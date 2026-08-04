@@ -53,6 +53,8 @@ module TradingSystem
     def start_services!
       market_closed = TradingSession::Service.market_closed?
 
+      TradingSystem::Bootstrap.boot_reconciliation!(strict: strict_boot_reconciliation?(market_closed: market_closed))
+
       if market_closed
         Rails.logger.info('[TradingDaemon] Market closed - starting WebSocket only')
         @supervisor[:market_feed]&.start
@@ -93,6 +95,14 @@ module TradingSystem
       @supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
     rescue StandardError => e
       Rails.logger.error("[TradingDaemon] subscribe_active_positions failed: #{e.class} - #{e.message}")
+    end
+
+    def strict_boot_reconciliation?(market_closed:)
+      # Default strict behavior only when market is open.
+      default_strict = !market_closed
+      return default_strict if ENV['TRADING_BOOT_RECONCILIATION_STRICT'].blank?
+
+      ENV['TRADING_BOOT_RECONCILIATION_STRICT'].to_s.downcase == 'true'
     end
 
     def trap_signals!

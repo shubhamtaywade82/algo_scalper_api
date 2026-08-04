@@ -23,8 +23,8 @@ This directory contains executable test scripts for each service in the trading 
    export CLIENT_ID="your_client_id"
    export ACCESS_TOKEN="your_access_token"
    # OR
-   export DHANHQ_CLIENT_ID="your_client_id"
-   export DHANHQ_ACCESS_TOKEN="your_access_token"
+   export DHAN_CLIENT_ID="your_client_id"
+   export DHAN_ACCESS_TOKEN="your_access_token"
    ```
 
 2. **Environment:**
@@ -70,7 +70,7 @@ ruby scripts/test_services/test_<service_name>.rb
 The test scripts automatically check for DhanHQ credentials on startup. If credentials are missing, you'll see:
 ```
 ⚠️  DhanHQ credentials not found in environment variables!
-   Required: CLIENT_ID (or DHANHQ_CLIENT_ID) and ACCESS_TOKEN (or DHANHQ_ACCESS_TOKEN)
+   Required: CLIENT_ID (or DHAN_CLIENT_ID) and ACCESS_TOKEN (or DHAN_ACCESS_TOKEN)
 ```
 
 ## Identifying Issues

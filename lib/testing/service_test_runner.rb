@@ -4,14 +4,12 @@
 # Usage: Load this file in Rails console and use the helper methods
 #
 # Example:
-#   load 'lib/testing/service_test_runner.rb'
-#   test_market_feed_hub
-#   test_risk_manager_service
+#   Testing::ServiceTestRunner.test_market_feed_hub
+#   Testing::ServiceTestRunner.test_risk_manager_service
 
-if Rails.env.local?
-  module Testing
-    module ServiceTestRunner
-      module_function
+module Testing
+  module ServiceTestRunner
+    module_function
 
   # Colors for console output
   COLORS = {
@@ -592,6 +590,5 @@ if Rails.env.local?
     wait_for_logs(seconds)
     print_success('Log monitoring completed')
   end
-    end
   end
 end

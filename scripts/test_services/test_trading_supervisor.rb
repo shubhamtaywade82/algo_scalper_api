@@ -203,4 +203,4 @@ ServiceTestHelper.print_info('     - MarketFeedHub should show WebSocket connect
 ServiceTestHelper.print_info('     - Signal::Scheduler should process watchlist items')
 ServiceTestHelper.print_info('     - ActiveCache should subscribe to MarketFeedHub')
 
-ServiceTestHelper.print_success('TradingSupervisor test completed')
+ServiceTestHelper.print_success('Trading supervisor test completed')

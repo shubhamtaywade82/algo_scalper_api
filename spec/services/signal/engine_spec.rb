@@ -161,8 +161,7 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: [:method, :uri] } do
                 theta_risk_cutoff_hour: 15,
                 theta_risk_cutoff_minute: 0
               }
-            },
-            enable_direction_gate: false # Disable for basic workflow tests
+            }
           }
         end
 

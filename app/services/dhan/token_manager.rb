@@ -1,21 +1,11 @@
 # frozen_string_literal: true
 
 module Dhan
-  # Orchestrates Dhan access-token lifecycle for the trading daemon.
-  #
-  # Auth strategy is selected at runtime via DHAN_AUTH_MODE:
-  #   totp       - fully automated TOTP login (default)
-  #   manual     - static DHAN_ACCESS_TOKEN from ENV
-  #   renew      - extend an existing token via Dhan RenewToken API
-  #   authority  - delegate to external authority server (optional)
-  #
-  # All paths return a token string or nil; never raise outside #refresh!.
   class TokenManager
     BUFFER_MINUTES = 30
+    REQUIRED_ENV_KEYS = %w[DHAN_PIN DHAN_TOTP_SECRET].freeze
 
     class << self
-      # Returns the current valid token, refreshing if needed.
-      # Returns nil on failure (callers must handle).
       def current_token
         current_token!
       end
@@ -24,29 +14,30 @@ module Dhan
         token_data = cached_token
 
         if token_data.nil? || expiring?(token_data)
-          refreshed = refresh!
-          return refreshed if refreshed.present?
-
-          # Refresh failed — return the stale token only if not yet expired
-          return nil if token_data.nil? ||
-                        token_data[:expiry_time].nil? ||
-                        token_data[:expiry_time] <= Time.current
+          refreshed_token = refresh!
+          return refreshed_token if refreshed_token.present?
+          token_data = cached_token
         end
 
         token_data&.dig(:token)
       end
 
-      # Fetches a fresh token via the configured auth strategy and persists it.
-      # Thread-safe via Mutex. Returns the token string or nil on failure.
-      def refresh!(force: false)
+      def refresh!
         mutex.synchronize do
           token_data = cached_token
-          return token_data[:token] if token_data && !expiring?(token_data) && !force
-          authority_response = fetch_from_authority
-          return nil if authority_response.blank?
+          return token_data[:token] if token_data && !expiring?(token_data)
+          return nil unless credentials_available?
 
-          access_token = authority_response[:access_token]
-          expiry_time = authority_response[:expiry_time]
+          Rails.logger.info('[DHAN] Regenerating token via TOTP...')
+
+          response = DhanHQ::Auth.generate_access_token(
+            dhan_client_id: creds[:client_id],
+            pin: creds[:pin],
+            totp: generate_totp
+          )
+
+          access_token = response['accessToken']
+          expiry_time = Time.parse(response['expiryTime'])
 
           persist_token(access_token, expiry_time)
           cache_token(access_token, expiry_time)
@@ -56,16 +47,8 @@ module Dhan
           access_token
         end
       rescue StandardError => e
-        Rails.logger.error("[DHAN] Token refresh failed (mode=#{ENV.fetch('DHAN_AUTH_MODE', 'totp')}): #{e.class} - #{e.message}")
+        Rails.logger.error("[DHAN] Token refresh failed: #{e.class} - #{e.message}")
         nil
-      end
-
-      def clear_cache!
-        mutex.synchronize do
-          @cached_token = nil
-          DhanAccessToken.delete_all
-        end
-        true
       end
 
       private
@@ -75,7 +58,10 @@ module Dhan
       end
 
       def cache_token(token, expiry_time)
-        @cached_token = { token: token, expiry_time: expiry_time }
+        @cached_token = {
+          token: token,
+          expiry_time: expiry_time
+        }
       end
 
       def expiring?(token_data)
@@ -86,7 +72,10 @@ module Dhan
         record = DhanAccessToken.first
         return nil unless record
 
-        { token: record.token, expiry_time: record.expiry_time }
+        {
+          token: record.token,
+          expiry_time: record.expiry_time
+        }
       end
 
       def persist_token(token, expiry_time)
@@ -99,54 +88,49 @@ module Dhan
         end
       end
 
-      def fetch_from_authority
-        token_url = token_authority_url
-        bearer = ENV['DHAN_TOKEN_ACCESS_TOKEN'].presence
-
-        if token_url.blank? || bearer.blank?
-          Rails.logger.error(
-            '[DHAN] Token refresh skipped: authority config missing. ' \
-            'Set TRADER_API_BASE_URL and DHAN_TOKEN_ACCESS_TOKEN.'
-          )
-          return nil
-        end
-
-        response = Faraday.get(token_url) { |req| req.headers['Authorization'] = "Bearer #{bearer}" }
-        unless response.success?
-          Rails.logger.error("[DHAN] Token authority request failed (status=#{response.status})")
-          return nil
-        end
-
-        data = JSON.parse(response.body)
-        access_token = data['access_token'].presence || data['accessToken'].presence
-        expiry_raw = data['expires_at'].presence || data['expiryTime'].presence
-
-        if access_token.blank? || expiry_raw.blank?
-          Rails.logger.error('[DHAN] Token authority response missing access_token or expires_at')
-          return nil
-        end
-
-        { access_token: access_token, expiry_time: Time.parse(expiry_raw) }
-      rescue StandardError => e
-        Rails.logger.error("[DHAN] Token authority fetch failed: #{e.class} - #{e.message}")
-        nil
+      def generate_totp
+        DhanHQ::Auth.generate_totp(creds[:totp_secret])
       end
 
-      def token_authority_url
-        raw_base = ENV['TRADER_API_BASE_URL'].to_s.strip
-        return nil if raw_base.blank? || raw_base.include?('<') || raw_base.include?('>')
+      def creds
+        @creds ||= begin
+          env = {
+            client_id: ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence,
+            pin: ENV['DHAN_PIN'].presence,
+            totp_secret: ENV['DHAN_TOTP_SECRET'].presence
+          }
 
-        uri = URI.parse(raw_base)
-        return nil unless uri.is_a?(URI::HTTP) && uri.host.present?
+          if env.values.all?(&:present?)
+            env
+          else
+            cred = Rails.application.credentials.dhan
+            {
+              client_id: cred&.dig(:client_id),
+              pin: cred&.dig(:pin),
+              totp_secret: cred&.dig(:totp_secret)
+            }
+          end
+        end
+      end
 
-        "#{raw_base.chomp('/')}/auth/dhan/token"
-      rescue URI::InvalidURIError
-        nil
+      def credentials_available?
+        missing = []
+        missing << 'client_id' if creds[:client_id].blank?
+        missing << 'pin' if creds[:pin].blank?
+        missing << 'totp_secret' if creds[:totp_secret].blank?
+
+        return true if missing.empty?
+
+        Rails.logger.warn(
+          "[DHAN] Token refresh skipped: missing credentials #{missing.join(', ')}. " \
+          "Set DHAN_CLIENT_ID/CLIENT_ID, #{REQUIRED_ENV_KEYS.join(', ')} or Rails credentials.dhan."
+        )
+        false
       end
 
       def apply_token_to_runtime!(access_token)
-        ENV["ACCESS_TOKEN"]      = access_token
-        ENV["DHAN_ACCESS_TOKEN"] = access_token
+        ENV['ACCESS_TOKEN'] = access_token
+        ENV['DHAN_ACCESS_TOKEN'] = access_token
 
         DhanHQ.configure do |config|
           config.access_token = access_token
@@ -156,16 +140,7 @@ module Dhan
       end
 
       def restart_websocket!
-        return unless defined?(Live::MarketFeedHub)
-
-        hub = Live::MarketFeedHub.instance
-        return unless hub.running?
-
-        Rails.logger.info("[DHAN] Restarting MarketFeedHub after token refresh")
-        hub.stop!
-        hub.start!
-      rescue StandardError => e
-        Rails.logger.error("[DHAN] Failed to restart MarketFeedHub: #{e.class} - #{e.message}")
+        Dhan::Ws::FeedListener.restart! if defined?(Dhan::Ws::FeedListener)
       end
 
       def mutex

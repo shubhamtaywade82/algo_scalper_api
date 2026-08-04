@@ -9,9 +9,6 @@ module Live
     def initialize
       @last_sync = nil
       @sync_interval = 30.seconds
-      @last_dhan_count = nil
-      @last_tracked_count = nil
-      @last_paper_count = nil
       @paper_mode = begin
         AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
       rescue StandardError

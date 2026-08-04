@@ -852,7 +852,9 @@ RSpec.describe Live::RiskManagerService do
         it 'raises fatal error because self-managed fallback is removed' do
           allow(Rails.logger).to receive(:fatal)
 
-          expect(service).to have_received(:execute_exit).with(tracker, reason)
+          expect { service.send(:dispatch_exit, nil, tracker, reason) }
+            .to raise_error(RuntimeError, /ExitEngine unavailable/)
+          expect(Rails.logger).to have_received(:fatal).with(match(/CRITICAL: ExitEngine unavailable/))
         end
       end
     end

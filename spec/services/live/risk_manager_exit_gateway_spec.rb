@@ -33,7 +33,7 @@ RSpec.describe Live::RiskManagerService do
       service.send(:risk_config)
       service.send(:risk_config)
 
-      expect(AlgoConfig).to have_received(:fetch).at_least(:once)
+      expect(AlgoConfig).to have_received(:fetch).once
     end
   end
 end

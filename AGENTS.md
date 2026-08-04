@@ -4,137 +4,58 @@
 - Core Rails app code lives in `app/`:
   - `app/controllers/api/` for API endpoints
   - `app/models/` and `app/models/concerns/` for domain models
-  - `app/services/` for business logic, grouped by domain (`signal/`, `options/`, `orders/`, `live/`, `risk/`, `entries/`, `capital/`, `smc/`, `indicators/`, `dhan/`, `adapters/`, `positions/`, `trading/`)
-  - `app/jobs/` for background jobs (Solid Queue — not Sidekiq)
-  - `app/strategies/` for trading strategy implementations
-  - `app/channels/` for ActionCable channels (`positions`, `dashboard`)
-  - `app/lib/` for `AlgoConfig` and supporting utilities
-  - `app/domain/` for value objects (`MarketTick`)
-- Library and infrastructure code in `lib/`:
-  - `lib/trading_system/` — daemon, bootstrap, supervisor (trading process lifecycle)
-  - `lib/services/ai/` — Ollama client (`ollama-client`) and technical analysis agent
-  - `lib/notifications/` — Telegram notifier
-  - `lib/tasks/` — rake tasks (`trading:daemon`, `solid_queue:load_recurring`, `ai:technical_analysis`)
-- Tests in `spec/` (models, services, integration, smoke, support, VCR cassettes).
-- Configuration in `config/` (`algo.yml`, `recurring.yml`, `queue.yml`, initializers, environments).
-- Documentation in `docs/` (architecture, trading, services, development, integrations, archive).
+  - `app/services/` for business logic, grouped by domain (`signal/`, `options/`, `orders/`, `live/`, `risk/`, etc.)
+  - `app/jobs/` for background jobs
+- Shared utilities and rake tasks are in `lib/` and `lib/tasks/`.
+- Tests live in `spec/` (models, services, integration, smoke, support, and VCR cassettes).
+- Runtime/config files are in `config/` (`algo.yml`, initializers, environment configs).
+- Long-form architecture and operations docs are in `docs/`.
 
 ## Build, Test, and Development Commands
-- `bundle install`: install gem dependencies.
-- `rails db:setup`: create and seed database.
-- `rails db:migrate`: run pending migrations.
-- `rails solid_queue:load_recurring`: populate Solid Queue recurring task schedule.
-- `./bin/dev`: run all 4 processes (web, trading daemon, Solid Queue worker, dashboard) via foreman.
-- `bin/jobs`: start Solid Queue worker standalone.
-- `ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon`: start trading daemon standalone.
+- `bin/setup --skip-server`: install gems and initialize local dependencies.
+- `bin/rails db:prepare`: create/migrate DB for current environment.
+- `bin/dev`: run the API server via `Procfile.dev`.
+- `ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon`: start trading services.
 - `bundle exec rspec`: run full test suite.
-- `bundle exec rspec spec/services/live/risk_manager_service_spec.rb`: run a focused spec.
-- `bundle exec rubocop`: run style/lint checks.
+- `bundle exec rspec spec/services/live/risk_manager_service_spec.rb`: run a focused spec file.
+- `bin/rubocop`: run style/lint checks.
 - `bin/brakeman --no-pager`: run security static analysis.
 
-## Process Architecture
-- `bin/dev` starts 4 processes via `Procfile.dev`:
-  - `web` — Rails API server on port 3011
-  - `trading` — Trading daemon (11 services in Ruby threads, managed by `TradingSystem::Supervisor`)
-  - `jobs` — Solid Queue worker (recurring tasks: instrument sync, SMC scanner, AI analysis)
-  - `dashboard` — Next.js frontend
-- Web and trading are separate OS processes; they share PostgreSQL and Redis but NOT in-process objects.
-- The trading daemon only starts services when `ENABLE_TRADING_SERVICES=true` and market is open. If market is closed at boot, only the WebSocket feed starts.
-
-## Paper vs Live Trading
-- **Effective** `paper_trading.enabled` comes from `AlgoConfig.fetch`: `config/algo.yml` → DB `algo_config_overrides` → `config/signal_tier_presets.yml` (tier from `SIGNAL_TIER` or `signals.signal_tier`) → **`LIVE_TRADING` env** forces paper when unset/false, live when true
-- Both modes use real DhanHQ WebSocket data for market ticks
-- Paper mode: simulated fills via `Orders::GatewayPaper`
-- Live gateway path: `Orders::GatewayLive`; broker orders require `dhanhq.enable_orders: true` and `PLACE_ORDER=true`
-- Gateway selected at boot time; switching `LIVE_TRADING` or YAML paper flag requires **daemon restart**
-
 ## Coding Style & Naming Conventions
-- Ruby files start with `# frozen_string_literal: true`.
-- 2-space indentation; classes/modules namespaced by domain.
-- Controllers thin — logic in services.
-- Services in domain folders (e.g. `app/services/options/chain_analyzer.rb`).
-- All percentage config values use DECIMAL format (0.12 = 12%, not 12.0).
-- Follow `.rubocop.yml` and `CODING_CONVENTIONS.md`.
+- Ruby files should start with `# frozen_string_literal: true`.
+- Use 2-space indentation; keep classes/modules namespaced by domain.
+- Keep controllers thin and move logic into services.
+- Place services in domain folders (for example `app/services/options/chain_analyzer.rb`).
+- Follow `.rubocop.yml` and the repository rules in `CODING_CONVENTIONS.md`.
 
 ## Testing Guidelines
-- Framework: RSpec (`rspec-rails`) with FactoryBot, VCR, WebMock, Shoulda Matchers.
-
----
-
-## Rule Precedence Hierarchy (Must Follow for AI Agents & Tools)
-
-1. **User Explicit Instructions**: Directly overrides generic defaults.
-2. **Repository Project Rules (`AGENTS.md`, `CLAUDE.md`, `CODING_CONVENTIONS.md`)**: Project invariants (e.g. Solid Queue, RSpec, `AlgoConfig`, `Orders::GatewayLive`/`GatewayPaper`) supersede external domain skills.
-3. **Detected Repository Profile**: Existing architecture (PostgreSQL, Solid Queue, RSpec) overrides generic defaults.
-4. **Team Conventions**: Defined architectural patterns.
-5. **External Domain Skills (Rails-AI / GoF Patterns)**: Knowledge reference.
-
----
-
-## Architecture & Refactoring Tools
-
-Available executable analysis scripts in `bin/` or `.agents/skills/scripts/`:
-- **Context Compiler**: `ruby .agents/skills/scripts/rails_context_compiler.rb <file_path>`
-- **Prism AST Parser**: `ruby .agents/skills/scripts/ruby_prism_ast_analyzer.rb <file_path>`
-- **Smell Detector**: `ruby .agents/skills/scripts/ruby_reek_smell_detector.rb <file_or_dir>`
-- **Pattern Advisor**: `ruby .agents/skills/scripts/ruby_pattern_advisor.rb <file_or_dir>`
-- **Project Profiler**: `ruby .agents/skills/scripts/rails_project_profiler.rb`
-
-- Test files as `*_spec.rb` mirroring code paths (`app/services/foo/bar.rb` → `spec/services/foo/bar_spec.rb`).
-- Sequential execution; no parallel assumptions.
-- Coverage via SimpleCov (`coverage/`).
+- Framework: RSpec (`rspec-rails`) with FactoryBot, VCR, WebMock, and Shoulda Matchers.
+- Name test files as `*_spec.rb` and mirror code paths (`app/services/foo/bar.rb` -> `spec/services/foo/bar_spec.rb`).
+- Default run is sequential; avoid assumptions about parallel execution.
+- Coverage is tracked via SimpleCov (`coverage/`), but minimum coverage is currently set to `0`.
 
 ## Commit & Pull Request Guidelines
-- Short, imperative commit subjects (e.g. `Add Telegram Formatter Service`, `Fix PnL mismatch in exit flow`).
-- Include issue/PR references when relevant.
-- PRs include: purpose, scope, config changes, test evidence, risk notes.
-- Trading behavior changes: include rollback notes and paper mode validation.
+- Prefer short, imperative commit subjects (for example: `Add Telegram Formatter Service...`, `Refactor DhanHQ credential handling...`).
+- Include issue/PR references when relevant (for example `(#87)`).
+- PRs should include: purpose, scope, config changes, test evidence (`bundle exec rspec` output), and risk notes.
+- For trading behavior changes, include rollback notes and whether validation was done in `PAPER_MODE=true`.
 
-## Security & Configuration
+## Security & Configuration Tips
 - Never commit secrets; use `.env` (based on `.env.example`).
-- Validate with paper mode before live use.
-
-## HTTP Rate Limiting (Rack::Attack)
-
-- **Configuration:** `config/initializers/rack_attack.rb`. Uses `Rails.cache`
-  for throttle counters.
-- **Test:** Rack::Attack is **disabled** after boot (`Rack::Attack.enabled =
-  false`) so specs and CI are not throttled.
-- **Dev / production:** Enabled by default:
-  - `/api/*` — default **240 requests / 5 minutes** per IP.
-  - `POST /api/analysis/:id/ai_snapshot` — **12 / minute** per IP (separate
-    bucket).
-- **Tuning:** `RACK_ATTACK_API_LIMIT`, `RACK_ATTACK_API_PERIOD_SECONDS`,
-  `RACK_ATTACK_AI_LIMIT`, `RACK_ATTACK_AI_PERIOD_SECONDS` in `.env` (see
-  `.env.example`). Raise limits for load tests. Throttled clients get **429**
-  and JSON `{"error":"rate_limited"}`.
-- **Bypassed:** `/up`, `/.well-known/*`.
-
-## Tick SMC + TA AI (optional)
-
-- **Runs only in the trading daemon** (`ENABLE_TRADING_SERVICES=true`), not in
-  Puma. Registers an `on_tick` callback on `Live::MarketFeedHub` (see
-  `Smc::TickAi::AnalysisService` in `lib/trading_system/bootstrap.rb`).
-- **Requires:** Redis (`REDIS_URL`) for per-tick throttle + rising-edge snapshot;
-  Ollama when `ai.enabled`; Telegram env vars when `tick_ai_notify_telegram` is
-  true (`config/algo.yml` → `signals.tick_ai_*`).
-- **Behavior:** throttle (default 15s per index) → Solid Queue job → MTF
-  confluence digest → **rising-edge** LTF flags vs Redis → optional index TA →
-  `Smc::AiAnalyzer` → optional Telegram. Master switch:
-  `signals.tick_ai_analysis_enabled`.
+- Validate new integrations with `DHANHQ_ENABLED=false` or `PAPER_MODE=true` before live use.
 
 ## Agent-Specific Instructions
-- Use `rg --files` and `rg -n` for code discovery; avoid slower recursive search.
-- Keep change scope tight: do not refactor unrelated code.
-- Definition of done:
+- Use `rg --files` and `rg -n` for code discovery; avoid slower recursive search tools.
+- Keep change scope tight: do not refactor or rename unrelated code while fixing a targeted issue.
+- Definition of done for code changes:
   - Update implementation and relevant specs.
-  - Run focused tests first (`bundle exec rspec spec/services/orders/`).
-  - Run lint on changed files (`bundle exec rubocop <paths>`).
-- High-risk areas requiring extra validation: `app/services/orders/`, `app/services/risk/`, `app/services/live/`, `app/services/dhan/token_manager.rb`, `app/services/entries/entry_guard.rb`.
-- For trading-flow changes, validate with `paper_trading.enabled: true` and `dhanhq.enable_orders: false`.
-- Model/persistence changes: include migration and verify `db/schema.rb`.
-- Never commit credentials, API tokens, or raw production data.
-- Agent PR summary format:
+  - Run focused tests first (for example `bundle exec rspec spec/services/orders/`).
+  - Run lint on changed files (`bin/rubocop <paths>`).
+- High-risk areas require extra validation: `app/services/orders/`, `app/services/risk/`, `app/services/live/`, `app/services/dhan/token_manager.rb`.
+- For trading-flow changes, validate locally with safe defaults: `PAPER_MODE=true` and `DHANHQ_ENABLED=false` unless explicitly testing live integrations.
+- When models or persistence logic change, include a migration and verify `db/schema.rb` updates with corresponding model/service specs.
+- Never commit credentials, API tokens, or raw production data; keep `.env` and secrets out of commits.
+- Agent PR summary format should always include:
   - Changed files
   - Behavioral impact
   - Tests and lint commands run

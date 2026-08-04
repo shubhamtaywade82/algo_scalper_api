@@ -43,14 +43,12 @@ class DhanAccessToken < ApplicationRecord
     end
   end
 
-  after_commit :clear_active_cache, on: :create
+  after_create :clear_active_cache
 
   private
 
-  # rubocop:disable Rails/Delegate
   def clear_active_cache
     self.class.clear_active_cache
   end
-  # rubocop:enable Rails/Delegate
 end
 

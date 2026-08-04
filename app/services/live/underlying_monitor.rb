@@ -206,7 +206,7 @@ module Live
         return position_data.underlying_ltp if position_data.underlying_ltp.to_f.positive?
         return nil unless index_cfg
 
-        Live::TickCache.ltp(index_cfg[:segment], index_cfg[:sid])
+        Live::TickQuery.for_security(segment: index_cfg[:segment], security_id: index_cfg[:sid])&.ltp
       rescue StandardError
         nil
       end

@@ -37,9 +37,10 @@ module Orders
         end
 
         payload = {
-          transaction_type: DhanHQ::Constants::TransactionType::BUY,
-          exchange_segment: seg,
-          security_id: sid.to_s,
+          dhanClientId: DhanHQ.configuration.client_id || ENV['DHAN_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
+          transactionType: 'BUY',
+          exchangeSegment: seg,
+          securityId: sid.to_s,
           quantity: qty.to_i,
           order_type: DhanHQ::Constants::OrderType::MARKET,
           product_type: product_type,
@@ -54,7 +55,7 @@ module Orders
         Rails.logger.info("[Orders::Placer] BUY payload: #{payload.inspect}")
 
         if order_placement_enabled?
-          order = with_order_rate_limit(context: "orders.buy_market") do
+          order = with_token_auto_heal(context: 'orders.buy_market') do
             DhanHQ::Models::Order.create(payload)
           end
           Rails.logger.info("[Orders::Placer] BUY response: #{order.inspect}") if order
@@ -289,25 +290,25 @@ module Orders
         end
 
         payload = {
-          transaction_type: DhanHQ::Constants::TransactionType::BUY,
-          exchange_segment: seg,
-          security_id: sid.to_s,
-          quantity: qty.to_i,
-          order_type: DhanHQ::Constants::OrderType::LIMIT,
-          product_type: product_type,
-          price: price.to_f.round(2),
-          validity: DhanHQ::Constants::Validity::DAY,
-          correlation_id: normalized_id,
-          disclosed_quantity: 0
+          dhanClientId: DhanHQ.configuration.client_id || ENV['DHAN_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
+          transactionType: 'SELL',
+          exchangeSegment: position ? position[:exchange_segment] : seg,
+          securityId: sid.to_s,
+          quantity: actual_qty.to_i,
+          orderType: 'MARKET',
+          productType: position ? position[:product_type] : product_type,
+          validity: 'DAY',
+          disclosedQuantity: 0,
+          correlationId: normalized_id
         }
 
         Rails.logger.info("[Orders::Placer] BUY LIMIT payload: #{payload.inspect}")
 
         if order_placement_enabled?
-          order = with_order_rate_limit(context: "orders.buy_limit") do
+          order = with_token_auto_heal(context: 'orders.sell_market') do
             DhanHQ::Models::Order.create(payload)
           end
-          Rails.logger.info("[Orders::Placer] BUY LIMIT response: #{order.inspect}") if order
+          Rails.logger.info("[Orders::Placer] SELL response: #{order.inspect}") if order
         else
           Rails.logger.warn("[Orders::Placer] BUY LIMIT blocked because PLACE_ORDER is not enabled")
           order = OpenStruct.new(order_id: "MOCK_LIMIT_#{SecureRandom.hex(4).upcase}", status: "success")
@@ -495,9 +496,10 @@ module Orders
                            end
 
         payload = {
-          transaction_type: transaction_type,
-          exchange_segment: actual_segment,
-          security_id: sid.to_s,
+          dhanClientId: DhanHQ.configuration.client_id || ENV['DHAN_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
+          transactionType: transaction_type,
+          exchangeSegment: actual_segment,
+          securityId: sid.to_s,
           quantity: actual_qty.to_i,
           order_type: DhanHQ::Constants::OrderType::MARKET,
           product_type: position_details[:product_type],
@@ -509,7 +511,7 @@ module Orders
         Rails.logger.info("[Orders::Placer] EXIT payload: #{payload.inspect}")
 
         if order_placement_enabled?
-          order = with_order_rate_limit(context: "orders.exit_position") do
+          order = with_token_auto_heal(context: 'orders.exit_position') do
             DhanHQ::Models::Order.create(payload)
           end
           Rails.logger.info("[Orders::Placer] EXIT response: #{order.inspect}") if order
@@ -542,33 +544,22 @@ module Orders
         nil
       end
 
-      def with_order_rate_limit(context: nil, &)
-        rate_limiter.consume!(&)
-      rescue TokenBucket::RateLimited => e
-        Rails.logger.warn("[Orders::Placer] rate limited: #{e.message}")
-        nil
-      end
-
-      def with_token_auto_heal(context:, &)
-        retried = false
-        with_order_rate_limit(&)
+      def with_token_auto_heal(context:)
+        yield
       rescue StandardError => e
         Rails.logger.error("[Orders::Placer] #{context} failed: #{e.class} - #{e.message}")
 
-          unless DhanhqErrorHandler.token_expired?(e)
-            return nil
-          end
-
-          if retried
-            Rails.logger.error("[Orders::Placer] #{context} retry failed: #{e.class} - #{e.message}")
-            return nil
-          end
-
-          Rails.logger.warn("[Orders::Placer] #{context} unauthorized; refreshing token and retrying once")
-          Dhan::TokenManager.refresh! if defined?(Dhan::TokenManager)
-          retried = true
-          retry
+        unless DhanhqErrorHandler.token_expired?(e)
+          return nil
         end
+
+        Rails.logger.warn("[Orders::Placer] #{context} unauthorized; refreshing token and retrying once")
+        Dhan::TokenManager.refresh! if defined?(Dhan::TokenManager)
+
+        yield
+      rescue StandardError => e
+        Rails.logger.error("[Orders::Placer] #{context} retry failed: #{e.class} - #{e.message}")
+        nil
       end
 
       def order_placement_enabled?

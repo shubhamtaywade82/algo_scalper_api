@@ -2,11 +2,30 @@
 # rubocop:disable Metrics/BlockNesting
 
 require_relative '../concerns/broker_fee_calculator'
+require_relative 'bos_extractor'
 
 module Entries
   class EntryGuard
+    ENTRY_CONTRACT = 'bos_machine_v1'
+    BOS_SWING_LOOKBACK = 5
+    BOS_MAX_AGE_CANDLES = 8
+    BOS_MAX_ENTRY_DELAY_CANDLES = 3
+    BOS_MAX_ENTRY_DISTANCE_R = 0.5
+
     class << self
-      include Live::UnderlyingLtpResolver
+      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
+        unless bos_contract_present?(entry_metadata)
+          Rails.logger.error(
+            "[EntryGuard] Direct entry blocked for #{index_cfg[:key]}: BOS contract missing"
+          )
+          return false
+        end
+
+        # Time regime validation (session-aware entry rules)
+        unless time_regime_allows_entry?(index_cfg: index_cfg, pick: pick, direction: direction)
+          Rails.logger.info("[EntryGuard] Entry blocked by time regime rules for #{index_cfg[:key]}")
+          return false
+        end
 
       def entry_guard_pipeline
         @entry_guard_pipeline ||= EntryGuardPipeline.new
@@ -107,6 +126,15 @@ module Entries
           return false
         end
 
+        bos_context = enforce_structure_entry_gate(
+          index_cfg: index_cfg,
+          instrument: instrument,
+          direction: direction,
+          entry_price: ltp.to_f,
+          entry_metadata: entry_metadata
+        )
+        return false unless bos_context
+
         # ===== Unified instrument profile + capital cap sizing (hard rules) =====
         symbol = index_cfg[:key].to_s.upcase
         permission_sym = (permission || entry_metadata&.dig(:permission) || :scale_ready).to_s.downcase.to_sym
@@ -166,49 +194,16 @@ module Entries
           return false
         end
 
-        # Risk-level policy gate (portfolio exposure + drawdown check before broker call)
-        risk_policy = Policies::RiskPolicy.new(
-          index_key: index_cfg[:key].to_s,
-          proposed_qty: quantity,
-          entry_price: ltp.to_f,
-          lot_size: lot_size
-        )
-        unless risk_policy.permitted?
-          Observability::StructuredLog.info(
-            event: 'entry_blocked',
-            payload: {
-              service: 'Entries::EntryGuard',
-              index_key: index_cfg[:key].to_s,
-              symbol: pick[:symbol].to_s,
-              stage: 'risk_policy',
-              reasons: risk_policy.reasons
-            }
-          )
-          signal&.record_entry_outcome('blocked', risk_policy.reasons.join('; '))
-          return false
-        end
-
-        # Risk-level policy gate (portfolio exposure + drawdown check before broker call)
-        risk_policy = Policies::RiskPolicy.new(
-          index_key: index_cfg[:key].to_s,
-          proposed_qty: quantity,
-          entry_price: ltp.to_f,
-          lot_size: lot_size
-        )
-        unless risk_policy.permitted?
-          Rails.logger.info("[EntryGuard] RiskPolicy blocked for #{index_cfg[:key]} — #{risk_policy.reasons.join(', ')}")
-          return false
-        end
-
-        place_cmd = Orders::Commands::PlaceOrderCommand.new(
-          gateway: Orders.config.gateway,
-          side: :buy,
+        response = Orders.config.place_market(
+          side: 'buy',
           segment: pick[:segment] || index_cfg[:segment],
           security_id: pick[:security_id],
           qty: quantity,
           meta: {
             client_order_id: build_client_order_id(index_cfg: index_cfg, pick: pick),
-            ltp: ltp # Pass resolved LTP (from WS or API)
+            ltp: ltp,
+            price: ltp,
+            symbol: pick[:symbol]
           }
         ).call
 
@@ -217,7 +212,11 @@ module Entries
           return false
         end
 
-        response = place_cmd.payload[:raw] || {}
+        if response.is_a?(Hash) && response[:success] == false
+          Rails.logger.error("[EntryGuard] place_market failed for #{index_cfg[:key]}: #{pick[:symbol]} (response: #{response.inspect})")
+          return false
+        end
+
         order_no = extract_order_no(response)
         unless order_no
           Rails.logger.warn("[EntryGuard] Order placement failed for #{index_cfg[:key]}: #{pick[:symbol]} (response: #{response.inspect})")
@@ -260,20 +259,8 @@ module Entries
                   end
 
         mark_bos_consumed!(index_cfg: index_cfg, bos_context: bos_context) if tracker
-        signal&.record_entry_outcome('entered') if tracker
 
         Rails.logger.info("[EntryGuard] Successfully placed order #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]}")
-        Observability::StructuredLog.info(
-          event: 'entry_order_placed',
-          payload: {
-            service: 'Entries::EntryGuard',
-            index_key: index_cfg[:key].to_s,
-            symbol: pick[:symbol].to_s,
-            order_no: order_no.to_s,
-            quantity: quantity.to_i,
-            ltp: ltp.to_f
-          }
-        )
         !!tracker
       rescue StandardError => e
         signal&.record_entry_outcome('blocked', "exception: #{e.class}")
@@ -416,9 +403,9 @@ module Entries
         return unless segment.present? && security_id.present?
 
         # Try Redis tick cache
-        tick_data = Live::TickCache.fetch(segment, security_id)
-        if tick_data&.dig(:ltp)
-          ltp = BigDecimal(tick_data[:ltp].to_s)
+        tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+        if tick
+          ltp = tick.ltp
           entry = BigDecimal(tracker.entry_price.to_s)
           qty = tracker.quantity.to_i
           pnl = (ltp - entry) * qty
@@ -442,11 +429,9 @@ module Entries
           meta_hash = build_base_meta(index_cfg: index_cfg, pick: pick, direction: bos_context&.dig(:direction))
           apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
-          snapshot = meta_hash.delete(:config_snapshot)
-          version = (meta_hash.delete(:config_version) || {}).with_indifferent_access
-          entry_at = meta_hash.delete(:entry_at)
-
-          tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
+        # Try WebSocket cache first
+        tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+        return tick.ltp if tick
 
           tracker = PositionTracker.create!(
             order_no: order_no,
@@ -576,8 +561,26 @@ module Entries
         Ledger::OrderResponse.extract_order_id(response) || legacy_extract_order_no(response)
       end
 
-      def legacy_extract_order_no(response)
-        return response[:order_id] || response['order_id'] if response.is_a?(Hash)
+        # Strategy 1: WebSocket subscription + TickCache (fastest, no API rate limits)
+        if hub.running? && hub.connected?
+          # Subscribe to the strike/derivative immediately
+          begin
+            hub.subscribe(segment: segment, security_id: security_id)
+            Rails.logger.debug { "[EntryGuard] Subscribed to #{segment}:#{security_id} for LTP resolution" }
+
+            # Wait briefly for tick to arrive (typically < 100ms)
+            max_wait_ms = 300
+            poll_interval_ms = 50
+            attempts = (max_wait_ms / poll_interval_ms).to_i
+
+            attempts.times do
+              cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+              if cached_tick&.ltp&.to_f&.positive?
+                Rails.logger.debug { "[EntryGuard] Got LTP from TickCache for #{segment}:#{security_id}: ₹#{cached_tick.ltp}" }
+                return cached_tick.ltp
+              end
+              sleep(poll_interval_ms / 1000.0) # Convert ms to seconds
+            end
 
         response
       end
@@ -779,26 +782,23 @@ module Entries
         last_thu
       end
 
-      def build_base_meta(index_cfg:, pick:, direction:)
-        snapshot_fields = Entries::EntrySnapshotBuilder.build(index_cfg: index_cfg, pick: pick)
+      def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:, order_no:, entry_metadata: nil, bos_context: nil)
 
-        {
-          index_key: index_cfg[:key].to_s,
-          symbol: pick[:symbol].to_s,
-          direction: direction || pick[:direction],
-          entry_at: Time.current.iso8601,
-          config_version: AlgoConfig.version,
-          config_snapshot: snapshot_fields[:config_snapshot],
-          dte_at_entry: snapshot_fields[:dte_at_entry],
-          vix_at_entry: snapshot_fields[:vix_at_entry],
-          spread_guard_pct: snapshot_fields[:spread_guard_pct],
-          atm_strike: snapshot_fields[:atm_strike],
-          expiry_date: snapshot_fields[:expiry_date],
-          entry_context: snapshot_fields[:entry_context]
+        # Determine watchable: derivative for options, instrument for indices
+        watchable = find_watchable_for_pick(pick: pick, instrument: instrument)
+
+        # Build meta hash with entry strategy/path information
+        meta_hash = {
+          index_key: index_cfg[:key],
+          direction: side,
+          placed_at: Time.current,
+          paper_trading: true
         }
 
         # Add diagnostic metadata if provided
         merge_diagnostic_metadata!(meta_hash, entry_metadata) if entry_metadata.is_a?(Hash)
+
+        apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
         apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
@@ -857,6 +857,8 @@ module Entries
 
         apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
+        apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
+
         PositionTracker.build_or_average!(
           watchable: watchable,
           instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
@@ -867,15 +869,19 @@ module Entries
           side: side,
           quantity: quantity,
           entry_price: ltp,
-          meta: meta_hash
+          meta: meta_hash,
+          trade_state: 'init'
         )
       rescue ActiveRecord::RecordInvalid => e
         Rails.logger.error("Failed to persist tracker for order #{order_no}: #{e.record.errors.full_messages.to_sentence}")
       end
 
-      def split_meta_hash(meta_hash)
-        promoted = {}
-        legacy = {}
+      def enforce_structure_entry_gate(index_cfg:, instrument:, direction:, entry_price:, entry_metadata:)
+        timeframe = effective_timeframe(entry_metadata)
+        unless timeframe
+          Rails.logger.info("[EntryGuard] BOS gate blocked #{index_cfg[:key]}: missing effective_timeframe")
+          return nil
+        end
 
         interval = timeframe_to_interval(timeframe)
         unless interval
@@ -965,21 +971,11 @@ module Entries
       def apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price:, quantity:)
         return unless bos_context
 
-        contract = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_contract].to_s : ''
-        if contract == SUPERTREND_CONTRACT
-          # Supertrend direct entries do not have BOS structure risk; derive premium risk from configured SL %.
-          sl_decimal = supertrend_sl_decimal
-          premium_r = entry_price.to_f * sl_decimal
-          entry_risk_rupees = premium_r * quantity.to_i
-          origin_price = entry_price.to_f
-          entry_underlying_price = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_underlying_price] : nil
-        else
-          origin_price = bos_context[:origin_swing][:price].to_f
-          entry_underlying_price = bos_context[:entry_underlying_price]
-          sl_decimal = supertrend_sl_decimal
-          premium_r = entry_price.to_f * sl_decimal
-          entry_risk_rupees = premium_r * quantity.to_i
-        end
+        origin_price = bos_context[:origin_swing][:price].to_f
+        entry_underlying_price = bos_context[:entry_underlying_price]
+        reference_price = entry_underlying_price || entry_price
+        entry_risk_rupees = (reference_price.to_f - origin_price).abs * quantity.to_i
+        premium_r = entry_risk_rupees / quantity.to_f
         premium_stop = entry_price.to_f - premium_r
         premium_target = entry_price.to_f + premium_r
 
@@ -987,9 +983,8 @@ module Entries
         meta_hash[:entry_premium] = entry_price.to_f
         meta_hash[:entry_risk_rupees] = entry_risk_rupees
         meta_hash[:premium_stop_price] = premium_stop
-        meta_hash[:initial_sl_pct] = (premium_r / entry_price.to_f * 100.0).round(2)
         meta_hash[:premium_target_price] = premium_target
-        meta_hash[:entry_underlying_price] = entry_underlying_price || resolve_underlying_ltp(meta_hash[:index_key])
+        meta_hash[:entry_underlying_price] = entry_underlying_price if entry_underlying_price
         meta_hash[:bos_confirmed_at] = bos_context[:confirmed_at]&.iso8601
         meta_hash[:bos_origin_index] = bos_context[:origin_swing][:index]
         meta_hash[:bos_timeframe] = bos_context[:timeframe]
@@ -1040,8 +1035,7 @@ module Entries
 
       def bos_contract_present?(entry_metadata)
         return false unless entry_metadata.is_a?(Hash)
-        contract = entry_metadata[:entry_contract].to_s
-        return false unless [ENTRY_CONTRACT, SUPERTREND_CONTRACT].include?(contract)
+        return false unless entry_metadata[:entry_contract].to_s == ENTRY_CONTRACT
         return false if entry_metadata[:bos_id].blank?
         return false if entry_metadata[:bos_timeframe].blank?
         return false if entry_metadata[:bos_origin_price].blank?

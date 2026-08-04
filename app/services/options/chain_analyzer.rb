@@ -1105,23 +1105,11 @@ module Options
           # Use BigDecimal for accurate float comparison
           strike_bd = BigDecimal(strike.to_s)
 
-          derivative_scope =
-            if instrument.respond_to?(:derivatives) && (instrument.derivatives.present? || instrument.persisted?)
-              instrument.derivatives
-            end
+          derivatives_collection = instrument.respond_to?(:derivatives) ? instrument.derivatives : nil
 
-          derivative = if derivative_scope
-                         Array(derivative_scope).detect do |d|
-                           d.expiry_date == expiry_date_obj &&
-                             d.option_type == option_type &&
-                             BigDecimal(d.strike_price.to_s) == strike_bd
-                         end
-                       else
-                         # Fall back to querying the Derivative model when association is unavailable
-                         Derivative.where(
-                           underlying_symbol: instrument.symbol_name,
-                           exchange: instrument.exchange,
-                           segment: instrument.segment,
+          # Try to find derivative using instrument.derivatives association first
+          derivative = if derivatives_collection.respond_to?(:where)
+                         derivatives_collection.where(
                            expiry_date: expiry_date_obj,
                            option_type: option_type
                          ).detect do |d|
@@ -1197,14 +1185,12 @@ module Options
                                     option_type: option_type
                                   ).pluck(:strike_price).map(&:to_f).sort
                                 else
-                                  # rubocop:disable Style/MultilineBlockChain
                                   Array(derivatives_collection).filter_map do |d|
                                     next unless derivative_like?(d)
                                     next unless d.expiry_date == expiry_date_obj && d.option_type.to_s.upcase == option_type
 
                                     d.strike_price.to_f
                                   end.sort
-                                  # rubocop:enable Style/MultilineBlockChain
                                 end
 
             Rails.logger.debug do
@@ -1218,45 +1204,37 @@ module Options
             next
           end
 
-          if security_id.blank?
-            Rails.logger.debug do
-              "[Options::ChainAnalyzer] Invalid security_id for #{index_cfg[:key]} #{strike} #{side}: " \
-                "#{security_id.inspect} (derivative_id=#{derivative.id})"
+          if derivative
+            derivative_strike_bd = BigDecimal(derivative.strike_price.to_s)
+            unless derivative_strike_bd == strike_bd
+              Rails.logger.warn do
+                "[Options::ChainAnalyzer] Derivative strike mismatch for #{index_cfg[:key]}: " \
+                  "expected=#{strike_bd}, found=#{derivative_strike_bd} " \
+                  "(derivative_id=#{derivative.id}, security_id=#{security_id})"
+              end
+              rejected_count += 1
+              next
             end
-            rejected_count += 1
-            next
-          end
 
-          # Verify the derivative matches the strike, expiry, and option type
-          derivative_strike_bd = BigDecimal(derivative.strike_price.to_s)
-          unless derivative_strike_bd == strike_bd
-            Rails.logger.warn do
-              "[Options::ChainAnalyzer] Derivative strike mismatch for #{index_cfg[:key]}: " \
-                "expected=#{strike_bd}, found=#{derivative_strike_bd} " \
-                "(derivative_id=#{derivative.id}, security_id=#{security_id})"
+            unless derivative.expiry_date == expiry_date_obj
+              Rails.logger.warn do
+                "[Options::ChainAnalyzer] Derivative expiry mismatch for #{index_cfg[:key]}: " \
+                  "expected=#{expiry_date_obj}, found=#{derivative.expiry_date} " \
+                  "(derivative_id=#{derivative.id}, security_id=#{security_id})"
+              end
+              rejected_count += 1
+              next
             end
-            rejected_count += 1
-            next
-          end
 
-          unless derivative.expiry_date == expiry_date_obj
-            Rails.logger.warn do
-              "[Options::ChainAnalyzer] Derivative expiry mismatch for #{index_cfg[:key]}: " \
-                "expected=#{expiry_date_obj}, found=#{derivative.expiry_date} " \
-                "(derivative_id=#{derivative.id}, security_id=#{security_id})"
+            unless derivative.option_type == option_type
+              Rails.logger.warn do
+                "[Options::ChainAnalyzer] Derivative option_type mismatch for #{index_cfg[:key]}: " \
+                  "expected=#{option_type}, found=#{derivative.option_type} " \
+                  "(derivative_id=#{derivative.id}, security_id=#{security_id})"
+              end
+              rejected_count += 1
+              next
             end
-            rejected_count += 1
-            next
-          end
-
-          unless derivative.option_type == option_type
-            Rails.logger.warn do
-              "[Options::ChainAnalyzer] Derivative option_type mismatch for #{index_cfg[:key]}: " \
-                "expected=#{option_type}, found=#{derivative.option_type} " \
-                "(derivative_id=#{derivative.id}, security_id=#{security_id})"
-            end
-            rejected_count += 1
-            next
           end
 
           derivative_segment = if derivative.respond_to?(:exchange_segment) && derivative.exchange_segment.present?
@@ -1365,6 +1343,22 @@ module Options
         return false if id.blank?
         return false if id.start_with?('TEST_')
 
+        true
+      end
+
+      def derivative_like?(row)
+        row.respond_to?(:expiry_date) && row.respond_to?(:option_type) && row.respond_to?(:strike_price)
+      end
+
+      def use_option_chain_security_id?
+        cfg = AlgoConfig.fetch
+        return true unless cfg.is_a?(Hash)
+
+        value = cfg.dig(:chain_analyzer, :use_option_chain_security_id)
+        return true if value.nil?
+
+        value == true
+      rescue StandardError
         true
       end
 

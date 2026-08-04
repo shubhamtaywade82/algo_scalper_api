@@ -11,21 +11,10 @@ module Live
       def dispatch_exit(exit_engine, tracker, reason)
         if exit_engine.respond_to?(:execute_exit) && !exit_engine.equal?(self)
           exit_engine.execute_exit(tracker, reason)
-
-          # Record realized PnL in portfolio tracker after exit (best-effort)
-          begin
-            pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)&.dig(:pnl) ||
-                  tracker.last_pnl_rupees.to_f
-            Portfolio::PnlTracker.mark_realized(tracker_id: tracker.id, pnl: pnl.to_f)
-          rescue StandardError => e
-            Rails.logger.error(
-              "[RiskManager] Portfolio::PnlTracker.mark_realized failed for tracker=#{tracker.id}: #{e.message}"
-            )
-          end
         else
           Rails.logger.fatal(
             "[RiskManager] CRITICAL: ExitEngine unavailable for #{tracker.order_no} " \
-            "(reason=#{reason}) — position NOT exited"
+              "(reason=#{reason}) — position NOT exited"
           )
           raise "ExitEngine unavailable for #{tracker.order_no}"
         end
@@ -33,10 +22,8 @@ module Live
 
       # Persist reason metadata
       def store_exit_reason(tracker, reason)
-        tracker.update!(
-          exit_reason: reason,
-          exit_triggered_at: Time.current
-        )
+        metadata = tracker.meta.is_a?(Hash) ? tracker.meta : {}
+        tracker.update!(meta: metadata.merge('exit_reason' => reason, 'exit_triggered_at' => Time.current))
       rescue StandardError => e
         Rails.logger.warn("[RiskManager] store_exit_reason failed for #{tracker.order_no}: #{e.class} - #{e.message}")
       end
@@ -85,7 +72,7 @@ module Live
       def record_trade_result_for_edge_detector(tracker, final_pnl, exit_reason)
         return unless tracker && final_pnl && exit_reason
 
-        index_key = tracker.index_key || tracker.instrument&.symbol_name
+        index_key = tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
         return unless index_key
 
         Live::EdgeFailureDetector.instance.record_trade_result(
@@ -126,20 +113,19 @@ module Live
         entry_meta = {}
         unless meta['entry_path'] || meta['entry_strategy']
           # Try to find matching TradingSignal to get entry metadata
-          signal = TradingSignal.where(index_key: meta['index_key'] || tracker.index_key)
+          signal = TradingSignal.where("metadata->>'index_key' = ?", meta['index_key'] || tracker.index_key)
                                 .where(created_at: (tracker.created_at - 5.minutes)..)
                                 .where(created_at: ..(tracker.created_at + 1.minute))
                                 .order(created_at: :desc)
                                 .first
 
-          if signal
-            signal_meta = signal.effective_metadata
-            entry_meta['entry_path'] = signal_meta['entry_path']
-            entry_meta['entry_strategy'] = signal_meta['strategy']
-            entry_meta['entry_strategy_mode'] = signal_meta['strategy_mode']
-            entry_meta['entry_timeframe'] = signal_meta['effective_timeframe'] || signal_meta['primary_timeframe']
-            entry_meta['entry_confirmation_timeframe'] = signal_meta['confirmation_timeframe']
-            entry_meta['entry_validation_mode'] = signal_meta['validation_mode']
+          if signal && signal.metadata.is_a?(Hash)
+            entry_meta['entry_path'] = signal.metadata['entry_path']
+            entry_meta['entry_strategy'] = signal.metadata['strategy']
+            entry_meta['entry_strategy_mode'] = signal.metadata['strategy_mode']
+            entry_meta['entry_timeframe'] = signal.metadata['effective_timeframe'] || signal.metadata['primary_timeframe']
+            entry_meta['entry_confirmation_timeframe'] = signal.metadata['confirmation_timeframe']
+            entry_meta['entry_validation_mode'] = signal.metadata['validation_mode']
           end
         end
 

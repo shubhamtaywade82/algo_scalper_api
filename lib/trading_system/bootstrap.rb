@@ -23,30 +23,6 @@ module TradingSystem
       false
     end
 
-    # Evaluates session gates that normally run on the 9:01 recurring job.
-    # Called when the trading daemon starts during market hours so late boots
-    # do not leave VIX entry_allowed? fail-open until the next 15m refresh.
-    def boot_market_gates!
-      vix = Market::VixGate.evaluate!
-      return log_vix_gate_skipped unless vix
-
-      Rails.logger.info(
-        "[Bootstrap] India VIX gate at boot: VIX=#{vix.round(2)} " \
-        "entry_allowed=#{Market::VixGate.entry_allowed?} " \
-        "force_exit=#{Market::VixGate.force_exit_active?}"
-      )
-      vix
-    rescue StandardError => e
-      Rails.logger.error("[Bootstrap] boot_market_gates! #{e.class} - #{e.message}")
-      nil
-    end
-
-    def log_vix_gate_skipped
-      Rails.logger.warn('[Bootstrap] India VIX gate not evaluated at boot (disabled or LTP unavailable)')
-      nil
-    end
-    private :log_vix_gate_skipped
-
     def build_supervisor
       supervisor = TradingSystem::Supervisor.new
 
@@ -75,7 +51,7 @@ module TradingSystem
                     end
         load file_path.to_s if File.exist?(file_path.to_s)
       end
-      supervisor.register(:active_cache, ::ActiveCacheService.new)
+      supervisor.register(:active_cache, Positions::ActiveCacheService.new)
       supervisor.register(:reconciliation, Live::ReconciliationService.instance)
       supervisor.register(:stats_notifier, Live::StatsNotifierService.instance)
       supervisor.register(:smc_scanner, Smc::Scanner.new)

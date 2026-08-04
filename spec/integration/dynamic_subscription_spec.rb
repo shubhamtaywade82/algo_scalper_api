@@ -61,6 +61,7 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
     allow(ENV).to receive(:[]).with('DHANHQ_WS_WATCHLIST').and_return('NSE_FNO:12345,NSE_FNO:67890')
     allow(ENV).to receive(:[]).with('REDIS_URL').and_return('redis://localhost:6379/0')
     allow(ENV).to receive(:[]).with('CLIENT_ID').and_return('test_client_id')
+    allow(ENV).to receive(:[]).with('CLIENT_ID').and_return('test_client_id')
     allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return('test_access_token')
     allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return('test_access_token')
     allow(ENV).to receive(:[]).with('COLUMNS').and_return('80')

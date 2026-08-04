@@ -791,17 +791,12 @@ market_context:
 # SIGNAL SETTINGS
 # ============================================
 signals:
-  # exploratory = most permissive (research/paper). standard = use algo.yml as written (no tier overlay).
-  # selective = strict gates + higher quality bar (not a profit guarantee). Override: SIGNAL_TIER env.
-  # See config/signal_tier_presets.yml
-  signal_tier: exploratory
-
   # Entry strategy selection (code enforces behavior; no strategy logic in YAML)
   # primary: supertrend => Supertrend flip only; omit or use other value for legacy multi-indicator path
   entry_strategy:
     primary: supertrend
 
-  primary_timeframe: "1m"
+  primary_timeframe: "5m"
   confirmation_timeframe: "5m"
 
   # Expiry date filtering: Skip indices with expiry > max_expiry_days
@@ -1016,6 +1011,7 @@ signals:
 # OPTION CHAIN SETTINGS
 # ============================================
 chain_analyzer:
+  use_option_chain_security_id: true
   max_candidates: 2
   strike_distance_pct: 0.02
   min_oi: 10000

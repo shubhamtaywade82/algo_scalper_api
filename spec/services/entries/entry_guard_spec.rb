@@ -220,34 +220,18 @@ RSpec.describe Entries::EntryGuard do
     end
 
       context 'when quantity calculation fails' do
-        it 'returns false if quantity is zero' do
+        it 'returns false when quantity is zero' do
           allow(Capital::Allocator).to receive(:qty_for).and_return(0)
-
-          result = described_class.try_enter(
-            index_cfg: index_cfg,
-            pick: pick,
-            direction: :bullish
-          )
-
-          expect(result).to be false
-        end
-
-        it 'falls back to paper mode when enabled and live balance is insufficient' do
-          allow(Capital::Allocator).to receive(:qty_for).and_return(0)
-          allow(described_class).to receive_messages(paper_trading_enabled?: false, auto_paper_fallback_enabled?: true, insufficient_live_balance?: true)
 
           expect do
-            described_class.try_enter(
+            result = described_class.try_enter(
               index_cfg: index_cfg,
               pick: pick,
               direction: :bullish
             )
-          end.to change(PositionTracker, :count).by(1)
 
-          tracker = PositionTracker.last
-          expect(tracker.paper?).to be true
-          expect(tracker.meta['fallback_to_paper']).to be true
-          expect(tracker.quantity).to eq(pick[:lot_size])
+            expect(result).to be false
+          end.not_to change(PositionTracker, :count)
         end
       end
     end

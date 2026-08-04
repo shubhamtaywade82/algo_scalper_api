@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_13_090000) do
+ActiveRecord::Schema[8.0].define(version: 2026_02_13_000100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -96,9 +96,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_13_090000) do
   end
 
   create_table "dhan_access_tokens", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.datetime "expiry_time", null: false
     t.string "token", null: false
+    t.datetime "expiry_time", null: false
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["expiry_time"], name: "index_dhan_access_tokens_on_expiry_time"
   end
@@ -294,13 +294,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_13_090000) do
     t.datetime "updated_at", null: false
     t.datetime "validated_at"
     t.bigint "watchable_id", null: false
-    t.string "watchable_type", null: false
-    t.index ["exit_coid"], name: "index_position_trackers_on_exit_coid", unique: true
-    t.index ["exit_order_id"], name: "index_position_trackers_on_exit_order_id"
-    t.index ["exit_requested_at"], name: "index_position_trackers_on_exit_requested_at"
-    t.index ["exit_triggered_at"], name: "index_position_trackers_on_exit_triggered_at"
-    t.index ["exited_at", "status"], name: "index_position_trackers_on_exited_at_and_status"
-    t.index ["index_key"], name: "index_position_trackers_on_index_key"
+    t.decimal "exit_price", precision: 12, scale: 4
+    t.datetime "exited_at"
+    t.string "trade_state"
+    t.datetime "validated_at"
+    t.datetime "expansion_at"
     t.index ["instrument_id"], name: "index_position_trackers_on_instrument_id"
     t.index ["order_no"], name: "index_position_trackers_on_order_no", unique: true
     t.index ["paper"], name: "index_position_trackers_on_paper"
@@ -375,170 +373,153 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_13_090000) do
     t.index ["scheduled_at", "finished_at"], name: "index_solid_queue_jobs_for_alerting"
   end
 
-  create_table "solid_queue_pauses", force: :cascade do |t|
-    t.datetime "created_at", null: false
+  create_table "solid_queue_blocked_executions", force: :cascade do |t|
+    t.bigint "job_id", null: false
     t.string "queue_name", null: false
+    t.integer "priority", default: 0, null: false
+    t.string "concurrency_key", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "created_at", null: false
+    t.index ["concurrency_key", "priority", "job_id"], name: "index_solid_queue_blocked_executions_for_release"
+    t.index ["expires_at", "concurrency_key"], name: "index_solid_queue_blocked_executions_for_maintenance"
+    t.index ["job_id"], name: "index_solid_queue_blocked_executions_on_job_id", unique: true
+  end
+
+  create_table "solid_queue_claimed_executions", force: :cascade do |t|
+    t.bigint "job_id", null: false
+    t.bigint "process_id"
+    t.datetime "created_at", null: false
+    t.index ["job_id"], name: "index_solid_queue_claimed_executions_on_job_id", unique: true
+    t.index ["process_id", "job_id"], name: "index_solid_queue_claimed_executions_on_process_id_and_job_id"
+  end
+
+  create_table "solid_queue_failed_executions", force: :cascade do |t|
+    t.bigint "job_id", null: false
+    t.text "error"
+    t.datetime "created_at", null: false
+    t.index ["job_id"], name: "index_solid_queue_failed_executions_on_job_id", unique: true
+  end
+
+  create_table "solid_queue_jobs", force: :cascade do |t|
+    t.string "queue_name", null: false
+    t.string "class_name", null: false
+    t.text "arguments"
+    t.integer "priority", default: 0, null: false
+    t.string "active_job_id"
+    t.datetime "scheduled_at"
+    t.datetime "finished_at"
+    t.string "concurrency_key"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["active_job_id"], name: "index_solid_queue_jobs_on_active_job_id"
+    t.index ["class_name"], name: "index_solid_queue_jobs_on_class_name"
+    t.index ["finished_at"], name: "index_solid_queue_jobs_on_finished_at"
+    t.index ["queue_name", "finished_at"], name: "index_solid_queue_jobs_for_filtering"
+    t.index ["scheduled_at", "finished_at"], name: "index_solid_queue_jobs_for_alerting"
+  end
+
+  create_table "solid_queue_pauses", force: :cascade do |t|
+    t.string "queue_name", null: false
+    t.datetime "created_at", null: false
     t.index ["queue_name"], name: "index_solid_queue_pauses_on_queue_name", unique: true
   end
 
   create_table "solid_queue_processes", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.string "hostname"
     t.string "kind", null: false
     t.datetime "last_heartbeat_at", null: false
-    t.text "metadata"
-    t.string "name", null: false
-    t.integer "pid", null: false
     t.bigint "supervisor_id"
+    t.integer "pid", null: false
+    t.string "hostname"
+    t.text "metadata"
+    t.datetime "created_at", null: false
+    t.string "name", null: false
     t.index ["last_heartbeat_at"], name: "index_solid_queue_processes_on_last_heartbeat_at"
     t.index ["name", "supervisor_id"], name: "index_solid_queue_processes_on_name_and_supervisor_id", unique: true
     t.index ["supervisor_id"], name: "index_solid_queue_processes_on_supervisor_id"
   end
 
   create_table "solid_queue_ready_executions", force: :cascade do |t|
-    t.datetime "created_at", null: false
     t.bigint "job_id", null: false
-    t.integer "priority", default: 0, null: false
     t.string "queue_name", null: false
+    t.integer "priority", default: 0, null: false
+    t.datetime "created_at", null: false
     t.index ["job_id"], name: "index_solid_queue_ready_executions_on_job_id", unique: true
     t.index ["priority", "job_id"], name: "index_solid_queue_poll_all"
     t.index ["queue_name", "priority", "job_id"], name: "index_solid_queue_poll_by_queue"
   end
 
   create_table "solid_queue_recurring_executions", force: :cascade do |t|
-    t.datetime "created_at", null: false
     t.bigint "job_id", null: false
-    t.datetime "run_at", null: false
     t.string "task_key", null: false
+    t.datetime "run_at", null: false
+    t.datetime "created_at", null: false
     t.index ["job_id"], name: "index_solid_queue_recurring_executions_on_job_id", unique: true
     t.index ["task_key", "run_at"], name: "index_solid_queue_recurring_executions_on_task_key_and_run_at", unique: true
   end
 
   create_table "solid_queue_recurring_tasks", force: :cascade do |t|
-    t.text "arguments"
-    t.string "class_name"
-    t.string "command", limit: 2048
-    t.datetime "created_at", null: false
-    t.text "description"
     t.string "key", null: false
-    t.integer "priority", default: 0
-    t.string "queue_name"
     t.string "schedule", null: false
+    t.string "command", limit: 2048
+    t.string "class_name"
+    t.text "arguments"
+    t.string "queue_name"
+    t.integer "priority", default: 0
     t.boolean "static", default: true, null: false
+    t.text "description"
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["key"], name: "index_solid_queue_recurring_tasks_on_key", unique: true
     t.index ["static"], name: "index_solid_queue_recurring_tasks_on_static"
   end
 
   create_table "solid_queue_scheduled_executions", force: :cascade do |t|
-    t.datetime "created_at", null: false
     t.bigint "job_id", null: false
-    t.integer "priority", default: 0, null: false
     t.string "queue_name", null: false
+    t.integer "priority", default: 0, null: false
     t.datetime "scheduled_at", null: false
+    t.datetime "created_at", null: false
     t.index ["job_id"], name: "index_solid_queue_scheduled_executions_on_job_id", unique: true
     t.index ["scheduled_at", "priority", "job_id"], name: "index_solid_queue_dispatch_all"
   end
 
   create_table "solid_queue_semaphores", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.datetime "expires_at", null: false
     t.string "key", null: false
-    t.datetime "updated_at", null: false
     t.integer "value", default: 1, null: false
+    t.datetime "expires_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
     t.index ["expires_at"], name: "index_solid_queue_semaphores_on_expires_at"
     t.index ["key", "value"], name: "index_solid_queue_semaphores_on_key_and_value"
     t.index ["key"], name: "index_solid_queue_semaphores_on_key", unique: true
   end
 
-  create_table "strategies", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.bigint "current_version_id"
-    t.string "desired_status"
-    t.string "name", null: false
-    t.string "slug", null: false
-    t.string "status", default: "draft", null: false
-    t.datetime "updated_at", null: false
-    t.index ["current_version_id"], name: "index_strategies_on_current_version_id"
-    t.index ["slug"], name: "index_strategies_on_slug", unique: true
-  end
-
-  create_table "strategy_runs", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.datetime "started_at"
-    t.jsonb "stats", default: {}
-    t.string "stop_reason"
-    t.datetime "stopped_at"
-    t.bigint "strategy_id", null: false
-    t.bigint "strategy_version_id", null: false
-    t.datetime "updated_at", null: false
-    t.index ["strategy_id"], name: "index_strategy_runs_on_strategy_id"
-    t.index ["strategy_version_id"], name: "index_strategy_runs_on_strategy_version_id"
-  end
-
-  create_table "strategy_signals", force: :cascade do |t|
-    t.string "action", null: false
-    t.float "confidence"
-    t.datetime "created_at", null: false
-    t.datetime "emitted_at", null: false
-    t.string "instrument_key", null: false
-    t.jsonb "metadata", default: {}
-    t.string "outcome"
-    t.bigint "position_tracker_id"
-    t.string "reason"
-    t.bigint "strategy_id", null: false
-    t.bigint "strategy_run_id", null: false
-    t.bigint "strategy_version_id", null: false
-    t.datetime "updated_at", null: false
-    t.index ["instrument_key", "emitted_at"], name: "index_strategy_signals_on_instrument_key_and_emitted_at"
-    t.index ["position_tracker_id"], name: "index_strategy_signals_on_position_tracker_id"
-    t.index ["strategy_id"], name: "index_strategy_signals_on_strategy_id"
-    t.index ["strategy_run_id", "emitted_at"], name: "index_strategy_signals_on_strategy_run_id_and_emitted_at"
-    t.index ["strategy_run_id"], name: "index_strategy_signals_on_strategy_run_id"
-    t.index ["strategy_version_id"], name: "index_strategy_signals_on_strategy_version_id"
-  end
-
-  create_table "strategy_versions", force: :cascade do |t|
-    t.string "checksum", null: false
-    t.datetime "created_at", null: false
-    t.datetime "deployed_at"
-    t.string "file_path", null: false
-    t.jsonb "manifest", default: {}, null: false
-    t.jsonb "scan_report", default: {}
-    t.bigint "strategy_id", null: false
-    t.datetime "updated_at", null: false
-    t.integer "version", null: false
-    t.index ["strategy_id", "version"], name: "index_strategy_versions_on_strategy_id_and_version", unique: true
-    t.index ["strategy_id"], name: "index_strategy_versions_on_strategy_id"
-  end
-
-  create_table "trade_analytics", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.integer "duration_seconds"
-    t.decimal "entry_price"
-    t.decimal "exit_price"
-    t.string "exit_reason"
-    t.decimal "max_adverse_excursion"
-    t.decimal "max_favorable_excursion"
-    t.bigint "position_tracker_id", null: false
-    t.string "strategy"
-    t.string "symbol"
-    t.datetime "updated_at", null: false
-    t.decimal "volatility"
-    t.index ["position_tracker_id"], name: "index_trade_analytics_on_position_tracker_id"
-  end
-
   create_table "trade_telemetry", force: :cascade do |t|
-    t.integer "bos_age_at_entry"
-    t.decimal "continuation_body_position", precision: 6, scale: 4
-    t.datetime "created_at", null: false
-    t.decimal "entry_distance_r", precision: 8, scale: 4
-    t.string "entry_tf", null: false
+    t.bigint "tracker_id", null: false
+    t.string "index_key", null: false
     t.datetime "entry_time", null: false
-    t.string "exit_path"
-    t.decimal "exit_r", precision: 10, scale: 4
     t.datetime "exit_time", null: false
+    t.string "entry_tf", null: false
     t.string "htf_tf", null: false
+    t.integer "bos_age_at_entry"
+    t.decimal "retrace_pct", precision: 6, scale: 4
+    t.integer "pullback_candles"
+    t.decimal "entry_distance_r", precision: 8, scale: 4
+    t.decimal "continuation_body_position", precision: 6, scale: 4
+    t.integer "time_from_bos_to_entry"
+    t.decimal "max_r_reached", precision: 10, scale: 4
+    t.decimal "exit_r", precision: 10, scale: 4
+    t.string "exit_path"
+    t.decimal "pnl_rupees", precision: 12, scale: 4
+    t.string "trade_state_at_exit"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["entry_time"], name: "index_trade_telemetry_on_entry_time"
+    t.index ["index_key"], name: "index_trade_telemetry_on_index_key"
+    t.index ["tracker_id"], name: "index_trade_telemetry_on_tracker_id", unique: true
+  end
+
+  create_table "trading_signals", force: :cascade do |t|
     t.string "index_key", null: false
     t.decimal "max_r_reached", precision: 10, scale: 4
     t.decimal "pnl_rupees", precision: 12, scale: 4
@@ -664,17 +645,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_13_090000) do
   add_foreign_key "paper_trades", "paper_positions"
   add_foreign_key "position_meta_snapshots", "position_trackers"
   add_foreign_key "position_trackers", "instruments"
-  add_foreign_key "research_option_bars", "research_raw_fetches"
-  add_foreign_key "research_option_candidates", "research_signals"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_failed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_ready_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_recurring_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
-  add_foreign_key "trade_analytics", "position_trackers"
   add_foreign_key "trade_telemetry", "position_trackers", column: "tracker_id"
-  add_foreign_key "woods_edges", "woods_units", column: "source_id"
-  add_foreign_key "woods_edges", "woods_units", column: "target_id"
-  add_foreign_key "woods_embeddings", "woods_units", column: "unit_id"
 end

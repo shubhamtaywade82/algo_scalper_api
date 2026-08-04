@@ -55,36 +55,23 @@ module Live
       # State validation
       return { success: false, reason: 'not_active' } unless tracker.active?
 
-      # Acquire process-wide exit lock to avoid dual intent (per-tick vs 5s loop)
-      unless acquire_exit_lock(tracker.id)
-        Rails.logger.info("[ExitEngine] Exit lock already held for #{tracker.order_no}, skipping duplicate exit request.")
-        return { success: false, reason: 'exit_lock_held' }
-      end
-
       intent_persisted = prepare_exit_intent!(tracker, reason)
       return { success: true, reason: 'already_exited', exit_price: tracker.exit_price } if tracker.exited?
       return { success: true, reason: 'exit_already_requested', client_order_id: tracker.exit_coid } unless intent_persisted
 
       ltp = safe_ltp(tracker)
+      result = @router.exit_market(tracker, client_order_id: tracker.exit_coid)
+      success = success?(result)
 
-      cmd_result = Orders::Commands::ExitOrderCommand.new(
-        gateway: @router,
-        tracker: tracker,
-        client_order_id: tracker.exit_coid,
-        reason: reason
-      ).call
-
-      unless cmd_result.success?
-        Rails.logger.error("[ExitEngine] Router failed for #{tracker.order_no}: #{cmd_result.reason} (coid: #{tracker.exit_coid})")
-        return { success: false, reason: 'router_failed', error: cmd_result.error || cmd_result.payload }
+      unless success
+        Rails.logger.error("[ExitEngine] Router failed for #{tracker.order_no}: #{result.inspect} (coid: #{tracker.exit_coid})")
+        return { success: false, reason: 'router_failed', error: result }
       end
 
-      # Extract raw broker response from command payload for downstream helpers
-      result = cmd_result.payload[:raw] || {}
       persist_broker_ack!(tracker, result)
 
-      # Use exit_price from command payload if available, fallback to LTP
-      exit_price = cmd_result.payload[:exit_price] || ltp
+      # Use exit_price from gateway if available, fallback to LTP
+      exit_price = (result.is_a?(Hash) && result[:exit_price]) || ltp
 
       finalize_exit!(tracker, exit_price: exit_price, reason: reason)
     rescue StandardError => e
@@ -101,30 +88,12 @@ module Live
     def prepare_exit_intent!(tracker, reason)
       tracker.with_lock do
         tracker.reload
-        return false if tracker.exited?
-        return false if tracker.exit_sent_at.present?
-
-        if tracker.exit_requested_at.present? && !stale_exit_intent?(tracker)
-          return false
-        end
+        return false if tracker.exited? || tracker.exit_requested_at.present?
 
         coid = tracker.exit_coid.presence || deterministic_exit_coid(tracker)
         metadata = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
-
         metadata['exit_reason'] = reason
         metadata['exit_triggered_at'] = Time.current
-
-        snapshot = safe_pnl_snapshot(tracker)
-        decision_pnl_pct = if snapshot && snapshot[:pnl_pct]
-                             (snapshot[:pnl_pct].to_f * 100.0).round(2)
-                           end
-
-        decision_meta = (metadata['decision'].is_a?(Hash) ? metadata['decision'].dup : {})
-        decision_meta['type'] = reason.to_s
-        decision_meta['path'] ||= 'unknown'
-        decision_meta['decided_at'] = Time.current.iso8601
-        decision_meta['pnl_pct_at_decision'] = decision_pnl_pct if decision_pnl_pct
-        metadata['decision'] = decision_meta
 
         tracker.update!(
           exit_requested_at: Time.current,
@@ -133,7 +102,7 @@ module Live
         )
       end
 
-      tracker.exit_reason
+      true
     end
 
     # Persists broker acknowledgement metadata after successful exit order placement.
@@ -142,159 +111,87 @@ module Live
     # @return [void]
     def persist_broker_ack!(tracker, result)
       order_id = result.is_a?(Hash) ? (result[:order_id] || result['order_id']) : nil
-      tracker.update_columns( # rubocop:disable Rails/SkipsModelValidations
+      tracker.update_columns(
         exit_sent_at: Time.current,
         exit_order_id: order_id,
         updated_at: Time.current
       )
     end
 
-      tracker.reload
-      return if tracker.exit_reason.to_s.strip.present?
+    # Finalizes tracker state and notifications once broker accepts exit order.
+    # @param tracker [PositionTracker]
+    # @param exit_price [BigDecimal, Float, nil]
+    # @param reason [String]
+    # @return [Hash]
+    def finalize_exit!(tracker, exit_price:, reason:)
+      tracker.with_lock do
+        tracker.reload
+        return { success: true, exit_price: tracker.exit_price, reason: tracker.exit_reason || reason } if tracker.exited?
 
-      col = reason.to_s
-      tracker.update!(exit_reason: col)
-    rescue StandardError => e
-      Rails.logger.warn("[ExitEngine] ensure_exit_reason_on_meta! failed for #{tracker&.order_no}: #{e.class} - #{e.message}")
-    end
-
-    def final_pnl_snapshot(tracker)
-      priced = Positions::FinalPnl.from_exit_price(
-        entry_price: tracker.entry_price,
-        quantity: tracker.quantity,
-        exit_price: tracker.exit_price,
-        is_exited: true
-      )
-      if priced
-        return {
-          pnl: priced[:pnl],
-          pnl_pct_decimal: (priced[:pnl_pct].to_f * 100.0)
-        }
+        tracker.mark_exited!(
+          exit_price: exit_price,
+          exit_reason: reason
+        )
       end
 
+      tracker.reload
+      normalized_reason = normalize_exit_reason_with_final_pnl(tracker, reason)
+
+      Rails.logger.info("[ExitEngine] Exit executed #{tracker.order_no}: #{normalized_reason} (coid: #{tracker.exit_coid})")
+
+      record_trade_telemetry(tracker, exit_price, normalized_reason)
+      notify_telegram_exit(tracker, normalized_reason, exit_price)
+
+      { success: true, exit_price: exit_price, reason: normalized_reason, client_order_id: tracker.exit_coid }
+    rescue StandardError => e
+      tracker.reload
+      if tracker.exited?
+        Rails.logger.info("[ExitEngine] Tracker already exited (likely by OrderUpdateHandler): #{tracker.order_no}")
+        { success: true, exit_price: tracker.exit_price, reason: tracker.exit_reason || reason, client_order_id: tracker.exit_coid }
+      else
+        Rails.logger.error("[ExitEngine] Order placed but tracker update failed: #{tracker.order_no}: #{e.class} - #{e.message}")
+        raise
+      end
+    end
+
+    # Ensures displayed exit reason reflects final net PnL percentage.
+    # @param tracker [PositionTracker]
+    # @param reason [String]
+    # @return [String]
+    def normalize_exit_reason_with_final_pnl(tracker, reason)
       final_pnl = tracker.last_pnl_rupees
       entry_price = tracker.entry_price
       quantity = tracker.quantity
-      return { pnl: nil, pnl_pct_decimal: nil } unless final_pnl.present? && entry_price.present? &&
-                                                       quantity.present? &&
-                                                       entry_price.to_f.positive? && quantity.to_i.positive?
-
-      {
-        pnl: final_pnl,
-        pnl_pct_decimal: (final_pnl.to_f / (entry_price.to_f * quantity.to_i)) * 100.0
-      }
-    end
-
-    def classify_exit(final_pnl_pct_decimal)
-      return 'profit' if final_pnl_pct_decimal.positive?
-      return 'loss' if final_pnl_pct_decimal.negative?
-
-      'breakeven'
-    end
-
-    def build_final_reason(reason, execution_meta)
-      final_pct = execution_meta['final_pnl_pct']
-      classification = execution_meta['classified_as']
-      return reason unless final_pct && classification
-
-      "#{reason} (Final: #{final_pct.round(2)}%, #{classification})"
-    end
-
-    def acquire_exit_lock(tracker_id, ttl: 10)
-      key = "exit_lock:#{tracker_id}"
-      @redis ||= Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
-      @redis.set(key, '1', nx: true, ex: ttl)
-    rescue StandardError => e
-      Rails.logger.error("[ExitEngine] acquire_exit_lock failed for tracker=#{tracker_id}: #{e.class} - #{e.message} — failing CLOSED (skipping this exit attempt)")
-      alert_exit_lock_unavailable(tracker_id, e)
-      false # fail closed: Redis outage must not allow a duplicate exit race; DB exit_sent_at is the backstop, next 5s loop retries
-    end
-
-    # Releases Redis exit lock immediately so the next close/exits are not blocked for the TTL window.
-    def release_exit_lock(tracker_id)
-      return if tracker_id.blank?
-      return unless @redis
 
       unless final_pnl.present? && entry_price.present? && quantity.present? &&
-             entry_price.to_f.positive? && quantity.to_i.positive?
+             entry_price.to_f.positive? && quantity.to_i.positive? && reason.present? && reason.include?('%')
         Rails.logger.warn("[ExitEngine] Cannot update exit reason for #{tracker.order_no}: final_pnl=#{final_pnl.inspect}, entry_price=#{entry_price.inspect}, quantity=#{quantity.inspect}, reason=#{reason.inspect}")
         return reason
       end
 
-      pnl_pct_display = ((final_pnl.to_f / (entry_price.to_f * quantity.to_i)) * 100.0)
-      classification = classify_exit(pnl_pct_display)
+      pnl_pct_display = ((final_pnl.to_f / (entry_price.to_f * quantity.to_i)) * 100.0).round(2)
+      base_reason = reason.split(/\s+-?\d+\.?\d*%/).first&.strip || reason.split('%').first&.strip || reason
+      updated_reason = "#{base_reason} #{pnl_pct_display}%"
+      return reason if reason == updated_reason
 
-      tracker.transaction do
-        tracker.lock!
-        meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
-
-        execution_meta = (meta['execution'].is_a?(Hash) ? meta['execution'].dup : {})
-        execution_meta['type'] = reason.to_s
-        execution_meta['final_pnl_pct'] = pnl_pct_display.round(2)
-        execution_meta['classified_as'] = classification
-        meta['execution'] = execution_meta
-
-        meta['exit_reason'] ||= reason
-
-        tracker.update!(meta: meta, exit_reason: build_final_reason(reason, execution_meta))
-      end
-
-      tracker.exit_reason
+      Rails.logger.info("[ExitEngine] Updating exit reason for #{tracker.order_no}: '#{reason}' -> '#{updated_reason}' (PnL: ₹#{final_pnl}, PnL%: #{pnl_pct_display}%)")
+      meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
+      meta['exit_reason'] = updated_reason
+      tracker.update_column(:meta, meta)
+      updated_reason
     end
 
-    def classify_exit(final_pnl_pct_decimal)
-      return 'profit' if final_pnl_pct_decimal.positive?
-      return 'loss' if final_pnl_pct_decimal.negative?
-
-      'breakeven'
+    # Generates a deterministic, broker-safe correlation id for exits.
+    # @param tracker [PositionTracker]
+    # @return [String]
+    def deterministic_exit_coid(tracker)
+      seed = "exit-#{tracker.id}-#{tracker.order_no}-#{tracker.security_id}"
+      "AS-EXIT-#{Digest::SHA256.hexdigest(seed)[0, 20]}"
     end
 
-    def build_final_reason(reason, execution_meta)
-      final_pct = execution_meta['final_pnl_pct']
-      classification = execution_meta['classified_as']
-      return reason unless final_pct && classification
-
-      "#{reason} (Final: #{final_pct.round(2)}%, #{classification})"
-    end
-
-    def acquire_exit_lock(tracker_id, ttl: 10)
-      key = "exit_lock:#{tracker_id}"
-      redis = Redis.current
-      redis.set(key, '1', nx: true, ex: ttl)
-    rescue StandardError => e
-      Rails.logger.error("[ExitEngine] acquire_exit_lock failed for tracker=#{tracker_id}: #{e.class} - #{e.message}")
-      true
-    end
-
-    def stale_exit_intent?(tracker)
-      return false if tracker.exit_requested_at.blank?
-
-      (Time.current - tracker.exit_requested_at) >= EXIT_INTENT_RETRY_AFTER_SECONDS
-    end
-
-    def safe_pnl_snapshot(tracker)
-      Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
-    rescue StandardError
-      nil
-    end
-
-    # Broker ack persisted (exit_sent_at) but tracker still active — dashboard manual
-    # close may resubmit; COID idempotency avoids duplicate live risk where supported.
-    def operator_may_resubmit_active_exit?(tracker, operator_retry)
-      operator_retry && tracker.active?
-    end
-
-    def safe_pnl_snapshot(tracker)
-      Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
-    rescue StandardError
-      nil
-    end
-
-    # Get LTP from cache with error handling
-    # Since Live::TickCache.ltp always exists (delegates to ::TickCache.instance.ltp),
-    # we can simplify to a direct call
+    # Resolve LTP via the market-data query boundary
     def safe_ltp(tracker)
-      Live::TickCache.ltp(tracker.segment, tracker.security_id)
+      Live::TickQuery.ltp_for(tracker)
     rescue StandardError
       nil
     end
@@ -341,8 +238,8 @@ module Live
         index_key: tracker.meta&.dig('index_key') || tracker.index_key,
         entry_time: tracker.created_at,
         exit_time: tracker.exited_at || Time.current,
-        entry_tf: resolved_entry_tf(tracker),
-        htf_tf: tracker.meta&.dig('htf_tf') || '15m', # Default to 15m if missing
+        entry_tf: tracker.meta&.dig('entry_tf'),
+        htf_tf: tracker.meta&.dig('htf_tf'),
         bos_age_at_entry: tracker.meta&.dig('bos_age_at_entry'),
         retrace_pct: tracker.meta&.dig('retrace_pct'),
         pullback_candles: tracker.meta&.dig('pullback_candles'),
@@ -357,13 +254,6 @@ module Live
       )
     rescue StandardError => e
       Rails.logger.error("[ExitEngine] Failed to record trade telemetry for #{tracker&.order_no}: #{e.class} - #{e.message}")
-    end
-
-    def resolved_entry_tf(tracker)
-      tf = tracker.meta&.dig('entry_tf') || tracker.meta&.dig('timeframe')
-      return tf if tf.present?
-
-      '1m'
     end
 
     # Check if Telegram notifications are enabled

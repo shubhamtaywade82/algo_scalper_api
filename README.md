@@ -56,7 +56,35 @@ rails db:migrate
 rails solid_queue:load_recurring    # populate recurring job schedule
 ```
 
-### Run
+### Environment Configuration
+
+Minimal `.env` setup:
+```dotenv
+# DhanHQ API Credentials (Required)
+CLIENT_ID=your_client_id
+DHAN_ACCESS_TOKEN=your_access_token
+
+# Application Settings
+RAILS_LOG_LEVEL=info
+RAILS_MAX_THREADS=2
+PORT=3000
+
+# Database
+ALGO_SCALPER_API_DATABASE_PASSWORD=your_password
+
+# Redis (for Solid Queue)
+REDIS_URL=redis://localhost:6379/0
+
+# Trading Configuration
+DHANHQ_ENABLED=true
+DHANHQ_WS_ENABLED=true
+DHANHQ_ORDER_WS_ENABLED=true
+
+# Trading Mode (PAPER or LIVE)
+PAPER_MODE=false  # Set to 'true' for paper trading, 'false' for live trading
+```
+
+### Start the Application
 
 ```bash
 # Web API server (does not start trading services)
@@ -93,14 +121,33 @@ indices:
     max_iv: 60.0
 ```
 
-This launches (via `Procfile.dev`):
+### Environment Variables
 
-| Process | Command | Purpose |
-|---------|---------|---------|
-| `web` | `bin/rails server -p 3011` | Rails API server |
-| `trading` | `ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon` | Trading brain (11 services in threads) |
-| `jobs` | `bin/jobs` | Solid Queue worker (SMC scanner, AI analysis, instrument sync) |
-| `dashboard` | `cd dashboard && npm run dev` | Vue/Vite frontend |
+| Variable                  | Purpose                                   | Default                    |
+| ------------------------- | ----------------------------------------- | -------------------------- |
+| `DHANHQ_ENABLED`          | Master toggle for DhanHQ integration      | `true`                     |
+| `CLIENT_ID`               | DhanHQ API client ID                      | Required                   |
+| `DHAN_ACCESS_TOKEN`     | DhanHQ API access token                   | Required                   |
+| `DHANHQ_WS_ENABLED`       | Enable WebSocket market feed              | `true`                     |
+| `DHANHQ_ORDER_WS_ENABLED` | Enable order update WebSocket             | `true`                     |
+| `DHANHQ_WS_MODE`          | WebSocket mode (`quote`/`ticker`/`full`)  | `quote`                    |
+| `PAPER_MODE`              | Trading mode (`true`=paper, `false`=live) | `false` (live)             |
+| `RAILS_LOG_LEVEL`         | Application log level                     | `info`                     |
+| `REDIS_URL`               | Redis connection URL                      | `redis://localhost:6379/0` |
+| `TRADING_BOOT_RECONCILIATION_STRICT` | Fail daemon start when startup reconciliation fails (`true`/`false`) | `true` when market open, else `false` |
+
+---
+
+### Startup Reconciliation Safety
+
+Trading daemon startup performs a broker-vs-DB reconciliation pass before starting risk/signal loops. This is handled by `Live::PositionSyncService.instance.force_sync!` and prevents stale DB-only state after restarts.
+
+- During market hours, reconciliation failures are strict by default and block daemon startup.
+- Outside market hours, strict mode defaults to false.
+- Override with `TRADING_BOOT_RECONCILIATION_STRICT=true|false`.
+
+
+## 📊 Trading System
 
 ### Other Commands
 
@@ -342,57 +389,11 @@ dhanhq:
   enable_orders: false  # must be true for live broker calls (with PLACE_ORDER=true)
 ```
 
-For **live broker** order placement: set `LIVE_TRADING=true`, `dhanhq.enable_orders: true`, and `PLACE_ORDER=true`. `Orders::Placer` dry-runs if either gate is off.
-
-Both modes use **real DhanHQ WebSocket data** for market ticks.
-
-Signals, guards, strike qualification, and risk rules use the **same logic** in paper and live. The only intentional differences are **order execution** (simulated fills and `GatewayPaper` wallet math vs DhanHQ orders and real balances) and **broker position sync** (live reconciles to DhanHQ positions; paper stays on `PositionTracker` + ticks).
-
-| Aspect | Paper Mode | Live Mode |
-|--------|-----------|-----------|
-| Market data | Real WebSocket ticks | Real WebSocket ticks |
-| Option chain | Real DhanHQ API | Real DhanHQ API |
-| Order execution | Simulated fills (`GatewayPaper`) | Real DhanHQ API (`GatewayLive`) |
-| PnL tracking | Real LTP-based | Real LTP-based |
-| Order updates | Synthetic | DhanHQ WebSocket |
-| Wallet | Simulated balance | Real funds API |
-
-## Environment Variables
-
-| Variable | Required | Purpose |
-|----------|----------|---------|
-| `DHAN_CLIENT_ID` | Yes | DhanHQ client ID |
-| `DHAN_ACCESS_TOKEN` | Yes | DhanHQ access token (static fallback) |
-| `DHAN_PIN` | Recommended | For TOTP auto-refresh |
-| `DHAN_TOTP_SECRET` | Recommended | For TOTP auto-refresh |
-| `ENABLE_TRADING_SERVICES` | Auto (Procfile) | Must be `"true"` for daemon |
-| `PLACE_ORDER` | Live only | Must be `"true"` to allow live broker order placement |
-| `LIVE_TRADING` | Recommended | When unset/false: paper gateway forced. Set `"true"` only when intentionally going live |
-| `SIGNAL_TIER` | Optional | `exploratory` / `standard` / `selective` — merges `config/signal_tier_presets.yml` |
-| `REDIS_URL` | Optional | Redis connection (default: redis://127.0.0.1:6379/0) |
-| `DATABASE_URL` | Optional | PostgreSQL connection |
-| `RAILS_ENV` | Optional | Rails environment |
-| `OLLAMA_MODEL` | Optional | Ollama model name (default: llama3.2:3b) |
-| `OLLAMA_BASE_URL` / `OLLAMA_HOST_URL` | Optional | Ollama server URL (default: http://localhost:11434) |
-| `OLLAMA_TIMEOUT` | Optional | Ollama request timeout in seconds (default: 120) |
-| `TELEGRAM_BOT_TOKEN` | Optional | Telegram bot token |
-| `TELEGRAM_CHAT_ID` | Optional | Telegram chat ID |
-
-### Live Trading Checklist
-
-Before live execution:
-
-- [ ] `LIVE_TRADING=true` in environment (and restart trading daemon so gateway picks live)
-- [ ] DhanHQ credentials set (`DHAN_CLIENT_ID`, `DHAN_ACCESS_TOKEN`)
-- [ ] TOTP credentials set (`DHAN_PIN`, `DHAN_TOTP_SECRET`) for token auto-refresh
-- [ ] `PLACE_ORDER=true` in environment
-- [ ] `dhanhq.enable_orders: true` in `config/algo.yml`
-- [ ] `InstrumentsImporter` has run recently (`rails runner 'puts Derivative.count'`)
-- [ ] Database migrated (`rails db:migrate:status`)
-- [ ] Redis running (`redis-cli ping`)
-- [ ] Solid Queue recurring tasks loaded (`rails solid_queue:load_recurring`)
-
-## API Endpoints
+**DhanHQ Authentication Errors**
+```bash
+# Check credentials
+echo $CLIENT_ID
+echo $DHAN_ACCESS_TOKEN
 
 ```
 GET  /api/health                      # System health status

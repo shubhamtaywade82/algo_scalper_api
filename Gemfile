@@ -47,22 +47,7 @@ gem 'kamal', require: false
 gem 'thruster', require: false
 
 # DhanHQ Ruby client (v2 API wrapper and WebSocket feed)
-gem 'DhanHQ', '2.8.0', require: 'dhan_hq'
-
-# MCP adapter for DhanHQ tool specs and validated routing
-gem 'dhanhq-mcp', path: '/home/nemesis/project/trading-workspace/sdk/dhanhq-mcp'
-
-# TOTP generation for Dhan TOTP auth strategy
-gem 'rotp', '~> 6.3'
-
-# Telegram bot for notifications
-gem 'telegram-bot-ruby', '~> 0.19'
-
-# Local LLM only — no OpenAI/ruby-openai gems
-gem 'ollama-client', '~> 1.1'
-
-# TOTP generation for Dhan TOTP auth strategy
-gem 'rotp', '~> 6.3'
+gem 'DhanHQ'
 
 # Telegram bot for notifications
 gem 'telegram-bot-ruby', '~> 0.19'

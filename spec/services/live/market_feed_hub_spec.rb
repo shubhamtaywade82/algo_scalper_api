@@ -19,8 +19,12 @@ RSpec.describe Live::MarketFeedHub do
     hub.instance_variable_set(:@watchdog_thread, nil)
     hub.instance_variable_set(:@restarting, false)
 
-    # Mock environment
-    allow(ENV).to receive(:[]).with('DHAN_CLIENT_ID').and_return('test_client_id')
+    # Clear TickCache
+    TickCache.instance.clear
+
+    # Ensure credentials are set (for enabled? check)
+    allow(ENV).to receive(:[]).and_call_original
+    allow(ENV).to receive(:[]).with('CLIENT_ID').and_return('test_client_id')
     allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return('test_access_token')
     allow(ENV).to receive(:[]).with('CLIENT_ID').and_return(nil)
     allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return(nil)
@@ -51,9 +55,101 @@ RSpec.describe Live::MarketFeedHub do
     hub.stop!
   end
 
-  describe 'singleton' do
-    it 'returns the same instance' do
-      expect(described_class.instance).to eq(described_class.instance)
+  describe 'EPIC B — B2: Auto-Subscribe on Boot' do
+    describe '#start! - Boot Initialization' do
+      context 'when enabled and credentials are present' do
+        it 'returns true and marks hub as running' do
+          expect(hub.start!).to be(true)
+          expect(hub).to be_running
+        end
+
+        it 'creates WebSocket client with correct mode' do
+          hub.start!
+          expect(DhanHQ::WS::Client).to have_received(:new).with(mode: :quote)
+        end
+
+        it 'registers tick handler with WebSocket client' do
+          hub.start!
+          expect(ws_client_double).to have_received(:on).with(:tick)
+        end
+
+        it 'starts WebSocket client connection' do
+          hub.start!
+          expect(ws_client_double).to have_received(:start)
+        end
+
+        it 'logs successful start' do
+          allow(Rails.logger).to receive(:info)
+          hub.start!
+          expect(Rails.logger).to have_received(:info).with(
+            match(/DhanHQ market feed started/)
+          )
+        end
+      end
+
+      context 'when credentials are missing' do
+        before do
+          allow(ENV).to receive(:[]).and_call_original
+          allow(ENV).to receive(:[]).with('CLIENT_ID').and_return(nil)
+          allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return(nil)
+          allow(ENV).to receive(:[]).with('CLIENT_ID').and_return(nil)
+          allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return(nil)
+        end
+
+        it 'returns false and does not start' do
+          result = hub.start!
+          expect(result).to be_falsy
+          expect(hub).not_to be_running
+        end
+
+        it 'does not create WebSocket client' do
+          hub.start!
+          expect(DhanHQ::WS::Client).not_to have_received(:new)
+        end
+      end
+
+      context 'when already running' do
+        before { hub.start! }
+
+        it 'does not start again' do
+          hub.start!
+          # Should not create a new client (already started in before block)
+          expect(DhanHQ::WS::Client).to have_received(:new).once
+        end
+
+        it 'remains running' do
+          hub.start!
+          expect(hub).to be_running
+        end
+      end
+
+      context 'when start fails' do
+        before do
+          allow(ws_client_double).to receive(:start).and_raise(StandardError, 'Connection failed')
+          allow(Rails.logger).to receive(:error)
+        end
+
+        it 'returns false' do
+          expect(hub.start!).to be(false)
+        end
+
+        it 'does not mark as running' do
+          hub.start!
+          expect(hub).not_to be_running
+        end
+
+        it 'logs error' do
+          hub.start!
+          expect(Rails.logger).to have_received(:error).with(
+            match(/Failed to start DhanHQ market feed/)
+          )
+        end
+
+        it 'calls stop! to clean up' do
+          expect(hub).to receive(:stop!).and_call_original
+          hub.start!
+        end
+      end
     end
   end
 

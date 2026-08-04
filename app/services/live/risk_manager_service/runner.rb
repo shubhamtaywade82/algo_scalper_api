@@ -8,12 +8,12 @@ module Live
       # Start watchdog thread to ensure service thread is restarted if it dies
       def start_watchdog
         @watchdog_thread = Thread.new do
-          Thread.current.name = "risk-manager-watchdog"
+          Thread.current.name = 'risk-manager-watchdog'
           loop do
             break unless @running # Exit if service is stopped
 
             unless @thread&.alive?
-              Rails.logger.warn("[RiskManagerService] Watchdog detected dead thread — restarting...")
+              Rails.logger.warn('[RiskManagerService] Watchdog detected dead thread — restarting...')
               # Reset running flag if thread is dead or nil
               @running = false
               start
@@ -26,10 +26,6 @@ module Live
       # Central monitoring loop: keep PnL and caches fresh.
       # Always run enforcement - ExitEngine is only used for executing exits, not for triggering them.
       def monitor_loop(last_paper_pnl_update)
-        # Clear per-cycle caches at the start
-        @redis_pnl_cache = {}
-        @cycle_tracker_map = nil
-
         # Skip processing if market is closed and no active positions
         if TradingSession::Service.market_closed?
           # Only fetch once after market closes, then skip all checks until market opens
@@ -44,7 +40,7 @@ module Live
             if active_count.zero?
               # Market closed and no active positions - no need to monitor
               # Mark as checked and return early - won't check again until market opens
-              Rails.logger.debug("[RiskManager] Market closed with no positions - skipping monitoring until market opens")
+              Rails.logger.debug('[RiskManager] Market closed with no positions - skipping monitoring until market opens')
               return
             end
             # Market closed but positions exist - continue monitoring (needed for exits)
@@ -61,216 +57,23 @@ module Live
         # Skip enforcement methods if market closed and no positions (avoid DB queries)
         return if skip_enforcement_due_to_market_closed?
 
-        # Circuit breaker — force-close all positions if tripped, then stop enforcement
-        if Risk::CircuitBreaker.instance.tripped?
-          cb = Risk::CircuitBreaker.instance.status
-          Rails.logger.error("[RiskManager] Circuit breaker active (#{cb[:reason]}) — force-closing all positions")
-          Risk::CircuitBreaker.instance.force_close_all!(exit_engine: exit_engine, reason: "circuit_breaker: #{cb[:reason]}")
-          return
-        end
-
         advance_trade_states!
 
         # ============================================================
         # NEW 5-LAYER EXIT SYSTEM (optimized for intraday options buying)
         # ============================================================
         # Priority order: first-match-wins, evaluation stops on exit
+        # This replaces the previous over-engineered system with a clean,
+        # options-aligned exit mechanism.
         # ============================================================
         exit_engine = @exit_engine || self
-        run_interval_enforcement_if_needed(exit_engine)
-      end
-
-      # Zombie trade watchdog: flatten all positions if the WebSocket feed has been
-      # stale for more than 15 seconds.  Without ticks we cannot monitor or protect
-      # positions, so force-close everything and let the next session start clean.
-      # Only fires during the trading window (9:20–15:30 IST) — outside those hours
-      # a stale feed is expected.
-      def flatten_if_feed_dead!(exit_engine)
-        seconds_stale = MarketFeedHub.instance.seconds_since_last_tick
-        return unless seconds_stale
-        return unless seconds_stale > 15
-
-        active = Positions::ActivePositionsCache.instance.active_trackers
-        return if active.empty?
-
-        Rails.logger.warn(
-          "[RiskManager] ZOMBIE WATCHDOG — feed stale for #{seconds_stale.round(1)}s, " \
-          "force-closing #{active.size} position(s)"
-        )
-
-        active.each do |tracker|
-          next if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
-
-          reason = "ZOMBIE_WATCHDOG (feed stale #{seconds_stale.round(1)}s)"
-          track_exit_path(tracker, "zombie_watchdog", reason)
-          dispatch_exit(exit_engine, tracker, reason)
-        end
-      rescue StandardError => e
-        Rails.logger.error("[RiskManager] flatten_if_feed_dead! error: #{e.class} - #{e.message}")
-      end
-
-      # Interval fallback enforcement when realtime tick-first path is stale/unavailable.
-      # EOD force-close runs every loop when at/past market close so it is never skipped by tick-first.
-      # When outside trading window (pre 9:20 or post 15:30): run EOD only in 15:30–16:00; skip all enforcement otherwise.
-      def run_interval_enforcement_if_needed(exit_engine)
-        if outside_trading_window?
-          return unless in_eod_force_close_window?
-          enforce_eod_force_close(exit_engine: exit_engine)
-          return
-        end
-
-        risk = risk_config
-        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || "15:20")
-        if market_close_time && Time.current >= market_close_time
-          enforce_eod_force_close(exit_engine: exit_engine)
-          return
-        end
-
-        flatten_if_feed_dead!(exit_engine)
-
-        return run_enforcement_cycle(exit_engine) unless realtime_tick_first_enabled?
-
-        if tick_stream_fresh?
-          Rails.logger.debug("[RiskManager] Tick-first mode active; skipping interval exit scan") if should_log_realtime_skip?
-          return
-        end
-
-        unless realtime_fallback_enabled?
-          Rails.logger.warn("[RiskManager] Tick stream stale and fallback disabled; skipping interval exit scan")
-          return
-        end
-
-        Rails.logger.warn("[RiskManager] Tick stream stale; running interval fallback exit scan")
-        run_enforcement_cycle(exit_engine)
-      end
-
-      # Template method: single algorithm skeleton for all exit enforcement layers.
-      # Add or reorder enforcement by editing this method.
-      # First-match-wins: after any layer triggers an exit, we skip remaining layers for that tracker.
-      # EOD force-close runs first when at or past market close so intraday positions never carry overnight.
-      def run_enforcement_cycle(exit_engine)
-        enforce_eod_force_close(exit_engine: exit_engine)
-
-        risk = risk_config
-        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || "15:30")
-        return if market_close_time && Time.current >= market_close_time
-
-        Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
-          run_enforcement_for_tracker(tracker, exit_engine, position_data: nil)
-        end
-      end
-
-      def run_enforcement_for_tracker(tracker, exit_engine, position_data: nil)
-        return if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
-
-        # Get high-performance position snapshot from ActiveCache
-        position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
-        return unless position_data
-
-        # Track metadata changes locally to avoid multiple DB updates per cycle
-        @pending_meta = (tracker.meta || {}).deep_dup
-
-        # Advance trade state before evaluating rules (updates trade_state, peak_trend_score etc)
-        # Note: advance_trade_state_for might still do its own updates for state columns
-        advance_trade_state_for(tracker, position_data: position_data)
-
-        # Layers will now update @pending_meta instead of the DB directly
-        enforce_premium_r_stop_for(tracker, exit_engine: exit_engine, position_data: position_data)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine, position_data: position_data)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_profit_floor_for(tracker, exit_engine: exit_engine, position_data: position_data)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_structure_invalidation_for(tracker, exit_engine: exit_engine, position_data: position_data)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_premium_momentum_failure_for(tracker, exit_engine: exit_engine, position_data: position_data)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_rr_profit_booking_for(tracker, exit_engine: exit_engine, position_data: position_data)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_percentage_pnl_exit_for(tracker, exit_engine: exit_engine, position_data: position_data)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_time_stop_for(tracker, exit_engine: exit_engine, position_data: position_data)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_time_based_exit_for(tracker, exit_engine: exit_engine, position_data: position_data)
-      ensure
-        # Perform a single consolidated update at the end of the cycle if meta changed
-        if @pending_meta && @pending_meta != tracker.meta
-          tracker.update_columns(meta: @pending_meta) # rubocop:disable Rails/SkipsModelValidations
-        end
-        @pending_meta = nil
-      end
-
-      def tick_stream_fresh?
-        last = @last_realtime_tick_at
-        return false unless last
-
-        (Time.current - last) <= realtime_tick_stale_after_seconds
-      end
-
-      def should_log_realtime_skip?
-        @last_realtime_skip_log_at ||= Time.zone.at(0)
-        return false if Time.current - @last_realtime_skip_log_at < 30.seconds
-
-        @last_realtime_skip_log_at = Time.current
-        true
-      end
-
-      def hydrate_meta_with_runtime(tracker)
-        base = (tracker.meta || {}).deep_stringify_keys
-        runtime = Live::PositionRuntimeCache.instance.fetch(tracker.id)
-        return base if runtime.empty?
-
-        runtime.each do |key, value|
-          base[key.to_s] = value unless value.nil?
-        end
-        base
-      end
-
-      def exit_requested_or_sent?(tracker)
-        # Check object state first. If it's already set, definitely true.
-        tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
-      end
-
-      def exits_blocked_by_time?
-        restrictions = AlgoConfig.fetch[:trading_time_restrictions]
-        return false unless restrictions&.[](:enabled) && restrictions[:block_exits]
-        return false if restrictions[:avoid_periods].blank?
-
-        current_hm = Time.zone.now.strftime("%H:%M")
-        restrictions[:avoid_periods].any? do |period|
-          start_time, end_time = period.split("-")
-          current_hm >= start_time && current_hm < end_time
-        end
-      rescue StandardError => e
-        Rails.logger.error("[RiskManager] exits_blocked_by_time? error: #{e.message}")
-        false
-      end
-
-      # True when outside continuous trading window (before 9:20 or after 15:30 IST).
-      def outside_trading_window?
-        TradingSession::Service.market_closed?
-      end
-
-      # True only in 15:30–16:00 IST so EOD force-close runs once after close, not at 1 AM or weekend.
-      def in_eod_force_close_window?
-        return false unless TradingSession::Service.after_market_close_time?
-
-
 
         # LAYER 0: EXECUTABLE R STOP (Premium-based hard stop)
         enforce_premium_r_stop(exit_engine: exit_engine)
 
-        # LAYER 1: DYNAMIC TRAILING SL (Lock in profits as price moves)
-        # Purpose: Move SL up-only to capture trend moves
-        enforce_dynamic_trailing_stops(exit_engine: exit_engine)
+        # LAYER 1: HARD RISK CIRCUIT BREAKER (Account protection - highest priority)
+        # Purpose: Account protection ONLY - no trade logic
+        enforce_hard_rupee_stop_loss(exit_engine: exit_engine)
 
         # PROFIT FLOOR (Stateful guarantee - protect locked profits)
         # Purpose: Once net PnL reaches lock_rupees, exit if it drops back to that floor
@@ -284,19 +87,11 @@ module Live
         # Purpose: Exit when premium stops making progress - aligns with gamma/theta behavior
         enforce_premium_momentum_failure(exit_engine: exit_engine)
 
-        # LAYER 4: RR-BASED PROFIT BOOKING (Full exit on % based PnL targets)
-        # Purpose: Capture profits at pre-defined R multiples
-        enforce_rr_profit_booking(exit_engine: exit_engine)
-
-        # LAYER 4.5: PERCENTAGE-BASED PNL EXIT
-        # Purpose: Full exit when target % PnL is reached
-        enforce_percentage_pnl_exit(exit_engine: exit_engine)
-
-        # LAYER 5: TIME STOP (Early, contextual - prevent holding dead trades)
+        # LAYER 4: TIME STOP (Early, contextual - prevent holding dead trades)
         # Purpose: Exit regardless of PnL when time limit exceeded
         enforce_time_stop(exit_engine: exit_engine)
 
-        # LAYER 6: END-OF-DAY FLATTEN (Operational safety - 3:20 PM exit)
+        # LAYER 5: END-OF-DAY FLATTEN (Operational safety - 3:20 PM exit)
         # Purpose: Operational safety - always exit before market close
         enforce_time_based_exit(exit_engine: exit_engine)
 
@@ -306,38 +101,10 @@ module Live
         # These are replaced by the new 5-layer system:
         # - enforce_early_trend_failure → replaced by premium_momentum_failure
         # - enforce_global_time_overrides → replaced by structure_invalidation + premium_momentum_failure
+        # - enforce_hard_limits (rupee TP) → removed (not aligned with options)
+        # - enforce_post_profit_zone → removed (not aligned with options)
         # - enforce_trailing_stops → replaced by premium_momentum_failure
         # ============================================================
-      end
-      def exits_blocked_by_time?
-        restrictions = AlgoConfig.fetch[:trading_time_restrictions]
-        return false unless restrictions&.[](:enabled) && restrictions[:block_exits]
-        return false if restrictions[:avoid_periods].blank?
-
-        current_hm = Time.zone.now.strftime('%H:%M')
-        restrictions[:avoid_periods].any? do |period|
-          start_time, end_time = period.split('-')
-          current_hm >= start_time && current_hm < end_time
-        end
-      rescue StandardError => e
-        Rails.logger.error("[RiskManager] exits_blocked_by_time? error: #{e.message}")
-        false
-      end
-
-      # True when outside continuous trading window (before 9:20 or after 15:30 IST).
-      def outside_trading_window?
-        TradingSession::Service.market_closed?
-      end
-
-      # True only in 15:30–16:00 IST so EOD force-close runs once after close, not at 1 AM or weekend.
-      def in_eod_force_close_window?
-        return false unless TradingSession::Service.after_market_close_time?
-
-        ist = TradingSession::Service.current_ist_time
-        now_min = (ist.hour * 60) + ist.min
-        close_min = (TradingSession::Service::MARKET_CLOSE_HOUR * 60) + TradingSession::Service::MARKET_CLOSE_MINUTE
-        end_min = (16 * 60) + 0
-        now_min >= close_min && now_min < end_min
       end
     end
   end
