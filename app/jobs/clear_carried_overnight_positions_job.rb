@@ -13,20 +13,19 @@ class ClearCarriedOvernightPositionsJob < ApplicationJob
   def perform
     exit_engine = nil
     today_start = Time.zone.today.beginning_of_day
-    trackers = PositionTracker.active.where(created_at: ...today_start).to_a
-
-    if trackers.empty?
+    count = PositionTracker.active.where(created_at: ...today_start).count
+    if count.zero?
       Rails.logger.info('[ClearCarriedOvernightPositionsJob] No carried-overnight positions to clear')
       return
     end
 
-    Rails.logger.info("[ClearCarriedOvernightPositionsJob] Clearing #{stale.size} carried-overnight position(s)")
+    Rails.logger.info("[ClearCarriedOvernightPositionsJob] Clearing #{count} carried-overnight position(s)")
 
     router = TradingSystem::OrderRouter.new
     exit_engine = Live::ExitEngine.new(order_router: router)
     exit_engine.start
 
-    stale.each do |tracker|
+    PositionTracker.active.where(created_at: ...today_start).find_each do |tracker|
       execute_exit_with_retry(exit_engine, tracker)
     end
   ensure

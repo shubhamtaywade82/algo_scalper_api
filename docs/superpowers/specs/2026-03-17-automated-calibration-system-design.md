@@ -366,7 +366,7 @@ def ai_snapshot
     calibration_stats: latest_run&.raw_stats
   )
 
-  client = Services::Ai::OpenaiClient.instance
+  client = Services::Ai::OllamaClient.instance
   return render json: { error: 'AI not configured' }, status: :service_unavailable unless client.enabled?
 
   response = client.chat(
@@ -640,12 +640,12 @@ Because the snapshot key set is fixed and bounded (~9 keys matching `Calibration
 - Route: added inside `namespace :api` block in `config/routes.rb` as `post 'analysis/:index_key/ai_snapshot', to: 'analysis#ai_snapshot', as: :analysis_ai_snapshot`. Note: `to: 'analysis#ai_snapshot'` (no `api/` prefix) because it is already inside the `namespace :api` block.
 - The controller resolves instrument and LTP exactly as `show` does (`find_instrument` + `Live::TickCache.ltp(instrument.exchange_segment, instrument.security_id)`), then passes resolved values to the builder.
 - Calls `Ai::AiSnapshotPromptBuilder.build(index_key:, ltp:, smc:, regime:, calibration_stats:)` to assemble context. `smc` and `regime` come from `AnalysisStore.read_all(index_key)[:smc]&.dig(:data)` and `[:regime]&.dig(:data)` respectively (same pattern as `show`). `calibration_stats` comes from `CalibrationRun.where(symbol: index_key.upcase).order(created_at: :desc).first&.raw_stats`.
-- Passes assembled messages array to `Services::Ai::OpenaiClient.instance.chat(messages: [...], temperature: 0.3)` — keyword argument form; `messages` is an array of `{ role:, content: }` hashes as `OpenaiClient` expects.
+- Passes assembled messages array to `Services::Ai::OllamaClient.instance.chat(messages: [...], temperature: 0.3)` — keyword argument form; `messages` is an array of `{ role:, content: }` hashes as `OllamaClient` expects.
 - Returns `{ snapshot: "<markdown string>", generated_at: "<ISO8601>" }`.
 - Does **not** write to `AnalysisStore` — snapshot is display-only and transient.
 - On `Net::ReadTimeout` or `Faraday::TimeoutError`: returns 503 `{ error: "AI service unavailable — timed out" }`.
 - On other AI/network errors (`StandardError` rescue): returns 503 `{ error: "AI service unavailable" }`.
-- Note: Rails does not emit 504. Timeout errors from `OpenaiClient` propagate as `Net::ReadTimeout` or `Faraday::TimeoutError` and are rescued explicitly to return 503.
+- Note: Rails does not emit 504. Timeout errors from `OllamaClient` propagate as `Net::ReadTimeout` or `Faraday::TimeoutError` and are rescued explicitly to return 503.
 
 **New service:** `app/services/ai/ai_snapshot_prompt_builder.rb` — constant `Ai::AiSnapshotPromptBuilder`
 

@@ -107,7 +107,7 @@ namespace :ai do
     end
 
     # Try to get AI-generated examples if AI is enabled
-    if Services::Ai::OpenaiClient.instance.enabled?
+    if Services::Ai::OllamaClient.instance.enabled?
       puts '=' * 100
       puts '🤖 AI-Generated Example Prompts'
       puts '=' * 100
@@ -193,7 +193,7 @@ namespace :ai do
       exit 1
     end
 
-    unless Services::Ai::OpenaiClient.instance.enabled?
+    unless Services::Ai::OllamaClient.instance.enabled?
       puts '❌ AI integration is not enabled or configured.'
       puts '   Set OPENAI_API_KEY or OLLAMA_BASE_URL environment variable'
       puts '   Enable AI in config/algo.yml: ai.enabled: true'
@@ -206,7 +206,7 @@ namespace :ai do
     puts ''
     puts "Query: #{query}"
     puts ''
-    puts "Provider: #{Services::Ai::OpenaiClient.instance.provider}"
+    puts "Provider: #{Services::Ai::OllamaClient.instance.provider}"
     puts ''
 
     # Check if streaming is requested

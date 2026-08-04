@@ -13,10 +13,6 @@ module Services
           @instance ||= new
         end
 
-        def reset_instance!
-          @instance = nil
-        end
-
         delegate :client, :enabled?, to: :instance
       end
 
@@ -37,33 +33,22 @@ module Services
       self.models_cache_mutex = Mutex.new
 
       def initialize
-        @provider              = :ollama
-        @config_mutex          = Mutex.new
-        @connection_fingerprint = nil
-        @enabled               = false
-        @client                = nil
-        @available_models      = nil
-        @selected_model        = nil
-        @last_request_time     = nil
-        ensure_connection!
+        @provider       = :ollama
+        @enabled        = check_enabled
+        @available_models = nil
+        @selected_model   = nil
+        @last_request_time = nil
+        initialize_client if @enabled
       end
 
-      attr_reader :provider, :selected_model, :available_models
-
-      def client
-        ensure_connection!
-        @client
-      end
+      attr_reader :client, :provider, :selected_model, :available_models
 
       def enabled?
-        ensure_connection!
         @enabled
       end
 
-      # Effective HTTP base URL after applying +ai.ollama_use_cloud+ (AlgoConfig) and ENV.
       def ollama_base_url
-        ensure_connection!
-        resolved_base_url(ollama_use_cloud?)
+        ENV['OLLAMA_HOST_URL'] || ENV['OLLAMA_BASE_URL'] || 'http://localhost:11434'
       end
 
       # ------------------------------------------------------------------
@@ -71,10 +56,9 @@ module Services
       # ------------------------------------------------------------------
 
       def fetch_available_models
-        ensure_connection!
         return [] unless @enabled
 
-        base_url = resolved_base_url(ollama_use_cloud?)
+        base_url = ollama_base_url
         cached   = self.class.get_cached_models(base_url)
         if cached
           @available_models = cached
@@ -128,7 +112,7 @@ module Services
         priority = %w[
           llama3.1:8b llama3.1:8b-instruct llama3:8b llama3:8b-instruct
           mistral:7b mistral mistral:instruct
-          qwen3.5:4b qwen3.5:4b-instruct
+          llama3.2:3b llama3.2:3b-instruct
           phi3:mini phi3 phi3:medium
           qwen2.5:1.5b-instruct gemma:2b gemma
           llama3:70b llama3:70b-instruct llama3 llama3:instruct
@@ -166,21 +150,14 @@ module Services
 
       # Returns content string when no tools; returns {content:, tool_calls:} hash when tools provided.
       def chat(messages:, model: nil, temperature: 0.7, tools: nil, tool_choice: nil, log_context: nil, **)
-        ensure_connection!
-        return nil unless @enabled
+        return nil unless enabled?
 
         model = resolve_model(model)
         log_prompt_and_tokens(messages: messages, model: model, log_context: log_context)
 
         result = chat_with_retry(messages: messages, model: model, temperature: temperature, tools: tools)
 
-        if tools
-          result
-        elsif result.is_a?(Hash)
-          (result[:content] || result['content']).to_s
-        else
-          result.to_s
-        end
+        tools ? result : (result.is_a?(Hash) ? (result[:content] || result['content']).to_s : result.to_s)
       rescue StandardError => e
         Rails.logger.error("[OllamaClient] Chat error: #{e.class} - #{e.message}")
         nil
@@ -191,8 +168,7 @@ module Services
       # ------------------------------------------------------------------
 
       def chat_stream(messages:, model: nil, temperature: 0.7, tools: nil, tool_choice: nil, &block)
-        ensure_connection!
-        return nil unless @enabled
+        return nil unless enabled?
 
         model = resolve_model(model)
         log_prompt_and_tokens(messages: messages, model: model)
@@ -202,7 +178,7 @@ module Services
           chunk_count   = 0
 
           hooks = {
-            on_token: lambda { |token|
+            on_token: ->(token) {
               chunk_count += 1
               block&.call(token)
             }
@@ -231,8 +207,7 @@ module Services
       # ------------------------------------------------------------------
 
       def generate(prompt:, model: nil, schema: nil, stream: false, **)
-        ensure_connection!
-        return nil unless @enabled
+        return nil unless enabled?
 
         model = resolve_model(model)
 
@@ -254,103 +229,52 @@ module Services
       # Internals
       # ------------------------------------------------------------------
 
-      def ensure_connection!
-        @config_mutex.synchronize do
-          use_cloud = ollama_use_cloud?
-          base      = resolved_base_url(use_cloud)
-          key       = use_cloud ? ENV['OLLAMA_API_KEY'].to_s.strip : ''
-          ai_on     = AlgoConfig.fetch.dig(:ai, :enabled) != false
-          fp        = [use_cloud, base, key, ai_on].join('|')
-
-          return if @client && @connection_fingerprint == fp
-
-          @connection_fingerprint = fp
-          @client = nil
-          @available_models = nil
-          @selected_model = nil
-          @enabled = connection_allowed?(use_cloud: use_cloud, base: base, key: key)
-          build_client! if @enabled
-        end
-      end
-
-      def ollama_use_cloud?
-        v = AlgoConfig.fetch.dig(:ai, :ollama_use_cloud)
-        ActiveModel::Type::Boolean.new.cast(v)
-      rescue StandardError
-        false
-      end
-
-      def resolved_base_url(use_cloud)
-        if use_cloud
-          ENV['OLLAMA_CLOUD_URL'].presence ||
-            ENV['OLLAMA_BASE_URL'].presence ||
-            'https://ollama.com'
-        else
-          ENV['OLLAMA_LOCAL_URL'].presence ||
-            ENV['OLLAMA_HOST_URL'].presence ||
-            ENV['OLLAMA_BASE_URL'].presence ||
-            'http://localhost:11434'
-        end
-      end
-
-      def connection_allowed?(use_cloud:, base:, key:)
+      def check_enabled
         return false if AlgoConfig.fetch.dig(:ai, :enabled) == false
 
-        if base.blank?
-          Rails.logger.warn('[OllamaClient] Resolved Ollama base URL is blank')
-          return false
-        end
-
-        if use_cloud && key.blank?
-          Rails.logger.warn('[OllamaClient] Cloud mode (ai.ollama_use_cloud) requires OLLAMA_API_KEY')
+        unless ollama_base_url.present?
+          Rails.logger.warn('[OllamaClient] Ollama base URL not configured (OLLAMA_HOST_URL or OLLAMA_BASE_URL)')
           return false
         end
 
         true
-      rescue StandardError => e
-        Rails.logger.warn("[OllamaClient] connection_allowed? failed: #{e.class} - #{e.message}")
+      rescue StandardError
         false
       end
 
-      def build_client!
+      def initialize_client
         timeout = ENV.fetch('OLLAMA_TIMEOUT', '120').to_i
-        use_cloud = ollama_use_cloud?
-        base      = resolved_base_url(use_cloud)
 
         config = Ollama::Config.new
-        config.base_url    = base
-        config.model       = ENV.fetch('OLLAMA_MODEL', 'qwen3.5:4b')
+        config.base_url    = ollama_base_url
+        config.model       = ENV.fetch('OLLAMA_MODEL', 'llama3.2:3b')
         config.timeout     = timeout
         config.temperature = 0.2
         config.strict_json = false
-        key = ENV['OLLAMA_API_KEY'].presence
-        config.api_key = key if use_cloud && key.present?
 
         @client = Ollama::Client.new(config: config)
-        mode = use_cloud ? 'cloud' : 'local'
-        Rails.logger.info("[OllamaClient] Connected (#{mode}) at #{base}")
-        Rails.logger.info('[OllamaClient] Initialized with provider: ollama')
+        Rails.logger.info("[OllamaClient] Connected to Ollama at #{ollama_base_url}")
+        Rails.logger.info("[OllamaClient] Initialized with provider: ollama")
       rescue StandardError => e
         Rails.logger.error("[OllamaClient] Failed to initialize: #{e.class} - #{e.message}")
         @enabled = false
-        @client = nil
       end
 
       def resolve_model(model)
         return model if model.present?
 
         fetch_and_select_model if @selected_model.nil?
-        @selected_model || ENV.fetch('OLLAMA_MODEL', 'qwen3.5:4b')
+        @selected_model || ENV.fetch('OLLAMA_MODEL', 'llama3.2:3b')
       end
 
-      def with_serialization(&)
+      def with_serialization(&block)
         REQUEST_MUTEX.synchronize do
           if @last_request_time
             elapsed_ms = (Time.current - @last_request_time) * 1000
             sleep((REQUEST_DELAY_MS - elapsed_ms) / 1000.0) if elapsed_ms < REQUEST_DELAY_MS
           end
           @last_request_time = Time.current
-          yield
+          block.call
         end
       end
 
@@ -400,10 +324,10 @@ module Services
         content = response.content
         tool_calls = response.message&.tool_calls&.map do |tc|
           {
-            'id' => tc.id,
-            'type' => 'function',
+            'id'       => tc.id,
+            'type'     => 'function',
             'function' => {
-              'name' => tc.function&.name,
+              'name'      => tc.function&.name,
               'arguments' => tc.function&.arguments.to_json
             }
           }
@@ -428,8 +352,8 @@ module Services
       def log_prompt_and_tokens(messages:, model:, log_context: nil)
         token_count = estimate_token_count(messages)
         logger      = log_context == :ai_intent &&
-                      Rails.application.config.respond_to?(:ai_intent_logger) &&
-                      Rails.application.config.ai_intent_logger
+                        Rails.application.config.respond_to?(:ai_intent_logger) &&
+                        Rails.application.config.ai_intent_logger
 
         if logger
           logger.info("[OllamaClient] Sending prompt to #{model} (~#{token_count} tokens)")

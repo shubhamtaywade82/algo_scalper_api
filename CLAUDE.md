@@ -20,8 +20,11 @@ rails db:migrate
 bundle exec rspec
 bundle exec rspec spec/path/file_spec.rb
 bundle exec rubocop
-rails server
-bin/jobs                           # start Solid Queue worker
+bundle exec rake rswag:specs:swaggerize # regenerate swagger/v1/swagger.yaml from RSwag specs
+bin/brakeman --no-pager                # security scan
+./bin/dev                              # start all processes (web + trading + jobs + dashboard)
+bin/jobs                               # start Solid Queue worker standalone
+ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon  # trading daemon standalone
 ```
 
 ## Architecture

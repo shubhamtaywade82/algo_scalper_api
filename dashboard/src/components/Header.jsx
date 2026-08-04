@@ -1,8 +1,9 @@
 import { createMemo } from 'solid-js'
 import { Show } from 'solid-js'
-import { A, useLocation } from '@solidjs/router'
+import { A } from '@solidjs/router'
 import { useDashboardContext } from '../context/DashboardContext'
 import { useFlash } from '../stores/useFlash'
+import { expiryBadgeMeta, subscribedRowByKey } from '../lib/expiryBadge'
 
 function inr(val) {
   if (val == null) return '—'
@@ -60,21 +61,10 @@ export default function Header(props) {
     return expiryBadgeMeta(row)
   }
 
-  const navLinkBase = 'px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 hover:text-white flex items-center gap-1.5 group border border-transparent'
-  const navLinkInactive = 'text-gray-500 hover:bg-white/[0.02]'
-  const navLinkActive = 'bg-primary-500/10 text-primary-300 border-primary-500/25 shadow-[0_0_15px_rgba(59,130,246,0.15)]'
-  const navLinkSettingsActive = 'bg-cyan-500/10 text-cyan-300 border-cyan-500/25 shadow-[0_0_15px_rgba(6,182,212,0.15)]'
-  const navLinkLedgerActive = 'bg-violet-500/10 text-violet-300 border-violet-500/25 shadow-[0_0_15px_rgba(139,92,246,0.15)]'
-
-  const location = useLocation()
-  const pageTitle = createMemo(() => {
-    const path = location.pathname
-    if (path === '/') return 'Dashboard'
-    const segment = path.split('/')[1] || ''
-    if (!segment) return 'Dashboard'
-    if (segment === 'option-scalper') return 'Option Scalper'
-    return segment.charAt(0).toUpperCase() + segment.slice(1)
-  })
+  const navLinkBase = 'px-5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 hover:text-white flex items-center gap-2 group'
+  const navLinkInactive = 'text-gray-500'
+  const navLinkActive = 'bg-white/10 text-white shadow-[0_0_15px_rgba(255,255,255,0.05)] border border-white/10'
+  const navLinkSettingsActive = 'bg-cyan-500/20 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.15)] border border-cyan-500/30'
 
   return (
     <div class="sticky top-0 z-50">
@@ -199,36 +189,63 @@ export default function Header(props) {
 
         </div>
 
-        {/* Center Section: Centered Dynamic Page Title */}
-        <div class="absolute left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none">
-          <span class="text-xs font-black text-white uppercase tracking-[0.25em]">{pageTitle()}</span>
-          <span class="text-[7px] font-bold text-gray-500 tracking-widest uppercase mt-0.5">Real-time view</span>
-        </div>
-
-        {/* Right Section: System badges */}
-        <div class="flex items-center gap-2.5 text-[9px] font-black tracking-wider flex-1 justify-end shrink-0">
-          <div
-            class={`flex items-center gap-2 px-3 py-1.5 rounded-full border bg-white/[0.01] transition-all duration-300 ${isIpVerified() ? 'border-emerald-500/10 hover:border-emerald-500/25 text-gray-500 hover:text-gray-300' : 'border-rose-500/10 hover:border-rose-500/25 text-rose-400'}`}
-            title={isIpVerified() ? `Verified: ${publicIpv4()}` : `Not Registered: ${publicIpv4()}`}
-          >
-            <span class="relative flex h-1.5 w-1.5">
-              <Show when={!isIpVerified()}>
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-              </Show>
-              <span class={`relative inline-flex rounded-full h-1.5 w-1.5 ${isIpVerified() ? 'bg-emerald-400' : 'bg-rose-500'}`}></span>
+        <div class="hidden xl:flex items-center gap-8 border-l border-white/10 pl-10">
+          <div class="flex flex-col gap-1">
+            <span class="text-[9px] font-black text-gray-500 tracking-widest uppercase mb-1">Nifty 50</span>
+            <span class={`text-sm font-black text-white text-data transition-all duration-300 rounded px-1 ${niftyFlash()}`}>
+              {inr(props.indices?.nifty)}
             </span>
+            {(() => {
+              const b = expiryBlock('NIFTY')
+              return (
+                <div class="flex flex-col gap-0.5 items-start mt-0.5">
+                  <span class={`text-[8px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded border ${b.className}`}>
+                    {b.text}
+                  </span>
+                  <Show when={b.sub}>
+                    <span class="text-[8px] font-bold text-gray-600">{b.sub}</span>
+                  </Show>
+                </div>
+              )
+            })()}
           </div>
-          <div class="flex flex-col">
+          <div class="flex flex-col gap-1">
             <span class="text-[9px] font-black text-gray-500 tracking-widest uppercase mb-1">Bank Nifty</span>
             <span class={`text-sm font-black text-white text-data transition-all duration-300 rounded px-1 ${bankniftyFlash()}`}>
               {inr(props.indices?.banknifty)}
             </span>
+            {(() => {
+              const b = expiryBlock('BANKNIFTY')
+              return (
+                <div class="flex flex-col gap-0.5 items-start mt-0.5">
+                  <span class={`text-[8px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded border ${b.className}`}>
+                    {b.text}
+                  </span>
+                  <Show when={b.sub}>
+                    <span class="text-[8px] font-bold text-gray-600">{b.sub}</span>
+                  </Show>
+                </div>
+              )
+            })()}
           </div>
-          <div class="flex flex-col">
+          <div class="flex flex-col gap-1">
             <span class="text-[9px] font-black text-gray-500 tracking-widest uppercase mb-1">Sensex</span>
             <span class={`text-sm font-black text-white text-data transition-all duration-300 rounded px-1 ${sensexFlash()}`}>
               {inr(props.indices?.sensex)}
             </span>
+            {(() => {
+              const b = expiryBlock('SENSEX')
+              return (
+                <div class="flex flex-col gap-0.5 items-start mt-0.5">
+                  <span class={`text-[8px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded border ${b.className}`}>
+                    {b.text}
+                  </span>
+                  <Show when={b.sub}>
+                    <span class="text-[8px] font-bold text-gray-600">{b.sub}</span>
+                  </Show>
+                </div>
+              )
+            })()}
           </div>
         </div>
       </div>

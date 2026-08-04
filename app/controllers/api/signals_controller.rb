@@ -2,6 +2,10 @@
 
 module Api
   class SignalsController < ApplicationController
+    include Api::TokenAuthenticatable
+
+    before_action :authenticate_dashboard_token!
+
     PER_PAGE_DEFAULT = 25
     PER_PAGE_MAX     = 100
     ALLOWED_SORT_COLS = %w[emitted_at confidence].freeze
@@ -18,7 +22,7 @@ module Api
     # (strategy_signals table) — the legacy Signal::Engine → TradingSignal
     # pipeline was removed in b3a8f30 and no longer writes new rows.
     def index
-      scope = ::Strategies::Signal.includes(:strategy_record, :strategy_version).order(emitted_at: :desc)
+      scope = TradingSignal.order(signal_timestamp: :desc).limit(100)
       scope = apply_filters(scope)
       total = scope.count
       scope = apply_sort(scope)

@@ -183,21 +183,21 @@ RiskManagerService#run_enforcement_cycle
 | Fills | Synthetic (immediate) | DhanHQ WebSocket updates |
 | Wallet | Simulated balance from config | Real funds API |
 
-## Signal Tiers And Paper Override
+## Run Modes
 
-There is **no** `run_mode` or `config/profiles/*.yml`. Strictness overlays use
-**`config/signal_tier_presets.yml`** with tier `exploratory` | `standard` | `selective` (from
-`SIGNAL_TIER` env or `signals.signal_tier`). **`LIVE_TRADING`** env forces effective
-`paper_trading.enabled` after that merge (restart trading daemon to change gateway).
+Set `run_mode` in `config/algo.yml` or override with `RUN_MODE` env var. Profile files at `config/profiles/<mode>.yml` provide partial YAML overrides merged on top of `algo.yml`.
+
+| Mode | Purpose |
+|------|---------|
+| `production` | Full guards, conservative entries (no overrides) |
+| `exit_testing` | Frequent entries to test SL/TP/trailing/time-stop rules |
+| `entry_testing` | Relaxed SMC/validation/ADX gates to verify entry pipeline |
 
 ## Configuration
 
-All trading parameters start in `config/algo.yml`. Runtime overrides via DB `settings` table
-(`algo_config_overrides`, deep-merged with 30s cache), then tier preset, then `LIVE_TRADING`.
+All trading parameters in `config/algo.yml`. Runtime overrides via DB `settings` table (deep-merged with 30s cache via `AlgoConfig.fetch`). `AlgoConfig.run_mode` returns the active run mode.
 
-**Key sections**: `paper_trading`, `dhanhq`, `indices` (per-index config), `trade_limits`, `risk`,
-`position_sizing`, `signals` (includes `signal_tier`, `validation_modes`, gates), `chain_analyzer`,
-`expiry_week_power_trend`, `broker_fees`, `telegram`, `ai`.
+**Key sections**: `paper_trading`, `run_mode`, `dhanhq`, `indices` (per-index config), `trade_limits`, `risk`, `position_sizing`, `signals`, `chain_analyzer`, `expiry_week_power_trend`, `broker_fees`, `telegram`, `ai`.
 
 All percentage values use **DECIMAL format** (0.12 = 12%).
 
@@ -205,7 +205,7 @@ All percentage values use **DECIMAL format** (0.12 = 12%).
 
 AI analysis uses a local Ollama server via the `ollama-client` gem (`~> 1.1`). The `lib/services/ai/ollama_client.rb` wrapper provides chat, generate, and streaming interfaces. OpenAI / ruby-openai gems have been removed.
 
-ENV: `OLLAMA_MODEL` (default: `qwen3.5:4b`), `OLLAMA_BASE_URL` / `OLLAMA_HOST_URL` (default: `http://localhost:11434`), `OLLAMA_TIMEOUT` (default: 120s).
+ENV: `OLLAMA_MODEL` (default: `llama3.2:3b`), `OLLAMA_BASE_URL` / `OLLAMA_HOST_URL` (default: `http://localhost:11434`), `OLLAMA_TIMEOUT` (default: 120s).
 
 ## Token Management
 

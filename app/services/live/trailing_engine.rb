@@ -16,7 +16,7 @@ module Live
     # @param position_data [Positions::ActiveCache::PositionData] Position data from ActiveCache
     # @param exit_engine [Live::ExitEngine, nil] Exit engine for peak-drawdown exits
     # @return [Hash] Result hash with :peak_updated, :sl_updated, :exit_triggered, :error
-    def process_tick(position_data, exit_engine: nil, tracker: nil)
+    def process_tick(position_data, exit_engine: nil, tracker: nil, pending_meta: nil)
       return failure_result('Invalid position data') unless position_data&.valid?
 
       # Use passed tracker or find if not provided (fallback for other callers)
@@ -34,7 +34,7 @@ module Live
       end
 
       # 2. Update peak_profit_pct if current profit exceeds peak
-      peak_updated = update_peak(position_data, tracker: tracker)
+      peak_updated = update_peak(position_data, tracker: tracker, pending_meta: pending_meta)
 
       # 3. Apply trailing SL (direct or tiered based on config)
       sl_result = if tailored_trailing_applicable?(position_data)
@@ -155,7 +155,7 @@ module Live
     # @param position_data [Positions::ActiveCache::PositionData] Position data
     # @param tracker [PositionTracker] Tracker object
     # @return [Boolean] True if peak was updated
-    def update_peak(position_data, tracker: nil)
+    def update_peak(position_data, tracker: nil, pending_meta: nil)
       return false unless position_data.pnl_pct && position_data.peak_profit_pct
 
       current = position_data.pnl_pct.to_f
@@ -179,8 +179,8 @@ module Live
 
       highest_price = entry_price * (1.0 + current)
       lowest_price = entry_price * (1.0 + min_profit)
-
-      persist_extremes_if_changed(position_data.tracker_id, highest_price, lowest_price, tracker: tracker)
+ 
+      persist_extremes_if_changed(position_data.tracker_id, highest_price, lowest_price, tracker: tracker, pending_meta: pending_meta)
 
       if peak_updated
         Rails.logger.debug { "[TrailingEngine] Updated peak_profit_pct for #{position_data.tracker_id}: #{(peak * 100).round(2)}% → #{(current * 100).round(2)}% (Highest: ₹#{highest_price.round(2)})" }
@@ -198,31 +198,29 @@ module Live
     # @param highest_price [Float] New highest price
     # @param lowest_price [Float] New lowest price
     # @param tracker [PositionTracker] Tracker object
-    def persist_extremes_if_changed(tracker_id, highest_price, lowest_price, tracker: nil)
+    def persist_extremes_if_changed(tracker_id, highest_price, lowest_price, tracker: nil, pending_meta: nil)
       tracker ||= PositionTracker.find_by(id: tracker_id)
       return unless tracker
 
-      meta = (pending_meta || {}).stringify_keys
-      old_highest = if pending_meta
-                      meta['highest_price'].to_f
-                    else
-                      tracker.runtime_meta_fetch('highest_price').to_f
-                    end
-      old_lowest = if pending_meta
-                     meta['lowest_price']
-                   else
-                     tracker.runtime_meta_fetch('lowest_price')
-                   end
-
+      meta = (pending_meta || tracker.meta || {}).stringify_keys
+      old_highest = meta['highest_price'].to_f
+      old_lowest = meta['lowest_price']
+ 
       new_highest = [old_highest, highest_price].max
       new_lowest = old_lowest.nil? ? lowest_price : [old_lowest.to_f, lowest_price].min
-
+ 
       # Only write to DB if values actually changed
       return if new_highest == old_highest && new_lowest == old_lowest.to_f
-
+ 
       meta['highest_price'] = new_highest
       meta['lowest_price'] = new_lowest
-      tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
+ 
+      if pending_meta
+        pending_meta['highest_price'] = new_highest
+        pending_meta['lowest_price'] = new_lowest
+      else
+        tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
+      end
     end
 
     # Apply direct trailing SL (follows price directly, only moves upward)

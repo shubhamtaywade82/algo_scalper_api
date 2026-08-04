@@ -1,34 +1,54 @@
 # frozen_string_literal: true
 
 Rails.application.routes.draw do
-  # Agent dashboard exposes prompts/responses/costs — keep off production unless explicitly enabled.
-  if !Rails.env.production? || ENV['ENABLE_AGENTS_DASHBOARD'] == 'true'
-    mount RubyLLM::Agents::Engine => "/agents"
-  end
   # OpenAPI UI + served spec (disable in production unless ENABLE_SWAGGER_UI=true)
   if !Rails.env.production? || ENV['ENABLE_SWAGGER_UI'] == 'true'
     mount Rswag::Ui::Engine => '/api-docs'
     mount Rswag::Api::Engine => '/api-docs'
   end
 
-  get '/healthz', to: 'health#live'
-  get '/ready', to: 'health#ready'
-
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
   # Can be used by load balancers and uptime monitors to verify that the app is live.
   get "up" => "rails/health#show", as: :rails_health_check
 
-  # Optional SMC decision endpoint (non-namespaced controller by design)
-  get "smc/decision", to: "smc#decision"
+  # ActionCable WebSocket endpoint
+  mount ActionCable.server => '/cable'
+
+  # Legacy SMC path → canonical /api/smc/decision (301, query string preserved)
+  get 'smc/decision', to: proc { |env|
+    qs = env['QUERY_STRING'].to_s
+    loc = qs.present? ? "/api/smc/decision?#{qs}" : '/api/smc/decision'
+    [301, { 'Location' => loc, 'Content-Type' => 'text/plain' }, []]
+  }
 
   namespace :api do
     get :health, to: "health#show"
     post :test_broadcast, to: "test#broadcast"
+    get :dashboard, to: "dashboard#show"
+    get "public_ip/audit", to: "public_ip#audit"
+    get :positions, to: "positions#index"
+    get :signals,   to: "signals#index"
+
+    get 'smc/decision', to: 'smc#decision'
+
+    # Live AI analysis dashboard
+    get  'analysis/:index_key',            to: 'analysis#show',        as: :analysis
+    get  'analysis/:index_key/historical', to: 'analysis#historical',  as: :analysis_historical
+    post 'analysis/:index_key/ai_snapshot', to: 'analysis#ai_snapshot', as: :analysis_ai_snapshot
+
+    # Algo Settings
+    get    'settings',           to: 'settings#index'
+    patch  'settings/bulk',      to: 'settings#update_bulk'
+    post   'settings/update_ip', to: 'settings#update_ip'
+
+    # Calibration runs — view and apply automated config patches
+    resources :calibration_runs, only: %i[index show] do
+      member do
+        post :apply
+      end
+    end
 
     # Circuit breaker — emergency halt
-    # GET    /api/circuit_breaker        → status (unauthenticated)
-    # POST   /api/circuit_breaker/trip   → trip   (requires X-Circuit-Breaker-Token)
-    # DELETE /api/circuit_breaker/trip   → reset  (requires X-Circuit-Breaker-Token)
     resource :circuit_breaker, only: %i[show], controller: 'circuit_breaker' do
       post :trip, on: :member
       delete :trip, action: :reset, on: :member

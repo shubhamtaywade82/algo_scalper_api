@@ -27,16 +27,25 @@ module Entries
 
     def default_handlers
       [
+        Guards::DrawdownGuard,
+        Guards::EntryPolicyGuard,
         Guards::CircuitBreakerGuard,
-        Guards::BosContractGuard,
-        Guards::TimeRegimeGuard,
-        Guards::BankniftyLastWeekGuard,
+        Guards::MiddayQualityGuard,          # ADX >= 28 bypass covers all power-trend cases
         Guards::EdgeFailureGuard,
         Guards::DailyLimitsGuard,
-        Guards::InstrumentLookupGuard,
+        Guards::MaxConcurrentGuard,
+        Guards::InstrumentLookupGuard,       # sets context[:instrument] — required by EPT guard
+        Guards::LtpResolutionGuard,
+        Guards::ExpiryWeekPowerTrendGuard,   # enriches context[:expiry_power_trend] when pattern detected
+        Guards::TimeRegimeGuard,             # reads context[:expiry_power_trend] to bypass S3/S4 block
+        Guards::BankniftyLastWeekGuard,
+        Guards::WeeklyExpiryGuard,
+        Guards::BosStructureGuard,
         Guards::ExposureGuard,
         Guards::CooldownGuard,
-        Guards::LtpResolutionGuard
+        Guards::SizingGuard,
+        Guards::RiskPolicyGuard,
+        Guards::SmcNavigatorGuard
       ]
     end
   end

@@ -46,16 +46,3 @@ export function subscribedRowByKey(rows, indexKey) {
   const k = (indexKey || '').toString().toUpperCase()
   return (rows || []).find((r) => (r.key || '').toUpperCase() === k) || null
 }
-
-/** Compact L/S scores + signal ticks from dashboard subscribed_indices.smc_confluence_ltf */
-export function confluenceLtfCompact(row) {
-  const s = row?.smc_confluence_ltf
-  if (!s || typeof s !== 'object') return null
-  const parts = []
-  if (s.long_score != null) parts.push(`L${s.long_score}`)
-  if (s.short_score != null) parts.push(`S${s.short_score}`)
-  if (s.long_signal) parts.push('L\u2713')
-  if (s.short_signal) parts.push('S\u2713')
-  if (parts.length === 0) return null
-  return parts.join(' ')
-}

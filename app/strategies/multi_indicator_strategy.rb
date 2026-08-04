@@ -127,9 +127,10 @@ class MultiIndicatorStrategy
   end
 
   def majority_vote(results)
-    bullish_count = results.count { |r| r[:direction] == :bullish }
-    bearish_count = results.count { |r| r[:direction] == :bearish }
-    neutral_count = results.count { |r| r[:direction] == :neutral }
+    counts = results.each_with_object(Hash.new(0)) { |r, h| h[r[:direction]] += 1 }
+    bullish_count = counts[:bullish]
+    bearish_count = counts[:bearish]
+    neutral_count = counts[:neutral]
 
     total = results.size
     return nil if bullish_count == bearish_count # Tie
@@ -222,9 +223,10 @@ class MultiIndicatorStrategy
   # Calculate confluence information showing which indicators agree/disagree
   def calculate_confluence(results)
     total_indicators = results.size
-    bullish_count = results.count { |r| r[:direction] == :bullish }
-    bearish_count = results.count { |r| r[:direction] == :bearish }
-    neutral_count = results.count { |r| r[:direction] == :neutral }
+    counts = results.each_with_object(Hash.new(0)) { |r, h| h[r[:direction]] += 1 }
+    bullish_count = counts[:bullish]
+    bearish_count = counts[:bearish]
+    neutral_count = counts[:neutral]
 
     # Determine dominant direction
     dominant_direction = case

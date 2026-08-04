@@ -78,16 +78,16 @@ MarketFeedHub#handle_tick(raw_tick)
 - **Dashboard throttling**: ActionCable broadcasts are emitted by `PnlUpdaterService` (250ms), not per-tick — prevents dashboard flooding
 - **Risk checks**: `RiskManagerService` receives `EventBus :ltp` events (250ms) and runs its own 5s enforcement loop — never directly in the tick callback
 
-## ENV and runtime gates
+## ENV Control
 
-There is no `DHANHQ_WS_ENABLED` toggle: the tick feed starts whenever
-`Live::MarketFeedHub#enabled?` passes (Dhan credentials present, and not
-`BACKTEST_MODE=1`, `SCRIPT_MODE=1`, or `rails runner`). In `RAILS_ENV=test`,
-`config/environments/test.rb` disables
-`config.x.dhanhq` WebSocket flags and tests stub the clients.
-
-`Live::OrderUpdateHub` starts only in live mode (not paper); see
-`app/services/live/order_update_hub.rb`.
+| Variable | Effect |
+|----------|--------|
+| `DHANHQ_WS_ENABLED=true` | Explicitly enable WebSocket |
+| `DHANHQ_WS_ENABLED=false` | Explicitly disable |
+| `RAILS_ENV=test` | WebSocket disabled |
+| `BACKTEST_MODE=1` | WebSocket disabled |
+| `SCRIPT_MODE=1` | WebSocket disabled |
+| `MOCK_DATA_ENABLED=true` | WebSocket disabled |
 
 ## Order Update WebSocket
 

@@ -44,13 +44,6 @@ module SwaggerStubs
     allow(PositionTracker).to receive(:paper_trading_stats_with_pct).and_return({})
   end
 
-  def stub_dhan_access_token!
-    allow(Dhan::TokenManager).to receive(:current_token).and_return('mock-dhan-access-token')
-    allow(DhanAccessToken).to receive(:active).and_return(
-      double('DhanAccessToken', token: 'mock-dhan-access-token', expiry_time: 1.day.from_now)
-    )
-  end
-
   def stub_analysis_show_dependencies!(instrument)
     allow(IndexConfigLoader).to receive(:load_indices).and_return(
       [

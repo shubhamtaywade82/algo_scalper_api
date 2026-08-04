@@ -20,7 +20,7 @@
 - Create: `app/services/ai/ai_snapshot_prompt_builder.rb`
 - Test: `spec/services/ai/ai_snapshot_prompt_builder_spec.rb`
 
-**Background:** Pure function — no I/O, no external calls. Receives pre-resolved context params from the controller and assembles a compact prompt for Ollama. All params are optional; the prompt degrades gracefully when any is nil. Returns an array of `{ role:, content: }` message hashes for direct use with `Services::Ai::OpenaiClient.instance.chat(messages: [...])`. Uses `TradingSession::Service.market_closed?` internally for session context — this is a time-only check, no I/O, so it is permitted in a pure function.
+**Background:** Pure function — no I/O, no external calls. Receives pre-resolved context params from the controller and assembles a compact prompt for Ollama. All params are optional; the prompt degrades gracefully when any is nil. Returns an array of `{ role:, content: }` message hashes for direct use with `Services::Ai::OllamaClient.instance.chat(messages: [...])`. Uses `TradingSession::Service.market_closed?` internally for session context — this is a time-only check, no I/O, so it is permitted in a pure function.
 
 - [ ] **Step 1: Write failing tests**
 
@@ -116,7 +116,7 @@ module Ai
   # All params are optional; the prompt degrades gracefully with nil inputs.
   #
   # Returns an Array of { role: String, content: String } hashes
-  # for direct use with Services::Ai::OpenaiClient.instance.chat(messages: [...])
+  # for direct use with Services::Ai::OllamaClient.instance.chat(messages: [...])
   class AiSnapshotPromptBuilder
     SYSTEM_PROMPT = <<~SYSTEM.strip
       You are a concise intraday options trading assistant for Indian index markets.
@@ -208,9 +208,9 @@ git commit -m "feat: add Ai::AiSnapshotPromptBuilder for on-demand AI snapshots"
 - Modify: `config/routes.rb`
 - Test: `spec/requests/api/analysis_ai_snapshot_spec.rb`
 
-**Background:** New `ai_snapshot` action added to the existing `AnalysisController`. Route is a standalone `post` entry (analysis routes are individual routes, not a `resource` block). The controller resolves the instrument and LTP exactly like `show` does, then delegates to `Ai::AiSnapshotPromptBuilder.build` and `Services::Ai::OpenaiClient.instance.chat`. Does NOT write to `AnalysisStore` — the snapshot is transient. Returns `{ snapshot: "<string>", generated_at: "<ISO8601>" }` on success, 503 on AI errors.
+**Background:** New `ai_snapshot` action added to the existing `AnalysisController`. Route is a standalone `post` entry (analysis routes are individual routes, not a `resource` block). The controller resolves the instrument and LTP exactly like `show` does, then delegates to `Ai::AiSnapshotPromptBuilder.build` and `Services::Ai::OllamaClient.instance.chat`. Does NOT write to `AnalysisStore` — the snapshot is transient. Returns `{ snapshot: "<string>", generated_at: "<ISO8601>" }` on success, 503 on AI errors.
 
-**Note:** `Ai::AiSnapshotPromptBuilder.build` returns a two-element array `[{role: 'system', ...}, {role: 'user', ...}]` — the builder owns the full message array including the system prompt. This is a deliberate deviation from the spec's original interface (which showed a user-only array); the builder encapsulation is cleaner and consistent with how `Services::Ai::OpenaiClient` expects messages.
+**Note:** `Ai::AiSnapshotPromptBuilder.build` returns a two-element array `[{role: 'system', ...}, {role: 'user', ...}]` — the builder owns the full message array including the system prompt. This is a deliberate deviation from the spec's original interface (which showed a user-only array); the builder encapsulation is cleaner and consistent with how `Services::Ai::OllamaClient` expects messages.
 
 - [ ] **Step 1: Write failing request spec**
 
@@ -237,10 +237,10 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot', type: :request do
     allow(CalibrationRun).to receive_message_chain(:where, :order, :first).and_return(nil)
   end
 
-  context 'when OpenaiClient returns a response' do
+  context 'when OllamaClient returns a response' do
     before do
-      client = instance_double(Services::Ai::OpenaiClient, enabled?: true, chat: 'Bullish outlook. Key level 22000.')
-      allow(Services::Ai::OpenaiClient).to receive(:instance).and_return(client)
+      client = instance_double(Services::Ai::OllamaClient, enabled?: true, chat: 'Bullish outlook. Key level 22000.')
+      allow(Services::Ai::OllamaClient).to receive(:instance).and_return(client)
     end
 
     it 'returns 200 with snapshot and generated_at' do
@@ -258,11 +258,11 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot', type: :request do
     end
   end
 
-  context 'when OpenaiClient raises Net::ReadTimeout' do
+  context 'when OllamaClient raises Net::ReadTimeout' do
     before do
-      client = instance_double(Services::Ai::OpenaiClient, enabled?: true)
+      client = instance_double(Services::Ai::OllamaClient, enabled?: true)
       allow(client).to receive(:chat).and_raise(Net::ReadTimeout)
-      allow(Services::Ai::OpenaiClient).to receive(:instance).and_return(client)
+      allow(Services::Ai::OllamaClient).to receive(:instance).and_return(client)
     end
 
     it 'returns 503' do
@@ -277,11 +277,11 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot', type: :request do
     end
   end
 
-  context 'when OpenaiClient raises a generic error' do
+  context 'when OllamaClient raises a generic error' do
     before do
-      client = instance_double(Services::Ai::OpenaiClient, enabled?: true)
+      client = instance_double(Services::Ai::OllamaClient, enabled?: true)
       allow(client).to receive(:chat).and_raise(StandardError, 'connection refused')
-      allow(Services::Ai::OpenaiClient).to receive(:instance).and_return(client)
+      allow(Services::Ai::OllamaClient).to receive(:instance).and_return(client)
     end
 
     it 'returns 503' do
@@ -292,8 +292,8 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot', type: :request do
 
   context 'when AI client is not enabled' do
     before do
-      client = instance_double(Services::Ai::OpenaiClient, enabled?: false)
-      allow(Services::Ai::OpenaiClient).to receive(:instance).and_return(client)
+      client = instance_double(Services::Ai::OllamaClient, enabled?: false)
+      allow(Services::Ai::OllamaClient).to receive(:instance).and_return(client)
     end
 
     it 'returns 503 without calling chat' do
@@ -354,7 +354,7 @@ def ai_snapshot
 
   latest_run = CalibrationRun.where(symbol: index_key).order(created_at: :desc).first
 
-  client = Services::Ai::OpenaiClient.instance
+  client = Services::Ai::OllamaClient.instance
   unless client.enabled?
     return render json: { error: 'AI service not configured' }, status: :service_unavailable
   end

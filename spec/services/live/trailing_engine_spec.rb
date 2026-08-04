@@ -52,6 +52,41 @@ RSpec.describe Live::TrailingEngine do
 
       expect(result[:error]).to eq('Invalid position data')
     end
+
+    it 'applies direct trailing when enabled and SL improves' do
+      allow(Positions::TrailingConfig).to receive(:direct_trailing_enabled?).and_return(true)
+      # Entry 100, LTP 150. If direct trailing is 5% offset, new SL should be ~142.5.
+      # But calculate_direct_trailing_sl is what really matters.
+      allow(Positions::TrailingConfig).to receive(:calculate_direct_trailing_sl).and_return(140.0)
+      
+      position = build_position(current_ltp: 150.0, sl_price: 130.0)
+      result = engine.process_tick(position)
+
+      expect(result[:sl_updated]).to be true
+      expect(result[:new_sl_price]).to eq(140.0)
+    end
+
+    it 'applies tailored trailing for index positions' do
+      # NIFTY should trigger tailored trailing
+      position = build_position(underlying_symbol: 'NIFTY', current_ltp: 120.0, sl_price: 100.0)
+      
+      # Mock the analyzer/adjuster interaction
+      allow(Orders::Analyzer).to receive(:new).and_return(double(recommended_sl: 110.0))
+      allow(Orders::Adjuster).to receive(:adjust_sl).and_return(true)
+      
+      # Mock MFE engine for reason code
+      allow_any_instance_of(Orders::MfeExitEngine).to receive(:call).and_return(110.0)
+
+      result = engine.process_tick(position)
+
+      expect(result[:sl_updated]).to be true
+      expect(result[:reason]).to eq('sl_updated')
+      expect(Orders::Adjuster).to have_received(:adjust_sl).with(
+        tracker: tracker,
+        recommended_sl: 110.0,
+        reason: /mfe_retrace_trailing/
+      )
+    end
   end
 
   describe '#check_peak_drawdown' do
@@ -106,8 +141,8 @@ RSpec.describe Live::TrailingEngine do
     it 'passes capital deployed to TrailingConfig' do
       # Entry 100 * Qty 50 = 5000 capital
       position = build_position(entry_price: 100.0, quantity: 50, peak_profit_pct: 0.10, pnl_pct: 0.05)
-
-      expect(trailing_view).to receive(:peak_drawdown_triggered?).with(
+      
+      expect(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).with(
         0.10, 0.05, hash_including(_capital_deployed: 5000.0)
       ).and_return(false)
 
@@ -117,14 +152,12 @@ RSpec.describe Live::TrailingEngine do
 
   describe '#check_peak_drawdown emergency exit' do
     it 'triggers emergency exit when peak >= 10% and current < -2%' do
-      allow(tracker).to receive(:meta).and_return(
-        'config_snapshot' => {
-          'position_sizing' => {
-            'drawdown' => { 'emergency_peak_loss_exit' => true, 'emergency_min_peak_pct' => 0.10 }
-          }
-        }
-      )
-      allow(engine).to receive(:feature_flags).and_return(enable_peak_drawdown_activation: false)
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        position_sizing: {
+          drawdown: { emergency_peak_loss_exit: true, emergency_min_peak_pct: 0.10 }
+        },
+        feature_flags: { enable_peak_drawdown_activation: false }
+      })
       position = build_position(peak_profit_pct: 0.15, pnl_pct: -0.05)
       allow(Live::ExitEngine).to receive(:execute_exit)
 
@@ -136,100 +169,46 @@ RSpec.describe Live::TrailingEngine do
     end
 
     it 'does not trigger emergency when peak < 10%' do
-      allow(tracker).to receive(:meta).and_return(
-        'config_snapshot' => {
-          'position_sizing' => {
-            'drawdown' => { 'emergency_peak_loss_exit' => true, 'emergency_min_peak_pct' => 0.10 }
-          }
-        }
-      )
-      allow(engine).to receive(:feature_flags).and_return(enable_peak_drawdown_activation: false)
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        position_sizing: {
+          drawdown: { emergency_peak_loss_exit: true, emergency_min_peak_pct: 0.10 }
+        },
+        feature_flags: { enable_peak_drawdown_activation: false }
+      })
       allow(Live::ExitEngine).to receive(:execute_exit)
       position = build_position(peak_profit_pct: 0.05, pnl_pct: -0.05)
 
-      engine.check_peak_drawdown(position, exit_engine)
+      result = engine.check_peak_drawdown(position, exit_engine)
       expect(Live::ExitEngine).not_to have_received(:execute_exit)
     end
 
     it 'does not trigger emergency when current loss is shallow (> -2%)' do
-      allow(tracker).to receive(:meta).and_return(
-        'config_snapshot' => {
-          'position_sizing' => {
-            'drawdown' => { 'emergency_peak_loss_exit' => true, 'emergency_min_peak_pct' => 0.10 }
-          }
-        }
-      )
-      allow(engine).to receive(:feature_flags).and_return(enable_peak_drawdown_activation: false)
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        position_sizing: {
+          drawdown: { emergency_peak_loss_exit: true, emergency_min_peak_pct: 0.10 }
+        },
+        feature_flags: { enable_peak_drawdown_activation: false }
+      })
       allow(Live::ExitEngine).to receive(:execute_exit)
       position = build_position(peak_profit_pct: 0.15, pnl_pct: -0.01)
 
-      engine.check_peak_drawdown(position, exit_engine)
+      result = engine.check_peak_drawdown(position, exit_engine)
       expect(Live::ExitEngine).not_to have_received(:execute_exit)
     end
   end
 
   describe '#update_peak persistence' do
-    it 'persists extremes to Redis when new peak is reached' do
-      runtime_cache = Live::PositionRuntimeCache.instance
-      allow(runtime_cache).to receive(:merge).and_call_original
-
+    it 'persists extremes to database when new peak is reached' do
+      # Entry 100, Current Profit 20%, Old Peak 10%
+      # Highest price = 100 * 1.2 = 120
       position = build_position(entry_price: 100.0, peak_profit_pct: 0.10, pnl_pct: 0.20)
-
-      expect(tracker).not_to receive(:update_column)
+      
+      # Should update meta in DB
+      expect(tracker).to receive(:update_column).with(
+        :meta, hash_including('highest_price' => 120.0)
+      )
 
       engine.update_peak(position, tracker: tracker)
-
-      expect(runtime_cache).to have_received(:merge).with(
-        tracker.id,
-        hash_including(highest_price: 120.0, lowest_price: kind_of(Numeric))
-      )
-    end
-  end
-
-  describe '#check_peak_drawdown emergency exit' do
-    it 'triggers emergency exit when peak >= 10% and current < -2%' do
-      allow(AlgoConfig).to receive(:fetch).and_return({
-        position_sizing: {
-          drawdown: { emergency_peak_loss_exit: true, emergency_min_peak_pct: 0.10 }
-        },
-        feature_flags: { enable_peak_drawdown_activation: false }
-      })
-      position = build_position(peak_profit_pct: 0.15, pnl_pct: -0.05)
-      allow(Live::ExitEngine).to receive(:execute_exit)
-
-      result = engine.check_peak_drawdown(position, exit_engine)
-      expect(result).to be true
-      expect(Live::ExitEngine).to have_received(:execute_exit).with(
-        hash_including(reason: /emergency_peak_loss_exit/)
-      )
-    end
-
-    it 'does not trigger emergency when peak < 10%' do
-      allow(AlgoConfig).to receive(:fetch).and_return({
-        position_sizing: {
-          drawdown: { emergency_peak_loss_exit: true, emergency_min_peak_pct: 0.10 }
-        },
-        feature_flags: { enable_peak_drawdown_activation: false }
-      })
-      allow(Live::ExitEngine).to receive(:execute_exit)
-      position = build_position(peak_profit_pct: 0.05, pnl_pct: -0.05)
-
-      result = engine.check_peak_drawdown(position, exit_engine)
-      expect(Live::ExitEngine).not_to have_received(:execute_exit)
-    end
-
-    it 'does not trigger emergency when current loss is shallow (> -2%)' do
-      allow(AlgoConfig).to receive(:fetch).and_return({
-        position_sizing: {
-          drawdown: { emergency_peak_loss_exit: true, emergency_min_peak_pct: 0.10 }
-        },
-        feature_flags: { enable_peak_drawdown_activation: false }
-      })
-      allow(Live::ExitEngine).to receive(:execute_exit)
-      position = build_position(peak_profit_pct: 0.15, pnl_pct: -0.01)
-
-      result = engine.check_peak_drawdown(position, exit_engine)
-      expect(Live::ExitEngine).not_to have_received(:execute_exit)
     end
   end
 

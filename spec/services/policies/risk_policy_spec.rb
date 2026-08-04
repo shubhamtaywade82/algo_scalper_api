@@ -35,7 +35,36 @@ RSpec.describe Policies::RiskPolicy do
     it { expect(policy.reasons).to be_empty }
   end
 
-  # ── Circuit breaker ────────────────────────────────────────────────────────
+  context 'when proposed_qty is NaN' do
+    subject(:policy) do
+      described_class.new(
+        index_key: 'NIFTY',
+        proposed_qty: Float::NAN,
+        entry_price: 250.0
+      )
+    end
+
+    it 'coerces to zero without raising' do
+      expect { policy.permitted? }.not_to raise_error
+      expect(policy).to be_permitted
+    end
+  end
+
+  context 'when lot_size is NaN' do
+    subject(:policy) do
+      described_class.new(
+        index_key: 'NIFTY',
+        proposed_qty: 50,
+        entry_price: 250.0,
+        lot_size: Float::NAN
+      )
+    end
+
+    it 'coerces lot_size to at least 1 without raising' do
+      expect { policy.permitted? }.not_to raise_error
+      expect(policy).to be_permitted
+    end
+  end
 
   context 'when circuit breaker is tripped' do
     before { allow(Risk::CircuitBreaker.instance).to receive(:tripped?).and_return(true) }

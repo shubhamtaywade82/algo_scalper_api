@@ -51,20 +51,22 @@ DhanHQ WebSocket ticks arrive in real time. For each tick:
 **Step-by-step**:
 1. Market open check (`TradingSession::Service.market_closed?`)
 2. Instrument resolution from `IndexInstrumentCache`
-3. Analysis context: `entry_primary` (`supertrend` vs legacy multi-indicator), `primary_tf`, optional confirmation
-4. Primary path: Supertrend-only flow **or** standard Supertrend+ADX (+ optional confirmation), regime detection where applicable; **`effective_validation_mode`** is set from regime (e.g. RANGING/CHOPPY → conservative) on the supertrend path
-5. Optional early halt: `halt_on_validation_failure` stops before context gates if comprehensive validation failed
-6. Trading context gate: `EntryFilterEngine`, `Trading::PermissionResolver`, regime strictness from config
-7. Entry quality filter: ADX / IV proxy / theta / validation mode presets under `signals.validation_modes`
-8. No-trade gate (when `enable_no_trade_engine`) + **`entry_dte_guard`** (nearest expiry vs `reject_when_days_to_expiry_lte`)
-9. Institutional gates: SMC alignment, `Signal::MomentumValidator`, direction gate when enabled
-10. `Signal::StateTracker.record` — dedup
-11. `Options::ChainAnalyzer.pick_strikes_with_qualification` — optional **`options_analysis_gate`** on IV/theta failures
-12. `TradingSignal.create_from_analysis` — persists signal with diagnostic metadata
-13. `execute_entry_gate` — pick validation, optional market context, premium checks
-14. `trigger_entry_flow` → `Entries::EntryGuard.try_enter`
+3. Analysis context: determines `entry_primary` (supertrend vs supertrend_adx), `primary_tf`, `confirmation_tf`
+   - In `exit_testing` run mode: forces `supertrend_adx` on `1m`, no confirmation
+4. Primary analysis: Supertrend direction + ADX strength
+5. Optional confirmation analysis: second timeframe must align
+6. Trading context gate: `MarketRegimeDetector`, `EntryFilterEngine`, `Trading::PermissionResolver`
+7. Entry quality filter: ADX strength, IV proxy, theta risk, comprehensive validation
+8. Institutional gates: SMC decision alignment, `Signal::MomentumValidator`
+9. `Signal::StateTracker.record` — dedup (skip if same direction/candle as last signal)
+10. `Options::ChainAnalyzer.pick_strikes_with_qualification` — returns ordered picks or empty
+11. `TradingSignal.create_from_analysis` — persists signal with diagnostic metadata
+12. Optional market context gate (only if `market_context.enabled: true`)
+13. `trigger_entry_flow` → `Entries::EntryGuard.try_enter`
 
-There is **no** separate `exit_testing` code branch; change frequency via YAML, tier preset, or guards.
+**Exit testing mode** (`run_mode: exit_testing`):
+- Forces `supertrend_adx` strategy on `1m` timeframe, no confirmation
+- Bypasses most signal-level quality filters to generate more entries for testing exits
 
 ---
 
@@ -209,8 +211,10 @@ All config values in DECIMAL format (0.10 = 10%).
 
 ```yaml
 paper_trading:
-  enabled: true      # base; LIVE_TRADING env forces effective gateway mode at boot
+  enabled: true      # true=paper, false=live
   balance: 100000
+
+run_mode: exit_testing  # production | exit_testing | entry_testing
 
 indices:
   - key: NIFTY
@@ -222,7 +226,6 @@ risk:
   take_profit: 0.25   # 25% (DECIMAL)
 
 signals:
-  signal_tier: standard   # exploratory | standard | selective — merged with signal_tier_presets.yml
   max_expiry_days: 7   # skip instruments with expiry > 7 days
 
 sizing:

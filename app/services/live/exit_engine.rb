@@ -134,6 +134,7 @@ module Live
     # @param reason [String]
     # @return [Hash]
     def finalize_exit!(tracker, exit_price:, reason:)
+      tracker.reload
       tracker.with_lock do
         tracker.reload
         return { success: true, exit_price: tracker.exit_price, reason: tracker.exit_reason || reason } if tracker.exited?

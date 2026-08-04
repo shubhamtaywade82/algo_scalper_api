@@ -21,35 +21,92 @@ module Risk
       PRIORITY = 20
 
       def evaluate(context)
-        return skip_result unless enabled?
-        return skip_result unless context.active?
-
         tracker = context.tracker
-        instrument = tracker.instrument || tracker.watchable&.instrument
-        return skip_result unless instrument
+        snapshot = context.tracker_snapshot
+        return skip_result unless tracker && snapshot
 
-        # Get position direction from tracker metadata or instrument
-        position_direction = determine_position_direction(tracker, instrument)
-        return skip_result unless position_direction.in?(%i[bullish bearish])
-
-        if opposite_bos_confirmed?(tracker, instrument, position_direction)
-          reason = "STRUCTURE_INVALIDATION (opposite BOS confirmed)"
-          return exit_result(reason: reason, metadata: { direction: position_direction })
+        # Delegate to legacy method for parity and spec compatibility
+        # This covers the 'structure_invalidation_price' and 'dual_condition' checks
+        result = Live::UnifiedExitChecker.check_structure_invalidation(tracker, snapshot)
+        
+        if result && result[:exit]
+          return exit_result(
+            reason: result[:reason] || 'STRUCTURE_INVALIDATION',
+            metadata: {
+              path: 'structure_invalidation'
+            }
+          )
         end
 
-        # Check structure invalidation on 5m and 15m timeframes (underlying)
+        # Fallback to internal rules if legacy hasn't triggered yet
+        instrument = tracker.instrument || tracker.watchable&.instrument
+        return no_action_result unless instrument
+
+        position_direction = determine_position_direction(tracker, instrument)
+        return no_action_result unless position_direction
+
+        if opposite_bos_confirmed?(tracker, instrument, position_direction)
+          return exit_result(
+            reason: "STRUCTURE_INVALIDATION (opposite BOS confirmed)",
+            metadata: { direction: position_direction, path: 'structure_invalidation' }
+          )
+        end
+
+        # Multi-timeframe structure check
         if structure_invalidated?(instrument, position_direction)
-          reason = "STRUCTURE_INVALIDATION (#{position_direction} structure broken)"
-          return exit_result(reason: reason, metadata: { direction: position_direction })
+          return exit_result(
+            reason: "STRUCTURE_INVALIDATION (#{position_direction} structure broken)",
+            metadata: { direction: position_direction, path: 'structure_invalidation' }
+          )
         end
 
         no_action_result
       rescue StandardError => e
         Rails.logger.error("[StructureInvalidationRule] Error: #{e.class} - #{e.message}")
-        skip_result
+        no_action_result
       end
 
       private
+
+      def resolve_underlying_ltp(index_key)
+        # Use existing module logic to fetch LTP
+        Live::UnifiedExitChecker.resolve_underlying_ltp(index_key)
+      end
+
+      def structure_invalidated_by_price?(tracker, underlying_ltp, invalidation_price)
+        direction = tracker.meta&.dig('direction').to_s
+        level = invalidation_price.to_f
+        buffer = structure_invalidation_buffer(level)
+        case direction
+        when 'long_pe', 'bearish'
+          underlying_ltp > level + buffer
+        when 'long_ce', 'bullish'
+          underlying_ltp < level - buffer
+        else
+          false
+        end
+      end
+
+      def structure_invalidation_buffer(level)
+        cfg = AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation) || {}
+        pct = (cfg[:buffer_pct] || 0.002).to_f
+        (level * pct).abs
+      end
+
+      def dual_condition_met?(tracker, underlying_ltp, premium_ltp, cfg)
+        # Ported from legacy UnifiedExitChecker
+        entry_underlying = tracker.meta&.dig('entry_underlying_price').to_f
+        return false if entry_underlying.zero?
+
+        move_pct = (underlying_ltp - entry_underlying).abs / entry_underlying
+        return false if move_pct < cfg[:underlying_move_pct].to_f
+
+        entry_premium = tracker.entry_price.to_f
+        return false if entry_premium.zero?
+
+        drop_pct = (entry_premium - premium_ltp) / entry_premium
+        drop_pct >= cfg[:premium_drop_pct].to_f
+      end
 
       # Determine position direction (bullish = CE/long, bearish = PE/short)
       def determine_position_direction(tracker, instrument)

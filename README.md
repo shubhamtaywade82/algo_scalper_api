@@ -8,18 +8,16 @@ Algo Scalper API automates the entire trade lifecycle — from signal identifica
 
 ### Key Capabilities
 
-- **Multi-Strategy Signal Engine** — Supertrend + ADX with multi-timeframe confirmation,
-  market regime detection, and dynamic validation modes (balanced/conservative).
-  Optional **market context** (`MarketContext::RegimeComposer`, chain signal extraction,
-  `Trading::MarketPermissionGate`) is configurable in `config/algo.yml` (`market_context`);
-  see `docs/trading/market_context_and_permission_gate.md`.
+- **Multi-Strategy Signal Engine** — Supertrend + ADX with multi-timeframe confirmation, market regime detection, and dynamic validation modes (balanced/conservative). Optional **market context** (`MarketContext::RegimeComposer`, chain signal extraction, `Trading::MarketPermissionGate`) is configurable in `config/algo.yml` (`market_context`); see `docs/trading/market_context_and_permission_gate.md`.
 - **Smart Money Concepts (SMC)** — Order block detection, FVG analysis, break-of-structure entries, institutional flow scoring
 - **Real-time WebSocket Hub** — DhanHQ tick ingestion with write-through Redis caching, automatic reconnection, and per-position subscription management
-- **Institutional Risk Management** — 15 exit rule engines: stop-loss, take-profit, trailing stops (tiered/direct/gamma-aware), peak drawdown, time-based, early trend failure, premium momentum failure, structure invalidation
+- **Institutional Risk Management** — Dual-path exit evaluation: per-tick `UnifiedExitChecker` (SL, TP, trailing, early trend failure, time-based) plus 5-second enforcement loop (premium R-stop, profit floor, structure invalidation, premium momentum failure, R:R booking, percentage PnL exit, time stop)
 - **Options Chain Intelligence** — ATM±1 strike selection with liquidity scoring, gamma ramp detection, expected move validation, per-index rules (NIFTY/BANKNIFTY/SENSEX)
+- **Expiry Week Power Trend** — ADX >= 40 + within 5 days of monthly expiry + 12:00-13:45 window → `ExpiryWeekPowerTrendGuard` enriches context to bypass chop-zone block
+- **20-Guard Entry Pipeline** — Full guard chain from DrawdownGuard through SmcNavigatorGuard
 - **Paper & Live Trading** — Seamless toggle; both modes use real DhanHQ WebSocket data. Paper simulates fills; live submits to exchange via DhanHQ API
 - **Circuit Breaker** — Redis-backed singleton with API control (`GET/POST/DELETE /api/circuit_breaker/trip`); EntryGuard checks before every entry, RiskManager force-closes all positions when tripped
-- **AI Technical Analysis** — Optional OpenAI integration for multi-timeframe analysis and SMC pattern enrichment
+- **AI Technical Analysis** — Local Ollama LLM integration (`ollama-client` gem `~> 1.1`); auto-selects best available model
 - **Telegram Notifications** — Trade alerts, PnL milestones, daily stats, SMC signals
 
 ## Tech Stack
@@ -29,14 +27,13 @@ Algo Scalper API automates the entire trade lifecycle — from signal identifica
 | Language | Ruby 3.3.4 |
 | Framework | Rails 8.0.2 (API-only mode) |
 | Database | PostgreSQL |
-| Cache/State | Redis (tick cache, PnL cache, position state) |
+| Cache/State | Redis (tick cache, PnL cache, position state, circuit breaker) |
 | Job Queue | Solid Queue (not Sidekiq) |
 | WebSocket Broadcast | Solid Cable (ActionCable backend) |
 | Broker | DhanHQ v2 via `dhanhq` gem |
-| AI | OpenAI (optional) |
+| AI | Ollama via `ollama-client` gem (`~> 1.1`) — local LLM, no OpenAI |
 | Notifications | Telegram Bot |
-| Frontend | Vue/Vite dashboard (separate process) |
-| Deployment | Kamal + Docker |
+| Frontend | Next.js dashboard (separate process) |
 
 ## Quick Start
 
@@ -142,12 +139,12 @@ indices:
 
 Trading daemon startup performs a broker-vs-DB reconciliation pass before starting risk/signal loops. This is handled by `Live::PositionSyncService.instance.force_sync!` and prevents stale DB-only state after restarts.
 
-- During market hours, reconciliation failures are strict by default and block daemon startup.
-- Outside market hours, strict mode defaults to false.
-- Override with `TRADING_BOOT_RECONCILIATION_STRICT=true|false`.
-
-
-## 📊 Trading System
+| Process | Command | Purpose |
+|---------|---------|---------|
+| `web` | `bin/rails server -p 3001` | Rails API server |
+| `trading` | `ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon` | Trading brain (11 services in threads) |
+| `jobs` | `bin/jobs` | Solid Queue worker (SMC scanner, AI analysis, instrument sync) |
+| `dashboard` | `cd dashboard && npm run dev` | Next.js frontend |
 
 ### Other Commands
 
@@ -160,32 +157,6 @@ bin/jobs                                   # start Solid Queue worker standalone
 ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon  # trading daemon standalone
 ```
 
-### Docker Compose (Rails + Vue/Vite)
-
-Use `docker-compose.yml` to run a containerized local stack with separate
-`web` and `jobs` containers, plus PostgreSQL, Redis, and a static dashboard.
-
-```bash
-cp .env.example .env
-# set RAILS_MASTER_KEY in .env
-docker compose build
-docker compose up -d
-docker compose ps
-```
-
-Endpoints:
-
-- Dashboard: `http://localhost:3000`
-- API health: `http://localhost/api/health`
-- Direct API: `http://localhost:80`
-
-Useful commands:
-
-```bash
-docker compose logs -f web jobs dashboard
-docker compose down --remove-orphans
-```
-
 ## Architecture
 
 ### Process Model
@@ -195,7 +166,7 @@ docker compose down --remove-orphans
 │ bin/dev (foreman)                                                │
 ├──────────────┬──────────────┬──────────────┬─────────────────────┤
 │ web          │ trading      │ jobs         │ dashboard           │
-│ Rails API    │ Daemon       │ Solid Queue  │ Vue/Vite            │
+│ Rails API    │ Daemon       │ Solid Queue  │ Next.js             │
 │ port 3001    │ 11 services  │ recurring    │ frontend            │
 │              │ in threads   │ tasks        │                     │
 └──────┬───────┴──────┬───────┴──────┬───────┴─────────────────────┘
@@ -218,7 +189,7 @@ Started by `TradingSystem::Supervisor` (registered in `lib/trading_system/bootst
 | 3 | `Live::RiskManagerService` | 5s enforcement loop + per-tick EventBus |
 | 4 | `TradingSystem::PositionHeartbeat` | 10s |
 | 5 | `TradingSystem::OrderRouter` | On-demand |
-| 6 | `Live::PaperPnlRefresher` | 1s (refreshes paper trackers when present) |
+| 6 | `Live::PaperPnlRefresher` | 1s (paper mode only) |
 | 7 | `Live::ExitEngine` | On-demand |
 | 8 | `Positions::ActiveCacheService` | On-demand |
 | 9 | `Live::ReconciliationService` | 30s |
@@ -386,14 +357,69 @@ paper_trading:
   balance: 100000  # simulated starting capital
 
 dhanhq:
-  enable_orders: false  # must be true for live broker calls (with PLACE_ORDER=true)
+  enable_orders: true  # safety gate for DhanHQ order API
 ```
 
-**DhanHQ Authentication Errors**
-```bash
-# Check credentials
-echo $CLIENT_ID
-echo $DHAN_ACCESS_TOKEN
+For live order placement, also set `PLACE_ORDER=true` in the environment. This is an additional safety gate in `Orders::Placer` that must be explicitly enabled.
+
+Both modes use **real DhanHQ WebSocket data** for market ticks.
+
+| Aspect | Paper Mode | Live Mode |
+|--------|-----------|-----------|
+| Market data | Real WebSocket ticks | Real WebSocket ticks |
+| Option chain | Real DhanHQ API | Real DhanHQ API |
+| Order execution | Simulated fills (`GatewayPaper`) | Real DhanHQ API (`GatewayLive`) |
+| PnL tracking | Real LTP-based | Real LTP-based |
+| Order updates | Synthetic | DhanHQ WebSocket |
+| Wallet | Simulated balance | Real funds API |
+
+## Run Modes
+
+Set in `config/algo.yml` (`run_mode:`) or override with `RUN_MODE` env var:
+
+| Mode | Purpose |
+|------|---------|
+| `production` | Full guards active, conservative entries |
+| `exit_testing` | Frequent entries to test exit rules (bypasses most entry guards) |
+| `entry_testing` | Relaxed guards to verify the entry pipeline |
+
+Profile overrides live in `config/profiles/<run_mode>.yml`. **Current default:** `run_mode: exit_testing` (paper trading mode).
+
+## Environment Variables
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `DHAN_CLIENT_ID` | Yes | DhanHQ client ID |
+| `DHAN_ACCESS_TOKEN` | Yes | DhanHQ access token (static fallback) |
+| `DHAN_PIN` | Recommended | For TOTP auto-refresh |
+| `DHAN_TOTP_SECRET` | Recommended | For TOTP auto-refresh |
+| `ENABLE_TRADING_SERVICES` | Auto (Procfile) | Must be `"true"` for daemon |
+| `PLACE_ORDER` | Live only | Must be `"true"` to allow live broker order placement |
+| `DHANHQ_WS_ENABLED` | Optional | Enable WebSocket (defaults based on env) |
+| `REDIS_URL` | Optional | Redis connection (default: redis://127.0.0.1:6379/0) |
+| `DATABASE_URL` | Optional | PostgreSQL connection |
+| `RAILS_ENV` | Optional | Rails environment |
+| `RUN_MODE` | Optional | Override run_mode from config |
+| `OLLAMA_MODEL` | Optional | Ollama model name (default: llama3.2:3b) |
+| `OLLAMA_BASE_URL` / `OLLAMA_HOST_URL` | Optional | Ollama server URL (default: http://localhost:11434) |
+| `OLLAMA_TIMEOUT` | Optional | Ollama request timeout in seconds (default: 120) |
+| `TELEGRAM_BOT_TOKEN` | Optional | Telegram bot token |
+| `TELEGRAM_CHAT_ID` | Optional | Telegram chat ID |
+
+### Live Trading Checklist
+
+Before switching `paper_trading.enabled: false`:
+
+- [ ] DhanHQ credentials set (`DHAN_CLIENT_ID`, `DHAN_ACCESS_TOKEN`)
+- [ ] TOTP credentials set (`DHAN_PIN`, `DHAN_TOTP_SECRET`) for token auto-refresh
+- [ ] `PLACE_ORDER=true` in environment
+- [ ] `dhanhq.enable_orders: true` in `config/algo.yml`
+- [ ] `InstrumentsImporter` has run recently (`rails runner 'puts Derivative.count'`)
+- [ ] Database migrated (`rails db:migrate:status`)
+- [ ] Redis running (`redis-cli ping`)
+- [ ] Solid Queue recurring tasks loaded (`rails solid_queue:load_recurring`)
+
+## API Endpoints
 
 ```
 GET  /api/health                      # System health status
@@ -438,6 +464,7 @@ All trading parameters live in `config/algo.yml`. Key sections:
 | Section | Purpose |
 |---------|---------|
 | `paper_trading` | Paper/live mode toggle and simulated balance |
+| `run_mode` | Runtime profile (`production`, `exit_testing`, `entry_testing`) |
 | `dhanhq` | Broker settings (`enable_orders` safety gate) |
 | `indices` | Per-index config: segment, SID, capital allocation, ADX thresholds, trailing tiers |
 | `trade_limits` | Global daily limits |

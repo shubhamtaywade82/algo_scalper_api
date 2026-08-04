@@ -17,9 +17,9 @@ RSpec.describe Ai::Calibration::Runner do
     # Mock PromptBuilder
     allow(Ai::Calibration::PromptBuilder).to receive(:call).and_return('prompt')
 
-    # Mock OpenaiClient generate
+    # Mock OllamaClient generate
     client = double('client', enabled?: true)
-    allow(Services::Ai::OpenaiClient).to receive(:instance).and_return(client)
+    allow(Services::Ai::OllamaClient).to receive(:instance).and_return(client)
     allow(client).to receive(:preferred_text_model).and_return('model')
     allow(client).to receive(:generate).and_return({ 'system_diagnosis' => {}, 'parameter_changes' => [] })
 

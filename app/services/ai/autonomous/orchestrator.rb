@@ -68,7 +68,8 @@ module Ai
         PROMPT
 
         response = Services::Ai::OllamaClient.new.generate(prompt: prompt)
-
+        
+        # Robust parsing: find the first { and last }
         json_match = response.match(/\{.*\}/m)
         if json_match
           JSON.parse(json_match[0])

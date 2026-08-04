@@ -213,7 +213,7 @@ For each active tracker (skipping if exit already requested/sent), **order of en
 ### Quick Relaxation Checklist
 
 - **More trades per day:** Lower cooldown, raise daily limits per index in `algo.yml`
-- **More entries in lunch:** `SIGNAL_TIER=exploratory`, relax guards in YAML/DB, or set `chop_decay.allow_entries: true`
+- **More entries in lunch:** `exit_testing` profile or set `chop_decay.allow_entries: true`
 - **Less SMC gating:** Set `signals.enable_smc_avrz_permission: false` and/or `enable_smc_decision_alignment: false`
 - **Softer validation:** Use `validation_mode: balanced` or lower ADX thresholds
 - **More strikes:** Widen `indices[].premium_band` or relax `chain_analyzer` scoring

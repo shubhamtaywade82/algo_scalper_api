@@ -52,15 +52,6 @@ gem 'DhanHQ', '2.6.2'
 # Telegram bot for notifications
 gem 'telegram-bot-ruby', '~> 0.19'
 
-# OpenAI API clients
-# ruby-openai (alexrudall) - used in development/test
-gem 'ruby-openai', '~> 8.0', group: %i[development test]
-
-# openai-ruby (official) - used in production
-gem 'openai', '~> 0.41', group: :production
-
-gem 'ollama-client', '~> 1.1'
-
 gem 'ollama-client', '~> 1.1'
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
@@ -118,4 +109,4 @@ end
 
 gem "json_schemer", "~> 2.4"
 
-gem "rswag", "~> 2.17", groups: %i[development test]
+gem "rswag", "~> 2.17", groups: [:development, :test]

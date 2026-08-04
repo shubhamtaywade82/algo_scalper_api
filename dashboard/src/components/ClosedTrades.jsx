@@ -1,11 +1,6 @@
-import { createSignal, createMemo, onMount } from 'solid-js'
+import { createSignal, createMemo, onMount, createEffect } from 'solid-js'
 import { Show, For } from 'solid-js'
 import { useDashboardContext } from '../context/DashboardContext'
-import { dashboardApiHeaders } from '../lib/dashboardApi'
-import { exitBadge } from '../lib/exitBadge'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './ui/Table'
-import Badge from './ui/Badge'
-import Button from './ui/Button'
 
 function inr(val, dec = 2) {
   if (val == null) return '—'
@@ -77,6 +72,8 @@ function SortHeader(props) {
 }
 
 export default function ClosedTrades() {
+  const ctx = useDashboardContext()
+
   const [positions, setPositions] = createSignal([])
   const [availableDates, setAvailableDates] = createSignal([])
   const [summary, setSummary] = createSignal(null)
@@ -149,6 +146,8 @@ export default function ClosedTrades() {
 
   onMount(fetchPositions)
 
+  // Open positions hook refreshes `closed` on WS `position_exited` / poll; this table
+  // keeps its own filtered fetch — re-run when global closed-set changes (by id).
   let prevClosedIds = null
   createEffect(() => {
     const list = ctx?.closed?.() || []

@@ -10,6 +10,9 @@ module Api
   # POST   /api/circuit_breaker/trip   → trip the breaker (blocks entries, force-closes positions)
   # DELETE /api/circuit_breaker/trip   → reset the breaker (re-enables trading)
   class CircuitBreakerController < ApplicationController
+    include Api::TokenAuthenticatable
+
+    before_action :authenticate_dashboard_token!, only: :show
     before_action :authenticate!, only: %i[trip reset]
 
     def show

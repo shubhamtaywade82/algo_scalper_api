@@ -5,7 +5,6 @@ module Api
     include Api::TokenAuthenticatable
 
     before_action :authenticate_dashboard_token!
-    before_action :assign_filter_date!, only: :index
 
     ALLOWED_SORT_COLS = %w[exited_at last_pnl_rupees entry_price symbol side quantity].freeze
 

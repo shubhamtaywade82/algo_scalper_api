@@ -102,37 +102,6 @@ RSpec.describe 'OpenAPI v1 — SMC & analysis', openapi_spec: 'v1/swagger.yaml' 
     end
   end
 
-  path '/api/analysis/{index_key}/risk_explorer' do
-    get 'Expected value and risk explorer' do
-      tags 'Analysis'
-      produces 'application/json'
-      parameter name: :index_key, in: :path, type: :string, required: true
-      parameter name: :weeks, in: :query, type: :integer, required: false
-      parameter name: :win_probability, in: :query, type: :number, required: false
-      parameter name: :reward_multiple, in: :query, type: :number, required: false
-
-      response '200', 'risk explorer payload' do
-        let(:index_key) { 'NIFTY' }
-        let(:weeks) { 8 }
-
-        before do
-          allow(IndexConfigLoader).to receive(:load_indices).and_return([{ key: 'NIFTY' }])
-          allow(OptionsBuying::RiskExplorer).to receive(:call).and_return(
-            index_key: 'NIFTY',
-            formula: 'EV = (P_win × R) - (P_loss × 1)',
-            risk_config: { sl_pct: 0.15, tp_pct: 0.45, reward_multiple: 3.0 },
-            scenario: { expected_value: 0.35, positive_edge: true },
-            grid: { cells: [] }
-          )
-        end
-
-        schema type: :object, additionalProperties: true
-
-        run_test!
-      end
-    end
-  end
-
   path '/api/analysis/{index_key}/ai_snapshot' do
     post 'On-demand AI snapshot (sync)' do
       tags 'Analysis'
@@ -152,6 +121,7 @@ RSpec.describe 'OpenAPI v1 — SMC & analysis', openapi_spec: 'v1/swagger.yaml' 
           allow(Instrument).to receive(:find_by_sid_and_segment).and_return(inst)
           allow(Live::TickCache).to receive(:ltp).and_return(22_450.0)
           allow(AnalysisStore).to receive(:read_all).and_return({})
+          allow(CalibrationRun).to receive(:where).and_return(CalibrationRun.none)
           client = instance_double(Services::Ai::OllamaClient, enabled?: false)
           allow(Services::Ai::OllamaClient).to receive(:instance).and_return(client)
         end

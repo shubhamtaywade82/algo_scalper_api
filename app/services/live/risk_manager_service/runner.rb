@@ -26,6 +26,10 @@ module Live
       # Central monitoring loop: keep PnL and caches fresh.
       # Always run enforcement - ExitEngine is only used for executing exits, not for triggering them.
       def monitor_loop(last_paper_pnl_update)
+        # Clear per-cycle caches at the start
+        @redis_pnl_cache.clear
+        @cycle_tracker_map = nil
+
         # Skip processing if market is closed and no active positions
         if TradingSession::Service.market_closed?
           # Only fetch once after market closes, then skip all checks until market opens
@@ -78,25 +82,82 @@ module Live
       # Template method: single algorithm skeleton for all exit enforcement layers.
       # Add or reorder enforcement by editing this method.
       def run_enforcement_cycle(exit_engine)
-        PositionTracker.active.find_each do |tracker|
-          # Skip if position is already being exited (prevents race conditions with high-frequency triggers)
-          next if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
+        enforce_eod_force_close(exit_engine: exit_engine)
 
-          # Advance trade state before evaluating rules (updates trade_state, peak_trend_score etc)
-          advance_trade_state_for(tracker)
+        risk = risk_config
+        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
+        return if market_close_time && Time.current >= market_close_time
 
-          enforce_hard_limits_for(tracker, exit_engine: exit_engine)
-          enforce_early_trend_failure_for(tracker, exit_engine: exit_engine)
-          enforce_premium_r_stop_for(tracker, exit_engine: exit_engine)
-          enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine)
-          enforce_profit_floor_for(tracker, exit_engine: exit_engine)
-          enforce_structure_invalidation_for(tracker, exit_engine: exit_engine)
-          enforce_premium_momentum_failure_for(tracker, exit_engine: exit_engine)
-          enforce_rr_profit_booking_for(tracker, exit_engine: exit_engine)
-          enforce_percentage_pnl_exit_for(tracker, exit_engine: exit_engine)
-          enforce_time_stop_for(tracker, exit_engine: exit_engine)
-          enforce_time_based_exit_for(tracker, exit_engine: exit_engine)
+        Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
+          run_enforcement_for_tracker(tracker, exit_engine, position_data: nil)
         end
+      end
+
+      def run_enforcement_for_tracker(tracker, exit_engine, position_data: nil)
+        return if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
+
+        # Get high-performance position snapshot from ActiveCache
+        position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
+        return unless position_data
+
+        # Track metadata changes locally to avoid multiple DB updates per cycle
+        pending_meta = (tracker.meta || {}).deep_dup
+
+        # Advance trade state before evaluating rules (updates trade_state, peak_trend_score etc)
+        # Note: advance_trade_state_for might still do its own updates for state columns
+        advance_trade_state_for(tracker, position_data: position_data, pending_meta: pending_meta)
+
+        # Layers will now update pending_meta instead of the DB directly
+        enforce_premium_r_stop_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_profit_floor_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_structure_invalidation_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_premium_momentum_failure_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_rr_profit_booking_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_percentage_pnl_exit_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_time_stop_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_time_based_exit_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+      ensure
+        # Perform a single consolidated update at the end of the cycle if meta changed
+        if pending_meta && pending_meta != tracker.meta
+          tracker.update_columns(meta: pending_meta) # rubocop:disable Rails/SkipsModelValidations
+        end
+      end
+
+      def tick_stream_fresh?
+        last = @last_realtime_tick_at
+        return false unless last
+
+        (Time.current - last) <= realtime_tick_stale_after_seconds
+      end
+
+      def should_log_realtime_skip?
+        @last_realtime_skip_log_at ||= Time.zone.at(0)
+        return false if Time.current - @last_realtime_skip_log_at < 30.seconds
+
+        @last_realtime_skip_log_at = Time.current
+        true
+      end
+
+      def exit_requested_or_sent?(tracker)
+        # Check object state first. If it's already set, definitely true.
+        tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
       end
 
       def exits_blocked_by_time?

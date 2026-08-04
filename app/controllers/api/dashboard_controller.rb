@@ -13,6 +13,10 @@ module Api
         balance: safe_wallet_snapshot,
         today: PositionTracker.paper_trading_stats_with_pct,
         indices: formatted_indices,
+        subscribed_indices: subscribed_indices_payload,
+        public_ipv4: ip_info[:public_ipv4],
+        public_ipv6: ip_info[:public_ipv6],
+        registered_ips: ip_info[:registered_ips],
         recent_signals: TradingSignal.order(created_at: :desc).limit(10).as_json(methods: [:confidence_level]),
         circuit_breaker: Risk::CircuitBreaker.instance.status,
         system: Live::SystemStatusCache.instance.all_statuses.merge(
@@ -55,6 +59,29 @@ module Api
           timeframe: signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '1m'
         )
       end
+    end
+
+    def subscribed_indices_payload
+      sorted_indices_with_strategy.map do |idx|
+        key = idx[:key].to_s.upcase
+        idx.merge(nearest_listed_option_expiry_fields(key))
+      end
+    end
+
+    def nearest_listed_option_expiry_fields(index_key)
+      sym = index_key.to_s.upcase
+      nearest = Derivative.options
+                          .where(underlying_symbol: sym)
+                          .where(expiry_date: Time.zone.today..)
+                          .minimum(:expiry_date)
+      return { nearest_expiry: nil, days_to_expiry: nil, expiry_today: false } unless nearest
+
+      days = (nearest - Time.zone.today).to_i
+      {
+        nearest_expiry: nearest.iso8601,
+        days_to_expiry: days,
+        expiry_today: !days.positive?
+      }
     end
 
     def resolve_strategy_name(signals_cfg, index_key)

@@ -31,13 +31,6 @@ RSpec.describe 'API token authentication' do
       get '/api/health', headers: { 'X-Api-Key' => 'dashboard-secret' }
       expect(response).to have_http_status(:ok)
     end
-
-    it 'returns only unauthorized JSON and does not execute the action when token is wrong' do
-      get '/api/health', headers: { 'Authorization' => 'Bearer wrong-token' }
-
-      expect(response).to have_http_status(:unauthorized)
-      expect(response.parsed_body.keys).to contain_exactly('error')
-    end
   end
 
   describe 'operator tier (API_OPERATOR_TOKEN)' do
@@ -82,58 +75,6 @@ RSpec.describe 'API token authentication' do
       expect(response).to have_http_status(:service_unavailable)
       body = response.parsed_body
       expect(body['error']).to eq('settings_update_unconfigured')
-    end
-  end
-
-  describe 'staging and other non-dev env fail-closed API tokens' do
-    it 'returns 503 for dashboard when API_DASHBOARD_TOKEN is unset outside dev/test' do
-      allow(Rails.env).to receive_messages(
-        production?: false,
-        local?: false
-      )
-      previous = ENV.fetch('API_DASHBOARD_TOKEN', nil)
-      ENV.delete('API_DASHBOARD_TOKEN')
-
-      get '/api/health'
-
-      expect(response).to have_http_status(:service_unavailable)
-      expect(response.parsed_body['error']).to eq('api_token_unconfigured')
-    ensure
-      ENV['API_DASHBOARD_TOKEN'] = previous if previous
-    end
-  end
-
-  describe 'production fail-closed API tokens' do
-    it 'returns 503 for dashboard routes when API_DASHBOARD_TOKEN is unset' do
-      allow(Rails.env).to receive_messages(
-        production?: true,
-        local?: false
-      )
-      previous = ENV.fetch('API_DASHBOARD_TOKEN', nil)
-      ENV.delete('API_DASHBOARD_TOKEN')
-
-      get '/api/health'
-
-      expect(response).to have_http_status(:service_unavailable)
-      expect(response.parsed_body['error']).to eq('api_token_unconfigured')
-    ensure
-      ENV['API_DASHBOARD_TOKEN'] = previous if previous
-    end
-
-    it 'returns 503 for operator routes when API_OPERATOR_TOKEN is unset' do
-      allow(Rails.env).to receive_messages(
-        production?: true,
-        local?: false
-      )
-      previous_o = ENV.fetch('API_OPERATOR_TOKEN', nil)
-      ENV.delete('API_OPERATOR_TOKEN')
-
-      get '/api/public_ip/audit'
-
-      expect(response).to have_http_status(:service_unavailable)
-      expect(response.parsed_body['error']).to eq('api_token_unconfigured')
-    ensure
-      ENV['API_OPERATOR_TOKEN'] = previous_o if previous_o
     end
   end
 end

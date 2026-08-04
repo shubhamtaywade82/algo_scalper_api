@@ -9,9 +9,7 @@ module Smc
     def initialize(instrument, initial_data:)
       @instrument = instrument
       @initial_data = initial_data
-      @messages = []
-      @tool_cache = {}
-      @ai_client = Services::Ai::OpenaiClient.instance
+      @ai_client = Services::Ai::OllamaClient.instance
       @model = select_model
     end
 

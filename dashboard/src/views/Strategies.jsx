@@ -1,11 +1,10 @@
-import { createSignal, onMount, For, createMemo, Show } from 'solid-js'
-import { useNavigate } from '@solidjs/router'
-import { useStrategies } from '../stores/useStrategies'
+import { createMemo } from 'solid-js'
+import { For, Show } from 'solid-js'
+import { useDashboardContext } from '../context/DashboardContext'
+import { expiryBadgeMeta } from '../lib/expiryBadge'
 
 export default function Strategies() {
-  const navigate = useNavigate()
-  const { strategies, loading, error, fetchAll } = useStrategies()
-  const [activeTab, setActiveTab] = createSignal('All')
+  const { subscribedIndices, config } = useDashboardContext()
 
   onMount(() => {
     fetchAll()
@@ -20,22 +19,7 @@ export default function Strategies() {
     return list.filter(s => s.status === activeTab().toLowerCase())
   })
 
-  const getStatusClass = (status) => {
-    switch (status) {
-      case 'active': return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-      case 'draft': return 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-      case 'archived': return 'bg-gray-500/10 text-gray-400 border border-gray-500/20'
-      default: return 'bg-white/5 text-white/50 border border-white/5'
-    }
-  }
-
-  function expiryVariant(className) {
-    if (className.includes('text-emerald')) return 'success'
-    if (className.includes('text-red') || className.includes('text-rose')) return 'danger'
-    if (className.includes('text-amber') || className.includes('text-yellow')) return 'warning'
-    if (className.includes('text-blue') || className.includes('text-cyan')) return 'info'
-    return 'outline'
-  }
+  const indicesList = createMemo(() => subscribedIndices() || [])
 
   return (
     <div class="space-y-6">
@@ -52,23 +36,45 @@ export default function Strategies() {
         </button>
       </div>
 
-      {/* Filter Tabs */}
-      <div class="flex items-center justify-between border-b border-white/5 pb-2.5 gap-4">
-        <div class="flex items-center gap-2">
-          {['All', 'Active', 'Draft', 'Archived'].map(tab => (
-            <button
-              onClick={() => setActiveTab(tab)}
-              class={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
-                activeTab() === tab ? 'bg-primary-600/15 text-primary-400 border border-primary-500/30' : 'text-gray-400 hover:text-white border border-transparent'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-        <span class="text-[9px] font-bold text-gray-500 font-mono">
-          Showing {filteredStrategies().length} strategies
-        </span>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <For each={indicesList()}>
+          {(idx) => (
+            <div class="glass glass-hover p-6 rounded-2xl flex flex-col gap-4 group overflow-hidden relative min-h-[160px]">
+              <div class="absolute top-0 right-0 w-32 h-32 bg-primary-500/5 blur-3xl group-hover:bg-primary-500/10 transition-colors"></div>
+              <div class="flex items-center justify-between relative z-10 gap-2">
+                <div class="flex flex-col min-w-0">
+                  <span class="text-xl font-black text-white tracking-tight">{idx.key}</span>
+                  <span class="text-xs font-bold text-gray-500 uppercase tracking-widest mt-0.5">{idx.timeframe} Interval</span>
+                  {(() => {
+                    const b = expiryBadgeMeta(idx)
+                    return (
+                      <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                        <span class={`text-[9px] font-black uppercase tracking-tight px-2 py-0.5 rounded border ${b.className}`}>
+                          {b.text}
+                        </span>
+                        <Show when={b.sub}>
+                          <span class="text-[9px] font-bold text-gray-600">{b.sub}</span>
+                        </Show>
+                      </div>
+                    )
+                  })()}
+                </div>
+                <div class="px-3 py-1 rounded-full bg-primary-500/10 border border-primary-500/20 shrink-0">
+                  <span class="text-xs font-black text-primary-400 uppercase tracking-tighter">{idx.strategy}</span>
+                </div>
+              </div>
+              <div class="flex flex-col gap-2 mt-auto relative z-10">
+                <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-gray-600">
+                  <span>Status</span>
+                  <span class="text-emerald-500">Scoping Index</span>
+                </div>
+                <div class="w-full bg-white/5 h-1 rounded-full overflow-hidden">
+                  <div class="bg-primary-500 h-full w-2/3 animate-pulse"></div>
+                </div>
+              </div>
+            </div>
+          )}
+        </For>
       </div>
 
       {/* Strategies Grid */}

@@ -2,13 +2,12 @@
 
 module Entries
   class MetaBuilder
-    SUPERTREND_CONTRACT = "supertrend_machine_v1"
+    SUPERTREND_CONTRACT = 'supertrend_machine_v1'
 
     def self.call(meta_hash, bos_context, entry_metadata, entry_price:, quantity:)
-      contract = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_contract].to_s : ""
-      return if bos_context.nil? && contract != SUPERTREND_CONTRACT
+      return unless bos_context
 
-      contract = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_contract].to_s : ""
+      contract = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_contract].to_s : ''
       sl_decimal = supertrend_sl_decimal
       premium_r = entry_price.to_f * sl_decimal
       qty_int = SafeNumeric.to_non_negative_integer(quantity)
@@ -34,14 +33,11 @@ module Entries
       meta_hash[:initial_sl_pct] = safe_initial_sl_pct(premium_r, entry_price.to_f)
       meta_hash[:premium_target_price] = premium_target
       meta_hash[:entry_underlying_price] = entry_underlying_price
-
-      if bos_context
-        meta_hash[:bos_confirmed_at] = bos_context[:confirmed_at]&.iso8601
-        meta_hash[:bos_origin_index] = bos_context[:origin_swing][:index]
-        meta_hash[:bos_timeframe] = bos_context[:timeframe]
-        meta_hash[:bos_direction] = bos_context[:direction]
-        meta_hash[:bos_id] = bos_context[:bos_id]
-      end
+      meta_hash[:bos_confirmed_at] = bos_context[:confirmed_at]&.iso8601
+      meta_hash[:bos_origin_index] = bos_context[:origin_swing][:index]
+      meta_hash[:bos_timeframe] = bos_context[:timeframe]
+      meta_hash[:bos_direction] = bos_context[:direction]
+      meta_hash[:bos_id] = bos_context[:bos_id]
 
       if entry_metadata.is_a?(Hash)
         meta_hash[:bos_age_at_entry] = entry_metadata[:bos_age_at_entry] if entry_metadata.key?(:bos_age_at_entry)
@@ -50,8 +46,6 @@ module Entries
         meta_hash[:entry_distance_r] = entry_metadata[:entry_distance_r] if entry_metadata.key?(:entry_distance_r)
         meta_hash[:entry_tf] = entry_metadata[:entry_tf]
         meta_hash[:htf_tf] = entry_metadata[:htf_tf]
-        meta_hash[:iv_percentile] = entry_metadata[:iv_percentile] if entry_metadata.key?(:iv_percentile)
-        meta_hash[:momentum_score] = entry_metadata[:momentum_score] if entry_metadata.key?(:momentum_score)
       end
     end
 

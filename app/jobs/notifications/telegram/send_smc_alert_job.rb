@@ -99,7 +99,7 @@ module Notifications
 
       def ai_enabled?
         AlgoConfig.fetch.dig(:ai, :enabled) == true &&
-          Services::Ai::OpenaiClient.instance.enabled?
+          Services::Ai::OllamaClient.instance.enabled?
       rescue StandardError
         false
       end

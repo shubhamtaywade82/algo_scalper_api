@@ -17,7 +17,7 @@ Rails 8 API-only backend for **fully autonomous intraday options scalping** on I
 
 Two main processes:
 
-- **Web API** (`bin/rails server -p 3011`) — REST/JSON endpoints, dashboards, AI tools.
+- **Web API** (`bin/rails server -p 3001`) — REST/JSON endpoints, dashboards, AI tools.
 - **Trading daemon** (`ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon`) — runs all live trading services in threads, coordinated by `lib/trading_system/supervisor.rb`.
 
 Jobs process (`bin/jobs`) runs Solid Queue for recurring tasks. Dashboard (`cd dashboard && npm run dev`) is a separate Next.js frontend.
@@ -130,7 +130,14 @@ When `market_context.enabled: true` in `config/algo.yml`:
 
 Next.js dashboard that consumes API endpoints (positions, PnL, indices). Runs as a separate process via `Procfile.dev`.
 
-### 2.14 `docs/`
+### 2.14 `config/profiles/`
+
+Profile YAML files for run mode overrides:
+- `production.yml` — no overrides (base `algo.yml` is production-safe).
+- `exit_testing.yml` — more frequent entries, relaxed guards for testing exit logic.
+- `entry_testing.yml` — relaxed SMC/validation/ADX gates for testing entry pipeline.
+
+### 2.15 `docs/`
 
 Architecture diagrams and narrative docs:
 - `docs/architecture/` — system overview, component map, execution flow, WebSocket feed.
@@ -144,10 +151,10 @@ Architecture diagrams and narrative docs:
 
 ## 3. Modes and Configuration
 
-- **Paper vs Live**: Effective `paper_trading.enabled` from `AlgoConfig.fetch`: `config/algo.yml` → DB `algo_config_overrides` → `config/signal_tier_presets.yml` (tier from `SIGNAL_TIER` or `signals.signal_tier`) → **`LIVE_TRADING` env** forces paper when unset/false. Live broker submission still needs `dhanhq.enable_orders: true` and `PLACE_ORDER=true`. Gateway selected at boot; restart after changing `LIVE_TRADING`.
-- **Signal tiers**: `exploratory` / `standard` / `selective` — YAML preset overlay only; not a second gateway switch.
+- **Paper vs Live**: Controlled via `config/algo.yml` → `paper_trading.enabled` and `dhanhq.enable_orders`. Also requires `PLACE_ORDER=true` env var for live orders. Gateway selected at boot: paper → `Orders::GatewayPaper`, live → `Orders::GatewayLive`. Both modes use real WebSocket and option chain data.
+- **Run Modes**: `run_mode: production | exit_testing | entry_testing` in `algo.yml` or `RUN_MODE=` env var. Profile files in `config/profiles/` provide partial YAML overrides. **Current default state:** `run_mode: exit_testing`.
 - **All percentage config values use DECIMAL format** (0.12 = 12%, not 12.0).
-- **Typed Settings**: `AlgoSetting` + `Setting` model + `config/algo.yml` drive feature flags, ADX thresholds, risk limits, time restrictions. `AlgoConfig.fetch` has a 30s cache with the merge order above.
+- **Typed Settings**: `AlgoSetting` + `Setting` model + `config/algo.yml` drive feature flags, ADX thresholds, risk limits, time restrictions. `AlgoConfig.fetch` has a 30s cache with DB deep-merge.
 
 ---
 
@@ -194,7 +201,7 @@ Run by `Entries::EntryGuardPipeline#run`. First block wins. Current order:
 - **Provider**: Ollama (local LLM) via `ollama-client` gem (`~> 1.1`). **OpenAI/ruby-openai gems have been removed.**
 - **Client**: `lib/services/ai/ollama_client.rb` — wraps `Ollama::Client`; provides `chat`, `generate`, `chat_stream`.
 - **Model selection**: If `OLLAMA_MODEL` env var set and available, uses it. Otherwise auto-selects from available models (prefers llama3.1:8b).
-- **ENV**: `OLLAMA_MODEL` (default: qwen3.5:4b), `OLLAMA_BASE_URL` / `OLLAMA_HOST_URL` (default: http://localhost:11434), `OLLAMA_TIMEOUT` (default: 120s).
+- **ENV**: `OLLAMA_MODEL` (default: llama3.2:3b), `OLLAMA_BASE_URL` / `OLLAMA_HOST_URL` (default: http://localhost:11434), `OLLAMA_TIMEOUT` (default: 120s).
 - **Agent**: `lib/services/ai/technical_analysis_agent.rb` runs multi-turn LLM analysis for NIFTY and SENSEX every 15 minutes via `AiTechnicalAnalysisJob`.
 
 ---
@@ -212,6 +219,7 @@ Run by `Entries::EntryGuardPipeline#run`. First block wins. Current order:
 ```bash
 ./bin/dev                                                              # web + trading + jobs + dashboard
 ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon           # trading daemon standalone
+RUN_MODE=exit_testing ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
 bin/jobs                                                               # Solid Queue worker standalone
 bundle exec rspec                                                       # test suite
 bundle exec rubocop                                                     # style/lint

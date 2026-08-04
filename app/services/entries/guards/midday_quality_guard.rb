@@ -12,6 +12,7 @@ module Entries
         include BaseGuard
 
         def call(context)
+          return PASS if AlgoConfig.run_mode == 'exit_testing'
           return PASS unless config_enabled?
           return { blocked: "no new trades after #{block_after_time}" } if blocked_after_cutoff?
           return PASS if opening_window?

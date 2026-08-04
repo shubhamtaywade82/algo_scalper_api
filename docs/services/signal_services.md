@@ -14,30 +14,35 @@ The core signal generation brain. Analyzes technical indicators (Supertrend, ADX
 **Inputs:**
 - `index_cfg`: Hash containing key, segment, SID, timeframe, ADX thresholds, and logic parameters
 - Instrument data from `IndexInstrumentCache` (candle series via DhanHQ API)
-- Effective `AlgoConfig.fetch[:signals]` (includes tier preset merge)
+- Current `AlgoConfig.run_mode`
 
 **Outputs:**
 - `TradingSignal` record (persisted with full diagnostic metadata)
 - Calls `Options::ChainAnalyzer` to qualify strikes
 - Calls `Entries::BosEntryEngine` or `Entries::EntryGuard` to attempt entry
 
-**Steps (high level):**
+**Steps:**
 1. Market open check
 2. Instrument resolution
-3. Analysis context initialization (`entry_primary`, timeframes from merged `signals`)
-4. Supertrend-only or standard analysis flow; set `effective_validation_mode` from regime where applicable
-5. Optional early return: `halt_on_validation_failure`
-6. Trading context gate
-7. Entry quality filter
-8. No-trade gate + `entry_dte_guard`
-9. Execution gates (SMC, momentum, direction, etc.)
-10. State snapshot dedup
-11. Options analysis (`options_analysis_gate` optional)
-12. Diagnostic metadata + `TradingSignal` persistence
-13. `execute_entry_gate` (pick + optional market context)
-14. `trigger_entry_flow`
+3. Analysis context initialization (respects `run_mode`)
+4. Primary + confirmation analysis
+5. Trading context gate (EntryFilterEngine, PermissionResolver)
+6. Entry quality filter
+7. Institutional gates (SMC, momentum)
+8. State snapshot dedup
+9. Options analysis
+10. Diagnostic metadata build
+11. TradingSignal persistence
+12. Optional market context gate
+13. Entry trigger
 
-**Signal tier:** `exploratory` / `standard` / `selective` merges `config/signal_tier_presets.yml` before `LIVE_TRADING` paper override — does not fork engine code.
+**Run mode behavior:**
+
+| Mode | entry_primary | primary_tf | confirmation | quality gates |
+|------|--------------|------------|-------------|---------------|
+| `production` | from config | from config | from config | full |
+| `exit_testing` | `supertrend_adx` (forced) | `1m` (forced) | disabled | most bypassed |
+| `entry_testing` | from config | from config | from config | relaxed |
 
 **Dependencies:** `Indicators::Supertrend`, `Indicators::ADX`, `Signal::StateTracker`, `Trading::PermissionResolver`, `Entries::EntryFilterEngine`, `Options::ChainAnalyzer`
 

@@ -3,7 +3,7 @@
 require 'swagger_helper'
 
 # rubocop:disable RSpec/DescribeClass, RSpec/EmptyExampleGroup, RSpec/ScatteredSetup -- RSwag OpenAPI specs
-RSpec.describe 'OpenAPI v1 — settings, risk, debug', openapi_spec: 'v1/swagger.yaml' do
+RSpec.describe 'OpenAPI v1 — settings, calibration, risk, debug', openapi_spec: 'v1/swagger.yaml' do
   path '/api/settings' do
     get 'Full algo config (YAML merge + DB overrides)' do
       tags 'Settings'
@@ -44,6 +44,80 @@ RSpec.describe 'OpenAPI v1 — settings, risk, debug', openapi_spec: 'v1/swagger
                  success: { type: :boolean },
                  flag: { type: :string, nullable: true }
                }
+
+        run_test!
+      end
+    end
+  end
+
+  path '/api/calibration_runs' do
+    get 'List calibration runs' do
+      tags 'Calibration'
+      produces 'application/json'
+      parameter name: :limit, in: :query, type: :integer, required: false
+
+      response '200', 'runs with snapshot' do
+        before do
+          CalibrationRun.delete_all
+          CalibrationRun.create!(
+            symbol: 'NIFTY', weeks_analyzed: 8, strike_mode: 'atm_plus_minus',
+            raw_stats: {}, proposed_patch: {}
+          )
+        end
+
+        schema type: :array, items: { type: :object, additionalProperties: true }
+
+        run_test!
+      end
+    end
+  end
+
+  path '/api/calibration_runs/{id}' do
+    get 'Single calibration run' do
+      tags 'Calibration'
+      produces 'application/json'
+      parameter name: :id, in: :path, type: :integer, required: true
+
+      response '200', 'run' do
+        let(:id) do
+          CalibrationRun.create!(
+            symbol: 'NIFTY', weeks_analyzed: 8, strike_mode: 'atm_plus_minus',
+            raw_stats: {}, proposed_patch: {}
+          ).id
+        end
+
+        before do
+          allow(AlgoConfig).to receive(:fetch).and_return({ risk: {} })
+        end
+
+        schema type: :object, additionalProperties: true
+
+        run_test!
+      end
+    end
+  end
+
+  path '/api/calibration_runs/{id}/apply' do
+    post 'Apply proposed patch to settings' do
+      tags 'Calibration'
+      produces 'application/json'
+      parameter name: :id, in: :path, type: :integer, required: true
+
+      response '200', 'applied' do
+        let(:id) do
+          CalibrationRun.create!(
+            symbol: 'NIFTY', weeks_analyzed: 8, strike_mode: 'atm_plus_minus',
+            raw_stats: {}, proposed_patch: { 'risk' => { 'trailing' => { 'activation_pct' => 0.02 } } }
+          ).id
+        end
+
+        before do
+          allow(Setting).to receive(:put)
+          allow(Setting).to receive(:find_by).and_return(nil)
+          allow(AlgoConfig).to receive(:reset!)
+        end
+
+        schema type: :object, additionalProperties: true
 
         run_test!
       end

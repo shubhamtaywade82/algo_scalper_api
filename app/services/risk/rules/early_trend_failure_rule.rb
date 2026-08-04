@@ -54,7 +54,7 @@ module Risk
 
         OpenStruct.new(
           trend_score: adx_hash[:value]&.to_f || 0,
-          peak_trend_score: tracker.runtime_meta_fetch('peak_trend_score') || 0,
+          peak_trend_score: tracker.meta&.dig('peak_trend_score') || 0,
           adx: adx_hash[:value],
           atr_ratio: calculate_atr_ratio(tracker, instrument),
           underlying_price: tracker.entry_price.to_f,

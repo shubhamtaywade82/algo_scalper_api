@@ -67,8 +67,6 @@ class PositionTracker < ApplicationRecord
     end
 
     def update_pnl!(pnl, pnl_pct: nil)
-      return if exited?
-
       pnl_value = BigDecimal(pnl.to_s)
       current_hwm = high_water_mark_pnl ? BigDecimal(high_water_mark_pnl.to_s) : BigDecimal(0)
       hwm = [current_hwm, pnl_value].max
@@ -78,8 +76,6 @@ class PositionTracker < ApplicationRecord
     end
 
     def cache_live_pnl(pnl, pnl_pct: nil)
-      return if exited?
-
       pnl_value = BigDecimal(pnl.to_s)
       self.last_pnl_rupees = pnl_value
       self.last_pnl_pct = pnl_pct.nil? ? nil : BigDecimal(pnl_pct.to_s)
@@ -121,7 +117,7 @@ class PositionTracker < ApplicationRecord
       qty = (quantity || 0).to_i
       pnl = BigDecimal((last_pnl_rupees || cached_pnl || 0).to_s)
 
-      self.last_pnl_pct = entry.positive? && qty.positive? ? (pnl / (entry * qty)) : BigDecimal('0')
+      self.last_pnl_pct = (entry.positive? && qty.positive?) ? (pnl / (entry * qty)) : BigDecimal('0')
     end
 
     def persist_hwm_pnl_pct(value)
