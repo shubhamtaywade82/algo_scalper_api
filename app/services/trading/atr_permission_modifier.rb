@@ -23,9 +23,7 @@ module Trading
         return :blocked unless PERMISSIONS.include?(p)
         return :blocked if p == :blocked
 
-        unless numeric_finite?(atr_current) && numeric_finite?(atr_session_median) && numeric_finite?(atr_slope)
-          return :blocked
-        end
+        return :blocked unless numeric_finite?(atr_current) && numeric_finite?(atr_session_median) && numeric_finite?(atr_slope)
         return :blocked unless atr_current.positive? && atr_session_median.positive?
 
         # Rule 1 (first):
@@ -33,13 +31,17 @@ module Trading
         # - full_deploy -> scale_ready
         # - scale_ready -> execution_only
         # - execution_only -> execution_only
-        p = downgrade_for_low_atr(p) if atr_current < atr_session_median
+        if atr_current < atr_session_median
+          p = downgrade_for_low_atr(p)
+        end
 
         # Rule 2 (second):
         # If atr_slope <= 0:
         # - scale_ready -> execution_only
         # - full_deploy -> scale_ready
-        p = downgrade_for_non_positive_slope(p) if atr_slope <= 0
+        if atr_slope <= 0
+          p = downgrade_for_non_positive_slope(p)
+        end
 
         # Rule 3 (implicit safety): never upgrade.
         p
@@ -86,3 +88,4 @@ module Trading
     end
   end
 end
+

@@ -63,3 +63,4 @@ RSpec.describe Smc::SmcPermissionResolver do
     end
   end
 end
+

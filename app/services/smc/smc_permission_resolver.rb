@@ -16,42 +16,19 @@ module Smc
       #
       # @param smc_result [Hash, #to_h] existing SMC output (unchanged)
       # @param avrz_result [Hash, #to_h] existing AVRZ output (unchanged)
-      # @param mode [String] Permission mode: 'strict', 'lenient', or 'bypass'
       # @return [Symbol] one of: :blocked, :execution_only, :scale_ready, :full_deploy
-      def resolve(smc_result:, avrz_result:, mode: 'strict')
+      def resolve(smc_result:, avrz_result:)
         smc = NormalizedSmc.new(smc_result)
         avrz = NormalizedAvrz.new(avrz_result)
 
         # ---------------- HARD BLOCK (:blocked) ----------------
         # STRICT:
-        # - SMC structure state is :neutral (always block - no direction)
-        # - AVRZ state == :dead only blocks if we have very few candles (< 5)
-        #   (With our lenient AVRZ detection, :dead should be rare)
-        return :blocked if smc.structure_state == :neutral
-
-        # Range markets: Allow execution_only if displacement is present
-        # In lenient mode: Allow range markets even without displacement
-        if smc.structure_state == :range
-          if smc.displacement?
-            Rails.logger.debug('[SmcPermissionResolver] Range market with displacement - allowing execution_only')
-            return :execution_only
-          elsif mode == 'lenient'
-            Rails.logger.debug('[SmcPermissionResolver] Lenient mode - allowing range market without displacement')
-            return :execution_only
-          end
-          Rails.logger.debug('[SmcPermissionResolver] Range market blocked - no displacement')
-          return :blocked
-        end
-
-        # Trend markets: Require BOS for any permission
-        # In lenient mode: Allow trend markets even without BOS (if displacement present)
-        unless smc.bos_recent?
-          if mode == 'lenient' && smc.displacement?
-            Rails.logger.debug('[SmcPermissionResolver] Lenient mode - allowing trend market without BOS (has displacement)')
-            return :execution_only
-          end
-          return :blocked
-        end
+        # - SMC structure state is :range OR :neutral
+        # - OR no BOS detected recently
+        # - OR AVRZ state == :dead
+        return :blocked if avrz.state == :dead
+        return :blocked if smc.structure_state.in?(%i[range neutral])
+        return :blocked unless smc.bos_recent?
 
         # ---------------- FULL DEPLOY (:full_deploy) ----------------
         # STRICT:
@@ -93,13 +70,6 @@ module Smc
           return :execution_only
         end
 
-        # Lenient mode fallback: If we have a trend market with BOS but don't meet other criteria,
-        # still allow execution_only
-        if mode == 'lenient' && smc.structure_state == :trend && smc.bos_recent?
-          Rails.logger.debug('[SmcPermissionResolver] Lenient mode - allowing trend market with BOS as execution_only')
-          return :execution_only
-        end
-
         :blocked
       end
     end
@@ -108,11 +78,7 @@ module Smc
 
     class NormalizedSmc
       def initialize(raw)
-        @raw = if raw.respond_to?(:to_h)
-                 raw.to_h
-               else
-                 (raw.is_a?(Hash) ? raw : {})
-               end
+        @raw = raw.respond_to?(:to_h) ? raw.to_h : (raw.is_a?(Hash) ? raw : {})
       end
 
       def structure_state
@@ -168,7 +134,7 @@ module Smc
           dig(:liquidity, :trap_active) ||
           dig(:liquidity, :trap)
 
-        v.nil? || (bool(v) == true)
+        v.nil? ? true : (bool(v) == true)
       end
 
       def trap_resolved?
@@ -219,7 +185,7 @@ module Smc
       end
 
       def bool(v)
-        return v if [true, false].include?(v)
+        return v if v == true || v == false
         return true if v.is_a?(String) && v.strip.downcase == 'true'
         return false if v.is_a?(String) && v.strip.downcase == 'false'
 
@@ -229,11 +195,7 @@ module Smc
 
     class NormalizedAvrz
       def initialize(raw)
-        @raw = if raw.respond_to?(:to_h)
-                 raw.to_h
-               else
-                 (raw.is_a?(Hash) ? raw : {})
-               end
+        @raw = raw.respond_to?(:to_h) ? raw.to_h : (raw.is_a?(Hash) ? raw : {})
       end
 
       def state
@@ -251,3 +213,4 @@ module Smc
     end
   end
 end
+
