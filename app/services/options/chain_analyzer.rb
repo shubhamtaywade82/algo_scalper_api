@@ -862,9 +862,7 @@ module Options
         pick = leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id, :strike, :prev_close)
                   .merge(strike_type: used_strike_type, score: leg[:score], acceleration_signal: leg[:acceleration_signal])
 
-        if exit_testing_mode
-          Rails.logger.info("[Options] Exit-testing mode: skipping expected-move validator for #{index_cfg[:key]}") if defined?(Rails)
-        else
+        if signals_cfg.fetch(:enable_expected_move_strike_gate, true)
           validator = Options::StrikeQualification::ExpectedMoveValidator.new
           validation = validator.call(
             index_key: key,

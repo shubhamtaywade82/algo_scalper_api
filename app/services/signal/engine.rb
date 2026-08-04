@@ -1364,7 +1364,7 @@ module Signal
       # @return [Array(Hash, Boolean, String, nil)] extra, blocked, block_detail when blocked
       def evaluate_market_context_for_entry(index_cfg:, primary_series:, expiry_date:, chain_data:,
                                             final_direction:, pick:, smc_decision: nil)
-        return [{}, false] unless AlgoConfig.fetch.dig(:market_context, :enabled) == true
+        return [{}, false, nil] unless AlgoConfig.fetch.dig(:market_context, :enabled) == true
 
         snapshot = MarketContext::RegimeComposer.new(series: primary_series, index_key: index_cfg[:key]).call
         chain_signal = Options::ChainSignalExtractor.new(

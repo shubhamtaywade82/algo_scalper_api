@@ -9,21 +9,8 @@ class AlgoConfig
         return @cached_config
       end
 
-      # 1. Load base configuration from YAML
-      base_config = YAML.load_file(Rails.root.join('config/algo.yml')).deep_symbolize_keys
-
-      # 2. Load dynamic overrides from the database (Settings table)
-      override_json = Setting.fetch('algo_config_overrides', nil, ttl: CACHE_TTL)
-      if override_json.present?
-        begin
-          overrides = JSON.parse(override_json).deep_symbolize_keys
-          # Deep merge standard hashes; handle arrays (like indices) carefully if needed,
-          # but deep_merge usually replaces arrays.
-          base_config = deep_merge_hashes_with_arrays(base_config, overrides)
-        rescue StandardError => e
-          Rails.logger.error("[AlgoConfig] Failed to parse algo_config_overrides: #{e.message}")
-        end
-      end
+      # 1. Canonical document from DB (seeded from config/algo.yml + legacy overrides on first use)
+      base_config = AlgoConfig::DocumentStore.current_mutable_document
 
       @cached_config = base_config
       @cache_expires_at = Time.current + CACHE_TTL
@@ -41,40 +28,16 @@ class AlgoConfig
 
     private
 
-    # Custom deep merge to handle arrays of hashes (like the indices array where we match by :key)
+    def truthy_signal_flag?(val)
+      val == true || val.to_s.strip.casecmp('true').zero?
+    end
+
     def deep_merge_hashes_with_arrays(base, overrides)
-      merged = base.dup
-
-      overrides.each do |key, val|
-        if base[key].is_a?(Hash) && val.is_a?(Hash)
-          merged[key] = deep_merge_hashes_with_arrays(base[key], val)
-        elsif base[key].is_a?(Array) && val.is_a?(Array)
-          # Try to merge array of hashes by a common identifier, primarily :key
-          merged[key] = merge_arrays(base[key], val)
-        else
-          merged[key] = val
-        end
-      end
-
-      merged
+      MergeUtil.deep_merge_hashes_with_arrays(base, overrides)
     end
 
     def merge_arrays(base_arr, override_arr)
-      # If they aren't arrays of hashes with :key, just overwrite
-      return override_arr unless base_arr.all? { |i| i.is_a?(Hash) && i[:key] } && override_arr.all? { |i| i.is_a?(Hash) && i[:key] }
-
-      merged_arr = base_arr.map(&:dup)
-
-      override_arr.each do |over_item|
-        existing_idx = merged_arr.index { |b_item| b_item[:key] == over_item[:key] }
-        if existing_idx
-          merged_arr[existing_idx] = deep_merge_hashes_with_arrays(merged_arr[existing_idx], over_item)
-        else
-          merged_arr << over_item
-        end
-      end
-
-      merged_arr
+      MergeUtil.merge_arrays(base_arr, override_arr)
     end
   end
 end

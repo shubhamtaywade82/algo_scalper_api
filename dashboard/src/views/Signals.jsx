@@ -1,9 +1,6 @@
 import { createSignal, createMemo, onMount } from 'solid-js'
 import { For, Show } from 'solid-js'
 import SignalsSidebar from '../components/signals/SignalsSidebar'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table'
-import Badge from '../components/ui/Badge'
-import Button from '../components/ui/Button'
 
 function formatTime(timestamp) {
   if (!timestamp) return '—'
@@ -206,12 +203,30 @@ export default function Signals() {
     return [...pages].sort((a, b) => a - b)
   })
 
-  function directionVariant(direction) {
-    const dir = String(direction || '').toLowerCase()
-    if (dir.includes('bullish') || dir.includes('buy')) return 'success'
-    if (dir.includes('bearish') || dir.includes('sell')) return 'danger'
-    return 'outline'
-  }
+  return (
+    <div class="flex flex-col lg:flex-row gap-6">
+      <div class="flex flex-col gap-6 w-full lg:w-3/4">
+        {/* Title */}
+      <div class="flex items-center justify-between px-2">
+        <h2 class="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+          Signal Intelligence
+        </h2>
+        <div class="flex items-center gap-3">
+          <Show when={meta().total > 0}>
+            <span class="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">
+              {meta().total} signals
+            </span>
+          </Show>
+          <button
+            onClick={fetchSignals}
+            disabled={loading()}
+            class="text-[10px] font-bold text-gray-500 hover:text-gray-300 uppercase tracking-wider disabled:opacity-40 transition-colors"
+          >
+            {loading() ? '↻ Loading...' : '↻ Refresh'}
+          </button>
+        </div>
+      </div>
 
   return (
     <div class="flex flex-col lg:flex-row gap-6">
@@ -511,6 +526,10 @@ export default function Signals() {
             </div>
           </Show>
         </div>
+      </div>
+      <div class="w-full lg:w-1/4">
+        <SignalsSidebar />
+      </div>
       </div>
       <div class="w-full lg:w-1/4">
         <SignalsSidebar />
