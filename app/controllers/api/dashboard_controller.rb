@@ -25,7 +25,10 @@ module Api
         ),
         config: {
           risk: AlgoConfig.fetch[:risk].slice(:sl_pct, :tp_pct, :hard_rupee_sl, :profit_floor, :trailing),
-          signals: AlgoConfig.fetch[:signals].slice(:enable_adx_filter, :adx, :enable_direction_gate),
+          signals: (AlgoConfig.fetch[:signals] || {}).slice(
+            :enable_adx_filter, :adx, :enable_direction_gate,
+            :enable_smc_confluence_digest, :enable_smc_confluence_gating, :smc_confluence_intervals
+          ).compact,
           time_restrictions: AlgoConfig.fetch[:trading_time_restrictions],
           market_session: {
             current: Live::TimeRegimeService.instance.current_regime,
@@ -64,8 +67,24 @@ module Api
     def subscribed_indices_payload
       sorted_indices_with_strategy.map do |idx|
         key = idx[:key].to_s.upcase
-        idx.merge(nearest_listed_option_expiry_fields(key))
+        idx.merge(nearest_listed_option_expiry_fields(key)).merge(
+          smc_confluence_ltf: confluence_ltf_from_analysis_store(key)
+        )
       end
+    end
+
+    def confluence_ltf_from_analysis_store(index_key)
+      return nil unless AlgoConfig.fetch.dig(:signals, :enable_smc_confluence_digest) == true
+
+      entry = AnalysisStore.read(index_key, :smc)
+      data = entry&.dig(:data)
+      return nil unless data.is_a?(Hash)
+
+      summary = data[:smc_confluence_ltf_summary] || data["smc_confluence_ltf_summary"]
+      summary.presence
+    rescue StandardError => e
+      Rails.logger.debug { "[DashboardController] confluence_ltf read #{index_key}: #{e.message}" }
+      nil
     end
 
     def nearest_listed_option_expiry_fields(index_key)

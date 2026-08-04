@@ -8,8 +8,11 @@ Rails 8 API backend for **fully autonomous** intraday options scalping on Indian
 - PostgreSQL
 - Redis (tick cache, PnL cache, position state)
 - Solid Queue (background job processing — not Sidekiq)
-- DhanHQ v2 via `dhanhq-client` gem
-- Optional: OpenAI for AI technical analysis
+- Solid Cable (ActionCable WebSocket backend)
+- Solid Cache (Rails.cache backend)
+- DhanHQ v2 via `dhanhq` gem (broker API + WebSocket)
+- Optional: Ollama (local LLM via `ollama-client`) for AI technical analysis
+- Optional: Telegram Bot for notifications
 
 ## Commands
 

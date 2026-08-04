@@ -34,7 +34,8 @@ RSpec.describe Signal::Engine do
           instrument,
           primary_series,
           :bullish,
-          signals_cfg
+          signals_cfg,
+          false
         )
         expect(result).to be_nil
       end
@@ -49,7 +50,8 @@ RSpec.describe Signal::Engine do
           instrument,
           primary_series,
           :bullish,
-          signals_cfg
+          signals_cfg,
+          false
         )
         expect(result).to be_a(Hash)
         expect(result[:permission]).to eq(:scale_ready)
@@ -79,7 +81,8 @@ RSpec.describe Signal::Engine do
           instrument,
           primary_series,
           :bearish,
-          signals_cfg
+          signals_cfg,
+          false
         )
         expect(result[:smc_confluence_ltf_summary]).to eq(summary)
       end

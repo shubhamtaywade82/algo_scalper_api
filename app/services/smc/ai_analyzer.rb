@@ -38,11 +38,7 @@ module Smc
     end
 
     def select_model
-      if @ai_client.provider == :ollama
-        @ai_client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3.2:3b'
-      else
-        'gpt-4o'
-      end
+      @ai_client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3.2:3b'
     end
 
     def initialize_conversation
@@ -625,26 +621,12 @@ module Smc
         end
       end
 
-      # Also try to find complete JSON objects that might be tool calls (more lenient)
-      # Look for patterns like: {"name": "...", "parameters": {...}}
-      text.scan(/\{[^}]*"name"\s*:\s*"([^"]+)"[^}]*"parameters"\s*:\s*(\{[^}]*\})[^}]*\}/) do |name, params_str|
-        next if seen_tools.include?(name) # Avoid duplicates
+      append_tick_ai_extras(prompt_parts)
 
-        begin
-          # Try to parse the full JSON object
-          full_match = text.match(/\{"name"\s*:\s*"#{Regexp.escape(name)}"\s*,\s*"parameters"\s*:\s*(\{[^}]*\})\s*\}/)
-          if full_match
-            parsed_params = JSON.parse(full_match[1])
-            tool_calls << {
-              'tool' => name,
-              'arguments' => parsed_params
-            }
-            seen_tools << name unless seen_tools.include?(name)
-            Rails.logger.info { "[Smc::AiAnalyzer] Extracted tool call (lenient): #{name}" }
-          end
-        rescue JSON::ParserError, NoMethodError
-          # Skip if can't parse
-        end
+      # Add option chain data if available
+      if @prefetched_data[:option_chain]&.dig(:options)&.any?
+        prompt_parts << build_option_chain_section(@prefetched_data[:option_chain], atm_strike, trend_direction)
+        prompt_parts << ''
       end
 
       # Pattern 2: {"tool": "tool_name", "arguments": {...}} (alternative format)
@@ -701,9 +683,54 @@ module Smc
         end
       end
 
-      if tool_calls.any?
-        Rails.logger.info { "[Smc::AiAnalyzer] Extracted #{tool_calls.size} tool call(s) from text" }
-        tool_calls
+    def append_tick_ai_extras(prompt_parts)
+      if @initial_data[:tick_trigger].present?
+        prompt_parts << '**TICK TRIGGER (rising-edge SMC confluence):**'
+        prompt_parts << json_pretty(@initial_data[:tick_trigger])
+        prompt_parts << ''
+      end
+
+      if @initial_data[:index_ta].present?
+        prompt_parts << '**INDEX TECHNICAL ANALYSIS:**'
+        prompt_parts << json_pretty(@initial_data[:index_ta])
+        prompt_parts << ''
+      end
+
+      return if @initial_data[:smc_confluence_mtf].blank?
+
+      prompt_parts << '**SMC CONFLUENCE MTF DIGEST (full JSON):**'
+      prompt_parts << json_pretty(@initial_data[:smc_confluence_mtf])
+      prompt_parts << ''
+    end
+
+    def json_pretty(obj)
+      return obj.to_s unless obj.is_a?(Hash) || obj.is_a?(Array)
+
+      JSON.pretty_generate(obj.deep_stringify_keys)
+    rescue StandardError
+      obj.to_json
+    end
+
+    def determine_trend_direction
+      htf_trend = @initial_data.dig(:timeframes, :htf, :trend)
+      mtf_trend = @initial_data.dig(:timeframes, :mtf, :trend)
+      ltf_trend = @initial_data.dig(:timeframes, :ltf, :trend)
+
+      bearish_count = [htf_trend, mtf_trend, ltf_trend].count { |t| t.to_s == 'bearish' }
+      bullish_count = [htf_trend, mtf_trend, ltf_trend].count { |t| t.to_s == 'bullish' }
+
+      trend_analysis = @prefetched_data[:trend_analysis].to_s
+      bearish_count += 2 if trend_analysis.include?('Overall Trend: BEARISH')
+      bullish_count += 2 if trend_analysis.include?('Overall Trend: BULLISH')
+      bearish_count += 1 if trend_analysis.include?('LOWER LOWS')
+      bearish_count += 1 if trend_analysis.include?('LOWER HIGHS')
+      bullish_count += 1 if trend_analysis.include?('HIGHER LOWS')
+      bullish_count += 1 if trend_analysis.include?('HIGHER HIGHS')
+
+      if bearish_count > bullish_count
+        :bearish
+      elsif bullish_count > bearish_count
+        :bullish
       else
         nil
       end

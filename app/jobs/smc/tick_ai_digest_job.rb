@@ -14,11 +14,10 @@ module Smc
         return
       end
 
-      return unless AlgoConfig.event_driven_intraday_ai?
+      signals_cfg = AlgoConfig.fetch[:signals] || {}
+      return unless signals_cfg[:tick_ai_analysis_enabled] == true
       return unless ai_enabled?
       return if Ai::GenerativeAiMarketGate.skip?(force: false)
-
-      signals_cfg = AlgoConfig.fetch[:signals] || {}
 
       intervals = signals_cfg[:smc_confluence_intervals] || {}
       htf = (intervals[:htf] || intervals['htf'] || BiasEngine::HTF_INTERVAL).to_s

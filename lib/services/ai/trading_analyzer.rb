@@ -2,8 +2,7 @@
 
 module Services
   module Ai
-    # AI-powered trading analysis service
-    # Uses OpenAI to analyze trading patterns, suggest improvements, etc.
+    # AI-powered trading analysis service (Ollama chat via Services::Ai::OllamaClient)
     class TradingAnalyzer
       class << self
         def analyze_trading_day(date: Time.zone.today, stream: false, &)
@@ -36,12 +35,7 @@ module Services
         prompt = build_analysis_prompt(stats: stats, positions: positions, date: date)
 
         Rails.logger.debug prompt
-        # Auto-select model (will use best available for Ollama)
-        model = if @client.provider == :ollama
-                  @client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3'
-                else
-                  'gpt-4o'
-                end
+        model = resolved_chat_model
 
         if stream && block_given?
           full_response = +''
@@ -94,12 +88,7 @@ module Services
         return nil unless @client.enabled?
 
         prompt = build_strategy_prompt(performance_data: performance_data)
-        # Auto-select model (will use best available for Ollama)
-        model = if @client.provider == :ollama
-                  @client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3'
-                else
-                  'gpt-4o'
-                end
+        model = resolved_chat_model
 
         if stream && block_given?
           full_response = +''
@@ -152,12 +141,7 @@ module Services
         return nil unless @client.enabled?
 
         prompt = build_market_analysis_prompt(market_data: market_data)
-        # Auto-select model (will use best available for Ollama)
-        model = if @client.provider == :ollama
-                  @client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3'
-                else
-                  'gpt-4o'
-                end
+        model = resolved_chat_model
 
         if stream && block_given?
           full_response = +''
@@ -207,6 +191,10 @@ module Services
       end
 
       private
+
+      def resolved_chat_model
+        @client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3'
+      end
 
       def system_prompt
         <<~PROMPT

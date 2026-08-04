@@ -3,8 +3,13 @@ import { createSignal, onMount, onCleanup } from 'solid-js'
 const POLL_INTERVAL_MS = 30000
 
 export function useAnalysis() {
-  const [currentIndex, setCurrentIndex] = createSignal('NIFTY')
-  const [liveData, setLiveData] = createSignal(null)
+  // Per-index state maps: { NIFTY: signal, SENSEX: signal, BANKNIFTY: signal }
+  const liveData = Object.fromEntries(INDICES.map(k => [k, createSignal(null)]))
+  const loading   = Object.fromEntries(INDICES.map(k => [k, createSignal(false)]))
+  const errors    = Object.fromEntries(INDICES.map(k => [k, createSignal(null)]))
+
+  // Historical / snapshot follow the selected Analysis tab (auto-loaded once per index per visit)
+  const [activeIndex, setActiveIndex] = createSignal(null)
   const [historicalData, setHistoricalData] = createSignal(null)
   const [loading, setLoading] = createSignal(false)
   const [historicalLoading, setHistoricalLoading] = createSignal(false)
@@ -12,6 +17,8 @@ export function useAnalysis() {
   const [snapshotLoading, setSnapshotLoading] = createSignal(false)
   const [snapshotData, setSnapshotData] = createSignal(null)
   const [snapshotError, setSnapshotError] = createSignal(null)
+  const [autoHistoricalLoadedForIndex, setAutoHistoricalLoadedForIndex] = createSignal({})
+  const [autoSnapshotLoadedForIndex, setAutoSnapshotLoadedForIndex] = createSignal({})
 
   let pollTimer = null
 
@@ -31,7 +38,17 @@ export function useAnalysis() {
     }
   }
 
-  async function fetchHistorical(weeks = 8) {
+  /** @param {string[] | undefined} keys when set, only those in INDICES are polled */
+  function fetchAll(keys) {
+    const list =
+      Array.isArray(keys) && keys.length > 0
+        ? keys.filter((k) => INDICES.includes(k))
+        : INDICES
+    list.forEach((idx) => fetchOne(idx))
+  }
+
+  async function fetchHistorical(index, weeks = 8) {
+    setActiveIndex(index)
     try {
       setHistoricalLoading(true)
       const res = await fetch(`/api/analysis/${currentIndex()}/historical?weeks=${weeks}`)
@@ -45,14 +62,34 @@ export function useAnalysis() {
     }
   }
 
-  async function fetchAiSnapshot() {
+  function ensureAutoLoadedDetails(index, { skipAiSnapshot = false } = {}) {
+    if (!index || !INDICES.includes(index)) return
+
+    const histDone = autoHistoricalLoadedForIndex()
+    if (!histDone[index]) {
+      setAutoHistoricalLoadedForIndex({ ...histDone, [index]: true })
+      void fetchHistorical(index)
+    }
+
+    if (skipAiSnapshot) return
+
+    const snapDone = autoSnapshotLoadedForIndex()
+    if (!snapDone[index]) {
+      setAutoSnapshotLoadedForIndex({ ...snapDone, [index]: true })
+      void fetchAiSnapshot(index)
+    }
+  }
+
+  async function fetchAiSnapshot(index) {
+    setActiveIndex(index)
     setSnapshotLoading(true)
     setSnapshotError(null)
     try {
       const res = await fetch(`/api/analysis/${currentIndex()}/ai_snapshot`, { method: 'POST' })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || `HTTP ${res.status}`)
+        const msg = data.message || data.error || `HTTP ${res.status}`
+        throw new Error(msg)
       }
       const data = await res.json()
       setSnapshotData(data.snapshot)
@@ -82,8 +119,20 @@ export function useAnalysis() {
   })
 
   return {
-    currentIndex, liveData, historicalData, loading, historicalLoading, error,
-    fetchLive, fetchHistorical, switchIndex,
-    snapshotLoading, snapshotData, snapshotError, fetchAiSnapshot
+    INDICES,
+    liveData:        (idx) => liveData[idx][0](),
+    isLoading:       (idx) => loading[idx][0](),
+    getError:        (idx) => errors[idx][0](),
+    fetchOne,
+    fetchAll,
+    fetchHistorical,
+    fetchAiSnapshot,
+    ensureAutoLoadedDetails,
+    activeIndex,
+    historicalData,
+    historicalLoading,
+    snapshotLoading,
+    snapshotData,
+    snapshotError,
   }
 }

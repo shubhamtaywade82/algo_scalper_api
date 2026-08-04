@@ -204,7 +204,7 @@ RSpec.describe Options::CalibrationAutoApplier do
 
     context 'when all gates pass' do
       before do
-        Setting.put(AlgoConfig::DocumentStore::DOCUMENT_KEY, { mode: 'paper', risk: {} }.to_json)
+        Setting.put('algo_config_overrides', '{}')
         AlgoConfig.reset!
         stub_config(
           auto_apply: {
@@ -219,8 +219,7 @@ RSpec.describe Options::CalibrationAutoApplier do
       end
 
       after do
-        Setting.where(key: AlgoConfig::DocumentStore::DOCUMENT_KEY).delete_all
-        AlgoConfigChangeLog.delete_all
+        Setting.where(key: 'algo_config_overrides').delete_all
         AlgoConfig.reset!
       end
 

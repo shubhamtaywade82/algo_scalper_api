@@ -7,7 +7,7 @@ module Signal
         signals_cfg = params[:signals_cfg]
         options_analysis = params[:options_analysis]
         primary_analysis = params[:primary_analysis]
-        
+
         {
           # Market State Diagnostics
           regime: params[:regime],
@@ -49,7 +49,8 @@ module Signal
 
           # SMC/Permission integration
           smc_decision: params[:smc_decision].to_s,
-          smc_permission: params[:permission].to_s
+          smc_permission: params[:permission].to_s,
+          smc_confluence_ltf: params[:smc_confluence_ltf_summary]
         }
       end
 
@@ -59,7 +60,7 @@ module Signal
         strategy_name = params[:strategy_name] || 'supertrend_adx'
         tf_label = params[:effective_timeframe]
         conf_label = params[:enable_confirmation] ? "+#{params[:confirmation_tf]}" : ''
-        
+
         "#{strategy_name}[#{tf_label}#{conf_label}]"
       end
     end

@@ -12,10 +12,7 @@ module Smc
       def start
         @running = true
         unless feature_enabled?
-          Rails.logger.info(
-            '[Smc::TickAi::AnalysisService] Disabled (set signals.event_driven_ai_alerts or ' \
-            'signals.tick_ai_analysis_enabled)'
-          )
+          Rails.logger.info('[Smc::TickAi::AnalysisService] Disabled (signals.tick_ai_analysis_enabled)')
           return
         end
 
@@ -31,7 +28,9 @@ module Smc
       private
 
       def feature_enabled?
-        AlgoConfig.event_driven_intraday_ai?
+        AlgoConfig.fetch.dig(:signals, :tick_ai_analysis_enabled) == true
+      rescue StandardError
+        false
       end
 
       def handle_tick(tick)
@@ -50,9 +49,9 @@ module Smc
         return unless Gate.acquire(sid, ttl_seconds: ttl)
 
         entry = index_entry_for_sid(sid)
-        instrument = Instrument.find_by_sid_and_segment(security_id: sid, segment_code: entry[:segment])
+        instrument = Instrument.find_by(security_id: sid)
         unless instrument&.exchange_segment.to_s == entry[:segment].to_s
-          Rails.logger.debug { "[Smc::TickAi::AnalysisService] No index Instrument for #{sid} in segment #{entry[:segment]}" }
+          Rails.logger.debug { "[Smc::TickAi::AnalysisService] No index Instrument for #{sid}" }
           return
         end
 

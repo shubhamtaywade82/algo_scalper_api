@@ -73,7 +73,7 @@ feature_flags:
   auto_paper_on_insufficient_balance: false
 
 # Calibration: historical option behaviour (weekly) and optional AI trade-based patches.
-# Auto-apply merges proposed_patch into DB algo_config_document (same as POST …/apply).
+# Auto-apply merges proposed_patch into DB algo_config_overrides (same as POST …/apply).
 calibration:
   auto_apply:
     # Master switch. When false, runs only create CalibrationRun rows for manual review.
@@ -816,6 +816,24 @@ signals:
   # SMC EventStore: persist every scan decision to smc_events for audit/replay
   smc_event_store_publish: true
 
+  # Pine-parity SMC confluence (delta_exchange_bot SmcConfluence::Engine) — advisory MTF digest in BiasEngine#details
+  enable_smc_confluence_digest: true
+  # Optional: block entries unless LTF last bar fires long_signal (bullish) / short_signal (bearish)
+  enable_smc_confluence_gating: false
+  # Dhan interval minutes; defaults match Smc::BiasEngine HTF/MTF/LTF
+  smc_confluence_intervals:
+    htf: "60"
+    mtf: "15"
+    ltf: "5"
+
+  # Tick-triggered MTF SMC confluence + optional index TA → Ollama → Telegram (trading daemon only).
+  # Hot path: Redis throttle on tick; job: MtfDigest, rising-edge on LTF alignment flags, then AiAnalyzer.
+  tick_ai_analysis_enabled: false
+  tick_ai_min_interval_seconds: 15
+  tick_ai_include_index_ta: true
+  tick_ai_notify_telegram: true
+  tick_ai_candle_fetch_delay_seconds: 1.0
+
   # SMC Navigator overlay (LTF tactical gate; additive to PermissionResolver — not a replacement)
   enable_smc_navigator_overlay: false
   smc_navigator_min_confidence: 0.6
@@ -1058,6 +1076,13 @@ telegram:
 # AI Integration Configuration
 ai:
   enabled: true # Set to true to enable AI integration
+  # Dashboard / DB override (Settings → AI): false = local Ollama, true = Ollama Cloud.
+  # URLs and secrets still come from ENV (see comments below).
+  ollama_use_cloud: true
+  # When true, skip Ollama calls while the cash session is closed (snapshot, AnalysisJob :ai,
+  # tick SMC digest AI). Dashboard auto-snapshot respects this via API payload. Set false for
+  # 24/7 research. POST /api/analysis/:key/ai_snapshot?force=true bypasses when allowed.
+  skip_generative_ai_when_market_closed: true
   # Timeout settings (in seconds):
   # - OLLAMA_HOST_URL: Remote Ollama server URL (e.g., http://192.168.0.200:11434)
   #   Alternative to OLLAMA_BASE_URL (both are supported)
@@ -1068,16 +1093,12 @@ ai:
   # - OLLAMA_OPEN_TIMEOUT: Connection timeout for Ollama (default: 5 seconds)
   # - OLLAMA_REQUEST_DELAY_MS: Delay between requests in milliseconds (default: 500ms)
   #   Useful for long streaming responses. Set higher if you experience timeouts.
-  # Provider selection:
-  # - Development/Test: Uses 'ruby-openai' gem (alexrudall/ruby-openai)
-  # - Production: Uses 'openai' gem (official openai-ruby)
-  # - Ollama: Automatically selected if OLLAMA_BASE_URL is set
-  # - Override: Set OPENAI_PROVIDER env var to 'ruby_openai', 'openai_ruby', or 'ollama'
-  #
-  # OpenAI API Key: Set OPENAI_API_KEY or OPENAI_ACCESS_TOKEN environment variable
+  # Provider: Ollama only (`ollama-client` gem). There is no OpenAI/ruby-openai integration.
   # Ollama Configuration:
-  #   - OLLAMA_BASE_URL: Base URL of Ollama server (e.g., http://192.168.1.11:11434)
-  #   - OLLAMA_API_KEY: Optional API key (default: 'ollama')
+  #   - OLLAMA_LOCAL_URL: Optional; used when ollama_use_cloud is false (overrides HOST/BASE fallbacks)
+  #   - OLLAMA_CLOUD_URL: Optional; used when ollama_use_cloud is true (else OLLAMA_BASE_URL, else ollama.com)
+  #   - OLLAMA_HOST_URL / OLLAMA_BASE_URL: Fallback for local mode (see OllamaClient)
+  #   - OLLAMA_API_KEY: Required when ollama_use_cloud is true (Ollama Cloud Bearer token)
   #   - OLLAMA_MODEL: Optional - explicitly set model (e.g., 'phi3:mini', 'llama3')
   #     If not set, system automatically fetches available models and selects the best one
   #

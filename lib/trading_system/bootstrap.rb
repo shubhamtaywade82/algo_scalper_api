@@ -32,8 +32,7 @@ module TradingSystem
 
       supervisor.register(:market_feed, feed)
       supervisor.register(:tick_smc_ai, Smc::TickAi::AnalysisService.new)
-      supervisor.register(:options_buying_breakout, OptionsBuying::BreakoutWatcher.new)
-      supervisor.register(:options_buying_stream_consumer, OptionsBuying::StreamConsumer.new)
+      supervisor.register(:signal_scheduler, Signal::Scheduler.new)
       supervisor.register(:risk_manager, Live::RiskManagerService.new(exit_engine: exit_engine))
       supervisor.register(:position_heartbeat, TradingSystem::PositionHeartbeat.new)
       supervisor.register(:order_router, router)

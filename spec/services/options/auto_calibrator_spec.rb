@@ -37,6 +37,12 @@ RSpec.describe Options::AutoCalibrator do
     allow(IndexConfigLoader).to receive(:load_indices).and_return([
                                                                     { key: 'NIFTY', segment: 'NSE_FNO', sid: '13' }
                                                                   ])
+
+    # Self-contained: do not depend on Derivative rows for weekly NIFTY expiries
+    fake_expiries = Array.new(8) { |i| Date.current - (i * 7) }
+    # rubocop:disable RSpec/AnyInstance -- isolates spec from derivative fixture drift
+    allow_any_instance_of(described_class).to receive(:historical_weekly_expiry_dates).and_return(fake_expiries)
+    # rubocop:enable RSpec/AnyInstance
   end
 
   describe '.call' do
@@ -56,6 +62,7 @@ RSpec.describe Options::AutoCalibrator do
       described_class.call(symbol: 'NIFTY', weeks: 4)
       run = CalibrationRun.last
       expect(run.raw_stats).not_to be_empty
+      expect(run.raw_stats['weeks_available'].to_i).to eq(8)
     end
 
     it 'stores proposed_patch (may be empty hash if nothing changed >10%)' do

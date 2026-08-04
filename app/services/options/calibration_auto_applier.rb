@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Options
-  # Applies a fresh CalibrationRun to +algo_config_document+ when config gates pass.
+  # Applies a fresh CalibrationRun to algo_config_overrides when config gates pass.
   #
   # Historical path: weekly DhanHQ expired-options stats → CalibrationConfigPatchBuilder.
   # AI path: recent paper trades → Ollama → proposed_patch (still validated in Runner).

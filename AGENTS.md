@@ -4,12 +4,20 @@
 - Core Rails app code lives in `app/`:
   - `app/controllers/api/` for API endpoints
   - `app/models/` and `app/models/concerns/` for domain models
-  - `app/services/` for business logic, grouped by domain (`signal/`, `options/`, `orders/`, `live/`, `risk/`, etc.)
-  - `app/jobs/` for background jobs
-- Shared utilities and rake tasks are in `lib/` and `lib/tasks/`.
-- Tests live in `spec/` (models, services, integration, smoke, support, and VCR cassettes).
-- Runtime/config files are in `config/` (`algo.yml`, initializers, environment configs).
-- Long-form architecture and operations docs are in `docs/`.
+  - `app/services/` for business logic, grouped by domain (`signal/`, `options/`, `orders/`, `live/`, `risk/`, `entries/`, `capital/`, `smc/`, `indicators/`, `dhan/`, `adapters/`, `positions/`, `trading/`)
+  - `app/jobs/` for background jobs (Solid Queue — not Sidekiq)
+  - `app/strategies/` for trading strategy implementations
+  - `app/channels/` for ActionCable channels (`positions`, `dashboard`)
+  - `app/lib/` for `AlgoConfig` and supporting utilities
+  - `app/domain/` for value objects (`MarketTick`)
+- Library and infrastructure code in `lib/`:
+  - `lib/trading_system/` — daemon, bootstrap, supervisor (trading process lifecycle)
+  - `lib/services/ai/` — Ollama client (`ollama-client`) and technical analysis agent
+  - `lib/notifications/` — Telegram notifier
+  - `lib/tasks/` — rake tasks (`trading:daemon`, `solid_queue:load_recurring`, `ai:technical_analysis`)
+- Tests in `spec/` (models, services, integration, smoke, support, VCR cassettes).
+- Configuration in `config/` (`algo.yml`, `recurring.yml`, `queue.yml`, initializers, environments).
+- Documentation in `docs/` (architecture, trading, services, development, integrations, archive).
 
 ## Build, Test, and Development Commands
 - `bin/setup --skip-server`: install gems and initialize local dependencies.
@@ -43,6 +51,35 @@
 ## Security & Configuration Tips
 - Never commit secrets; use `.env` (based on `.env.example`).
 - Validate new integrations with `DHANHQ_ENABLED=false` or `PAPER_MODE=true` before live use.
+
+## HTTP Rate Limiting (Rack::Attack)
+
+- **Configuration:** `config/initializers/rack_attack.rb`. Uses `Rails.cache`
+  for throttle counters.
+- **Test:** Rack::Attack is **disabled** after boot (`Rack::Attack.enabled =
+  false`) so specs and CI are not throttled.
+- **Dev / production:** Enabled by default:
+  - `/api/*` — default **240 requests / 5 minutes** per IP.
+  - `POST /api/analysis/:id/ai_snapshot` — **12 / minute** per IP (separate
+    bucket).
+- **Tuning:** `RACK_ATTACK_API_LIMIT`, `RACK_ATTACK_API_PERIOD_SECONDS`,
+  `RACK_ATTACK_AI_LIMIT`, `RACK_ATTACK_AI_PERIOD_SECONDS` in `.env` (see
+  `.env.example`). Raise limits for load tests. Throttled clients get **429**
+  and JSON `{"error":"rate_limited"}`.
+- **Bypassed:** `/up`, `/.well-known/*`.
+
+## Tick SMC + TA AI (optional)
+
+- **Runs only in the trading daemon** (`ENABLE_TRADING_SERVICES=true`), not in
+  Puma. Registers an `on_tick` callback on `Live::MarketFeedHub` (see
+  `Smc::TickAi::AnalysisService` in `lib/trading_system/bootstrap.rb`).
+- **Requires:** Redis (`REDIS_URL`) for per-tick throttle + rising-edge snapshot;
+  Ollama when `ai.enabled`; Telegram env vars when `tick_ai_notify_telegram` is
+  true (`config/algo.yml` → `signals.tick_ai_*`).
+- **Behavior:** throttle (default 15s per index) → Solid Queue job → MTF
+  confluence digest → **rising-edge** LTF flags vs Redis → optional index TA →
+  `Smc::AiAnalyzer` → optional Telegram. Master switch:
+  `signals.tick_ai_analysis_enabled`.
 
 ## Agent-Specific Instructions
 - Use `rg --files` and `rg -n` for code discovery; avoid slower recursive search tools.
