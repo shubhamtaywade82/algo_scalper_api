@@ -40,11 +40,6 @@ VCR.configure do |config|
     'algo-trading-api.onrender.com'
   end
 
-  # Filter SENSITIVE_SERVICE_URL (onrender.com)
-  config.filter_sensitive_data('<SENSITIVE_SERVICE_URL>') do
-    'algo-trading-api.onrender.com'
-  end
-
   # Filter sensitive headers - more comprehensive approach
   # We use blocks that return the value to be replaced.
   # VCR will replace all occurrences of these values in the cassette.
@@ -92,50 +87,22 @@ VCR.configure do |config|
   config.before_record do |interaction|
     body = interaction.request.body
 
-    # Only filter if body contains sensitive data, otherwise preserve as-is
-    if body.is_a?(String)
-      # Only filter if access_token or client_id are present in the body
-      if body.include?('access_token') || body.include?('client_id')
-        filtered_body = body.dup
-        # Replace access_token value while preserving the JSON structure
-        if body.include?('access_token')
-          filtered_body = filtered_body.gsub(/"access_token"\s*:\s*"[^"]*"/,
-                                             '"access_token":"<ACCESS_TOKEN>"')
-        end
-        if body.include?('client_id')
-          filtered_body = filtered_body.gsub(/"client_id"\s*:\s*"[^"]*"/,
-                                             '"client_id":"<CLIENT_ID>"')
-        end
-        interaction.request.body = filtered_body
+    if body.is_a?(String) && (body.include?('access_token') || body.include?('client_id'))
+      filtered_body = body.dup
+      # Replace access_token value while preserving the JSON structure
+      filtered_body = filtered_body.gsub(/"access_token"\s*:\s*"[^"]*"/,
+                                         '"access_token":"<ACCESS_TOKEN>"') if body.include?('access_token')
+      if body.include?('client_id')
+        filtered_body = filtered_body.gsub(/"client_id"\s*:\s*"[^"]*"/,
+                                           '"client_id":"<CLIENT_ID>"')
       end
-    elsif body.is_a?(Hash)
-      # Filter hash body only if it contains sensitive keys
-      if body.key?('access_token') || body.key?(:access_token) || body.key?('client_id') || body.key?(:client_id)
-        filtered_body = body.dup
-        if filtered_body['access_token'] || filtered_body[:access_token]
-          filtered_body['access_token'] = '<ACCESS_TOKEN>'
-        end
-        
-        # 2. Pattern-based scrubbing (Automatic Facility)
-        # Scrub JWT tokens (base64-encoded JSON header starting with eyJ0eXAi)
-        # Matches typical JWT structure: head.payload.signature
-        jwt_pattern = /eyJ0eXAi[a-zA-Z0-9\-\._~+\/]+=*/
-        filtered_body.gsub!(jwt_pattern, '<ACCESS_TOKEN>')
-        
-        # Scrub Bearer tokens in any string (not just JSON keys)
-        # Standard Bearer tokens are alphanumeric with some symbols
-        bearer_pattern = /Bearer\s+[a-zA-Z0-9\-\._~+\/]+=*/
-        filtered_body.gsub!(bearer_pattern, 'Bearer <AUTHORIZATION>')
-        
-        # Scrub potential Render/Heroku app URLs if they look sensitive
-        # Matches things like https://my-app.onrender.com or https://my-app.herokuapp.com
-        url_pattern = /https:\/\/[a-zA-Z0-9\-]+\.(onrender\.com|herokuapp\.com)/
-        filtered_body.gsub!(url_pattern, '<SENSITIVE_SERVICE_URL>')
-        
-        obj.body = filtered_body
-      rescue StandardError => e
-        Rails.logger.error "[VCR] Error filtering body: #{e.message}"
-      end
+      interaction.request.body = filtered_body
+    elsif body.is_a?(Hash) && (body.key?('access_token') || body.key?(:access_token) ||
+      body.key?('client_id') || body.key?(:client_id))
+      filtered_body = body.to_h.transform_keys(&:to_s)
+      filtered_body['access_token'] = '<ACCESS_TOKEN>' if filtered_body['access_token']
+      filtered_body['client_id'] = '<CLIENT_ID>' if filtered_body['client_id']
+      interaction.request.body = filtered_body
     end
   end
 
