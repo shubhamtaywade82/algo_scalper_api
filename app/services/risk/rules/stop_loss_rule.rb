@@ -14,7 +14,7 @@ module Risk
           pnl_pct = context.tracker_snapshot[:pnl_pct].to_f
 
           return exit_result(
-            reason: 'STOP_LOSS', # Legacy checker mapped loss_limit_hit? to STOP_LOSS
+            reason: 'STOP_LOSS',
             metadata: {
               path: 'stop_loss',
               pnl_pct: (pnl_pct * 100.0).round(2)

@@ -59,7 +59,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
         # Create upward trending candles
         price = base_price + (i * 10)
         candle = Candle.new(
-          ts: Time.zone.now + i.minutes,
+          timestamp: Time.zone.now + i.minutes,
           open: price,
           high: price + 5,
           low: price - 5,
@@ -122,7 +122,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
           candle_time = Time.zone.parse("2024-01-01 09:00:00 IST") + i.minutes
           price = base_price + (i * 10)
           candle = Candle.new(
-            ts: candle_time,
+            timestamp: candle_time,
             open: price,
             high: price + 5,
             low: price - 5,
@@ -151,7 +151,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
       min_candles.times do |i|
         price = base_price + (i * 10)
         candle = Candle.new(
-          ts: Time.zone.now + i.minutes,
+          timestamp: Time.zone.now + i.minutes,
           open: price,
           high: price + 5,
           low: price - 5,
@@ -173,7 +173,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
         i = series.candles.size
         price = 22_000.0 + (i * 10)
         candle = Candle.new(
-          ts: Time.zone.now + i.minutes,
+          timestamp: Time.zone.now + i.minutes,
           open: price,
           high: price + 5,
           low: price - 5,
@@ -203,7 +203,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
           # Strong upward trend
           price = base_price + (i * 20)
           candle = Candle.new(
-            ts: Time.zone.parse("2024-01-01 10:00:00 IST") + i.minutes,
+            timestamp: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
             open: price,
             high: price + 10,
             low: price - 5,
@@ -235,7 +235,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
           # Strong downward trend
           price = base_price - (i * 20)
           candle = Candle.new(
-            ts: Time.zone.parse("2024-01-01 10:00:00 IST") + i.minutes,
+            timestamp: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
             open: price,
             high: price + 5,
             low: price - 10,
@@ -270,7 +270,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
       total_needed.times do |i|
         price = base_price + (i * 10)
         candle = Candle.new(
-          ts: Time.zone.parse("2024-01-01 10:00:00 IST") + i.minutes,
+          timestamp: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
           open: price,
           high: price + 5,
           low: price - 5,
@@ -313,7 +313,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
       min_candles.times do |i|
         price = base_price + (i * 10)
         candle = Candle.new(
-          ts: Time.zone.parse("2024-01-01 10:00:00 IST") + i.minutes,
+          timestamp: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
           open: price,
           high: price + 5,
           low: price - 5,

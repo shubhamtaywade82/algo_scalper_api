@@ -44,6 +44,12 @@ end
 Rails.root.glob('spec/support/**/*.rb').each { |f| require f }
 
 RSpec.configure do |config|
+  config.before(:each) do
+    # Ensure tests run in a valid time regime by default
+    allow(Live::TimeRegimeService.instance).to receive(:allow_new_trades?).and_return(true)
+    allow(Live::TimeRegimeService.instance).to receive(:current_regime).and_return(:trend_continuation)
+  end
+
   # These settings depend on rspec-rails features; guard in case APIs change
   config.fixture_path = Rails.root.join('spec/fixtures').to_s if config.respond_to?(:fixture_path=)
   config.use_transactional_fixtures = false if config.respond_to?(:use_transactional_fixtures=)

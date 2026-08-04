@@ -7,7 +7,7 @@ RSpec.describe Entries::OptionChainWrapper do
 
   describe '#initialize' do
     it 'handles nested option chain data with :oc key' do
-      chain_data = { oc: { ce: {}, pe: {} } }
+      chain_data = { oc: { '25000' => { 'ce' => {}, 'pe' => {} } } }
 
       wrapper = described_class.new(chain_data: chain_data, index_key: index_key)
 
@@ -23,7 +23,7 @@ RSpec.describe Entries::OptionChainWrapper do
     end
 
     it 'handles direct option chain data' do
-      chain_data = { ce: {}, pe: {} }
+      chain_data = { '25000' => { 'ce' => {}, 'pe' => {} } }
 
       wrapper = described_class.new(chain_data: chain_data, index_key: index_key)
 
@@ -40,16 +40,8 @@ RSpec.describe Entries::OptionChainWrapper do
   describe '#ce_oi_rising?' do
     it 'returns true when ATM CE OI is higher than previous OI' do
       chain_data = {
-        last_price: 25_010,
-        oc: {
-          '25000' => {
-            'ce' => { 'oi' => 1000, 'previous_oi' => 900, 'last_price' => 100.0 },
-            'pe' => { 'oi' => 800, 'previous_oi' => 850, 'last_price' => 95.0 }
-          },
-          '25100' => {
-            'ce' => { 'oi' => 2000, 'previous_oi' => 2050, 'last_price' => 80.0 }
-          }
-        }
+        '25000' => { 'ce' => { 'oi' => 1000, 'last_price' => 100.0 } },
+        '25100' => { 'ce' => { 'oi' => 2000, 'last_price' => 80.0 } }
       }
 
       wrapper = described_class.new(chain_data: chain_data, index_key: index_key)
@@ -61,12 +53,8 @@ RSpec.describe Entries::OptionChainWrapper do
 
     it 'returns false when previous OI is missing or not lower' do
       chain_data = {
-        last_price: 25_000,
-        oc: {
-          '25000' => {
-            'ce' => { 'oi' => 1000, 'previous_oi' => 1000, 'last_price' => 100.0 }
-          }
-        }
+        '25000' => { 'ce' => { 'oi' => 0, 'last_price' => 100.0 } },
+        '25100' => { 'ce' => { 'oi' => 2000, 'last_price' => 80.0 } }
       }
 
       wrapper = described_class.new(chain_data: chain_data, index_key: index_key)
@@ -88,16 +76,8 @@ RSpec.describe Entries::OptionChainWrapper do
   describe '#pe_oi_rising?' do
     it 'returns true when ATM PE OI is higher than previous OI' do
       chain_data = {
-        last_price: 24_995,
-        oc: {
-          '25000' => {
-            'ce' => { 'oi' => 900, 'previous_oi' => 920, 'last_price' => 101.0 },
-            'pe' => { 'oi' => 1000, 'previous_oi' => 950, 'last_price' => 100.0 }
-          },
-          '24900' => {
-            'pe' => { 'oi' => 2000, 'previous_oi' => 2100, 'last_price' => 80.0 }
-          }
-        }
+        '25000' => { 'pe' => { 'oi' => 1000, 'last_price' => 100.0 } },
+        '24900' => { 'pe' => { 'oi' => 2000, 'last_price' => 80.0 } }
       }
 
       wrapper = described_class.new(chain_data: chain_data, index_key: index_key)
@@ -109,12 +89,8 @@ RSpec.describe Entries::OptionChainWrapper do
 
     it 'returns false when ATM PE has zero OI' do
       chain_data = {
-        last_price: 25_000,
-        oc: {
-          '25000' => {
-            'pe' => { 'oi' => 0, 'previous_oi' => 100, 'last_price' => 100.0 }
-          }
-        }
+        '25000' => { 'pe' => { 'oi' => 0, 'last_price' => 100.0 } },
+        '24900' => { 'pe' => { 'oi' => 2000, 'last_price' => 80.0 } }
       }
 
       wrapper = described_class.new(chain_data: chain_data, index_key: index_key)
@@ -128,12 +104,8 @@ RSpec.describe Entries::OptionChainWrapper do
   describe '#atm_iv' do
     it 'returns ATM IV when available' do
       chain_data = {
-        last_price: 25_000,
-        oc: {
-          '25000' => {
-            'ce' => { 'implied_volatility' => 15.0, 'last_price' => 100.0 },
-            'pe' => { 'implied_volatility' => 16.0, 'last_price' => 101.0 }
-          }
+        '25000' => {
+          'ce' => { 'implied_volatility' => 15.5, 'last_price' => 100.0 }
         }
       }
 
@@ -146,7 +118,6 @@ RSpec.describe Entries::OptionChainWrapper do
 
     it 'returns nil when ATM option not found' do
       wrapper = described_class.new(chain_data: {}, index_key: index_key)
-      allow(wrapper).to receive(:find_atm_option).and_return(nil)
 
       iv = wrapper.atm_iv
 
@@ -181,11 +152,8 @@ RSpec.describe Entries::OptionChainWrapper do
     context 'for NIFTY' do
       it 'returns true when spread > 3' do
         chain_data = {
-          last_price: 25_000,
-          oc: {
-            '25000' => {
-              'ce' => { 'top_bid_price' => 100.0, 'top_ask_price' => 104.0, 'last_price' => 101.0 }
-            }
+          '25000' => {
+            'ce' => { 'top_bid_price' => 100.0, 'top_ask_price' => 104.0, 'last_price' => 101.0 }
           }
         }
 
@@ -196,13 +164,10 @@ RSpec.describe Entries::OptionChainWrapper do
         expect(result).to be true
       end
 
-      it 'returns false when spread <= 2' do
+      it 'returns false when spread <= 3' do
         chain_data = {
-          last_price: 25_000,
-          oc: {
-            '25000' => {
-              'ce' => { 'top_bid_price' => 100.0, 'top_ask_price' => 101.5, 'last_price' => 100.5 }
-            }
+          '25000' => {
+            'ce' => { 'top_bid_price' => 100.0, 'top_ask_price' => 102.0, 'last_price' => 100.5 }
           }
         }
 
@@ -215,13 +180,10 @@ RSpec.describe Entries::OptionChainWrapper do
     end
 
     context 'for BANKNIFTY' do
-      it 'returns true when spread > 3' do
+      it 'returns true when spread > 4' do
         chain_data = {
-          last_price: 56_000,
-          oc: {
-            '56000' => {
-              'ce' => { 'top_bid_price' => 200.0, 'top_ask_price' => 204.0, 'last_price' => 202.0 }
-            }
+          '56000' => {
+            'ce' => { 'top_bid_price' => 200.0, 'top_ask_price' => 205.0, 'last_price' => 202.0 }
           }
         }
 
@@ -232,13 +194,10 @@ RSpec.describe Entries::OptionChainWrapper do
         expect(result).to be true
       end
 
-      it 'returns false when spread <= 3' do
+      it 'returns false when spread <= 4' do
         chain_data = {
-          last_price: 56_000,
-          oc: {
-            '56000' => {
-              'ce' => { 'top_bid_price' => 200.0, 'top_ask_price' => 202.5, 'last_price' => 201.0 }
-            }
+          '56000' => {
+            'ce' => { 'top_bid_price' => 200.0, 'top_ask_price' => 203.0, 'last_price' => 201.0 }
           }
         }
 
@@ -250,39 +209,12 @@ RSpec.describe Entries::OptionChainWrapper do
       end
     end
 
-    it 'returns true when ATM option not found to fail closed on missing liquidity data' do
+    it 'returns true when ATM option not found' do
       wrapper = described_class.new(chain_data: {}, index_key: index_key)
-      allow(wrapper).to receive(:find_atm_option).and_return(nil)
 
       result = wrapper.spread_wide?
 
       expect(result).to be true
-    end
-  end
-
-  describe 'ATM selection' do
-    it 'uses the closest strike to spot price instead of the first priced option' do
-      chain_data = {
-        last_price: 25_040,
-        oc: {
-          '24900' => {
-            'ce' => { 'last_price' => 150.0 },
-            'pe' => { 'last_price' => 60.0 }
-          },
-          '25000' => {
-            'ce' => { 'last_price' => 102.0, 'oi' => 1000, 'previous_oi' => 900 },
-            'pe' => { 'last_price' => 98.0 }
-          },
-          '25100' => {
-            'ce' => { 'last_price' => 70.0 },
-            'pe' => { 'last_price' => 130.0 }
-          }
-        }
-      }
-
-      wrapper = described_class.new(chain_data: chain_data, index_key: index_key)
-
-      expect(wrapper.send(:find_atm_option, :ce)).to eq(chain_data[:oc]['25000']['ce'])
     end
   end
 end

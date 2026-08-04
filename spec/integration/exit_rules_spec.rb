@@ -92,6 +92,9 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
 
     # Mock position fetching
 
+    # Mock ActivePositionsCache for TrailingEngine
+    allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([position_tracker])
+
     # Mock ActiveCache for TrailingEngine
     @mock_active_cache = instance_double(Positions::ActiveCache)
     allow(Positions::ActiveCache).to receive(:instance).and_return(@mock_active_cache)
@@ -102,21 +105,19 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
                                             }, current_ltp: BigDecimal('105.0'), current_ltp_with_freshness_check: BigDecimal('105.0'))
 
     # Default mock for ActiveCache
-    allow(@mock_active_cache).to receive(:get_by_tracker_id).with(anything) do |id|
-      if id == position_tracker.id
-        Positions::ActiveCache::PositionData.new(
-          tracker_id: position_tracker.id,
-          security_id: '12345',
-          entry_price: position_tracker.entry_price&.to_f,
-          quantity: position_tracker.quantity,
-          current_ltp: 105.0,
-          pnl: 250.0,
-          pnl_pct: 0.05,
-          peak_profit_pct: 0.05,
-          sl_price: 70.0
-        )
-      end
-    end
+    allow(@mock_active_cache).to receive(:get_by_tracker_id).with(position_tracker.id).and_return(
+      Positions::PositionData.new(
+        tracker_id: position_tracker.id,
+        security_id: '12345',
+        entry_price: 100.0,
+        current_ltp: 105.0,
+        pnl: 250.0,
+        pnl_pct: 0.05,
+        peak_profit_pct: 0.05,
+        sl_price: 70.0,
+        quantity: 50
+      )
+    )
     allow(@mock_active_cache).to receive(:update_position)
 
     # Ensure mock_exit_engine responds to execute_exit so dispatch_exit works
@@ -143,7 +144,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
 
         # Ensure ActiveCache has profitable state
         allow(@mock_active_cache).to receive(:get_by_tracker_id).with(position_tracker.id).and_return(
-          Positions::ActiveCache::PositionData.new(
+          Positions::PositionData.new(
             tracker_id: position_tracker.id,
             security_id: '12345',
             entry_price: 100.0,
@@ -163,7 +164,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
 
         expect(mock_exit_engine).to receive(:execute_exit).with(position_tracker, /peak_drawdown_exit/)
 
-        risk_manager.send(:enforce_trailing_stops, exit_engine: mock_exit_engine)
+        risk_manager.send(:enforce_dynamic_trailing_stops, exit_engine: mock_exit_engine)
       end
 
       it 'does not trigger trailing stop when PnL drop is less than 3%' do
@@ -172,13 +173,13 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
 
         expect(mock_exit_engine).not_to receive(:execute_exit)
 
-        risk_manager.send(:enforce_trailing_stops, exit_engine: mock_exit_engine)
+        risk_manager.send(:enforce_dynamic_trailing_stops, exit_engine: mock_exit_engine)
       end
 
       it 'activates trailing stop only after 10% profit' do
         # Position with 5% profit (below 10% threshold)
         allow(Positions::ActiveCache.instance).to receive(:get_by_tracker_id).with(position_tracker.id).and_return(
-          Positions::ActiveCache::PositionData.new(
+          Positions::PositionData.new(
             tracker_id: position_tracker.id,
             security_id: '12345',
             entry_price: 100.0,
@@ -193,11 +194,11 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
 
         expect(mock_exit_engine).not_to receive(:execute_exit)
 
-        risk_manager.send(:enforce_trailing_stops, exit_engine: mock_exit_engine)
+        risk_manager.send(:enforce_dynamic_trailing_stops, exit_engine: mock_exit_engine)
       end
 
       it 'updates high water mark when PnL increases' do
-        # NOTE: enforce_trailing_stops doesn't update PnL - it only checks trailing stop conditions
+        # NOTE: enforce_dynamic_trailing_stops doesn't update PnL - it only checks trailing stop conditions
         # PnL updates happen elsewhere (in the monitor loop or when processing ticks)
         # This test verifies that trailing stops are not triggered when PnL increases
 
@@ -212,7 +213,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
         # When PnL increases above HWM, trailing stop should not be triggered
         expect(mock_exit_engine).not_to receive(:execute_exit)
 
-        risk_manager.send(:enforce_trailing_stops, exit_engine: mock_exit_engine)
+        risk_manager.send(:enforce_dynamic_trailing_stops, exit_engine: mock_exit_engine)
       end
     end
 
@@ -256,7 +257,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
         allow(risk_manager).to receive(:current_ltp_with_freshness_check).and_return(BigDecimal('140.0'))
 
         # Verify that the method can be called without crashing
-        expect { risk_manager.send(:enforce_trailing_stops, exit_engine: mock_exit_engine) }.not_to raise_error
+        expect { risk_manager.send(:enforce_dynamic_trailing_stops, exit_engine: mock_exit_engine) }.not_to raise_error
       end
 
       it 'does not lock breakeven below 35% profit' do
@@ -265,7 +266,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
 
         expect(position_tracker).not_to receive(:lock_breakeven!)
 
-        risk_manager.send(:enforce_trailing_stops, exit_engine: mock_exit_engine)
+        risk_manager.send(:enforce_dynamic_trailing_stops, exit_engine: mock_exit_engine)
       end
 
       it 'does not lock breakeven if already locked' do
@@ -275,7 +276,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
 
         expect(position_tracker).not_to receive(:lock_breakeven!)
 
-        risk_manager.send(:enforce_trailing_stops, exit_engine: mock_exit_engine)
+        risk_manager.send(:enforce_dynamic_trailing_stops, exit_engine: mock_exit_engine)
       end
     end
 
@@ -551,7 +552,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
     context 'when handling concurrent access' do
       it 'handles position tracker locking' do
         # Verify that the method can be called without crashing
-        expect { risk_manager.send(:enforce_trailing_stops, exit_engine: mock_exit_engine) }.not_to raise_error
+        expect { risk_manager.send(:enforce_dynamic_trailing_stops, exit_engine: mock_exit_engine) }.not_to raise_error
       end
 
       it 'handles database connection errors' do

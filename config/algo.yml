@@ -1057,6 +1057,35 @@ market_context:
     controlled_min_score: 60
 
 # ============================================
+# MARKET CONTEXT (regime snapshot + permission gate)
+# ============================================
+# Composes structure/volatility/participation with MarketRegimeDetector. When gate.enabled
+# is true, entries are blocked unless regime + chain signals pass thresholds.
+market_context:
+  enabled: false
+  regime_scoring:
+    weights:
+      trending_structure: 20
+      displacement: 20
+      vwap_not_chop: 15
+      strong_strength: 15
+      volatility_ok: 10
+      participation_high: 10
+      legacy_confidence: 10
+  chain_signal_extractor:
+    premium_move_pct_threshold: 3.0
+    near_expiry_penalty_days: 1
+  gate:
+    enabled: false
+    min_conviction_score: 70
+    min_chain_confidence: 40
+    allow_normal_participation: true
+    require_premium_expansion: false
+  strategy_profiles:
+    aggressive_min_score: 80
+    controlled_min_score: 60
+
+# ============================================
 # SIGNAL SETTINGS
 # ============================================
 signals:

@@ -12,8 +12,16 @@ RSpec.describe Risk::Rules::TakeProfitRule do
       quantity: 10
     )
   end
-  let(:position) { OpenStruct.new(pnl_pct: pnl_pct) }
-  let(:pnl_pct) { 0.07 }
+  let(:position_data) do
+    Positions::PositionData.new(
+      tracker_id: tracker.id,
+      entry_price: 100.0,
+      quantity: 10,
+      current_ltp: 107.0,
+      pnl: 70.0,
+      pnl_pct: 0.07
+    )
+  end
   let(:risk_config) { { tp_pct: 0.05 } }
   let(:context) do
     Risk::Rules::RuleContext.new(
@@ -25,9 +33,43 @@ RSpec.describe Risk::Rules::TakeProfitRule do
   end
   let(:rule) { described_class.new(config: risk_config) }
 
-  before do
-    allow(Live::UnifiedExitChecker).to receive(:exit_config_for).and_return({ take_profit: 0.05 })
-  end
+  describe '#evaluate' do
+    context 'when take profit is hit' do
+      it 'returns exit result when PnL exceeds threshold' do
+        result = rule.evaluate(context)
+        expect(result.exit?).to be true
+        expect(result.reason).to include('TP HIT')
+        expect(result.reason).to include('7.0%')
+        expect(result.metadata[:pnl_pct]).to eq(0.07)
+        expect(result.metadata[:tp_pct]).to eq(0.05)
+      end
+
+      it 'triggers exit when PnL exactly equals threshold' do
+        position_data.pnl_pct = 0.05
+        result = rule.evaluate(context)
+        expect(result.exit?).to be true
+      end
+
+      it 'triggers exit when PnL exceeds threshold' do
+        position_data.pnl_pct = 0.10
+        result = rule.evaluate(context)
+        expect(result.exit?).to be true
+      end
+    end
+
+    context 'when take profit is not hit' do
+      it 'returns no_action when PnL is below threshold' do
+        position_data.pnl_pct = 0.03
+        result = rule.evaluate(context)
+        expect(result.no_action?).to be true
+      end
+
+      it 'returns no_action when PnL is negative' do
+        position_data.pnl_pct = -0.02
+        result = rule.evaluate(context)
+        expect(result.no_action?).to be true
+      end
+    end
 
   describe '#evaluate' do
     it 'exits when pnl reaches take-profit threshold' do
@@ -44,13 +86,21 @@ RSpec.describe Risk::Rules::TakeProfitRule do
       expect(rule.evaluate(context)).to be_no_action
     end
 
-    it 'skips when pnl is missing' do
-      missing_context = Risk::Rules::RuleContext.new(
-        position: OpenStruct.new(pnl_pct: nil),
-        tracker: tracker,
-        tracker_snapshot: {},
-        risk_config: risk_config
-      )
+    context 'with different thresholds' do
+      it 'works with 3% threshold' do
+        risk_config[:tp_pct] = 0.03
+        position_data.pnl_pct = 0.05
+        result = rule.evaluate(context)
+        expect(result.exit?).to be true
+      end
+
+      it 'works with 10% threshold' do
+        risk_config[:tp_pct] = 0.10
+        position_data.pnl_pct = 0.07
+        result = rule.evaluate(context)
+        expect(result.no_action?).to be true
+      end
+    end
 
       expect(rule.evaluate(missing_context)).to be_skip
     end

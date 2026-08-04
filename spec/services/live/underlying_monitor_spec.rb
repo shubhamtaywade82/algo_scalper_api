@@ -5,7 +5,7 @@ require 'rails_helper'
 RSpec.describe Live::UnderlyingMonitor do
   let(:position_data) do
     instance_double(
-      Positions::ActiveCache::PositionData,
+      Positions::PositionData,
       tracker_id: 42,
       underlying_segment: 'IDX_I',
       underlying_security_id: '13',
