@@ -291,28 +291,17 @@ namespace :backtest do
               strategy: strategy_name,
               summary: summary
             }
-          )
 
-          summary = result.summary
-          next if summary.empty?
-
-          all_results << {
-            symbol: symbol,
-            interval: details[:interval],
-            strategy: strategy_name,
-            summary: summary
-          }
-
-          puts "  Total Trades:    #{summary[:total_trades]}"
-          puts "  Win Rate:        #{summary[:win_rate]}%"
-          puts "  Total P&L:       #{'+' if summary[:total_pnl_percent].positive?}#{summary[:total_pnl_percent]}%"
-          puts "  Expectancy:      #{'+' if summary[:expectancy].positive?}#{summary[:expectancy]}% per trade"
-          puts "  Avg Win:         +#{summary[:avg_win_percent]}%"
-          puts "  Avg Loss:        #{summary[:avg_loss_percent]}%"
-        rescue StandardError => e
-          puts "  ❌ Error: #{e.message}"
-          Rails.logger.error("[Backtest] Failed for #{symbol}/#{details[:interval]}min/#{strategy_name}: #{e.message}")
-        end
+            puts "  Total Trades:    #{summary[:total_trades]}"
+            puts "  Win Rate:        #{summary[:win_rate]}%"
+            puts "  Total P&L:       #{'+' if summary[:total_pnl_percent].positive?}#{summary[:total_pnl_percent]}%"
+            puts "  Expectancy:      #{'+' if summary[:expectancy].positive?}#{summary[:expectancy]}% per trade"
+            puts "  Avg Win:         +#{summary[:avg_win_percent]}%"
+            puts "  Avg Loss:        #{summary[:avg_loss_percent]}%"
+          rescue StandardError => e
+            puts "  ❌ Error: #{e.message}"
+            Rails.logger.error("[Backtest] Failed for #{symbol}/#{details[:interval]}min/#{strategy_name}: #{e.message}")
+          end
 
         sleep 1 # Rate limit protection
       end
