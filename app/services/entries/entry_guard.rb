@@ -201,13 +201,35 @@ module Entries
 
           true
         end
-      rescue StandardError => e
-        signal&.record_entry_outcome('blocked', "exception: #{e.class}")
-        bt = e.backtrace&.first(12)&.join("\n")
-        msg = "EntryGuard failed for #{index_cfg[:key]}: #{e.class} - #{e.message}"
-        msg = "#{msg}\n#{bt}" if bt.present?
-        Rails.logger.error(msg)
+
+        Rails.logger.debug { "[EntryGuard] Exposure check passed for #{instrument.symbol_name}: #{current_count} < #{max_allowed}" }
+        true
+      end
+
+      def pyramiding_allowed?(first_position)
+        # AGGRESSIVE MODE: Allow pyramiding immediately without profit requirement
+        # Reduced profit duration from 5 minutes to 30 seconds for aggressive entries
+        min_profit_duration = 30.seconds
+
+        # Allow pyramiding if:
+        # 1. Position is profitable (even slightly), OR
+        # 2. Position has been open for at least 30 seconds (reduced from 5 minutes)
+        if first_position.last_pnl_rupees&.positive?
+          Rails.logger.info("[Pyramiding] Allowing second position - first position profitable: ₹#{first_position.last_pnl_rupees.round(2)}")
+          return true
+        end
+
+        # Allow if position has been open for minimum duration (aggressive mode)
+        if first_position.updated_at < min_profit_duration.ago
+          Rails.logger.info("[Pyramiding] Allowing second position - first position open for #{min_profit_duration} seconds")
+          return true
+        end
+
         false
+      rescue StandardError => e
+        Rails.logger.error("Pyramiding check failed: #{e.message}")
+        # In aggressive mode, allow on error to avoid blocking
+        true
       end
 
       # Used by OrderExecutionService
