@@ -190,10 +190,10 @@ module Live
 
       # Try the standard ExitEngine path first to ensure proper routing
       supervisor = Rails.application.config.x.trading_supervisor
-      exit_engine = if supervisor.respond_to?(:exit_manager)
+      exit_engine = if supervisor.respond_to?(:[])
+                      supervisor[:exit_manager]
+                    elsif supervisor.respond_to?(:exit_manager)
                       supervisor.exit_manager
-                    elsif supervisor.is_a?(Hash)
-                      supervisor.dig(:exit_manager)
                     end
 
       if exit_engine

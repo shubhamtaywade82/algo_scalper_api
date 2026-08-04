@@ -3,6 +3,7 @@ slug: supertrend-adx
 name: Supertrend ADX
 class_name: SupertrendAdxStrategy
 timeframes:
+- 1m
 - 5m
 instruments:
 - NIFTY

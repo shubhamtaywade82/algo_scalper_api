@@ -16,7 +16,8 @@ module Research
       mfe_retrace_50: :simulate_mfe_retrace_50,
       gamma_state: :simulate_gamma_state,
       velocity_ratchet: :simulate_velocity_ratchet,
-      oi_unwind: :simulate_oi_unwind
+      oi_unwind: :simulate_oi_unwind,
+      dynamic_hold_exit: :simulate_dynamic_hold_exit
     }.freeze
     STRATEGY_NAMES = STRATEGY_METHODS.keys.freeze
 
@@ -369,6 +370,67 @@ module Research
         if current_oi < entry_oi * 0.80 && c[:close] > entry_price
           return [c[:close], c[:timestamp], "oi_unwind"]
         end
+      end
+
+      c_last = active_candles.last
+      [c_last[:close], c_last[:timestamp], "market_close"]
+    end
+
+    # 15. Dynamic hold/exit — composite rule set for naked option buying:
+    # hard SL -> theta barrier (max hold without meaningful profit) -> OI
+    # unwind -> IV crush -> EMA-of-underlying trend trail (once in real
+    # profit) -> noon partial-book -> EOD squareoff. Checked in that order
+    # every bar; first condition to fire wins. Params overridable per call
+    # so Research::HoldExitSweep can grid-search thresholds.
+    DEFAULT_DYNAMIC_HOLD_EXIT_CFG = {
+      theta_minutes: 45, theta_profit_floor: 0.20, hard_sl_pct: 0.25,
+      oi_unwind_pct: 0.15, iv_crush_pct: 0.10, ema_trail_activate_pct: 0.20,
+      ema_period: 15, noon_book_pct: 0.50, noon_cutoff: "12:00", eod_cutoff: "15:15"
+    }.freeze
+
+    def self.simulate_dynamic_hold_exit(entry_price, entry_idx, active_candles, underlying_candles, breakout_type,
+                                        **overrides)
+      cfg = DEFAULT_DYNAMIC_HOLD_EXIT_CFG.merge(overrides)
+      entry_time = active_candles[entry_idx][:timestamp]
+      entry_oi = active_candles[entry_idx][:oi].to_f
+      entry_iv = active_candles[entry_idx][:iv].to_f
+      k = 2.0 / (cfg[:ema_period] + 1)
+      ema = nil
+
+      active_candles[entry_idx..].each_with_index do |c, offset|
+        und_c = underlying_candles[entry_idx + offset]
+        ema = ema.nil? ? und_c[:close] : (und_c[:close] * k) + (ema * (1 - k)) if und_c
+
+        return [entry_price * (1 - cfg[:hard_sl_pct]), c[:timestamp], "hard_sl"] if c[:close] <= entry_price * (1 - cfg[:hard_sl_pct])
+
+        profit_pct = (c[:close] - entry_price) / entry_price
+        minutes_elapsed = (c[:timestamp] - entry_time) / 60.0
+
+        if minutes_elapsed >= cfg[:theta_minutes] && profit_pct < cfg[:theta_profit_floor]
+          return [c[:close], c[:timestamp], "theta_barrier"]
+        end
+
+        current_oi = c[:oi].to_f
+        if entry_oi.positive? && current_oi.positive? && current_oi < entry_oi * (1 - cfg[:oi_unwind_pct])
+          return [c[:close], c[:timestamp], "oi_unwind"]
+        end
+
+        current_iv = c[:iv].to_f
+        if entry_iv.positive? && current_iv.positive? && current_iv < entry_iv * (1 - cfg[:iv_crush_pct])
+          return [c[:close], c[:timestamp], "iv_crush"]
+        end
+
+        if profit_pct > cfg[:ema_trail_activate_pct] && ema && und_c
+          broke = breakout_type == :bullish ? und_c[:close] < ema : und_c[:close] > ema
+          return [c[:close], c[:timestamp], "trend_broke_ema"] if broke
+        end
+
+        clock = c[:timestamp].strftime("%H:%M")
+        if profit_pct >= cfg[:noon_book_pct] && clock >= cfg[:noon_cutoff]
+          return [c[:close], c[:timestamp], "partial_profit_noon"]
+        end
+
+        return [c[:close], c[:timestamp], "eod_squareoff"] if clock >= cfg[:eod_cutoff]
       end
 
       c_last = active_candles.last

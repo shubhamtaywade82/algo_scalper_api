@@ -37,7 +37,7 @@ module Research
       def to_candle(bar)
         {
           timestamp: bar.ts, open: bar.open.to_f, high: bar.high.to_f, low: bar.low.to_f,
-          close: bar.close.to_f, volume: bar.volume.to_i, oi: bar.oi.to_i
+          close: bar.close.to_f, volume: bar.volume.to_i, oi: bar.oi.to_i, iv: bar.iv.to_f
         }
       end
 

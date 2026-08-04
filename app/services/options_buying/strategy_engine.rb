@@ -3,21 +3,14 @@
 module OptionsBuying
   # Strategy Engine that maps regimes to specific entry strategies.
   class StrategyEngine
-    # The blueprint: regime -> strategies
+    # The blueprint: primary active MTF Supertrend + ADX strategy across all regimes
     STRATEGIES = {
-      trending: [
-        Strategies::TripleTfAlignment,
-        Strategies::OrbBreakout
-      ],
-      ranging: [
-        Strategies::VcpBreakout
-      ],
-      low_vix: [
-        Strategies::VixExpansion,
-        Strategies::IvPercentileConfluence
-      ],
-      event_day: [], # Future
-      late_day: []   # Future
+      trending: [Strategies::SupertrendAdx],
+      ranging: [Strategies::SupertrendAdx],
+      low_vix: [Strategies::SupertrendAdx],
+      event_day: [Strategies::SupertrendAdx],
+      late_day: [Strategies::SupertrendAdx],
+      default: [Strategies::SupertrendAdx]
     }.freeze
 
     def self.evaluate!(index_key:, security_id:, bucket: nil, current_tick: nil)

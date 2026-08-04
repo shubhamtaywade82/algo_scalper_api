@@ -75,12 +75,7 @@ options_buying:
     refresh_minutes: 30
     subscribe_sync_seconds: 30      # daemon polls radar set this often to subscribe strikes to the WS feed
   execution:
-    spread_enabled: true          # BidAskSpreadGuard — per-index overrides in indices[].execution
     max_bid_ask_spread_pct: 0.015
-    tcm_enabled: false            # TransactionCostGuard (pre-trade net-edge gate) only runs when true
-    min_net_edge_pct: 0.0         # block when expected edge − round-trip cost < this (DECIMAL)
-    expected_edge_pct: 0.30       # fallback expected premium edge when signal injects none (DECIMAL)
-    slippage_pct_per_side: 0.001  # modelled slippage per fill; charged on entry + exit
     limit_chasing:
       enabled: true
       max_chase_seconds: 15
@@ -134,20 +129,13 @@ options_buying:
     kill_switch_cooldown_hours: 8
   strategies:
     enabled:
-      - orb_breakout
-      - vcp_breakout
-      - triple_tf_alignment
-      - vix_expansion
-      - iv_percentile_confluence
-    orb_breakout:
-      period_minutes: 15
-      volume_multiplier: 1.5
-    vcp_breakout:
-      inside_bar_lookback: 5
-    triple_tf_alignment:
-      daily_ma_period: 50
-      hourly_ema_period: 20
-      pullback_rsi_range: [40, 60]
+      - supertrend_v1
+      - supertrend_adx
+    supertrend_adx:
+      supertrend_period: 10
+      supertrend_multiplier: 2.0
+      adx_min: 20.0
+      adx_period: 14
   event_calendar: []
 
 # Expiry-week power trend mode: detects and holds high-conviction directional entries
@@ -198,13 +186,10 @@ sizing:
   # allocation_cap_pct: 0.30
 
 feature_flags:
-  enable_direction_before_chain: true
-  enable_trend_scorer: false # Toggle TrendScorer on/off (if false, uses legacy Supertrend+ADX path)
   enable_auto_subscribe_unsubscribe: true
   enable_demand_driven_services: true
   enable_underlying_aware_exits: true
   enable_peak_drawdown_activation: true
-  auto_paper_on_insufficient_balance: false
 
 # DhanHQ broker settings
 dhanhq:

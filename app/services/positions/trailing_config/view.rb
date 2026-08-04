@@ -30,6 +30,10 @@ module Positions
         parsed[:direct_trailing]&.dig(:min_sl_offset_pct) || -0.30
       end
 
+      def hybrid_atr_enabled?
+        trailing_mode == 'hybrid_atr' || parsed[:hybrid_atr]&.dig(:enabled) == true
+      end
+
       def tiers
         parsed[:tiers]
       end
@@ -53,6 +57,20 @@ module Positions
         new_sl_price = current_price * (1.0 - distance_pct)
         min_sl_price = entry_price * (1.0 + direct_trailing_min_sl_offset_pct)
         [new_sl_price, min_sl_price].max.round(2)
+      end
+
+      def calculate_hybrid_atr_trailing_sl(current_price:, entry_price:, peak_price:, current_profit_pct:, atr_value:)
+        return nil unless hybrid_atr_enabled?
+
+        options = parsed[:hybrid_atr] || {}
+        Positions::HybridAtrCalculator.calculate_sl_price(
+          current_price: current_price,
+          entry_price: entry_price,
+          peak_price: peak_price,
+          current_profit_pct: current_profit_pct,
+          atr_value: atr_value,
+          options: options
+        )
       end
 
       def peak_drawdown_triggered?(peak_profit_pct, current_profit_pct, _capital_deployed: nil)
@@ -112,6 +130,7 @@ module Positions
         {
           trailing_mode: (risk[:trailing_mode] || 'tiered').to_s,
           direct_trailing: parse_direct_trailing(risk[:direct_trailing]),
+          hybrid_atr: parse_hybrid_atr(risk[:hybrid_atr]),
           tiers: parse_tiers(risk[:trailing_tiers]) || TrailingConfig::DEFAULT_TIERS,
           peak_drawdown_pct: numeric_or_default(risk[:peak_drawdown_exit_pct], TrailingConfig::DEFAULT_PEAK_DRAWDOWN_PCT),
           activation_profit_pct: numeric_or_default(
@@ -124,6 +143,23 @@ module Positions
           ),
           tiered_drawdown_thresholds: parse_tiered_drawdown_thresholds(risk[:tiered_drawdown_thresholds])
         }
+      end
+
+      def parse_hybrid_atr(hybrid_atr)
+        return nil unless hybrid_atr.is_a?(Hash)
+
+        {
+          enabled: hybrid_atr[:enabled] == true || hybrid_atr['enabled'] == true,
+          base_multiplier: numeric_or_default(hybrid_atr[:base_multiplier] || hybrid_atr['base_multiplier'], 2.0),
+          activation_profit_pct: numeric_or_default(
+            hybrid_atr[:activation_profit_pct] || hybrid_atr['activation_profit_pct'], 0.15
+          ),
+          min_sl_offset_pct: numeric_or_default(
+            hybrid_atr[:min_sl_offset_pct] || hybrid_atr['min_sl_offset_pct'], -0.15
+          )
+        }
+      rescue StandardError
+        nil
       end
 
       def parse_direct_trailing(direct_trailing)
