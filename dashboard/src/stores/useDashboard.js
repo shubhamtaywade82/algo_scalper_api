@@ -28,6 +28,7 @@ export function useDashboard(onPositionChange) {
   })
   const [subscribedIndices, setSubscribedIndices] = createSignal([])
   const [optionsBuying, setOptionsBuying] = createSignal({ nifty: {}, banknifty: {}, sensex: {} })
+  const [isStale, setIsStale] = createSignal(false)
   const [system, setSystem] = createSignal({ ws_market_feed: false, ws_order_update: false, scheduler: 'unknown' })
   const [publicIpv4, setPublicIpv4] = createSignal('Unknown')
   const [publicIpv6, setPublicIpv6] = createSignal('Unknown')
@@ -36,7 +37,6 @@ export function useDashboard(onPositionChange) {
   const [lastUpdated, setLastUpdated] = createSignal(null)
   const [recentSignals, setRecentSignals] = createSignal([])
   const [config, setConfig] = createSignal({ risk: {}, signals: {}, time_restrictions: {} })
-  const [subscribedIndices, setSubscribedIndices] = createSignal([])
 
   let subscription = null
   let pollTimer = null

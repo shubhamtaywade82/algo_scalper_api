@@ -69,3 +69,6 @@ dump.rdb
 
 # Woods codebase index (generated artifacts)
 /tmp/woods/
+node_modules/
+dashboard/dist/
+dashboard/node_modules/

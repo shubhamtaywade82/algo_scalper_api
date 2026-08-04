@@ -109,9 +109,6 @@ export function usePositions() {
         } else {
           applyPnlUpdate(data)
           markFresh()
-        } else if (data.type === 'pnl_stale') {
-          applyPnlStale(data)
-          markFresh()
         }
       }
     })
