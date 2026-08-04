@@ -464,11 +464,10 @@ risk:
   # Tuned for NIFTY/SENSEX intraday: arm later, allow more give-back before locking.
   profit_floor:
     enabled: true
-    lock_pct: 0.03         # 3% of capital — arm floor later vs 2.5%
-    min_arm_rupees: 200    # ↓ was 550 — arm earlier so scalp wins get protected
-    trail_pct: 0.75        # ↓ was 0.82 — lock more of the HWM on the way up
-    breakeven_at: 100      # ↓ was 200 — mark breakeven at ₹100 net PnL
-    time_kill_minutes: 35  # chop: slower stale-floor kill (was 20)
+    lock_pct: 0.05         # 5% - arm floor when net PnL >= 5% of capital_deployed (was 0.10 — too high, missed peaks like +7.3%/+₹2,320 that reversed to -₹3,608 unlocked)
+    trail_pct: 0.70        # 70% - ratchet floor to 70% of HWM each cycle
+    breakeven_at: 200      # mark breakeven when net PnL reaches ₹200 (rupees, not percentage)
+    time_kill_minutes: 30  # give trailing more time to develop
 
   # RR-Based Profit Booking (Dynamic Exit)
   # Captures profits based on R multiples (Reward / Risk)
@@ -1065,7 +1064,7 @@ signals:
   # selective = strict gates + higher quality bar (not a profit guarantee).
   # Single source of truth: this value (DB document). SIGNAL_TIER env is ignored unless SIGNAL_TIER_FORCE=true.
   # See config/signal_tier_presets.yml
-  signal_tier: selective # Profitability Slice 2 — was exploratory; override via SIGNAL_TIER_FORCE only
+  signal_tier: selective
 
   # Entry strategy selection (code enforces behavior; no strategy logic in YAML)
   # primary: supertrend => Supertrend flip only; omit or use other value for legacy multi-indicator path

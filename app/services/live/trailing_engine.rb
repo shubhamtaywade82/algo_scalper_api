@@ -223,11 +223,7 @@ module Live
         pending_meta['highest_price'] = new_highest
         pending_meta['lowest_price'] = new_lowest
       elsif tracker.exit_requested_at.blank? && tracker.exit_sent_at.blank? && !tracker.exited?
-        Live::PositionRuntimeCache.instance.merge(
-          tracker_id,
-          highest_price: new_highest,
-          lowest_price: new_lowest
-        )
+        tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
       end
     end
 

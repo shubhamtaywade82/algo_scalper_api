@@ -18,7 +18,7 @@ module AlphaExecutionService
 
       # 3. Directional Locking (Conflict check)
       return failure("Conflicting position exists for #{signal[:index_key]}") if conflicting_position?(signal)
-
+      
       # 3b. AI Alpha Gate Check
       return failure("Trade blocked by AI Risk Manager") unless Ai::AlphaGate.approve?(signal)
 
@@ -63,20 +63,20 @@ module AlphaExecutionService
 
       # Existing logic: resolve_ltp -> sizing -> order_placer -> tracker
       order = derivative.buy_option!(
-        product_type: "NORMAL",
+        product_type: 'INTRADAY',
         index_cfg: index_cfg,
         meta: meta
       )
 
       if order&.respond_to?(:order_id) && order.order_id.present?
         # Update Audit Trail
-        record_signal_audit!(signal, order.order_id, "executed")
+        record_signal_audit!(signal, order.order_id, 'executed')
         # Record trade in Risk Limits
         Risk::LimitsGuard.record_trade!
-
+        
         success(order, signal)
       else
-        record_signal_audit!(signal, nil, "failed")
+        record_signal_audit!(signal, nil, 'failed')
         failure("Order placement failed via gateway")
       end
     rescue StandardError => e
@@ -100,35 +100,26 @@ module AlphaExecutionService
     end
 
     def fetch_current_index_ltp(index_key)
-      instrument = Instrument.find_by(symbol_name: index_key.to_s.upcase, segment: "index")
+      instrument = Instrument.find_by(symbol_name: index_key.to_s.upcase, segment: 'index')
       return nil unless instrument
-
-      index_cfg = AlgoConfig.fetch[:indices]&.find { |row| row[:key].to_s.casecmp?(index_key.to_s) }
-      return instrument.resolve_ltp if index_cfg.blank?
-
-      instrument.resolve_ltp(segment: index_cfg[:segment], security_id: index_cfg[:sid])
+      
+      cfg = AlphaStrategy::INDEX_CONFIG[index_key.to_sym]
+      return nil unless cfg
+      
+      instrument.resolve_ltp(segment: cfg[:exchange_segment], security_id: cfg[:security_id])
     end
 
     def atm_strike(ltp, index_key)
-      step = strike_step_for(index_key)
-      return 0 unless step.positive?
-
+      cfg = AlphaStrategy::INDEX_CONFIG[index_key.to_sym]
+      return 0 unless cfg
+      step = cfg[:tick_step]
       (ltp.to_f / step).round * step
-    end
-
-    def strike_step_for(index_key)
-      case index_key.to_s.downcase
-      when "nifty" then 50
-      when "banknifty" then 100
-      when "sensex" then 100
-      else 50
-      end
     end
 
     def conflicting_position?(signal)
       # Check if an active position exists in the OPPOSITE direction for the same index
-      opposite_direction = signal[:direction].to_s.downcase == "ce" ? "pe" : "ce"
-      PositionTracker.active.where("(index_key = ? OR meta->>'index_key' = ?) AND (direction = ? OR meta->>'direction' = ?)", signal[:index_key].to_s, signal[:index_key].to_s, opposite_direction, opposite_direction).exists?
+      opposite_direction = signal[:direction].to_s.downcase == 'ce' ? 'pe' : 'ce'
+      PositionTracker.active.where("meta->>'index_key' = ? AND meta->>'direction' = ?", signal[:index_key].to_s, opposite_direction).exists?
     end
 
     def existing_tracker?(derivative)

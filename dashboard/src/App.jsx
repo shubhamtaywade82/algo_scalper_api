@@ -13,7 +13,6 @@ const Dashboard = lazy(() => import('./views/Dashboard'))
 const Strategies = lazy(() => import('./views/Strategies'))
 const StrategyCreator = lazy(() => import('./views/StrategyCreator'))
 const Signals = lazy(() => import('./views/Signals'))
-const Research = lazy(() => import('./views/Research'))
 const Alpha = lazy(() => import('./views/Alpha'))
 const Analysis = lazy(() => import('./views/Analysis'))
 const Charts = lazy(() => import('./views/Charts'))
@@ -122,42 +121,16 @@ function AppShell(props) {
 export default function App() {
   return (
     <Router>
-      {/* Auth pages — own layout, no header chrome */}
-      <Route path="/login" component={Login} />
-      <Route path="/register" component={Register} />
-
-      {/* Protected app shell */}
-      <Route component={Protected}>
-        <Route component={AppShell}>
-          <Route path="/" component={Dashboard} />
-          <Route path="/strategies/creator" component={StrategyCreator} />
-          <Route path="/strategies/:id" component={StrategyCreator} />
-          <Route path="/strategies" component={Strategies} />
-          <Route path="/alpha" component={Alpha} />
-          <Route path="/signals" component={Signals} />
-          <Route path="/research" component={Research} />
-          <Route path="/option-scalper" component={OptionScalper} />
-          <Route path="/option-chain" component={OptionChain} />
-          <Route path="/analysis" component={Analysis} />
-          <Route path="/ledger" component={Ledger} />
-          <Route path="/settings" component={Settings} />
-          <Route path="/backtester" component={Backtester} />
-          <Route path="/replay" component={Replay} />
-          {/* New routes from TDD layout */}
-          <Route path="/market-watch" component={MarketWatch} />
-          <Route path="/positions" component={Positions} />
-          <Route path="/holdings" component={Holdings} />
-          <Route path="/funds" component={Funds} />
-          <Route path="/reports" component={Reports} />
-          <Route path="/alerts" component={Alerts} />
-          <Route path="/scheduler" component={Scheduler} />
-          <Route path="/logs" component={Logs} />
-        </Route>
+      <Route component={AppShell}>
+        <Route path="/" component={Dashboard} />
+        <Route path="/strategies" component={Strategies} />
+        <Route path="/alpha" component={Alpha} />
+        <Route path="/signals" component={Signals} />
+        <Route path="/analysis" component={Analysis} />
+        <Route path="/settings" component={Settings} />
       </Route>
-
       {/* Fullscreen — own layout, no Header/footer chrome */}
       <Route path="/charts" component={Charts} />
-      <Route path="/trail-engine" component={TrailEngine} />
     </Router>
   )
 }

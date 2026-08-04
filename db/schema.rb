@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_08_045609) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -216,45 +216,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.datetime "updated_at", null: false
     t.index ["index_key", "snapshot_date", "strike_price", "option_type"], name: "index_iv_snapshots_unique", unique: true
     t.index ["index_key", "snapshot_date"], name: "index_iv_snapshots_on_index_key_and_snapshot_date"
-  end
-
-  create_table "ledger_accounts", force: :cascade do |t|
-    t.string "account_type", null: false
-    t.decimal "balance_cache", precision: 18, scale: 2, default: "0.0", null: false
-    t.string "code", null: false
-    t.datetime "created_at", null: false
-    t.string "currency", default: "INR", null: false
-    t.string "name", null: false
-    t.datetime "updated_at", null: false
-    t.index ["code"], name: "index_ledger_accounts_on_code_unique", unique: true
-  end
-
-  create_table "ledger_journal_entries", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.string "event_type", null: false
-    t.string "idempotency_key", null: false
-    t.jsonb "meta", default: {}, null: false
-    t.string "mode", default: "paper", null: false
-    t.string "order_no"
-    t.bigint "position_tracker_id"
-    t.date "trading_date", null: false
-    t.datetime "updated_at", null: false
-    t.index ["event_type"], name: "index_ledger_journal_entries_on_event_type"
-    t.index ["idempotency_key"], name: "index_ledger_journal_entries_on_idempotency_key_unique", unique: true
-    t.index ["position_tracker_id"], name: "index_ledger_journal_entries_on_position_tracker_id"
-    t.index ["trading_date"], name: "index_ledger_journal_entries_on_trading_date"
-  end
-
-  create_table "ledger_postings", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.decimal "credit", precision: 18, scale: 2, default: "0.0", null: false
-    t.decimal "debit", precision: 18, scale: 2, default: "0.0", null: false
-    t.bigint "ledger_account_id", null: false
-    t.bigint "ledger_journal_entry_id", null: false
-    t.datetime "updated_at", null: false
-    t.index ["ledger_account_id"], name: "index_ledger_postings_on_ledger_account_id"
-    t.index ["ledger_journal_entry_id", "ledger_account_id"], name: "index_ledger_postings_on_journal_and_account"
-    t.index ["ledger_journal_entry_id"], name: "index_ledger_postings_on_ledger_journal_entry_id"
   end
 
   create_table "market_holidays", force: :cascade do |t|

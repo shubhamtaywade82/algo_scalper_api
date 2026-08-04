@@ -165,9 +165,33 @@ module Live
         exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker)
         return unless exit_decision&.dig(:exit)
 
-        path = exit_decision[:path] || exit_decision[:reason]
-        track_exit_path(tracker, path, exit_decision[:reason])
-        dispatch_exit(exit_engine, tracker, exit_decision[:reason])
+        enforce_profit_floor_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_structure_invalidation_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_premium_momentum_failure_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_rr_profit_booking_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_percentage_pnl_exit_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_time_stop_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_time_based_exit_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+      ensure
+        # Perform a single consolidated update at the end of the cycle if meta changed.
+        # Skip when the tracker exited mid-cycle — ExitFlow already wrote the authoritative
+        # meta (incl. exit_reason/exit_path) under lock; a blind update_columns here would
+        # clobber it with this cycle's stale pre-exit snapshot.
+        if pending_meta && pending_meta != tracker.meta && !exit_requested_or_sent?(tracker) && !tracker.exited?
+          tracker.update_columns(meta: pending_meta) # rubocop:disable Rails/SkipsModelValidations
+        end
       end
 
       def tick_stream_fresh?
