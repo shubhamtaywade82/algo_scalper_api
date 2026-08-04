@@ -5,7 +5,29 @@ require_relative '../concerns/broker_fee_calculator'
 module Entries
   class EntryGuard
     class << self
-      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
+      include Live::UnderlyingLtpResolver
+
+      def entry_guard_pipeline
+        @entry_guard_pipeline ||= EntryGuardPipeline.new
+      end
+
+      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil, signal: nil)
+        # Global Profit Protection Check
+        if Portfolio::DrawdownGuard.triggered?
+          Observability::StructuredLog.info(
+            event: 'entry_blocked',
+            payload: {
+              service: 'Entries::EntryGuard',
+              index_key: index_cfg[:key].to_s,
+              symbol: pick[:symbol].to_s,
+              stage: 'profit_protection',
+              reason: 'drawdown_guard_active'
+            }
+          )
+          signal&.record_entry_outcome('skipped', 'drawdown_guard_active')
+          return false
+        end
+
         Observability::StructuredLog.info(
           event: 'entry_attempted',
           payload: {
@@ -29,6 +51,7 @@ module Entries
               reasons: entry_policy.reasons
             }
           )
+          signal&.record_entry_outcome('blocked', entry_policy.reasons.join('; '))
           return false
         end
 
@@ -47,6 +70,7 @@ module Entries
           Rails.logger.info(
             "[EntryGuard] Entry blocked by edge failure detector for #{index_cfg[:key]}: #{edge_check[:reason]} (resume at: #{resume_str})"
           )
+          signal&.record_entry_outcome('blocked', reason.to_s)
           return false
         end
 
@@ -61,6 +85,10 @@ module Entries
 
         if cooldown_active?(pick[:symbol], index_cfg[:cooldown_sec].to_i)
           Rails.logger.warn("[EntryGuard] Cooldown active for #{index_cfg[:key]}: #{pick[:symbol]}")
+          return false
+        end
+        unless bos_context
+          signal&.record_entry_outcome('blocked', 'bos_structure_gate')
           return false
         end
 
@@ -98,6 +126,7 @@ module Entries
             "[EntryGuard] Trade blocked by sizing for #{symbol}: permission=#{permission_sym}, " \
             "permission_cap=#{permission_cap}, lot_size=#{lot_size}, premium=#{ltp}"
           )
+          signal&.record_entry_outcome('blocked', 'reentry_cooldown')
           return false
         end
 
@@ -110,6 +139,7 @@ module Entries
         is_paper = entry_metadata&.dig(:paper) || Rails.env.development? || Rails.env.test?
         if !is_supertrend && !is_paper && %w[NIFTY SENSEX].include?(symbol) && !weekly_contract?(pick: pick, index_cfg: index_cfg)
           Rails.logger.info("[EntryGuard] Weekly-only expiry rule blocked #{symbol} entry for #{pick[:symbol]}")
+          signal&.record_entry_outcome('blocked', 'weekly_only_expiry_rule')
           return false
         end
 
@@ -117,6 +147,7 @@ module Entries
 
         if permission_sym == :execution_only && profile[:allow_execution_only] == false
           Rails.logger.info("[EntryGuard] Execution-only blocked for #{symbol} by profile")
+          signal&.record_entry_outcome('blocked', 'execution_only_blocked_by_profile')
           return false
         end
 
@@ -134,6 +165,7 @@ module Entries
             "[EntryGuard] Trade blocked by sizing for #{symbol}: permission=#{permission_sym}, " \
             "permission_cap=#{permission_cap}, lot_size=#{lot_size}, premium=#{ltp}"
           )
+          signal&.record_entry_outcome('blocked', 'capital_sizing_cap_zero')
           return false
         end
 
@@ -153,6 +185,7 @@ module Entries
             "[EntryGuard] Quantity blocked for #{index_cfg[:key]}: #{pick[:symbol]} " \
             "(qty=#{quantity}, cap_qty=#{quantity_by_cap}, alloc_qty=#{quantity_by_existing_allocator}, lot_size=#{lot_size}, ltp=#{ltp})"
           )
+          signal&.record_entry_outcome('blocked', 'quantity_below_lot_minimum')
           return false
         end
 
@@ -174,6 +207,7 @@ module Entries
               reasons: risk_policy.reasons
             }
           )
+          signal&.record_entry_outcome('blocked', risk_policy.reasons.join('; '))
           return false
         end
 
@@ -200,30 +234,109 @@ module Entries
               reason: place_cmd.reason.to_s
             }
           )
+          signal&.record_entry_outcome('blocked', "order_placement_failed: #{place_cmd.reason}")
           return false
         end
 
-          result = entry_guard_pipeline.run(context)
-          if result != EntryGuardPipeline::PASS
-            reason = result.is_a?(Hash) ? result[:blocked] : result.to_s
-            guard_results = result.is_a?(Hash) ? result[:evaluated] : nil
-            Observability::StructuredLog.info(
-              event: 'entry_blocked',
-              payload: {
-                service: 'Entries::EntryGuard',
-                index_key: index_cfg[:key].to_s,
-                symbol: pick[:symbol].to_s,
-                reason: reason,
-                guard_results: guard_results
-              }
-            )
-            if guard_results.present?
-              signal&.record_entry_outcome('blocked', reason, extra_metadata: { 'guard_results' => guard_results })
-            else
-              signal&.record_entry_outcome('blocked', reason)
-            end
-            next false
-          end
+        response = place_cmd.payload[:raw] || {}
+        order_no = extract_order_no(response)
+        unless order_no
+          Rails.logger.warn("[EntryGuard] Order placement failed for #{index_cfg[:key]}: #{pick[:symbol]} (response: #{response.inspect})")
+          Observability::StructuredLog.warn(
+            event: 'entry_order_missing_order_no',
+            payload: {
+              service: 'Entries::EntryGuard',
+              index_key: index_cfg[:key].to_s,
+              symbol: pick[:symbol].to_s
+            }
+          )
+          signal&.record_entry_outcome('blocked', 'order_no_missing')
+          return false
+        end
+
+        tracker = if response.is_a?(Hash) && response[:paper]
+                    create_paper_tracker!(
+                      instrument: instrument,
+                      pick: pick,
+                      side: side,
+                      quantity: quantity,
+                      index_cfg: index_cfg,
+                      ltp: ltp,
+                      order_no: order_no,
+                      entry_metadata: entry_metadata,
+                      bos_context: bos_context
+                    )
+                  else
+                    create_tracker!(
+                      instrument: instrument,
+                      order_no: order_no,
+                      pick: pick,
+                      side: side,
+                      quantity: quantity,
+                      index_cfg: index_cfg,
+                      ltp: ltp,
+                      entry_metadata: entry_metadata,
+                      bos_context: bos_context
+                    )
+                  end
+
+        mark_bos_consumed!(index_cfg: index_cfg, bos_context: bos_context) if tracker
+        signal&.record_entry_outcome('entered') if tracker
+
+        Rails.logger.info("[EntryGuard] Successfully placed order #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]}")
+        Observability::StructuredLog.info(
+          event: 'entry_order_placed',
+          payload: {
+            service: 'Entries::EntryGuard',
+            index_key: index_cfg[:key].to_s,
+            symbol: pick[:symbol].to_s,
+            order_no: order_no.to_s,
+            quantity: quantity.to_i,
+            ltp: ltp.to_f
+          }
+        )
+        !!tracker
+      rescue StandardError => e
+        signal&.record_entry_outcome('blocked', "exception: #{e.class}")
+        Rails.logger.error("EntryGuard failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
+        Observability::StructuredLog.error(
+          event: 'entry_guard_exception',
+          payload: {
+            service: 'Entries::EntryGuard',
+            index_key: index_cfg[:key].to_s,
+            symbol: pick[:symbol].to_s,
+            error_class: e.class.to_s,
+            error_message: e.message
+          }
+        )
+        false
+      end
+
+      def exposure_ok?(instrument:, side:, max_same_side:)
+        max_allowed = max_same_side.to_i
+
+        # Safety check: if max_same_side is not configured (nil or 0), default to 1
+        if max_allowed <= 0
+          Rails.logger.warn("[EntryGuard] Invalid max_same_side value: #{max_same_side.inspect}, defaulting to 1")
+          max_allowed = 1
+        end
+
+        # Check positions by underlying instrument (for derivatives, check their underlying instrument)
+        # This ensures all positions on the same index count together, regardless of strike
+        # Query by instrument_id (for direct positions) OR by watchable_type='Derivative' with instrument_id
+        active_positions = PositionTracker.active.where(side: side).where(
+          "(instrument_id = ? OR (watchable_type = 'Derivative' AND watchable_id IN (SELECT id FROM derivatives WHERE instrument_id = ?)))",
+          instrument.id, instrument.id
+        ).limit(max_allowed + 1)
+        current_count = active_positions.count
+
+        Rails.logger.debug { "[EntryGuard] Exposure check for #{instrument.symbol_name}: side=#{side}, current=#{current_count}, max=#{max_allowed}" }
+
+        # Check if we've reached the maximum allowed positions
+        if current_count >= max_allowed
+          Rails.logger.warn("[EntryGuard] Exposure limit reached for #{instrument.symbol_name}: #{current_count} >= #{max_allowed} (side: #{side})")
+          return false
+        end
 
           # 2. Order Execution
           execution_result = OrderExecutionService.call(context)

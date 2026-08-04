@@ -30,12 +30,14 @@ module Live
       global_daily_profit = get_global_daily_profit
       max_daily_profit = risk_config[:max_daily_profit] || risk_config[:daily_profit_target]
       if max_daily_profit&.to_f&.positive? && global_daily_profit >= max_daily_profit.to_f
-        return {
+        result = {
           allowed: false,
           reason: 'daily_profit_target_reached',
           global_daily_profit: global_daily_profit,
           max_daily_profit: max_daily_profit.to_f
         }
+        notify_daily_profit_target_telegram(result)
+        return result
       end
 
       # Daily loss limits ONLY enforced when daily profit >= ₹20k (protect profits)
@@ -285,6 +287,17 @@ module Live
     end
 
     private
+
+    def notify_daily_profit_target_telegram(result)
+      return unless defined?(Notifications::TelegramNotifier)
+
+      Notifications::TelegramNotifier.instance.notify_daily_profit_target_once(
+        global_daily_profit: result[:global_daily_profit],
+        max_daily_profit: result[:max_daily_profit]
+      )
+    rescue StandardError => e
+      Rails.logger.warn("[DailyLimits] Daily profit Telegram notify failed: #{e.message}")
+    end
 
     # Normalize index key to string
     def normalize_index_key(index_key)

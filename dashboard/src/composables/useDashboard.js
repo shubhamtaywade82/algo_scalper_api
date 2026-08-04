@@ -1,7 +1,8 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import cable from '../cable'
 
-const POLL_INTERVAL_MS = 5000
+// Baseline polling; ActionCable pushes stats faster when connected.
+const POLL_INTERVAL_MS = 30000
 
 export function useDashboard(onPositionChange) {
   const mode = ref('paper')
@@ -74,6 +75,8 @@ export function useDashboard(onPositionChange) {
         } else if (data.type === 'position_activated' || data.type === 'position_exited') {
           onPositionChange?.()
           fetchInitial()
+        } else if (data.type === 'circuit_breaker') {
+          circuitBreaker.value = { tripped: data.tripped, reason: data.reason, at: data.at }
         }
       }
     })

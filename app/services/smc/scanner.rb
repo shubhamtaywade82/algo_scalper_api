@@ -147,9 +147,6 @@ module Smc
 
         # Persist scan event for audit trail and replay capability
         publish_scan_event(index_cfg, instrument, decision)
-
-        # Record atomic structural events (swings/BOS/CHoCH/FVG/OB/sweeps)
-        Smc::StructureEventRecorder.record!(instrument: instrument, interval: STRUCTURE_EVENT_INTERVAL)
       rescue DhanHQ::RateLimitError => e
         Rails.logger.error("[Smc::Scanner] Rate limit error for #{index_cfg[:key]}: #{e.message}")
         Rails.logger.info('[Smc::Scanner] Waiting 5 seconds before continuing...')
@@ -256,6 +253,36 @@ module Smc
       ENV['SMC_SCANNER_PERIOD'].to_i
     rescue StandardError
       nil
+    end
+
+    # Persist scan decision to EventStore for audit trail and replay capability.
+    # Uses event_type 'bias_scan' (not 'signal') so JSON schema validation is skipped.
+    # Failures are logged and swallowed — event store is non-critical to the alert pipeline.
+    def publish_scan_event(index_cfg, instrument, decision)
+      return unless event_store_enabled?
+
+      price = instrument.ltp&.to_f || instrument.latest_ltp&.to_f || 0.0
+
+      EventStore::Publisher.publish!(
+        stream: "smc:#{index_cfg[:key]}",
+        event_type: 'bias_scan',
+        correlation_id: SecureRandom.uuid,
+        payload: {
+          'index'       => index_cfg[:key].to_s,
+          'decision'    => decision.to_s,
+          'price'       => price,
+          'scanned_at'  => Time.current.iso8601
+        },
+        validate_contract: false
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Smc::Scanner] EventStore publish failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
+    end
+
+    def event_store_enabled?
+      AlgoConfig.fetch.dig(:signals, :smc_event_store_publish) == true
+    rescue StandardError
+      false
     end
   end
 end

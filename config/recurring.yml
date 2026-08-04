@@ -152,6 +152,13 @@ development:
     priority: 20
     description: "Auto-syncs local public IP with Dhan whitelisting slots when cooldown expires"
 
+  public_ip_log:
+    class: PublicIpLogJob
+    schedule: every 15 minutes
+    queue_name: background
+    priority: 25
+    description: "Persists public IP last-seen (throttled); dashboard no longer writes public_ip_logs"
+
 production:
   pre_market_iv_baseline:
     class: PreMarketIvBaselineJob
@@ -306,3 +313,17 @@ production:
     queue_name: background
     priority: 3
     description: "Weekly ATM±1 options calibration — generates config patch proposal for NIFTY and SENSEX"
+
+  dhan_auto_ip_sync:
+    class: Dhan::AutoIpUpdaterJob
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 20
+    description: "Auto-syncs local public IP with Dhan whitelisting slots when cooldown expires"
+
+  public_ip_log:
+    class: PublicIpLogJob
+    schedule: every 15 minutes
+    queue_name: background
+    priority: 25
+    description: "Persists public IP last-seen (throttled); dashboard polling does not write public_ip_logs"

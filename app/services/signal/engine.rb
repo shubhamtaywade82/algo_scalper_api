@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# rubocop:disable Metrics/BlockNesting
+
 module Signal
   # Stock Supertrend options-buying pipeline: 1m flip → chop gate → ATM strike → EntryGuard.
   class Engine
@@ -263,12 +265,44 @@ module Signal
         end
         # ===== END DIRECTION GATE =====
 
-        # 6. Entry Quality Filter
-        quality_result = evaluate_entry_quality(index_cfg, primary_series, primary_analysis, final_direction, regime)
+        # ===== ENTRY QUALITY FILTER =====
+        # Skipped in exit_testing mode — free entries are required to test exit logic.
+        quality_result = if exit_testing_mode?
+                           Rails.logger.info("[Signal] Exit-testing mode: skipping EntryQualityFilter for #{index_cfg[:key]}")
+                           { pass: true, score: 0, breakdown: {}, reject_reason: nil }
+                         else
+                           Signal::EntryQualityFilter.evaluate(
+                             series: primary_series,
+                             supertrend_result: primary_analysis[:supertrend],
+                             adx_value: primary_analysis[:adx_value],
+                             direction: final_direction,
+                             regime: regime,
+                             index_key: index_cfg[:key]
+                           )
+                         end
         unless quality_result[:pass]
           Signal::StateTracker.reset(index_cfg[:key])
           return
         end
+        Rails.logger.info("[Signal] EntryQualityFilter PASSED #{index_cfg[:key]} #{final_direction} " \
+                          "score=#{quality_result[:score]} #{quality_result[:breakdown]}") unless exit_testing_mode?
+        # ===== END ENTRY QUALITY FILTER =====
+
+        permission = :exit_testing
+        smc_decision = final_direction == :bullish ? :call : :put
+
+        if exit_testing_mode?
+          Rails.logger.info("[Signal] Exit-testing mode: skipping entry filter, permission/SMC gating, and momentum validation.")
+        else
+          # ===== INSTITUTIONAL ENTRY FILTER (Structure + Liquidity + Volatility) =====
+          filter = Entries::EntryFilterEngine.new(series: primary_series, symbol: index_cfg[:key])
+          unless filter.valid_entry?(direction: final_direction)
+            Rails.logger.warn("[Signal] EntryFilterEngine BLOCKED #{index_cfg[:key]}: Missing Structure/Liquidity/Volatility alignment")
+            Signal::StateTracker.reset(index_cfg[:key])
+            return
+          end
+          Rails.logger.info("[Signal] EntryFilterEngine PASSED for #{index_cfg[:key]}")
+          # ===== END INSTITUTIONAL ENTRY FILTER =====
 
         # 7. No-Trade Context Gate
         no_trade_gate = execute_no_trade_gate(index_cfg: index_cfg, instrument: instrument, signals_cfg: signals_cfg)
@@ -372,7 +406,7 @@ module Signal
           smc_permission: permission.to_s
         }
 
-        TradingSignal.create_from_analysis(
+        signal = TradingSignal.create_from_analysis(
           index_key: index_cfg[:key],
           direction: final_direction.to_s,
           timeframe: effective_timeframe,
@@ -388,6 +422,7 @@ module Signal
         # ===== EXIT IF BLOCKED BY OPTIONS BEHAVIOR =====
         if expiry_blocked
           Rails.logger.info("[Signal] ExpiryModel BLOCKED #{index_cfg[:key]}: Midday decay period")
+          record_signal_skip(signal, 'expiry midday decay')
           Signal::StateTracker.reset(index_cfg[:key])
           return
         end
@@ -411,6 +446,7 @@ module Signal
 
         unless expected_spot_move&.positive?
           Rails.logger.info("[Signal] Missing expected_spot_move (ATR) -> BLOCK #{index_cfg[:key]}")
+          record_signal_skip(signal, 'missing ATR')
           Signal::StateTracker.reset(index_cfg[:key])
           return
         end
@@ -423,13 +459,28 @@ module Signal
         )
         # ===== END STRIKE QUALIFICATION LAYER =====
 
-        unless expected_spot_move&.positive?
-          Rails.logger.info("[Signal] Missing expected_spot_move (ATR) -> BLOCK #{index_cfg[:key]}")
-          Signal::StateTracker.reset(index_cfg[:key])
+        if picks.blank?
+          Rails.logger.warn("[Signal] No suitable option strikes found for #{index_cfg[:key]} #{final_direction}")
+          record_signal_skip(signal, 'no suitable strikes')
           return
         end
 
         Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.pluck(:symbol).join(', ')}")
+
+        market_context_extra, mc_gate_blocked = evaluate_market_context_for_entry(
+          index_cfg: index_cfg,
+          primary_series: primary_series,
+          expiry_date: expiry_date,
+          chain_data: chain_data,
+          final_direction: final_direction,
+          pick: picks.first,
+          smc_decision: smc_decision
+        )
+        if mc_gate_blocked
+          record_signal_skip(signal, 'market context gate')
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
 
         # Prepare entry metadata to pass to EntryGuard
         entry_metadata = diagnostic_metadata.merge(
@@ -437,29 +488,39 @@ module Signal
           permission: permission
         )
 
-        # 13. Option Pick and Market Context Gate
-        gate_result = execute_entry_gate(
-          index_cfg: index_cfg, instrument: instrument, signal: signal,
-          final_direction: final_direction, primary_series: primary_series,
-          options_analysis: options_analysis, momentum_score: momentum_score,
-          permission: permission, smc_decision: smc_decision
-        )
-        return unless gate_result
-
-        # 14. Trigger Entry
-        trigger_entry_flow(
-          index_cfg: index_cfg, instrument: instrument, signal: signal,
-          picks: gate_result[:picks], final_direction: final_direction,
-          primary_series: primary_series, primary_tf: primary_tf,
-          entry_primary: entry_primary,
-          diagnostic_metadata: diagnostic_metadata,
-          quality_result: quality_result,
-          execution_permission: permission
-        )
-        if entered
-          summary.entered!(direction: final_direction, regime: regime)
+        if supertrend_direct_entry
+          # Supertrend-only mode: enter directly on signal without BOS pullback wait.
+          # Add stub BOS fields required by EntryGuard's contract check.
+          Rails.logger.info("[Signal] Exit-testing mode: using direct EntryGuard path (no BOS state machine).") if exit_testing_mode?
+          entry_metadata.merge!(
+            bos_id: "st_#{index_cfg[:key]}_#{Time.current.to_i}",
+            bos_timeframe: primary_tf,
+            bos_origin_price: primary_series.candles.last&.close,
+            bos_level: primary_series.candles.last&.close,
+            entry_underlying_price: primary_series.candles.last&.close
+          )
+          picks.each do |pick|
+            entered = Entries::EntryGuard.try_enter(
+              index_cfg: index_cfg,
+              pick: pick,
+              direction: final_direction,
+              scale_multiplier: 1,
+              entry_metadata: entry_metadata,
+              permission: execution_permission,
+              signal: signal
+            )
+            break if entered
+          end
         else
-          record_cycle_block!("entry_guard", regime: regime, direction: final_direction)
+          Entries::BosEntryEngine.run_for(
+            index_cfg: index_cfg,
+            instrument: instrument,
+            direction: final_direction,
+            picks: picks,
+            entry_metadata: entry_metadata,
+            permission: execution_permission,
+            signal: signal
+          )
         end
 
         # Rails.logger.info("[Signal] Completed analysis for #{index_cfg[:key]}")
@@ -1523,7 +1584,7 @@ module Signal
       # @return [Array(Hash, Boolean, String, nil)] extra, blocked, block_detail when blocked
       def evaluate_market_context_for_entry(index_cfg:, primary_series:, expiry_date:, chain_data:,
                                             final_direction:, pick:, smc_decision: nil)
-        return [{}, false, nil] unless AlgoConfig.fetch.dig(:market_context, :enabled) == true
+        return [{}, false] unless AlgoConfig.fetch.dig(:market_context, :enabled) == true
 
         snapshot = MarketContext::RegimeComposer.new(series: primary_series, index_key: index_cfg[:key]).call
         chain_signal = Options::ChainSignalExtractor.new(
@@ -2171,6 +2232,13 @@ module Signal
         Rails.logger.info("[Signal] 🚀 Using optimized ADX min for #{instrument.symbol_name} @ #{interval}: #{optimized_min}")
         optimized_min
       end
+
+      private
+
+      def record_signal_skip(signal, reason)
+        signal&.record_entry_outcome('skipped', reason)
+      end
     end
   end
 end
+# rubocop:enable Metrics/BlockNesting

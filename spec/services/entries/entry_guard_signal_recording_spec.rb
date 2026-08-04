@@ -18,7 +18,7 @@ RSpec.describe Entries::EntryGuard, '#try_enter signal recording' do
   let(:index_cfg) do
     {
       key: 'NIFTY',
-      segment: 'IDX_I',
+      segment: 'NSE_FNO',
       cooldown_sec: 0
     }
   end

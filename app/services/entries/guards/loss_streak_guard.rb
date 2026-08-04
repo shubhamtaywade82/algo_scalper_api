@@ -3,6 +3,8 @@
 module Entries
   module Guards
     class LossStreakGuard
+      LOSS_EXIT_PATTERNS = %w[STOP_LOSS PREMIUM_MOMENTUM_FAILURE].freeze
+
       class << self
         include BaseGuard
 
@@ -67,30 +69,19 @@ module Entries
         end
 
         def recent_positions(index_key)
-          position_scope
-            .where(status: :exited)
-            .where("meta->>'index_key' = ?", index_key)
-            .where(exited_at: Time.zone.today.all_day)
-            .order(exited_at: :desc)
-            .limit(loss_threshold)
-        end
-
-        def position_scope
-          paper_trading_mode? ? PositionTracker.paper : PositionTracker.live
-        end
-
-        def paper_trading_mode?
-          AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
-        rescue StandardError
-          false
-        end
-
-        def position_scope
-          paper_trading_mode? ? PositionTracker.paper : PositionTracker.live
+          PositionTracker.paper
+                         .where(status: :exited)
+                         .where("meta->>'index_key' = ?", index_key)
+                         .where(exited_at: Time.zone.today.all_day)
+                         .order(exited_at: :desc)
+                         .limit(loss_threshold)
         end
 
         def loss_exit?(position)
-          position.last_pnl_rupees.to_f.negative?
+          return false unless position.last_pnl_rupees.to_f.negative?
+
+          reason = position.exit_reason.to_s
+          LOSS_EXIT_PATTERNS.any? { |pattern| reason.start_with?(pattern) }
         end
 
         def local_cooldown_active?(index_key)

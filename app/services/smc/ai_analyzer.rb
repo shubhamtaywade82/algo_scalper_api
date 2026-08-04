@@ -1030,6 +1030,40 @@ module Smc
       prompt_parts << JSON.pretty_generate(@initial_data[:timeframes])
       prompt_parts << ''
 
+      # Add SMC structure validation context
+      htf_data = @initial_data.dig(:timeframes, :htf, :context) || {}
+      mtf_data = @initial_data.dig(:timeframes, :mtf, :context) || {}
+      ltf_data = @initial_data.dig(:timeframes, :ltf, :context) || {}
+
+      prompt_parts << '**SMC STRUCTURE VALIDATION (CRITICAL FOR TRADE DECISION):**'
+      prompt_parts << "- HTF Trend: #{htf_data[:trend] || 'N/A'}"
+      prompt_parts << "- HTF Structure: #{htf_data[:structure]&.dig(:state) || 'N/A'}"
+      prompt_parts << "- BOS (Break of Structure): #{mtf_data[:structure]&.dig(:bos) ? 'YES' : 'NO'}"
+      prompt_parts << "- Displacement: #{ltf_data[:fvg]&.dig(:gaps)&.any? ? 'YES' : 'NO'}"
+      prompt_parts << "- Equilibrium Position: #{if htf_data[:premium_discount]&.dig(:premium)
+                                                   'PREMIUM (above)'
+                                                 else
+                                                   htf_data[:premium_discount]&.dig(:discount) ? 'DISCOUNT (below)' : 'N/A'
+                                                 end}"
+      prompt_parts << "- Price vs Equilibrium: #{ltp_value > (htf_data[:premium_discount]&.dig(:equilibrium) || 0) ? 'ABOVE' : 'BELOW'} equilibrium"
+      prompt_parts << ''
+      prompt_parts << '**TRADE VALIDATION RULES (MUST PASS ALL FOR BUY CE/PE):**'
+      prompt_parts << '1. BOS (Break of Structure) must be present on MTF/HTF'
+      prompt_parts << '2. Price must be above equilibrium (for CE) or below equilibrium (for PE)'
+      prompt_parts << '3. Displacement must be present (FVG gaps)'
+      prompt_parts << '4. HTF trend must align with trade direction (bullish for CE, bearish for PE)'
+      prompt_parts << '5. No conflicting signals across timeframes'
+      prompt_parts << ''
+      prompt_parts << '**IF ANY RULE FAILS → RECOMMEND "AVOID TRADING"**'
+      prompt_parts << ''
+
+      # Add LTF engine outputs (Displacement, Volume, Zone, Navigator) when available
+      ltf_engines = @initial_data[:ltf_engines]
+      if ltf_engines.present?
+        prompt_parts << build_ltf_engines_section(ltf_engines)
+        prompt_parts << ''
+      end
+
       # Add option chain data if available
       if @prefetched_data[:option_chain]&.dig(:options)&.any?
         prompt_parts << build_option_chain_section(@prefetched_data[:option_chain], atm_strike, symbol_name,
@@ -1117,11 +1151,48 @@ module Smc
       # Find daily high/low/close for each day
       daily_data = group_candles_by_day(recent_candles)
 
-      # Calculate trend metrics
-      current_price = candles.last.close
-      first_price = recent_candles.first.close
-      price_change = current_price - first_price
-      price_change_pct = (price_change / first_price * 100).round(2)
+    def build_ltf_engines_section(engines)
+      lines = ['**LTF ENGINE ANALYSIS (5m real-time confirmation):**']
+
+      if (disp = engines[:displacement])
+        direction = if disp[:bullish] then 'BULLISH'
+                    elsif disp[:bearish] then 'BEARISH'
+                    else 'NONE (no displacement candle)'
+                    end
+        lines << "- Displacement: #{direction}"
+        lines << "  Body: #{disp[:body]} pts | ATR: #{disp[:atr]} pts | Body/ATR ratio: #{disp[:body_atr_ratio]} (threshold ≥1.2)"
+      end
+
+      if (vol = engines[:volume])
+        spike_str = vol[:spike] ? "YES ─ volume spike confirmed (#{vol[:ratio]}x avg)" : "NO (#{vol[:ratio]}x avg)"
+        lines << "- Volume Spike: #{spike_str}"
+        lines << "  Current volume: #{vol[:current]} | Avg volume (20-bar): #{vol[:avg]}"
+      end
+
+      if (z = engines[:zone])
+        loc = z[:location]&.upcase || 'UNKNOWN'
+        eq = z[:equilibrium] ? "₹#{z[:equilibrium]}" : 'N/A'
+        lines << "- Market Zone: #{loc} (Equilibrium: #{eq})"
+        lines << '  Premium zone = supply; Discount zone = demand'
+      end
+
+      if (nav = engines[:navigator])
+        decision_str = nav[:allow] ? "ALLOW (confidence: #{nav[:confidence]})" : "BLOCK ─ #{nav[:reason]} (confidence: #{nav[:confidence]})"
+        lines << "- Navigator Entry Evaluation: #{decision_str}"
+      end
+
+      lines << ''
+      lines << '**Use the above LTF confirmations to validate or reject the trade setup:**'
+      lines << '- Displacement present + Volume spike = high-quality move'
+      lines << '- Zone location must match bias (CE in Discount, PE in Premium)'
+      lines << '- Navigator BLOCK = reduce confidence or recommend AVOID'
+
+      lines.join("\n")
+    end
+
+    def system_prompt
+      <<~PROMPT
+        You are an expert Smart Money Concepts (SMC) and market structure analyst specializing in Indian index options trading (NIFTY, BANKNIFTY, SENSEX).
 
       # Detect gaps (significant open vs previous close)
       gap_analysis = detect_gaps(recent_candles)

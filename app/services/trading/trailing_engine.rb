@@ -43,6 +43,8 @@ module Trading
       config     = config_for_symbol
       profit_pct = (@ltp - @entry) / @entry
 
+      maybe_log_smc_exit_advisory
+
       # PHASE 3: High Watermark Trailing (Most aggressive locking)
       return trailing_stop(config) if profit_pct >= config[:activation_trigger]
 
@@ -62,6 +64,15 @@ module Trading
         @highest = @ltp
         @tracker.update_columns(meta: @tracker.meta.merge('highest_price' => @highest))
       end
+    end
+
+    def maybe_log_smc_exit_advisory
+      instrument = @tracker.instrument
+      return unless instrument
+
+      Smc::Navigator.log_exit_advisory(tracker: @tracker, ltp: @ltp, instrument: instrument)
+    rescue StandardError => e
+      Rails.logger.error("[Trading::TrailingEngine] #{e.class} - #{e.message}")
     end
 
     # Resolve config: algo.yml > hardcoded DEFAULTS

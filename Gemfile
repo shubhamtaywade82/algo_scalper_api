@@ -61,6 +61,9 @@ gem 'telegram-bot-ruby', '~> 0.19'
 # Local LLM only — no OpenAI/ruby-openai gems
 gem 'ollama-client', '~> 1.1'
 
+# TOTP generation for Dhan TOTP auth strategy
+gem 'rotp', '~> 6.3'
+
 # Telegram bot for notifications
 gem 'telegram-bot-ruby', '~> 0.19'
 
@@ -74,8 +77,7 @@ gem 'openai', '~> 0.41', group: :production
 # Local Ollama client
 gem 'ollama-client', path: '~/project/ai-workspace/ollama-client'
 
-# Local Ollama client
-gem 'ollama-client', path: '~/project/ai-workspace/ollama-client'
+gem 'ollama-client', '~> 1.1'
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 # gem "image_processing", "~> 1.2"
@@ -131,8 +133,3 @@ group :development, :test do
 end
 
 gem "json_schemer", "~> 2.4"
-
-gem "rswag", "~> 2.17", groups: %i[development test]
-
-# AI Multi-Agent orchestration framework
-gem 'ruby_llm-agents'

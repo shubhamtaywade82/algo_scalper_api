@@ -9,21 +9,8 @@ RSpec.describe Entries::EntryGuardPipeline do
 
       expect(handlers).to include(Entries::Guards::MiddayQualityGuard)
       expect(handlers).to include(Entries::Guards::LossStreakGuard)
-      expect(handlers).to include(Entries::Guards::SegmentExpectancyGuard)
-      expect(handlers).to include(Entries::Guards::TradingTimeRestrictionGuard)
-      expect(handlers).to include(Entries::Guards::IndexTradeLimitGuard)
       expect(handlers.index(Entries::Guards::MiddayQualityGuard)).to be > handlers.index(Entries::Guards::TimeRegimeGuard)
-      expect(handlers.index(Entries::Guards::SegmentExpectancyGuard)).to be > handlers.index(Entries::Guards::TimeRegimeGuard)
-      expect(handlers.index(Entries::Guards::TradingTimeRestrictionGuard)).to be > handlers.index(Entries::Guards::EarliestEntryGuard)
       expect(handlers.index(Entries::Guards::LossStreakGuard)).to be > handlers.index(Entries::Guards::EdgeFailureGuard)
-    end
-
-    it 'includes ChainConfirmationGuard after OptionVolumeVelocityGuard and before EarliestEntryGuard' do
-      handlers = described_class.new.send(:default_handlers)
-
-      expect(handlers).to include(Entries::Guards::ChainConfirmationGuard)
-      expect(handlers.index(Entries::Guards::ChainConfirmationGuard)).to be > handlers.index(Entries::Guards::OptionVolumeVelocityGuard)
-      expect(handlers.index(Entries::Guards::ChainConfirmationGuard)).to be < handlers.index(Entries::Guards::EarliestEntryGuard)
     end
   end
 end

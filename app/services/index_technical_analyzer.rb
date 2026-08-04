@@ -448,6 +448,7 @@ class IndexTechnicalAnalyzer < ApplicationService
   end
 
   def dhanhq_ta_available?
+    ensure_dhanhq_ta_loaded
     defined?(TA) && TA.const_defined?(:TechnicalAnalysis)
   end
 
@@ -460,6 +461,47 @@ class IndexTechnicalAnalyzer < ApplicationService
     DhanhqErrorHandler.handle_dhanhq_error(error, context: 'index_technical_analysis')
     @error = error.message
     log_error("Technical analysis failed: #{error.class} - #{error.message}")
+  end
+
+  def normalize_timeframe_keys(indicators)
+    return indicators unless indicators.is_a?(Hash)
+
+    indicators.deep_symbolize_keys
+  end
+
+  def valid_analysis_payload?(payload)
+    return false unless payload.is_a?(Hash)
+
+    meta = payload[:meta] || payload['meta']
+    indicators = payload[:indicators] || payload['indicators']
+    meta.present? && indicators.present?
+  end
+
+  def ensure_dhanhq_ta_loaded
+    return if defined?(@ta_load_attempted) && @ta_load_attempted
+
+    require 'ta/technical_analysis'
+  rescue LoadError => e
+    log_warn("DhanHQ TA load failed: #{e.message}")
+  ensure
+    @ta_load_attempted = true
+  end
+
+  def sanitize_timeframes(timeframes)
+    requested = Array(timeframes).filter_map do |tf|
+      Integer(tf)
+    rescue ArgumentError, TypeError
+      nil
+    end
+
+    sanitized = requested.map { |tf| tf == 30 ? 25 : tf }.select { |tf| VALID_TIMEFRAMES.include?(tf) }.uniq
+    sanitized = DEFAULT_TIMEFRAMES if sanitized.empty?
+
+    if requested != sanitized
+      log_warn("Adjusted invalid timeframes #{requested.inspect} -> #{sanitized.inspect}")
+    end
+
+    sanitized
   end
 
   def success_result

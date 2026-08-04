@@ -99,7 +99,20 @@ module Services
 
         # Cache miss or expired - fetch from API
         begin
-          response = Net::HTTP.get_response(URI("#{base_url}/api/tags"))
+          uri = URI("#{base_url}/api/tags")
+          open_timeout = ENV.fetch('OLLAMA_OPEN_TIMEOUT', '5').to_i
+          read_timeout = ENV.fetch('OLLAMA_MODELS_READ_TIMEOUT', '5').to_i
+          response = Net::HTTP.start(
+            uri.host, uri.port,
+            use_ssl: uri.scheme == 'https',
+            open_timeout: open_timeout,
+            read_timeout: read_timeout
+          ) do |http|
+            request = Net::HTTP::Get.new(uri)
+            api_key = ENV.fetch('OLLAMA_API_KEY', nil)
+            request['Authorization'] = "Bearer #{api_key}" if api_key.present?
+            http.request(request)
+          end
 
           if response.code == '200'
             data = JSON.parse(response.body)

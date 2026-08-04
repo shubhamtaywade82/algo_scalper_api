@@ -149,7 +149,7 @@ class BacktestService
       candle = series.candles[i]
 
       if open_position
-        exit_result = check_exit(open_position, candle, i, series)
+        exit_result = option_check_exit(open_position, candle, i, series)
         if exit_result
           @results << exit_result
           open_position = nil
@@ -159,82 +159,13 @@ class BacktestService
 
       if open_position.nil?
         signal = strategy.generate_signal(i)
-        open_position = enter_position(signal, candle, i) if signal
+        open_position = option_enter_position(signal, candle, i) if signal
       end
 
       i += 1
     end
 
     return unless open_position
-
-    last_candle = series.candles.last
-    exit_result = force_exit(open_position, last_candle, series.candles.size - 1, 'end_of_data')
-    @results << exit_result
-  end
-
-  def enter_position(signal, candle, index)
-    option_data = fetch_option_series(signal[:type], candle.timestamp)
-    return if option_data.blank?
-
-    entry_premium = fetch_premium_price(option_data, candle.timestamp)
-
-    position = {
-      signal_type: signal[:type],
-      entry_index: index,
-      entry_time: candle.timestamp,
-      entry_price: entry_premium,
-      option_data: option_data,
-      stop_loss: calculate_stop_loss(entry_premium, signal[:type]),
-      target: calculate_target(entry_premium, signal[:type])
-    }
-
-    instrument_event('trade.entered', position)
-    position
-  end
-
-  # removed duplicate check_exit (option-premium based) to avoid method redefinition
-
-  # ------------------------- NEW METHODS --------------------------
-
-  def fetch_option_series(type, date)
-    fetcher = Options::ExpiredFetcher.call(symbol: @instrument.symbol_name, expiry_flag: 'WEEK', date: date)
-    fetcher[type]
-  rescue StandardError => e
-    Rails.logger.error("[Backtest] fetch_option_series failed: #{e.message}")
-    []
-  end
-
-  def fetch_premium_price(option_data, ts)
-    # get closest timestamp bar
-    return 0.0 if option_data.blank?
-
-    bar = option_data.min_by { |b| (b[:timestamp] - ts).abs }
-    bar[:close].to_f
-  end
-
-    instrument_event('trade.entered', position)
-    position
-  end
-
-  # removed duplicate check_exit (option-premium based) to avoid method redefinition
-
-  # ------------------------- NEW METHODS --------------------------
-
-  def fetch_option_series(type, date)
-    fetcher = Options::ExpiredFetcher.call(symbol: @instrument.symbol_name, expiry_flag: 'WEEK', date: date)
-    fetcher[type]
-  rescue StandardError => e
-    Rails.logger.error("[Backtest] fetch_option_series failed: #{e.message}")
-    []
-  end
-
-  def fetch_premium_price(option_data, ts)
-    # get closest timestamp bar
-    return 0.0 if option_data.blank?
-
-    bar = option_data.min_by { |b| (b[:timestamp] - ts).abs }
-    bar[:close].to_f
-  end
 
     last_candle = series.candles.last
     exit_result = option_force_exit(open_position, last_candle, series.candles.size - 1, 'end_of_data')

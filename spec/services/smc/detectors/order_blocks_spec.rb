@@ -54,19 +54,20 @@ RSpec.describe Smc::Detectors::OrderBlocks do
 
     it 'returns the bullish candle before a bearish impulse' do
       series = build(:candle_series, :five_minute)
-      # Bullish candle (order block)
-      series.add_candle(build(:candle, open: 100, high: 102, low: 99, close: 101))
-      # Middle candle
-      series.add_candle(build(:candle, open: 101, high: 101.5, low: 99.5, close: 100.5))
-      # Bearish impulse (breaks below middle candle low)
-      series.add_candle(build(:candle, open: 100.5, high: 101, low: 97, close: 98))
+      series.add_candle(build(:candle, open: 100, high: 102, low: 99, close: 101)) # bullish OB
+      series.add_candle(build(:candle, open: 101, high: 101, low: 97, close: 98)) # bearish impulse
+      series.add_candle(build(:candle, open: 98, high: 99, low: 97, close: 98))
+      series.add_candle(build(:candle, open: 98, high: 99, low: 97, close: 98))
+      series.add_candle(build(:candle, open: 98, high: 99, low: 97, close: 98))
+      allow(series).to receive(:atr).with(20).and_return(1.0)
 
       detector = described_class.new(series)
       bearish_ob = detector.bearish
 
       expect(bearish_ob).not_to be_nil
-      expect(bearish_ob.bullish?).to be(true)
-      expect(bearish_ob.close).to eq(101)
+      expect(bearish_ob[:bias]).to eq(:bearish)
+      expect(bearish_ob[:high]).to eq(102)
+      expect(bearish_ob[:low]).to eq(99)
     end
 
     it 'returns nil when impulse candle is not preceded by bullish candle' do
@@ -82,6 +83,7 @@ RSpec.describe Smc::Detectors::OrderBlocks do
   end
 
   describe '#to_h' do
+    # rubocop:disable RSpec/MultipleExpectations -- hash contract snapshot
     it 'serializes bullish order block' do
       series = build(:candle_series, :five_minute)
       timestamp = Time.zone.now
@@ -99,7 +101,9 @@ RSpec.describe Smc::Detectors::OrderBlocks do
       expect(result[:bullish][:close]).to eq(104.5)
       expect(result[:bearish]).to be_nil
     end
+    # rubocop:enable RSpec/MultipleExpectations
 
+    # rubocop:disable RSpec/MultipleExpectations -- hash contract snapshot
     it 'serializes bearish order block' do
       series = build(:candle_series, :five_minute)
       timestamp = Time.zone.now
@@ -117,6 +121,7 @@ RSpec.describe Smc::Detectors::OrderBlocks do
       expect(result[:bearish][:close]).to eq(101)
       expect(result[:bullish]).to be_nil
     end
+    # rubocop:enable RSpec/MultipleExpectations
 
     it 'returns nil for both when no order blocks found' do
       series = build(:candle_series, :five_minute)

@@ -37,9 +37,10 @@ module Entries
         Guards::DrawdownGuard,
         Guards::EntryPolicyGuard,
         Guards::CircuitBreakerGuard,
-        Guards::VixGateGuard,
-        Guards::EarliestEntryGuard,
-        Guards::MiddayQualityGuard,          # ADX >= 28 bypass covers all power-trend cases
+        Guards::BosContractGuard,
+        Guards::TimeRegimeGuard,
+        Guards::MiddayQualityGuard,
+        Guards::BankniftyLastWeekGuard,
         Guards::EdgeFailureGuard,
         Guards::LossStreakGuard,
         Guards::DailyLimitsGuard,
@@ -61,9 +62,7 @@ module Entries
         Guards::PremiumBandGuard,
         Guards::ExposureGuard,
         Guards::CooldownGuard,
-        Guards::SizingGuard,
-        Guards::BreakoutReadyGuard,
-        Guards::RiskPolicyGuard,
+        Guards::LtpResolutionGuard,
         Guards::SmcNavigatorGuard
       ]
     end

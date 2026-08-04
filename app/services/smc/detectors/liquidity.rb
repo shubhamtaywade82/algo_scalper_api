@@ -12,18 +12,47 @@ module Smc
       end
 
       def buy_side_taken?
-        @series&.liquidity_grab_up? || false
+        return false if @series.nil?
+        if @series.respond_to?(:liquidity_grab_up?)
+          return @series.liquidity_grab_up?
+        end
+
+        sweep?(:high)
       end
 
       def sell_side_taken?
-        @series&.liquidity_grab_down? || false
+        return false if @series.nil?
+        if @series.respond_to?(:liquidity_grab_down?)
+          return @series.liquidity_grab_down?
+        end
+
+        sweep?(:low)
       end
 
       def sweep_direction
+        return nil if @series.nil?
+
         return :buy_side if buy_side_taken?
         return :sell_side if sell_side_taken?
 
         nil
+      end
+
+      def sweep?(type)
+        return false if swings.empty?
+
+        last_c = candles.last
+        return false unless last_c
+
+        if type == :high
+          level = recent_swing_highs.first # Most recent high
+          return false unless level
+          last_c.high > level[:price] && last_c.close < level[:price]
+        else
+          level = recent_swing_lows.first
+          return false unless level
+          last_c.low < level[:price] && last_c.close > level[:price]
+        end
       end
 
       # Equal Highs (EQH) - multiple swing highs at similar levels
@@ -54,14 +83,16 @@ module Smc
           sweep_direction: sweep_direction,
           equal_highs: equal_highs?,
           equal_lows: equal_lows?,
-          sweep: sweep?
+          sweep: buy_side_taken? || sell_side_taken?
         }
       end
 
       private
 
-      def recent_highs
-        @series&.recent_highs(5) || []
+      def swings
+        return [] if @series.nil?
+
+        @swings ||= Structure.new(@series).swings
       end
 
       def recent_lows

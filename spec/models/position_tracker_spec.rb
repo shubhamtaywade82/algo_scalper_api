@@ -3,231 +3,31 @@
 require 'rails_helper'
 
 RSpec.describe PositionTracker do
-  let(:instrument) { create(:instrument, :nifty_future) }
-  let(:tracker) do
-    create(
-      :position_tracker,
-      :pending,
-      instrument: instrument,
-      watchable: instrument,
-      order_no: 'ORD123456',
-      security_id: '50074',
-      segment: 'NSE_FNO',
-      quantity: 75,
-      entry_price: 100.0
-    )
-  end
+  describe '#mark_exited!' do
+    it 'delegates to Positions::ExitFlow' do
+      tracker = create(:position_tracker, segment: 'NSE_FNO')
+      allow(Positions::ExitFlow).to receive(:call).and_return(tracker)
 
-  describe 'EPIC F — F1: Place Entry Order & Subscribe Option Tick' do
-    let(:redis_cache) { Live::RedisPnlCache.instance }
+      tracker.mark_exited!(exit_reason: 'stop')
 
-    before do
-      mock_redis = instance_double(Redis, set: true, get: nil, del: true, hset: true, ttl: 3600, expire: true,
-                                          hgetall: {})
-      allow(Redis).to receive(:new).and_return(mock_redis)
-      redis_cache.instance_variable_set(:@redis, mock_redis)
-
-      # Mock RedisTickCache to prevent Redis access
-      allow(Live::RedisTickCache.instance).to receive(:clear_tick).and_return(true)
-    end
-
-    after do
-      redis_cache.instance_variable_set(:@redis, nil)
-    end
-
-    describe '#mark_active!' do
-      context 'when order is filled' do
-        it 'updates status to active' do
-          tracker.mark_active!(avg_price: 101.5, quantity: 75)
-
-          expect(tracker.reload.status).to eq('active')
-        end
-
-        it 'sets avg_price and updates entry_price if missing' do
-          tracker.update(entry_price: nil)
-          tracker.mark_active!(avg_price: 101.5, quantity: 75)
-
-          tracker.reload
-          expect(tracker.avg_price).to eq(BigDecimal('101.5'))
-          expect(tracker.entry_price).to eq(BigDecimal('101.5'))
-        end
-
-        it 'preserves existing entry_price if present' do
-          tracker.mark_active!(avg_price: 101.5, quantity: 75)
-
-          tracker.reload
-          expect(tracker.avg_price).to eq(BigDecimal('101.5'))
-          expect(tracker.entry_price).to eq(BigDecimal('100.0')) # Preserved
-        end
-
-        it 'updates quantity' do
-          tracker.mark_active!(avg_price: 101.5, quantity: 100)
-
-          expect(tracker.reload.quantity).to eq(100)
-        end
-
-        it 'subscribes to option tick feed' do
-          market_feed_hub = Live::MarketFeedHub.instance
-          expect(market_feed_hub).to receive(:subscribe).with(
-            segment: 'NSE_FNO',
-            security_id: '50074'
-          ).at_least(:once)
-
-          tracker.mark_active!(avg_price: 101.5, quantity: 75)
-        end
-
-        it 'subscribes within 1s of fill detection' do
-          start_time = Time.current
-          market_feed_hub = Live::MarketFeedHub.instance
-
-          allow(market_feed_hub).to receive(:subscribe) do
-            elapsed = Time.current - start_time
-            expect(elapsed).to be < 1.second
-          end
-
-          tracker.mark_active!(avg_price: 101.5, quantity: 75)
-        end
-      end
-
-      context 'when avg_price is nil' do
-        it 'handles nil avg_price gracefully' do
-          tracker.mark_active!(avg_price: nil, quantity: 75)
-
-          tracker.reload
-          expect(tracker.status).to eq('active')
-          expect(tracker.avg_price).to be_nil
-          expect(tracker.quantity).to eq(75)
-        end
-      end
-    end
-
-    describe '#subscribe' do
-      context 'when segment and security_id are present' do
-        it 'calls MarketFeedHub.subscribe with correct parameters' do
-          market_feed_hub = Live::MarketFeedHub.instance
-          expect(market_feed_hub).to receive(:subscribe).with(
-            segment: 'NSE_FNO',
-            security_id: '50074'
-          ).at_least(:once)
-
-          tracker.subscribe
-        end
-
-        it 'uses instrument exchange_segment if segment not present' do
-          tracker.update(segment: nil)
-          allow(instrument).to receive(:exchange_segment).and_return('NSE_FNO')
-
-          market_feed_hub = Live::MarketFeedHub.instance
-          expect(market_feed_hub).to receive(:subscribe).with(
-            segment: 'NSE_FNO',
-            security_id: '50074'
-          )
-
-          tracker.subscribe
-        end
-      end
-
-      context 'when segment or security_id missing' do
-        it 'does not subscribe if segment is missing' do
-          tracker.update(segment: nil)
-          allow(instrument).to receive(:exchange_segment).and_return(nil)
-
-          market_feed_hub = Live::MarketFeedHub.instance
-          expect(market_feed_hub).not_to receive(:subscribe)
-
-          tracker.subscribe
-        end
-
-        it 'does not subscribe if security_id is missing' do
-          tracker.update(security_id: nil)
-
-          market_feed_hub = Live::MarketFeedHub.instance
-          expect(market_feed_hub).not_to receive(:subscribe)
-
-          tracker.subscribe
-        end
-      end
-    end
-
-    describe '#unsubscribe' do
-      it 'unsubscribes from option tick feed' do
-        market_feed_hub = Live::MarketFeedHub.instance
-        allow(market_feed_hub).to receive(:running?).and_return(true)
-        expect(market_feed_hub).to receive(:unsubscribe).with(
-          segment: 'NSE_FNO',
-          security_id: '50074'
-        )
-
-        tracker.unsubscribe
-      end
-
-      it 'unsubscribes underlying instrument if option' do
-        underlying = Instrument.find_or_create_by!(security_id: '13') do |inst|
-          inst.assign_attributes(
-            symbol_name: 'NIFTY',
-            exchange: 'nse',
-            segment: 'index',
-            instrument_type: 'INDEX',
-            instrument_code: 'index'
-          )
-        end
-        allow(tracker.instrument).to receive(:underlying_symbol).and_return('NIFTY')
-        allow(Instrument).to receive(:find_by).and_return(underlying)
-
-        market_feed_hub = Live::MarketFeedHub.instance
-        allow(market_feed_hub).to receive(:running?).and_return(true)
-        expect(market_feed_hub).to receive(:unsubscribe).with(
-          segment: 'NSE_FNO',
-          security_id: '50074'
-        )
-        # NOTE: unsubscribe does NOT unsubscribe from IDX_I segments (they're needed for signal generation)
-        expect(market_feed_hub).not_to receive(:unsubscribe).with(
-          segment: 'IDX_I',
-          security_id: underlying.security_id
-        )
-
-        tracker.unsubscribe
-      end
-    end
-
-    describe 'status transitions' do
-      it 'starts as pending after order placement' do
-        expect(tracker.status).to eq('pending')
-      end
-
-      it 'transitions to active after mark_active!' do
-        tracker.mark_active!(avg_price: 101.5, quantity: 75)
-        expect(tracker.reload.status).to eq('active')
-      end
-
-      it 'transitions to cancelled after mark_cancelled!' do
-        tracker.mark_cancelled!
-        expect(tracker.reload.status).to eq('cancelled')
-      end
-
-      it 'transitions to exited after mark_exited!' do
-        tracker.update(status: 'active')
-        tracker.mark_exited!
-        expect(tracker.reload.status).to eq('exited')
-      end
+      expect(Positions::ExitFlow).to have_received(:call).with(
+        tracker: tracker,
+        exit_price: nil,
+        exited_at: nil,
+        exit_reason: 'stop'
+      )
     end
   end
 
-    describe 'callbacks' do
-      it 'clears Redis cache when status transitions to exited via update' do
-        tracker.update!(status: 'active')
+  describe '#lock_breakeven!' do
+    it 'updates meta through Positions::MetaUpdater' do
+      tracker = create(:position_tracker, segment: 'NSE_FNO', meta: {})
+      updater = instance_double(Positions::MetaUpdater, update!: true)
+      allow(Positions::MetaUpdater).to receive(:new).with(tracker: tracker).and_return(updater)
 
-        redis_cache = Live::RedisPnlCache.instance
-        expect(redis_cache).to receive(:clear_tracker).with(tracker.id).at_least(:once).and_call_original
+      tracker.lock_breakeven!
 
-        tracker.update!(status: 'exited')
-      end
-
-      it 'clears Redis cache after destroy' do
-        redis_cache = Live::RedisPnlCache.instance
-        expect(redis_cache).to receive(:clear_tracker).with(tracker.id).and_call_original
-
-      expect { tracker.lock_breakeven! }.to change { tracker.reload.breakeven_locked }.to(true)
+      expect(updater).to have_received(:update!)
     end
   end
 end

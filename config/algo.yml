@@ -43,110 +43,14 @@ midday_guard:
   min_confidence: 0.7
   min_adx: 20
   block_after_time: "15:00"
-  trending_adx_bypass: 28    # skip guard entirely when ADX >= this (trending market)
-
-# Strategies::Manager plugin platform — wires plugin signals (e.g. supertrend_v1)
-# into the real Entries::EntryGuard pipeline. Set auto_entry_enabled: false to
-# go back to shadow-only (signals persisted, no orders placed).
-strategy_platform:
-  auto_entry_enabled: true
-  min_confidence: 0.6
-
-# Options buying framework — default intraday_scalper (see docs/options_buying_intraday_spec.md)
-options_buying:
-  mode: intraday_scalper          # intraday_scalper | positional
-  atr_compression:
-    enabled: true
-    atr_period: 14
-    max_setup_ratio: 0.30
-    setup_window_end: "11:15"
-  breakout:
-    enabled: true
-    timeframe_minutes: 1
-    volume_multiplier: 2.0
-    require_oi_unwind: true
-    compression_arm: true
-    ready_ttl_seconds: 300
-  chain_radar:
-    enabled: true
-    delta_min: 0.45
-    delta_max: 0.55
-    min_volume: 10000
-    refresh_minutes: 30
-    subscribe_sync_seconds: 30      # daemon polls radar set this often to subscribe strikes to the WS feed
-  execution:
-    spread_enabled: true          # BidAskSpreadGuard — per-index overrides in indices[].execution
-    max_bid_ask_spread_pct: 0.015
-    tcm_enabled: false            # TransactionCostGuard (pre-trade net-edge gate) only runs when true
-    min_net_edge_pct: 0.0         # block when expected edge − round-trip cost < this (DECIMAL)
-    expected_edge_pct: 0.30       # fallback expected premium edge when signal injects none (DECIMAL)
-    slippage_pct_per_side: 0.001  # modelled slippage per fill; charged on entry + exit
-  positional:
-    enabled: false
-    require_carry_allowed: true
-    min_carry_roi: 0.30           # DECIMAL: hold overnight only when ROI >= +30%
-    max_carry_positions: 3        # book-level cap: max simultaneous overnight carries (0 = unlimited)
-    max_carry_exposure_rupees: 150000  # book-level cap: max total carried premium outlay (0 = unlimited)
-  expiry_day:
-    lockout_after: "13:00"
-  rsi_bias:
-    enabled: true
-    timeframe: "15"
-  streams:
-    enabled: true
-    maxlen: 1000
-    window_seconds: 60
-    consumer_group: options_buying_evaluators
-    consumer_block_ms: 1000
-    telemetry_sink_enabled: true
-    legacy_zset_enabled: false
-
-# Expiry-week power trend mode: detects and holds high-conviction directional entries
-# during the final week before monthly expiry when ADX confirms a power trend.
-# Pattern: BANKNIFTY ADX=53 or NIFTY ADX=40+ locked since morning → enter 12:00-13:45
-# → ride afternoon gamma explosion. Near-ATM options can return 3-6x on a 0.8-1.4% spot move.
-expiry_week_power_trend:
-  enabled: true
-  adx_min: 40              # Power trend minimum (ADX >= 40 = confirmed strong trend)
-  expiry_days_max: 5       # Only within 5 calendar days of monthly expiry
-  entry_start: "12:00"     # Start of optimal entry window (after morning volatility)
-  entry_end: "13:45"       # End of optimal entry window (before gamma session)
 
 loss_streak_guard:
   enabled: true
   consecutive_losses_threshold: 2
   cooldown_minutes: 30
 
-segment_expectancy_guard:
-  enabled: true
-
-# Trading::SegmentExpectancyAnalyzer — realized win-rate/expectancy by (index, session-regime)
-# segment, computed from closed-trade history. Backs segment_expectancy_guard above.
-trading:
-  segment_expectancy:
-    lookback_days: 14
-    min_samples: 8                      # below this, a segment is "unproven" — never blocks
-    negative_expectancy_rupees: -150.0  # avg realized PnL/trade below this → negative edge
-    cache_ttl_minutes: 15
-
-strike_cooldown_guard:
-  enabled: false
-  after_any_exit: false
-  cooldown_minutes: 5
-  loss_cooldown_minutes: 5
-
-capital_allocator:
-  post_peak_size_cut:
-    enabled: true
-    min_peak: 2000        # only activate after intraday peak ≥ ₹2k
-    giveback_ratio: 0.50  # if net < peak × 0.50, cut size
-    size_factor: 0.5      # halve allocator output
-
 sizing:
   post_1100_multiplier: 0.5
-  # Optional default max buy value as a fraction of available cash when an index omits
-  # capital_alloc_pct (0.30 = 30%). Per-index indices.*.capital_alloc_pct takes precedence.
-  # allocation_cap_pct: 0.30
 
 feature_flags:
   enable_direction_before_chain: true
@@ -306,8 +210,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 8 # 1m ADX threshold (very strict filter for volatile Sensex)
-      confirmation_min_strength: 8 # 5m ADX threshold
+      primary_min_strength: 15 # 1m ADX threshold (loosened to allow more SENSEX signals)
+      confirmation_min_strength: 15 # 5m ADX threshold
 
     strategies:
       open_interest:
@@ -349,6 +253,15 @@ risk:
     enabled: true
     target_pct: 15.0 # Full exit when total PnL reaches 15%
 
+  # Underlying-context-aware trailing exit (tick-first path)
+  # Tightens or forces trailing exit when underlying structure/trend signals reversal.
+  # Only active when trailing is already armed (position profitable >= activation_pct).
+  underlying_context_exit:
+    enabled: true
+    trend_score_threshold: 15     # trend_score below this = weak trend
+    atr_ratio_threshold: 0.65     # atr_ratio below this AND falling = collapsing
+    tightening_multiplier: 0.5    # compress allowed_dd by this factor when weakening
+
   # Hard rupee-based stops (HIGHEST PRIORITY - checked before %-based stops)
   # Perfect for scalping: fixed ₹1k SL + ₹2k TP per trade
 
@@ -367,6 +280,30 @@ risk:
   rr_profit_booking:
     enabled: true
     target_rr: 2.5        # Exit fully at 2.5R (e.g., if SL is 10%, TP at 25%)
+
+  # Exit-layer overrides (optional). Price-based structure invalidation uses these when set.
+  exits:
+    structure_invalidation:
+      enabled: true           # Re-enabled with options-aware dual condition
+      min_hold_seconds: 120   # No structure exit until position age >= this (reduces churn)
+      buffer_pct: 0.004       # Legacy: require underlying to breach level by this fraction
+      underlying_move_pct: 0.01  # Underlying must move 1%+ against trade direction
+      premium_drop_pct: 0.05     # Premium must drop 5%+ from peak
+    smc_navigator_exit:
+      enabled: false           # opt-in: enforce Navigator exit signals (CHoCH, liquidity sweep)
+      min_hold_seconds: 120    # no SMC navigator exit before position age >= this
+      min_confidence: 0.65     # minimum Navigator exit confidence to trigger
+    premium_momentum_failure:
+      enabled: true
+      default_stall_minutes: 2
+      index_overrides:
+        SENSEX:
+          stall_minutes: 2
+      session_overrides:
+        chop_decay:
+          stall_minutes_add: 0  # In chop, cut dead trades fast — no extension
+        close_gamma:
+          stall_minutes_add: 1
 
   # Time Stop: Prevents holding dead trades beyond time limits
   # Previously hardcoded in Risk::Rules::TimeStopRule — now runtime-configurable
@@ -395,11 +332,21 @@ risk:
       activation_trigger: 0.20    # Phase 3: HWM Trailing at +20%
       trailing_distance: 0.386    # 38.6% from HWM (80% of avg 48.3% retrace)
     sensex:
-      early_trigger: 0.06         # Phase 1: Survival (+6% profit → -10% SL)
-      early_sl_offset: -0.10
-      breakeven_trigger: 0.12     # Phase 2: Breakeven at +12%
-      activation_trigger: 0.18    # Phase 3: HWM Trailing at +18%
-      trailing_distance: 0.413    # 41.3% from HWM (80% of avg 51.65% retrace)
+      # SENSEX profile: CE avg max gain +30.47%, PE +69.07%, post-peak retrace ~99.8%
+      # Options decay to near-zero after peak → activate early, lock in gains quickly
+      early_trigger: 0.03         # Phase 1: Survival (+3% profit → -8% SL)
+      early_sl_offset: -0.08
+      breakeven_trigger: 0.08     # Phase 2: Breakeven at +8% (calibration: CE breakeven 7.6%)
+      activation_trigger: 0.15    # Phase 3: HWM Trailing at +15% (between CE 7.6% and PE 17.3%)
+      trailing_distance: 0.15     # 15% from HWM (wider than NIFTY — SENSEX moves are 2x larger)
+      adaptive_drawdown:
+        - { min_profit: 0.08, drawdown: 0.12 }  # At +8%: 12% drawdown room
+        - { min_profit: 0.15, drawdown: 0.10 }  # At +15%: tighten to 10%
+        - { min_profit: 0.30, drawdown: 0.08 }  # At +30% (avg CE peak): 8%
+        - { min_profit: 0.50, drawdown: 0.06 }  # At +50% (deep PE zone): 6%
+        - { min_profit: 0.75, drawdown: 0.04 }  # At +75%: tighten — gains can evaporate rapidly near expiry
+        - { min_profit: 1.00, drawdown: 0.03 }  # At +100%: very tight — option likely near peak, protect aggressively
+        - { min_profit: 1.50, drawdown: 0.02 }  # At +150%+: near-expiry gamma extreme — lock in immediately on any retreat
     banknifty:
       early_trigger: 0.06         # Phase 1: Survival (+6% profit → -15% SL)
       early_sl_offset: -0.15      # Wider SL — BN is more volatile
@@ -725,6 +672,8 @@ position_sizing:
   # Underlying-aware exit thresholds
   underlying_trend_score_threshold: 10.0 # Exit if underlying trend_score < this value
   underlying_atr_collapse_multiplier: 0.65 # Exit if ATR ratio < this value (falling volatility)
+  use_smc_bias_flip: false               # opt-in: exit when SMC bias flips against position direction
+  smc_bias_flip_trend_threshold: 40      # only exit on bias flip when trend_score is also below this
 
   daily_limits:
     enable: true
@@ -791,19 +740,49 @@ position_sizing:
 # If net PnL ever drops below the floor → ALL positions exit + new entries blocked.
 #
 # Floor is monotonic: it only moves up as PnL peaks climb.
-# Example: PnL peaks at ₹25k (past the ₹20k trigger):
-#   floor = ₹25k × 0.70 = ₹17.5k  (not just the static ₹14k)
+# Example: PnL peaks at ₹40k (past the ₹35k trigger, level 2 ratio):
+#   floor = ₹40k × 0.70 = ₹28k
 #
 # Set enabled: false to disable the entire engine without removing config.
 profit_lock:
   enabled: true
   levels:
-    - trigger: 10000   # ₹10k — Level 1
-      lock_ratio: 0.60 # floor = peak_pnl × 60%  (e.g. ₹10k peak → ₹6k floor)
-    - trigger: 20000   # ₹20k — Level 2
-      lock_ratio: 0.70 # floor = peak_pnl × 70%  (e.g. ₹20k peak → ₹14k floor)
-    - trigger: 30000   # ₹30k — Level 3
-      lock_ratio: 0.73 # floor = peak_pnl × 73%  (e.g. ₹30k peak → ₹21.9k floor)
+    - trigger: 20000   # ₹20k — Level 1
+      lock_ratio: 0.60 # floor = peak_pnl × 60%  (e.g. ₹20k peak → ₹12k floor)
+    - trigger: 35000   # ₹35k — Level 2
+      lock_ratio: 0.70 # floor = peak_pnl × 70%  (e.g. ₹35k peak → ₹24.5k floor)
+    - trigger: 50000   # ₹50k — Level 3
+      lock_ratio: 0.73 # floor = peak_pnl × 73%  (e.g. ₹50k peak → ₹36.5k floor)
+
+# ============================================
+# MARKET CONTEXT (regime snapshot + permission gate)
+# ============================================
+# Composes structure/volatility/participation with MarketRegimeDetector. When gate.enabled
+# is true, entries are blocked unless regime + chain signals pass thresholds.
+market_context:
+  enabled: false
+  regime_scoring:
+    weights:
+      trending_structure: 20
+      displacement: 20
+      vwap_not_chop: 15
+      strong_strength: 15
+      volatility_ok: 10
+      participation_high: 10
+      legacy_confidence: 10
+  chain_signal_extractor:
+    premium_move_pct_threshold: 3.0
+    near_expiry_penalty_days: 1
+  gate:
+    enabled: false
+    min_conviction_score: 70
+    min_chain_confidence: 40
+    allow_normal_participation: true
+    require_premium_expansion: false
+    require_smc_alignment: false   # opt-in: reject if SMC bias conflicts with final_direction
+  strategy_profiles:
+    aggressive_min_score: 80
+    controlled_min_score: 60
 
 # ============================================
 # SIGNAL SETTINGS
@@ -854,30 +833,6 @@ signals:
 
   # SMC EventStore: persist every scan decision to smc_events for audit/replay
   smc_event_store_publish: true
-
-  # Pine-parity SMC confluence (delta_exchange_bot SmcConfluence::Engine) — advisory MTF digest in BiasEngine#details
-  enable_smc_confluence_digest: true
-  # Optional: block entries unless LTF last bar fires long_signal (bullish) / short_signal (bearish)
-  enable_smc_confluence_gating: false
-  # Dhan interval minutes; defaults match Smc::BiasEngine HTF/MTF/LTF
-  smc_confluence_intervals:
-    htf: "60"
-    mtf: "15"
-    ltf: "5"
-
-  # Event-driven intraday AI (see AlgoConfig.event_driven_intraday_ai?): tick throttle + defer 15m jobs.
-  # Optional second flag (both are OR’d). DB JSON may send "true" as a string — that still counts.
-  # event_driven_ai_alerts: true
-
-  # Tick-triggered MTF SMC confluence + optional index TA → Ollama → Telegram (trading daemon only).
-  # Hot path: Redis throttle on tick; job: TickAiDigestJob, rising-edge on LTF flags, then AiAnalyzer.
-  # When true (or event_driven_ai_alerts): open-session AiTechnicalAnalysisJob + SmcScannerJob skip;
-  # BiasEngine Telegram from the daemon SMC loop is suppressed (tick/SMC AI alerts only on edges).
-  tick_ai_analysis_enabled: true
-  tick_ai_min_interval_seconds: 15
-  tick_ai_include_index_ta: true
-  tick_ai_notify_telegram: true
-  tick_ai_candle_fetch_delay_seconds: 1.0
 
   # SMC Navigator overlay (LTF tactical gate; additive to PermissionResolver — not a replacement)
   enable_smc_navigator_overlay: false
@@ -1110,6 +1065,7 @@ telegram:
   notify_pnl_milestones: true # Send notifications for PnL milestones (10%, 20%, etc.)
   pnl_milestones: [10, 20, 30, 50, 100] # PnL percentage milestones to notify
   notify_risk_alerts: true # Send risk alert notifications
+  notify_daily_profit_target: true # Telegram when global daily profit cap is hit (entries blocked)
   include_stats_on_exit: true # Include trading stats summary in exit notifications
   notify_stats_at_market_close: true # Send daily trading stats at end of market session (3:30 PM IST)
   # SMC Alert Settings

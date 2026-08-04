@@ -67,19 +67,24 @@ module Live
 
       ltp = safe_ltp(tracker)
 
-      cmd_result = Orders::Commands::ExitOrderCommand.new(
-        gateway: @router,
-        tracker: tracker,
-        client_order_id: tracker.exit_coid,
-        reason: reason
-      ).call
+      cmd_result = nil
+      begin
+        cmd_result = Orders::Commands::ExitOrderCommand.new(
+          gateway: @router,
+          tracker: tracker,
+          client_order_id: tracker.exit_coid,
+          reason: reason
+        ).call
+      rescue StandardError => e
+        Rails.logger.error("[ExitEngine] Router exception for #{tracker.order_no}: #{e.class} - #{e.message}")
+        return { success: false, reason: 'router_failed', error: e }
+      end
 
       unless cmd_result.success?
-        raise cmd_result.error if cmd_result.reason == 'command_exception' && cmd_result.error
-
         error_detail = cmd_result.error
-        if error_detail.nil? && cmd_result.payload.is_a?(Hash) && cmd_result.payload.key?(:raw)
-          error_detail = cmd_result.payload[:raw]
+        if error_detail.nil? && cmd_result.payload.is_a?(Hash)
+          # Keep payload shape (includes :raw) for consistent caller/logging handling.
+          error_detail = cmd_result.payload
         end
         error_detail = cmd_result.payload if error_detail.nil?
 
@@ -109,7 +114,12 @@ module Live
     def prepare_exit_intent!(tracker, reason)
       tracker.with_lock do
         tracker.reload
-        return false if tracker.exited? || tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
+        return false if tracker.exited?
+        return false if tracker.exit_sent_at.present?
+
+        if tracker.exit_requested_at.present? && !stale_exit_intent?(tracker)
+          return false
+        end
 
         coid = tracker.exit_coid.presence || deterministic_exit_coid(tracker)
         metadata = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
@@ -257,6 +267,12 @@ module Live
     rescue StandardError => e
       Rails.logger.error("[ExitEngine] acquire_exit_lock failed for tracker=#{tracker_id}: #{e.class} - #{e.message}")
       true
+    end
+
+    def stale_exit_intent?(tracker)
+      return false if tracker.exit_requested_at.blank?
+
+      (Time.current - tracker.exit_requested_at) >= EXIT_INTENT_RETRY_AFTER_SECONDS
     end
 
     def safe_pnl_snapshot(tracker)

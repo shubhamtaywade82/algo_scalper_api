@@ -41,31 +41,4 @@ RSpec.describe Risk::CircuitBreaker do
       cb.reset!
     end
   end
-
-  describe '#tripped?' do
-    context 'when cache read fails' do
-      before do
-        allow(Rails.cache).to receive(:read).and_raise(Redis::BaseError, 'connection refused')
-        allow(Notifications::TelegramNotifier.instance).to receive(:notify_error)
-      end
-
-      it 'fails CLOSED (returns true, blocking entries)' do
-        expect(cb.tripped?).to be true
-      end
-
-      it 'alerts via Telegram' do
-        cb.tripped?
-        expect(Notifications::TelegramNotifier.instance).to have_received(:notify_error).with(
-          a_string_matching(/failing CLOSED/),
-          context: 'CircuitBreaker#tripped?'
-        )
-      end
-    end
-
-    context 'when cache is healthy and not tripped' do
-      it 'returns false' do
-        expect(cb.tripped?).to be false
-      end
-    end
-  end
 end

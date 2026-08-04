@@ -13,10 +13,9 @@ RSpec.describe Live::RedisTickCache do
   end
 
   describe '#store_tick' do
-    it 'sets a 24-hour TTL on the tick key after storing' do
-      allow(redis_double).to receive(:expire)
+    it 'sets a 1-hour TTL on the tick key after storing' do
+      expect(redis_double).to receive(:expire).with('tick:NSE_FNO:50073', 3600)
       cache.store_tick(segment: 'NSE_FNO', security_id: '50073', data: { ltp: 100.0, ts: Time.current.to_i })
-      expect(redis_double).to have_received(:expire).with('tick:NSE_FNO:50073', 86_400)
     end
   end
 end

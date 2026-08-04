@@ -71,7 +71,8 @@ module Portfolio
         r.del(KEY_TRIGGERED)
         r.del(KEY_ENTRIES_BLOCKED)
         Portfolio::PnlTracker.reset_day!
-        
+        Portfolio::PaperPeakTracker.reset_day!
+
         Rails.logger.info('[Portfolio::DrawdownGuard] Daily state reset')
       rescue StandardError => e
         Notifications::TelegramNotifier.instance.notify_error(e.message, context: 'Portfolio::DrawdownGuard')

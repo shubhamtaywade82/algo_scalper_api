@@ -57,8 +57,9 @@ module Smc
       def find_blocks(limit:)
         blocks = []
 
-        # Need at least 3 candles to detect order blocks
-        return [] if candles.size < 3
+        rvr_ok = rvr_above_threshold?(candle, candle_index)
+        rvr_ok.nil? || rvr_ok
+      end
 
         # Check each 3-candle window
         (0...(candles.size - 2)).each do |i|
@@ -80,9 +81,10 @@ module Smc
         blocks.last(limit)
       end
 
-      def find_candle_by_index(index)
-        candles[index] if index && candles[index]
-      end
+      def mitigated?(block)
+        # Skip the displacement candle (index + 1); mitigation starts after the impulse.
+        start_index = block[:index] + 2
+        return false if start_index >= candles.size
 
       def candle_to_h(candle)
         return nil unless candle

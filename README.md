@@ -1,53 +1,44 @@
 # Algo Scalper API
 
-Rails 8 API backend for **autonomous algorithmic trading** powered by the DhanHQ API v2, specifically designed for **Indian index options trading** (NIFTY, BANKNIFTY, SENSEX).
+A production-grade autonomous intraday options scalping system for Indian index markets (NIFTY, BANKNIFTY, SENSEX), built with Ruby on Rails 8. Self-contained pipeline: signal generation → options analysis → capital allocation → order execution → position management.
 
-## 🚀 Features
+## System Overview
 
-- **🤖 Fully Autonomous Trading**: Signal generation, option chain analysis, and automated order placement
-- **📊 Real-time Market Data**: DhanHQ WebSocket integration for live quotes, LTP, and order updates
-- **⚡ Low-latency Execution**: Direct `DhanHQ::Models::*` integration for minimal overhead
-- **🛡️ Advanced Risk Management**: Comprehensive validation, trailing stops, and circuit breakers
-- **📈 Technical Analysis**: Supertrend, ADX, and other indicators for signal generation
-- **🎯 Smart Strike Selection**: ATM-focused option chain analysis with liquidity scoring
-- **💰 Capital Management**: Dynamic allocation based on account size and risk parameters
-- **🔄 Background Processing**: Solid Queue integration for reliable job processing
-- **🤖 AI Integration**: OpenAI-powered trading analysis and strategy suggestions (optional)
+Algo Scalper API automates the entire trade lifecycle — from signal identification using technical analysis (Supertrend, ADX, SMC) through dynamic risk-managed exits. It runs as a **process-isolated execution engine**: the trading daemon operates separately from the web/dashboard processes to ensure low-latency tick processing and order execution.
 
----
+### Key Capabilities
 
-## 🏗️ Architecture Overview
+- **Multi-Strategy Signal Engine** — Supertrend + ADX with multi-timeframe confirmation,
+  market regime detection, and dynamic validation modes (balanced/conservative).
+  Optional **market context** (`MarketContext::RegimeComposer`, chain signal extraction,
+  `Trading::MarketPermissionGate`) is configurable in `config/algo.yml` (`market_context`);
+  see `docs/trading/market_context_and_permission_gate.md`.
+- **Smart Money Concepts (SMC)** — Order block detection, FVG analysis, break-of-structure entries, institutional flow scoring
+- **Real-time WebSocket Hub** — DhanHQ tick ingestion with write-through Redis caching, automatic reconnection, and per-position subscription management
+- **Institutional Risk Management** — 15 exit rule engines: stop-loss, take-profit, trailing stops (tiered/direct/gamma-aware), peak drawdown, time-based, early trend failure, premium momentum failure, structure invalidation
+- **Options Chain Intelligence** — ATM±1 strike selection with liquidity scoring, gamma ramp detection, expected move validation, per-index rules (NIFTY/BANKNIFTY/SENSEX)
+- **Paper & Live Trading** — Seamless toggle; both modes use real DhanHQ WebSocket data. Paper simulates fills; live submits to exchange via DhanHQ API
+- **Circuit Breaker** — Redis-backed singleton with API control (`GET/POST/DELETE /api/circuit_breaker/trip`); EntryGuard checks before every entry, RiskManager force-closes all positions when tripped
+- **AI Technical Analysis** — Optional OpenAI integration for multi-timeframe analysis and SMC pattern enrichment
+- **Telegram Notifications** — Trade alerts, PnL milestones, daily stats, SMC signals
 
-### Core Components
+## Tech Stack
 
-| Component                  | Purpose                    | Key Features                                          |
-| -------------------------- | -------------------------- | ----------------------------------------------------- |
-| **Signal Engine**          | Generate trading signals   | Supertrend + ADX analysis, comprehensive validation   |
-| **Options Chain Analyzer** | Select optimal strikes     | ATM/ATM±1 focus, liquidity scoring, dynamic intervals |
-| **Capital Allocator**      | Calculate position sizes   | Risk-based allocation, lot size compliance            |
-| **Entry Guard**            | Prevent duplicate entries  | Exposure limits, cooldown periods                     |
-| **Risk Manager**           | Monitor and exit positions | PnL tracking, trailing stops, daily limits            |
-| **Market Feed Hub**        | Real-time data streaming   | WebSocket management, tick caching                    |
+| Component | Technology |
+|-----------|-----------|
+| Language | Ruby 3.3.4 |
+| Framework | Rails 8.0.2 (API-only mode) |
+| Database | PostgreSQL |
+| Cache/State | Redis (tick cache, PnL cache, position state) |
+| Job Queue | Solid Queue (not Sidekiq) |
+| WebSocket Broadcast | Solid Cable (ActionCable backend) |
+| Broker | DhanHQ v2 via `dhanhq` gem |
+| AI | OpenAI (optional) |
+| Notifications | Telegram Bot |
+| Frontend | Vue/Vite dashboard (separate process) |
+| Deployment | Kamal + Docker |
 
-### Trading Flow
-
-```mermaid
-graph TD
-    A[Signal Scheduler] --> B[Signal Engine]
-    B --> C[Technical Analysis]
-    C --> D[Comprehensive Validation]
-    D --> E[Options Chain Analysis]
-    E --> F[Capital Allocation]
-    F --> G[Entry Guard]
-    G --> H[Order Placement]
-    H --> I[Position Tracking]
-    I --> J[Risk Management]
-    J --> K[Exit Execution]
-```
-
----
-
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -109,7 +100,7 @@ This launches (via `Procfile.dev`):
 | `web` | `bin/rails server -p 3011` | Rails API server |
 | `trading` | `ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon` | Trading brain (11 services in threads) |
 | `jobs` | `bin/jobs` | Solid Queue worker (SMC scanner, AI analysis, instrument sync) |
-| `dashboard` | `cd dashboard && npm run dev` | Next.js frontend |
+| `dashboard` | `cd dashboard && npm run dev` | Vue/Vite frontend |
 
 ### Other Commands
 
@@ -122,6 +113,32 @@ bin/jobs                                   # start Solid Queue worker standalone
 ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon  # trading daemon standalone
 ```
 
+### Docker Compose (Rails + Vue/Vite)
+
+Use `docker-compose.yml` to run a containerized local stack with separate
+`web` and `jobs` containers, plus PostgreSQL, Redis, and a static dashboard.
+
+```bash
+cp .env.example .env
+# set RAILS_MASTER_KEY in .env
+docker compose build
+docker compose up -d
+docker compose ps
+```
+
+Endpoints:
+
+- Dashboard: `http://localhost:3000`
+- API health: `http://localhost/api/health`
+- Direct API: `http://localhost:80`
+
+Useful commands:
+
+```bash
+docker compose logs -f web jobs dashboard
+docker compose down --remove-orphans
+```
+
 ## Architecture
 
 ### Process Model
@@ -131,8 +148,8 @@ ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon  # trading daemon s
 │ bin/dev (foreman)                                                │
 ├──────────────┬──────────────┬──────────────┬─────────────────────┤
 │ web          │ trading      │ jobs         │ dashboard           │
-│ Rails API    │ Daemon       │ Solid Queue  │ Next.js             │
-│ port 3011    │ 11 services  │ recurring    │ frontend            │
+│ Rails API    │ Daemon       │ Solid Queue  │ Vue/Vite            │
+│ port 3001    │ 11 services  │ recurring    │ frontend            │
 │              │ in threads   │ tasks        │                     │
 └──────┬───────┴──────┬───────┴──────┬───────┴─────────────────────┘
        │              │              │

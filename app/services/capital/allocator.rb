@@ -176,6 +176,31 @@ module Capital
         current_ist_time >= '11:00'
       end
 
+      def effective_multiplier(scale_multiplier)
+        base_multiplier = normalize_multiplier(scale_multiplier)
+        midday_multiplier = post_1100_multiplier
+        return base_multiplier if midday_multiplier >= 1.0
+        return base_multiplier unless post_1100?
+
+        adjusted = (base_multiplier * midday_multiplier).floor
+        [adjusted, 1].max
+      end
+
+      def post_1100_multiplier
+        value = AlgoConfig.fetch.dig(:sizing, :post_1100_multiplier)
+        return 1.0 if value.nil?
+
+        multiplier = value.to_f
+        multiplier.positive? ? multiplier : 1.0
+      rescue StandardError
+        1.0
+      end
+
+      def post_1100?
+        current_ist_time = Time.current.in_time_zone('Asia/Kolkata').strftime('%H:%M')
+        current_ist_time >= '11:00'
+      end
+
       def valid_for_allocation?(index_cfg, entry_price, derivative_lot_size, capital_available)
         return log_and_return_false("[Capital] Invalid capital snapshot for #{index_cfg[:key]}") unless finite_money?(capital_available)
 
