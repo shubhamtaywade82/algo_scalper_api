@@ -6,6 +6,8 @@ The system employs a multi-layered risk management strategy, prioritizing capita
 
 ---
 
+> **Full reference:** For the exact guard pipeline, exit priority order, 5-second enforcement cycle, and config keys, see **`docs/trading/entry_and_exit_rules.md`**.
+
 ## The Exit Hierarchy
 
 ### Path A: Per-Tick (UnifiedExitChecker)

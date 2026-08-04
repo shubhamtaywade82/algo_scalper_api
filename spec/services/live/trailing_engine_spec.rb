@@ -6,15 +6,15 @@ RSpec.describe Live::TrailingEngine do
   let(:active_cache) { instance_double(Positions::ActiveCache, update_position: true) }
   let(:bracket_placer) { instance_double(Orders::BracketPlacer) }
   let(:exit_engine) { instance_double(Live::ExitEngine) }
-  let(:tracker) { instance_double(PositionTracker, id: 42, order_no: 'ORD42', active?: true) }
+  let(:tracker) { instance_double(PositionTracker, id: 42, order_no: 'ORD42', active?: true, meta: {}, symbol: 'SEC42', entry_price: 100.0, quantity: 50) }
   let(:engine) { described_class.new(active_cache: active_cache, bracket_placer: bracket_placer) }
 
   before do
+    Positions::TrailingConfig.reset_config!
     allow(PositionTracker).to receive(:find_by).and_return(tracker)
     allow(bracket_placer).to receive(:update_bracket).and_return({ success: true })
     allow(exit_engine).to receive(:execute_exit)
     allow(tracker).to receive(:update_column)
-    allow(tracker).to receive(:runtime_meta_fetch).and_return(nil)
     allow(tracker).to receive(:with_lock).and_yield
     allow(tracker).to receive(:exited?).and_return(false)
     allow(Rails.logger).to receive_messages(info: nil, warn: nil, error: nil, debug: nil)
@@ -22,7 +22,9 @@ RSpec.describe Live::TrailingEngine do
 
   describe '#process_tick' do
     it 'updates peak and SL when tier threshold is satisfied' do
-      position = build_position(pnl_pct: 12.0, peak_profit_pct: 10.0, sl_price: 70.0)
+      allow(Positions::TrailingConfig).to receive(:direct_trailing_enabled?).and_return(false)
+      # 0.12 = 12% profit, peak was 0.10
+      position = build_position(pnl_pct: 0.12, peak_profit_pct: 0.10, sl_price: 70.0)
 
       result = engine.process_tick(position, exit_engine: nil)
 
@@ -31,12 +33,14 @@ RSpec.describe Live::TrailingEngine do
       expect(result[:exit_triggered]).to be false
       expect(active_cache).to have_received(:update_position).with(
         position.tracker_id,
-        hash_including(sl_price: be > 70.0, sl_offset_pct: -5.0)
+        hash_including(sl_price: be > 70.0, sl_offset_pct: -0.05) # 10% tier has -5% offset
       )
     end
 
     it 'skips SL update when profit has not reached the first tier' do
-      position = build_position(pnl_pct: 3.0, peak_profit_pct: 5.0)
+      allow(Positions::TrailingConfig).to receive(:direct_trailing_enabled?).and_return(false)
+      # 0.03 = 3% profit, peak was 0.05. Tier 1 is at 0.05 (default)
+      position = build_position(pnl_pct: 0.03, peak_profit_pct: 0.05)
 
       result = engine.process_tick(position)
 
@@ -96,7 +100,9 @@ RSpec.describe Live::TrailingEngine do
       end
 
       it 'exits immediately when drawdown threshold is met' do
-        position = build_position(peak_profit_pct: 40.0, pnl_pct: 34.0, sl_offset_pct: 12.0)
+        # peak 0.40 (40%), current 0.34 (34%) -> drawdown 0.06 (6%)
+        # Threshold at 40% peak is 0.008 (0.8%)
+        position = build_position(peak_profit_pct: 0.40, pnl_pct: 0.34, sl_offset_pct: 0.12)
 
         result = engine.process_tick(position, exit_engine: exit_engine)
 
@@ -111,9 +117,10 @@ RSpec.describe Live::TrailingEngine do
       end
 
       it 'does not exit if activation thresholds are not met' do
-        # peak 0.20, current 0.12, sl_offset 0.08
-        # OR logic: profit 0.20 >= 0.25 (False) OR sl_offset 0.08 >= 0.10 (False) → blocked
-        position = build_position(peak_profit_pct: 0.20, pnl_pct: 0.12, sl_offset_pct: 0.08)
+        # peak 0.40, current 0.22, sl_offset 0.08
+        # activation_profit_pct is 0.25 (default)
+        # sl_offset_pct 0.08 >= activation_sl_offset_pct 0.10 (False)
+        position = build_position(peak_profit_pct: 0.40, pnl_pct: 0.22, sl_offset_pct: 0.08)
 
         result = engine.process_tick(position, exit_engine: exit_engine)
 
@@ -124,7 +131,7 @@ RSpec.describe Live::TrailingEngine do
       it 'exits once when activation thresholds are satisfied' do
         # peak 0.60, current 0.30
         # sl_price 112.0 means sl_offset is 0.12 (12%)
-        # activation thresholds: peak >= 0.25 OR sl_offset >= 0.10 (True)
+        # activation thresholds: peak >= 0.25 AND sl_offset >= 0.10 (True)
         # drawdown 0.30 >= threshold 0.008 (True)
         position = build_position(peak_profit_pct: 0.60, pnl_pct: 0.30, sl_price: 112.0, sl_offset_pct: 0.12)
         allow(tracker).to receive(:active?).and_return(true, false)
@@ -223,8 +230,8 @@ RSpec.describe Live::TrailingEngine do
       tp_price: 150.0,
       high_water_mark: 0.0,
       current_ltp: 110.0,
-      pnl_pct: 10.0,
-      peak_profit_pct: 12.0,
+      pnl_pct: 0.10,
+      peak_profit_pct: 0.12,
       sl_offset_pct: nil,
       pnl: 0.0,
       trend: :neutral,

@@ -70,15 +70,15 @@ module Orders
               :nifty
             end
 
-      # Pinned to this position's entry snapshot (falls back to live config when absent).
+      # Try to load from AlgoConfig
       yml = begin
-        Positions::ExitConfigResolver.for(@position).dig(:risk, :institutional_trailing)
+        AlgoConfig.fetch.dig(:risk, :institutional_trailing)
       rescue StandardError
         nil
       end
 
       raw = yml&.[](key) || (key == :sensex ? SENSEX : NIFTY)
-
+      
       # Handle BANKNIFTY default if not in constants
       if key == :banknifty && !yml&.[](key)
         raw = {

@@ -25,7 +25,7 @@ module AutoExp
         metrics[:win_rate],
         status,
         description,
-        Time.current.strftime("%Y-%m-%d %H:%M:%S")
+        Time.now.strftime("%Y-%m-%d %H:%M:%S")
       ].join("\t")
 
       File.open(FILE, "a") { |f| f.puts(line) }
@@ -35,7 +35,7 @@ module AutoExp
       return [] unless File.exist?(FILE)
 
       lines = File.readlines(FILE).last(limit)
-      lines.filter_map do |line|
+      lines.map do |line|
         parts = line.chomp.split("\t")
         next if parts[0] == "commit" # Skip header if it was in the last 10 lines
 
@@ -47,7 +47,7 @@ module AutoExp
           status: parts[4],
           description: parts[5]
         }
-      end
+      end.compact
     end
   end
 end

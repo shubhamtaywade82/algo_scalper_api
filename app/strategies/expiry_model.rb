@@ -23,10 +23,10 @@ module Strategies
     def self.trade_allowed?(symbol: nil)
       s = session
       return false if s == :closed
-
+      
       # Institutional rule: On expiry days, avoid trading during midday decay period
-      if expiry_day?(symbol) && (s == :midday)
-        return false
+      if expiry_day?(symbol)
+        return false if s == :midday
       end
 
       true
@@ -34,26 +34,27 @@ module Strategies
 
     def self.expiry_day?(symbol)
       return false if symbol.blank?
-
+      
       sym = symbol.to_s.upcase
       today = Time.current.in_time_zone('Asia/Kolkata').wday
-
+      
       # Indian Index Expiry Days:
       # MIDCPNIFTY: Monday (1)
       # FINNIFTY: Tuesday (2)
       # BANKNIFTY: Wednesday (3)
       # NIFTY: Thursday (4)
       # SENSEX/BANKEX: Friday (5)
-
-      if sym.include?('SENSEX') || sym.include?('BANKEX')
+      
+      case
+      when sym.include?('SENSEX') || sym.include?('BANKEX')
         today == 5
-      elsif sym.include?('NIFTY') && sym.exclude?('BANK') && sym.exclude?('FIN') && sym.exclude?('MIDCP')
+      when sym.include?('NIFTY') && !sym.include?('BANK') && !sym.include?('FIN') && !sym.include?('MIDCP')
         today == 4
-      elsif sym.include?('BANKNIFTY')
+      when sym.include?('BANKNIFTY')
         today == 3
-      elsif sym.include?('FINNIFTY')
+      when sym.include?('FINNIFTY')
         today == 2
-      elsif sym.include?('MIDCPNIFTY')
+      when sym.include?('MIDCPNIFTY')
         today == 1
       else
         false

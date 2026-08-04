@@ -7,8 +7,8 @@ module Backtest
       @data = data
     end
 
-    def each_tick(&)
-      @data.each(&)
+    def each_tick
+      @data.each { |tick| yield tick }
     end
   end
 

@@ -84,12 +84,17 @@ module Positions
       is_ce ? (current_ltp >= tp_price) : (current_ltp <= tp_price)
     end
 
-    # Determine if this is a CE (Call) position
-    def ce_position?
-      # Check position_direction (can be :bullish/:bearish or 'long_ce'/'long_pe')
-      dir = position_direction.to_s.downcase
-      return true if %w[long_ce bullish].include?(dir)
-      return false if %w[long_pe bearish].include?(dir)
+      def update_ltp(ltp, timestamp: Time.current)
+        self.current_ltp = ltp.to_f
+        self.last_updated_at = timestamp
+
+        # Maintain price history (last 10 ticks) for velocity/acceleration
+        self.price_history ||= []
+        self.price_history << ltp.to_f
+        self.price_history.shift if self.price_history.size > 10
+
+        recalculate_pnl
+      end
 
       # Fallback: default to CE if unknown (safer default for long positions)
       true
@@ -107,31 +112,14 @@ module Positions
       recalculate_pnl
     end
 
-    # rubocop:disable Metrics/AbcSize
-    def recalculate_pnl
-      return unless entry_price&.positive? && current_ltp&.positive? && quantity&.positive?
+        # Update min profit percentage (lowest profit % achieved - MAE)
+        self.min_profit_pct = pnl_pct if min_profit_pct.nil? || pnl_pct < min_profit_pct
 
-      gross_pnl = (current_ltp - entry_price) * quantity
-      # Deduct broker fees (₹20 per order)
-      self.pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: false)
-
-      # Calculate Net pnl_pct as decimal (0.0573 for 5.73%)
-      invested_capital = entry_price * quantity
-      self.pnl_pct = invested_capital.positive? ? (pnl / invested_capital) : 0.0
-
-      # Update HWM
-      self.high_water_mark = pnl if high_water_mark.nil? || pnl > high_water_mark
-
-      # Update peak profit percentage
-      self.peak_profit_pct = pnl_pct if peak_profit_pct.nil? || pnl_pct > peak_profit_pct
-
-      # Update min profit percentage (MAE)
-      self.min_profit_pct = pnl_pct if min_profit_pct.nil? || pnl_pct < min_profit_pct
-    end
-    # rubocop:enable Metrics/AbcSize
-
-    def [](key)
-      public_send(key)
+        # NEW (Step 12): Persist peak if it was updated
+        # Note: Peak persistence is handled by ActiveCache.update_ltp, not here
+        # This avoids calling private methods from PositionData struct
+      end
+      # rubocop:enable Metrics/AbcSize
     end
     # rubocop:enable Metrics/AbcSize
 

@@ -17,13 +17,6 @@ development:
     priority: 1
     description: "Daily DhanHQ instrument master sync — ensures derivative records exist for strike selection"
 
-  portfolio_reset:
-    class: PortfolioResetJob
-    schedule: at 9:15am every day
-    queue_name: background
-    priority: 1
-    description: "Daily portfolio PnL reset (realized, peak, floor, level) before market open"
-
   clear_carried_overnight:
     class: ClearCarriedOvernightPositionsJob
     schedule: at 9:15am every day
@@ -76,26 +69,12 @@ development:
     description: "Persists public IP last-seen (throttled); dashboard no longer writes public_ip_logs"
 
 production:
-  pre_market_iv_baseline:
-    class: PreMarketIvBaselineJob
-    schedule: at 8:30am every weekday
-    queue_name: background
-    priority: 1
-    description: "Seeds IvRankTracker with historical ATM IV samples from expired options (pre-market baseline)"
-
   instruments_import:
     class: InstrumentsImportJob
     schedule: at 8:45am every weekday
     queue_name: background
     priority: 1
     description: "Daily DhanHQ instrument master sync — ensures derivative records exist for strike selection"
-
-  portfolio_reset:
-    class: PortfolioResetJob
-    schedule: at 9:15am every weekday
-    queue_name: background
-    priority: 1
-    description: "Daily portfolio PnL reset (realized, peak, floor, level) before market open"
 
   clear_carried_overnight:
     class: ClearCarriedOvernightPositionsJob

@@ -471,6 +471,26 @@ module Live
       # TickCache.put() handles merging of both types
       Live::TickCache.put(tick) if tick[:ltp].to_f.positive? || tick[:prev_close].to_f.positive?
 
+      # Integrated Institutional Market Data Cache
+      if tick[:ltp].to_f.positive?
+        # Resolve symbol if possible, or use security_id
+        symbol = tick[:symbol] || tick[:security_id]
+        
+        # Check if it's an index or an option
+        is_index = tick[:instrument_type].to_s.upcase == 'INDEX' || %w[NIFTY SENSEX BANKNIFTY].include?(symbol.to_s.upcase)
+        MarketData::MarketCache.update_ltp(symbol, tick[:ltp], is_index: is_index)
+        
+        # If it's an option (OI/Volume present), update option data
+        if tick[:oi].present? || tick[:volume].present?
+          MarketData::MarketCache.update_option_data(symbol, {
+            oi: tick[:oi],
+            volume: tick[:volume],
+            ltp: tick[:ltp],
+            timestamp: Time.current
+          })
+        end
+      end
+
       # # puts Live::TickQuery.for_security(segment: tick[:segment], security_id: tick[:security_id])&.ltp
       # # Store in Redis for PnL tracking (secondary)
       # # Only store if we have valid segment, security_id, and LTP

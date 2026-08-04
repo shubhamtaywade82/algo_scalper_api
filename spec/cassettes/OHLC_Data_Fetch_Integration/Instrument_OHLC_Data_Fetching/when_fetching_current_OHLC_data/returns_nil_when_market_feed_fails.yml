@@ -2,7 +2,7 @@
 http_interactions:
 - request:
     method: get
-    uri: <SENSITIVE_SERVICE_URL>/auth/dhan/token
+    uri: https://<SENSITIVE_SERVICE_URL>/auth/dhan/token
     body:
       encoding: US-ASCII
       string: ''

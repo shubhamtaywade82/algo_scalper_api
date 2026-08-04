@@ -56,12 +56,24 @@ module Orders
     end
 
     # ------------ WALLET ---------------
+    # Returns unified shape: { cash:, equity:, mtm:, exposure:, utilized:, margin: }
     def wallet_snapshot
-      funds = DhanHQ::Models::FundLimit.fetch
-      { cash: funds.available, utilized: funds.utilized, margin: funds.margin }
+      funds = DhanHQ::Models::Funds.fetch
+      cash = funds.available_balance.to_f
+      utilized = funds.utilized_amount.to_f
+      margin = funds.respond_to?(:margin) ? funds.margin.to_f : 0
+      equity = cash + utilized
+      {
+        cash: cash,
+        equity: equity,
+        mtm: 0,
+        exposure: utilized,
+        utilized: utilized,
+        margin: margin
+      }
     rescue StandardError => e
-      Rails.logger.error("[GatewayLive] position failed: #{e.message}")
-      nil
+      Rails.logger.error("[GatewayLive] wallet snapshot failed: #{e.message}")
+      { cash: 0, equity: 0, mtm: 0, exposure: 0, utilized: 0, margin: 0 }
     end
 
     def cancel_order(order_id)
@@ -72,6 +84,56 @@ module Orders
     rescue StandardError => e
       Rails.logger.error("[GatewayLive] cancel_order failed for #{order_id}: #{e.class} - #{e.message}")
       raise
+    end
+
+    # Exit by segment/security_id (used when no tracker is available).
+    # Prefer exit_market(tracker) when a PositionTracker exists.
+    def flat_position(segment:, security_id:)
+      Orders::Placer.exit_position!(
+        seg: segment,
+        sid: security_id,
+        client_order_id: generate_client_order_id('EXIT', security_id)
+      )
+    end
+
+    # Fetch position summary for segment/security_id from DhanHQ Position API.
+    # Returns unified shape: { qty:, avg_price:, upnl:, rpnl:, last_ltp:, product_type:, exchange_segment:, position_type:, trading_symbol:, status: }
+    # @return [Hash, nil] unified position hash or nil on error
+    def position(segment:, security_id:)
+      positions = fetch_positions
+      pos = positions.find { |p| p.security_id.to_s == security_id.to_s && p.exchange_segment.to_s == segment.to_s }
+      return nil unless pos
+
+      entry_price = pos.respond_to?(:buy_avg) ? BigDecimal(pos.buy_avg.to_s) : nil
+      qty = pos.respond_to?(:net_qty) ? pos.net_qty.to_i : 0
+      tick = Live::TickQuery.for_security(segment: segment, security_id: security_id.to_s)
+      ltp = tick&.ltp
+
+      upnl = if entry_price && ltp && qty != 0
+               (BigDecimal(ltp.to_s) - entry_price) * qty
+             else
+               BigDecimal(0)
+             end
+
+      product_type = pos.respond_to?(:product_type) ? pos.product_type : nil
+      position_type = pos.respond_to?(:position_type) ? pos.position_type : 'LONG'
+      trading_symbol = pos.respond_to?(:trading_symbol) ? pos.trading_symbol : nil
+
+      {
+        qty: qty,
+        avg_price: entry_price || BigDecimal(0),
+        upnl: upnl,
+        rpnl: BigDecimal(0),
+        last_ltp: ltp ? BigDecimal(ltp.to_s) : (entry_price || BigDecimal(0)),
+        product_type: product_type,
+        exchange_segment: segment.to_s,
+        position_type: position_type,
+        trading_symbol: trading_symbol,
+        status: 'active'
+      }
+    rescue StandardError => e
+      Rails.logger.error("[GatewayLive] position failed: #{e.message}")
+      nil
     end
 
     private

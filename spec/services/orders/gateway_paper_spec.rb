@@ -117,14 +117,18 @@ RSpec.describe Orders::GatewayPaper do
 
   describe '#position' do
     context 'when tracker exists' do
-      it 'returns position hash with consistent format' do
+      it 'returns position hash with unified shape' do
         tracker.update!(quantity: 50, avg_price: 100.5, side: 'BUY', symbol: 'NIFTY24JAN20000CE')
+        allow(Live::TickQuery).to receive(:for_security).and_return(double(ltp: BigDecimal('102.0')))
 
         result = gateway.position(segment: 'NSE_FNO', security_id: '55111')
 
-        expect(result).to eq(
+        expect(result).to include(
           qty: 50,
           avg_price: 100.5,
+          upnl: be_a(BigDecimal),
+          rpnl: BigDecimal(0),
+          last_ltp: BigDecimal('102.0'),
           product_type: nil,
           exchange_segment: 'NSE_FNO',
           position_type: 'LONG',

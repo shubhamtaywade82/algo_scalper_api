@@ -15,13 +15,13 @@ module Orders
     # Returns the recommended SL price based on institutional integrated ExitEngine
     def recommended_sl
       prices = @prices.any? ? @prices : [@ltp]
-
+      
       # Use the institutional ExitEngine wrapper
       exit_engine = Orders::ExitEngine.new(
         position: @tracker,
         prices: prices
       )
-
+      
       # Force exit trigger (SL above current price)
       return (@ltp * 1.1).round(2) if exit_engine.force_exit?
 

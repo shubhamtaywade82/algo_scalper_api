@@ -13,7 +13,7 @@ module AutoExp
       "exit.mfe_ratio_nifty" => 0.2..0.6,
       "exit.initial_stop" => 0.08..0.20,
       "risk.max_trades_per_day" => 1..5
-    }.freeze
+    }
 
     def apply(parameter:, value:)
       config = YAML.load_file(CONFIG_PATH)

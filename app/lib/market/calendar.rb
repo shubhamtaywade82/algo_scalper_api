@@ -66,11 +66,8 @@ module Market
         trading_days_counted = 0
         days_back = 0
 
-        # Use while loop instead of fixed range - handles weekends + holiday clusters
-        # Max 10 trading days worth of calendar days (14 days) as safety
-        max_days_back = count * 7
-        while days_back < max_days_back
-          days_back += 1
+        # Look back up to 2x the count to find enough trading days
+        (1..(count * 2)).each do |days_back|
           candidate = current - days_back.days
           if trading_day?(candidate)
             trading_days_counted += 1

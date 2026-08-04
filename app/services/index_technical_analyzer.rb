@@ -147,6 +147,7 @@ class IndexTechnicalAnalyzer < ApplicationService
   }.freeze
 
   DEFAULT_TIMEFRAMES = [5, 15, 60].freeze
+  VALID_TIMEFRAMES = [1, 5, 15, 25, 60].freeze
   DEFAULT_DAYS_BACK = 30
 
   attr_reader :index_symbol, :config, :indicators, :bias_summary, :error
@@ -166,7 +167,7 @@ class IndexTechnicalAnalyzer < ApplicationService
     return failure_result('DhanHQ credentials not configured') unless valid_credentials?
 
     # Use configured values if not provided, allow runtime override
-    effective_timeframes = timeframes || @config[:timeframes]
+    effective_timeframes = sanitize_timeframes(timeframes || @config[:timeframes])
     effective_days_back = days_back || @config[:api_settings][:days_back]
 
     begin
@@ -318,10 +319,17 @@ class IndexTechnicalAnalyzer < ApplicationService
     # Check if DhanHQ Analysis module is available
     if dhanhq_analysis_available?
       begin
-        analyzer = DhanHQ::Analysis::MultiTimeframeAnalyzer.new(data: @indicators)
+        analyzer_input = normalize_timeframe_keys(@indicators)
+        unless valid_analysis_payload?(analyzer_input)
+          log_warn('DhanHQ Analysis payload shape invalid - using fallback')
+          @bias_summary = generate_fallback_bias_summary
+          return
+        end
+
+        analyzer = DhanHQ::Analysis::MultiTimeframeAnalyzer.new(data: analyzer_input)
         @bias_summary = analyzer.call
         log_info("Generated bias summary: #{@bias_summary.dig(:summary, :bias)}")
-      rescue NameError, NoMethodError => e
+      rescue NameError, NoMethodError, ArgumentError => e
         log_warn("DhanHQ Analysis module not available: #{e.message} - using fallback")
         @bias_summary = generate_fallback_bias_summary
       end
@@ -466,25 +474,13 @@ class IndexTechnicalAnalyzer < ApplicationService
   def normalize_timeframe_keys(indicators)
     return indicators unless indicators.is_a?(Hash)
 
-    indicators.deep_symbolize_keys
+    indicators.each_with_object({}) do |(key, value), normalized|
+      normalized[key.to_s] = value
+    end
   end
 
   def valid_analysis_payload?(payload)
-    return false unless payload.is_a?(Hash)
-
-    meta = payload[:meta] || payload['meta']
-    indicators = payload[:indicators] || payload['indicators']
-    meta.present? && indicators.present?
-  end
-
-  def ensure_dhanhq_ta_loaded
-    return if defined?(@ta_load_attempted) && @ta_load_attempted
-
-    require 'ta/technical_analysis'
-  rescue LoadError => e
-    log_warn("DhanHQ TA load failed: #{e.message}")
-  ensure
-    @ta_load_attempted = true
+    payload.is_a?(Hash) && payload[:meta].present? && payload[:indicators].present?
   end
 
   def sanitize_timeframes(timeframes)

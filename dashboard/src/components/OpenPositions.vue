@@ -13,6 +13,7 @@ const props = defineProps({
 // but isSafe is needed for the circuit breaker header.
 
 const isSafe = computed(() => !props.circuitBreaker?.tripped)
+const isWsLive = computed(() => props.wsConnected && !props.wsStale)
 </script>
 
 <template>
@@ -26,14 +27,25 @@ const isSafe = computed(() => !props.circuitBreaker?.tripped)
           <span class="text-primary-400 ml-2 font-black text-data">[{{ positions.length }}]</span>
         </h2>
       </div>
-      <div
-        :class="[
-          'flex items-center gap-2 text-[10px] font-black tracking-widest px-3 py-1.5 rounded-full transition-all duration-500 border',
-          isSafe ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
-        ]"
-      >
-        <span :class="['w-2 h-2 rounded-full', isSafe ? 'bg-emerald-400 shadow-[0_0_8px_oklch(0.64_0.17_145_/_0.5)]' : 'bg-rose-400 animate-pulse shadow-[0_0_12px_oklch(0.62_0.18_20_/_0.5)]']"></span>
-        CIRCUIT: {{ isSafe ? 'OPTIMAL' : 'TRIPPED' }}
+      <div class="flex items-center gap-2">
+        <div
+          :class="[
+            'flex items-center gap-2 text-[10px] font-black tracking-widest px-3 py-1.5 rounded-full transition-all duration-500 border',
+            isWsLive ? 'text-cyan-300 bg-cyan-500/10 border-cyan-500/30' : 'text-amber-300 bg-amber-500/10 border-amber-500/30'
+          ]"
+        >
+          <span :class="['w-2 h-2 rounded-full', isWsLive ? 'bg-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.55)]' : 'bg-amber-300 animate-pulse shadow-[0_0_10px_rgba(251,191,36,0.45)]']"></span>
+          {{ isWsLive ? 'WS LIVE' : 'WS STALE' }}
+        </div>
+        <div
+          :class="[
+            'flex items-center gap-2 text-[10px] font-black tracking-widest px-3 py-1.5 rounded-full transition-all duration-500 border',
+            isSafe ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+          ]"
+        >
+          <span :class="['w-2 h-2 rounded-full', isSafe ? 'bg-emerald-400 shadow-[0_0_8px_oklch(0.64_0.17_145_/_0.5)]' : 'bg-rose-400 animate-pulse shadow-[0_0_12px_oklch(0.62_0.18_20_/_0.5)]']"></span>
+          CIRCUIT: {{ isSafe ? 'OPTIMAL' : 'TRIPPED' }}
+        </div>
       </div>
     </div>
 

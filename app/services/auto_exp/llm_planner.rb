@@ -3,12 +3,12 @@
 module AutoExp
   class LlmPlanner
     def model
-      ENV['OLLAMA_MODEL'] || "qwen3.5:4b"
+      ENV['OLLAMA_MODEL'] || "llama3.2:3b"
     end
 
     SCHEMA = {
       "type" => "object",
-      "required" => %w[parameter value reason],
+      "required" => ["parameter", "value", "reason"],
       "properties" => {
         "parameter" => {
           "type" => "string",
@@ -24,10 +24,10 @@ module AutoExp
         "value" => { "type" => "number" },
         "reason" => { "type" => "string" }
       }
-    }.freeze
+    }
 
     def initialize
-      @client = Services::Ai::OllamaClient.instance
+      @client = Services::Ai::OpenaiClient.instance
     end
 
     def propose(results:, config:)
@@ -43,31 +43,31 @@ module AutoExp
     private
 
     def build_prompt(results, config)
-      history = (results || []).last(10)
-                              .map { |r| "pf=#{r[:profit_factor]} dd=#{r[:drawdown]} win_rate=#{r[:win_rate]}" }
-                              .join("\n")
+      history = (results || []).last(10).map do |r|
+        "pf=#{r[:profit_factor]} dd=#{r[:drawdown]} win_rate=#{r[:win_rate]}"
+      end.join("\n")
 
       <<~PROMPT
-        You are optimizing a trading strategy.
+      You are optimizing a trading strategy.
 
-        Goal:
-        Increase profit_factor while avoiding drawdown increases.
+      Goal:
+      Increase profit_factor while avoiding drawdown increases.
 
-        Recent experiment results:
-        #{history.empty? ? 'No previous results.' : history}
+      Recent experiment results:
+      #{history.empty? ? 'No previous results.' : history}
 
-        Current configuration:
-        #{config.to_yaml}
+      Current configuration:
+      #{config.to_yaml}
 
-        Suggest ONE parameter change. Ensure the value is within reasonable bounds:
-        - entry.range_expansion_threshold: 1.2..2.0
-        - entry.atr_rising_lookback: 1..5
-        - strike_selection.delta_target: 0.4..0.6
-        - exit.mfe_ratio_nifty: 0.2..0.6
-        - exit.initial_stop: 0.08..0.20
-        - risk.max_trades_per_day: 1..5
+      Suggest ONE parameter change. Ensure the value is within reasonable bounds:
+      - entry.range_expansion_threshold: 1.2..2.0
+      - entry.atr_rising_lookback: 1..5
+      - strike_selection.delta_target: 0.4..0.6
+      - exit.mfe_ratio_nifty: 0.2..0.6
+      - exit.initial_stop: 0.08..0.20
+      - risk.max_trades_per_day: 1..5
 
-        Output JSON only.
+      Output JSON only.
       PROMPT
     end
   end

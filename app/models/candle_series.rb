@@ -144,7 +144,10 @@ class CandleSeries
   def atr(period = 14)
     return nil if candles.size < period + 1
 
-    TechnicalAnalysis::Atr.calculate(hlc, period: period).first.atr
+    result = TechnicalAnalysis::Atr.calculate(hlc, period: period)
+    return nil if result.empty?
+
+    result.last.atr
   rescue TechnicalAnalysis::Validation::ValidationError, ArgumentError, TypeError => e
     Rails.logger.warn("[CandleSeries] ATR calculation failed: #{e.message}")
     nil

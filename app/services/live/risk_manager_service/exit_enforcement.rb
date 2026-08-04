@@ -63,7 +63,9 @@ module Live
 
         # pnl_pct is decimal (e.g. 0.05 for 5%), convert to percentage for EarlyTrendFailure.applicable?
         pnl_pct_value = pnl_pct.to_f * 100.0
-        return unless Live::EarlyTrendFailure.applicable?(pnl_pct_value, activation_profit_pct: activation_profit)
+        # Config stores activation_profit_pct as decimal (0.07 = 7%); applicable? expects percentage
+        activation_pct = activation_profit <= 1.0 ? activation_profit * 100.0 : activation_profit
+        return unless Live::EarlyTrendFailure.applicable?(pnl_pct_value, activation_profit_pct: activation_pct)
 
         # Build position_data struct for ETF check
         instrument = tracker.instrument || tracker.watchable&.instrument
@@ -149,7 +151,10 @@ module Live
         return unless tracker.trade_state == 'expansion' || tracker.be_set?
 
         # TrailingEngine expects PositionData from ActiveCache
-        position_data = @active_cache.get_by_tracker_id(tracker.id)
+        cache = active_cache
+        return unless cache
+
+        position_data = cache.get_by_tracker_id(tracker.id)
         return unless position_data
 
         # engine = @trailing_engine ||= Live::TrailingEngine.new
@@ -300,6 +305,29 @@ module Live
         end
       end
 
+      # EOD force-close: at or after market close, close all active positions.
+      # Ensures intraday positions never carry overnight regardless of time-stop bypass or other rules.
+      def enforce_eod_force_close(exit_engine:)
+        risk = risk_config
+        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
+        return unless market_close_time
+
+        now = Time.current
+        return unless now >= market_close_time
+
+        PositionTracker.active.find_each do |tracker|
+          next if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
+
+          reason = "MARKET_CLOSE (EOD #{market_close_time.strftime('%H:%M')} IST)"
+          exit_path = 'eod_force_close'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
+        rescue StandardError => e
+          Rails.logger.error("[RiskManager] enforce_eod_force_close error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        end
+      end
+
       def enforce_time_based_exit_for(tracker, exit_engine:)
         risk = risk_config
         exit_time = parse_time_hhmm(risk[:time_exit_hhmm] || '15:20')
@@ -380,10 +408,12 @@ module Live
       # Purpose: Move SL up-only to capture trend moves (direct trailing)
       def enforce_dynamic_trailing_stops(exit_engine:)
         engine = @trailing_engine ||= Live::TrailingEngine.new
+        cache = active_cache
+        return unless cache
 
         PositionTracker.active.find_each do |tracker|
           # TrailingEngine expects PositionData from ActiveCache
-          position_data = @active_cache.get_by_tracker_id(tracker.id)
+          position_data = cache.get_by_tracker_id(tracker.id)
           next unless position_data
 
           ltp = snapshot[:ltp]

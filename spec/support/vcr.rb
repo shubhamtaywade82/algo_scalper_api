@@ -40,50 +40,80 @@ VCR.configure do |config|
     'algo-trading-api.onrender.com'
   end
 
+  # Filter SENSITIVE_SERVICE_URL (onrender.com)
+  config.filter_sensitive_data('<SENSITIVE_SERVICE_URL>') do
+    'algo-trading-api.onrender.com'
+  end
+
   # Filter sensitive headers - more comprehensive approach
   # We use blocks that return the value to be replaced.
   # VCR will replace all occurrences of these values in the cassette.
   
   config.filter_sensitive_data('<ACCESS_TOKEN>') do |interaction|
-    headers = interaction.request.headers
-    vals = Array(headers['Access-Token'] || headers['access-token'] || headers['ACCESS_TOKEN'])
-    # We want to filter ANY value that looks like a token
-    vals.find { |v| v.to_s.length > 10 && v.to_s != '<ACCESS_TOKEN>' }
+    # Check various header formats for access-token
+    (interaction.request.headers['Access-Token'] ||
+      interaction.request.headers['access-token'] ||
+      interaction.request.headers['ACCESS_TOKEN'])&.first
+  end
+
+  # Masking Bearer tokens (even if not JWT)
+  config.filter_sensitive_data('<ACCESS_TOKEN>') do |interaction|
+    auth_header = (interaction.request.headers['Authorization'] || interaction.request.headers['authorization'])&.first
+    if auth_header && (match = auth_header.match(/^Bearer\s+(.+)$/))
+      match[1]
+    end
+  end
+
+  # Masking JWT tokens (starting with eyJ) in headers and bodies
+  config.filter_sensitive_data('<ACCESS_TOKEN>') do |interaction|
+    jwt_regex = /eyJ[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+/
+    
+    # Check Authorization header for JWT
+    auth_header = (interaction.request.headers['Authorization'] || interaction.request.headers['authorization'])&.first
+    if auth_header && (match = auth_header.match(jwt_regex))
+      match[0]
+    # Check body for any JWT
+    elsif (match = interaction.request.body&.match(jwt_regex))
+      match[0]
+    elsif (match = interaction.response.body&.match(jwt_regex))
+      match[0]
+    end
   end
 
   config.filter_sensitive_data('<CLIENT_ID>') do |interaction|
-    headers = interaction.request.headers
-    vals = Array(headers['Client-Id'] || headers['client-id'] || headers['CLIENT_ID'])
-    vals.find { |v| v.to_s.length > 3 && v.to_s != '<CLIENT_ID>' }
+    # Check various header formats for client-id
+    (interaction.request.headers['Client-Id'] ||
+      interaction.request.headers['client-id'] ||
+      interaction.request.headers['CLIENT_ID'])&.first
   end
 
-  config.filter_sensitive_data('<AUTHORIZATION>') do |interaction|
-    headers = interaction.request.headers
-    vals = Array(headers['Authorization'] || headers['authorization'] || headers['AUTHORIZATION'])
-    vals.find { |v| v.to_s.length > 10 && v.to_s != '<AUTHORIZATION>' }
-  end
-
-  # Comprehensive sensitive data filtering for BOTH request and response bodies
-  # This acts as an "automatic masking facility" that doesn't rely solely on ENV variables
+  # Filter sensitive data from request body ONLY when present
+  # Preserve the entire request body structure for proper VCR matching
   config.before_record do |interaction|
-    [interaction.request, interaction.response].each do |obj|
-      next unless obj.body.is_a?(String) && !obj.body.empty?
-      
-      begin
-        # Perform replacements on a copy of the body
-        filtered_body = obj.body.dup
-        
-        # 1. Targeted JSON key scrubbing
-        if filtered_body.start_with?('{', '[')
-          # Replace access_token value
-          filtered_body.gsub!(/"access_token"\s*:\s*"[^"]*"/, '"access_token":"<ACCESS_TOKEN>"')
-          
-          # Replace client_id/dhanClientId values
-          filtered_body.gsub!(/"client_id"\s*:\s*"[^"]*"/, '"client_id":"<CLIENT_ID>"')
-          filtered_body.gsub!(/"dhanClientId"\s*:\s*"[^"]*"/, '"dhanClientId":"<CLIENT_ID>"')
-          
-          # Replace Authorization header in JSON if present
-          filtered_body.gsub!(/"Authorization"\s*:\s*"Bearer\s+[^"]*"/i, '"Authorization":"Bearer <AUTHORIZATION>"')
+    body = interaction.request.body
+
+    # Only filter if body contains sensitive data, otherwise preserve as-is
+    if body.is_a?(String)
+      # Only filter if access_token or client_id are present in the body
+      if body.include?('access_token') || body.include?('client_id')
+        filtered_body = body.dup
+        # Replace access_token value while preserving the JSON structure
+        if body.include?('access_token')
+          filtered_body = filtered_body.gsub(/"access_token"\s*:\s*"[^"]*"/,
+                                             '"access_token":"<ACCESS_TOKEN>"')
+        end
+        if body.include?('client_id')
+          filtered_body = filtered_body.gsub(/"client_id"\s*:\s*"[^"]*"/,
+                                             '"client_id":"<CLIENT_ID>"')
+        end
+        interaction.request.body = filtered_body
+      end
+    elsif body.is_a?(Hash)
+      # Filter hash body only if it contains sensitive keys
+      if body.key?('access_token') || body.key?(:access_token) || body.key?('client_id') || body.key?(:client_id)
+        filtered_body = body.dup
+        if filtered_body['access_token'] || filtered_body[:access_token]
+          filtered_body['access_token'] = '<ACCESS_TOKEN>'
         end
         
         # 2. Pattern-based scrubbing (Automatic Facility)

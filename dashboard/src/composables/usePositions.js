@@ -33,12 +33,6 @@ export function usePositions() {
     open.value[idx] = { ...open.value[idx], ...update }
   }
 
-  function applyPnlStale(staleEvent) {
-    const idx = open.value.findIndex(p => Number(p.id) === Number(staleEvent.id))
-    if (idx === -1) return
-    open.value[idx] = { ...open.value[idx], ltp_stale: true }
-  }
-
   function clearStaleTimer() {
     if (staleTimer) {
       clearTimeout(staleTimer)
@@ -95,9 +89,6 @@ export function usePositions() {
       received(data) {
         if (data.type === 'pnl_update') {
           applyPnlUpdate(data)
-          markFresh()
-        } else if (data.type === 'pnl_stale') {
-          applyPnlStale(data)
           markFresh()
         }
       }

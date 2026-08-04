@@ -44,7 +44,7 @@ module Orders
       return (@entry_price * 0.88).round(2) if profit < 0.10
 
       # State 3 — Gamma expansion (Loosen trailing to avoid premature exit)
-      if profit > cfg[:gamma_trigger] && acceleration.positive?
+      if profit > cfg[:gamma_trigger] && acceleration > 0
         return (@highest * cfg[:gamma_trail]).round(2)
       end
 
@@ -88,7 +88,7 @@ module Orders
         # highest_price is a store_accessor on meta
         if @position.respond_to?(:update_columns)
           meta = (@position.meta || {}).merge('highest_price' => @highest)
-          @position.update_columns(meta: meta) # rubocop:disable Rails/SkipsModelValidations
+          @position.update_columns(meta: meta)
         elsif @position.respond_to?(:meta=)
           @position.meta = (@position.meta || {}).merge('highest_price' => @highest)
         end

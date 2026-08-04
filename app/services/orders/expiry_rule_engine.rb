@@ -11,7 +11,7 @@ module Orders
 
       now = Time.current.in_time_zone('Asia/Kolkata')
       # after 15:10 force exit
-      (now.hour == 15 && now.min >= 10) || now.hour > 15
+      now.hour == 15 && now.min >= 10 || now.hour > 15
     end
 
     def tighten_trailing?
@@ -31,18 +31,19 @@ module Orders
       # FINNIFTY: Tuesday
       # MIDCPNIFTY: Monday
       # SENSEX: Friday
-
+      
       today = Time.current.in_time_zone('Asia/Kolkata').wday
-
-      if @symbol.include?('SENSEX') || @symbol.include?('BANKEX')
+      
+      case
+      when @symbol.include?('SENSEX') || @symbol.include?('BANKEX')
         today == 5 # Friday
-      elsif @symbol.include?('NIFTY') && @symbol.exclude?('BANK') && @symbol.exclude?('FIN') && @symbol.exclude?('MIDCP')
+      when @symbol.include?('NIFTY') && !@symbol.include?('BANK') && !@symbol.include?('FIN') && !@symbol.include?('MIDCP')
         today == 4 # Thursday
-      elsif @symbol.include?('BANKNIFTY')
+      when @symbol.include?('BANKNIFTY')
         today == 3 # Wednesday
-      elsif @symbol.include?('FINNIFTY')
+      when @symbol.include?('FINNIFTY')
         today == 2 # Tuesday
-      elsif @symbol.include?('MIDCPNIFTY')
+      when @symbol.include?('MIDCPNIFTY')
         today == 1 # Monday
       else
         false

@@ -106,15 +106,16 @@ Rails.logger.error(
 
         if entry_metadata&.dig(:entry_contract).to_s == SUPERTREND_CONTRACT
           # Bypass BOS gate for Supertrend-only mode
+          # Use option premium domain values for synthetic BOS context.
           bos_context = {
             confirmed_at: Time.current,
             confirmed_index: -1,
             direction: direction,
             bos_id: entry_metadata[:bos_id],
             timeframe: entry_metadata[:bos_timeframe],
-            origin_swing: { price: entry_metadata[:bos_origin_price] },
-            broken_swing: { price: entry_metadata[:bos_level] },
-            entry_underlying_price: ltp.to_f
+            origin_swing: { price: ltp.to_f },
+            broken_swing: { price: ltp.to_f },
+            entry_underlying_price: entry_metadata[:entry_underlying_price]
           }
         else
           bos_context = enforce_structure_entry_gate(
@@ -126,6 +127,16 @@ Rails.logger.error(
           )
         end
         return false unless bos_context
+
+        # ===== Cooldown check (prevent overtrading) =====
+        symbol_name = pick[:symbol]
+        cooldown_sec = index_cfg[:cooldown_sec].to_i
+        if cooldown_sec.positive? && cooldown_active?(symbol_name, cooldown_sec)
+          Rails.logger.info(
+            "[EntryGuard] Entry blocked for #{symbol_name}: Reentry cooldown active (#{cooldown_sec}s)"
+          )
+          return false
+        end
 
         # ===== Unified instrument profile + capital cap sizing (hard rules) =====
         symbol = index_cfg[:key].to_s.upcase
@@ -579,11 +590,22 @@ Rails.logger.error(
       end
 
       # Check if daily loss/profit limits allow entry (NOT trade frequency - we don't cap trade count)
+      # EXCEPT for institutional rule of max 3 trades per day for index options.
       def daily_limits_allow_entry?(index_cfg:)
         return true unless daily_limits_enabled?
 
         daily_limits = Live::DailyLimits.new
         result = daily_limits.can_trade?(index_key: index_cfg[:key])
+
+        # Institutional rule: max 3 trades per day for NIFTY/SENSEX/BANKNIFTY
+        symbol = index_cfg[:key].to_s.upcase
+        if %w[NIFTY SENSEX BANKNIFTY].include?(symbol)
+          trades_today = daily_limits.get_daily_trades(symbol)
+          if trades_today >= 3
+            Rails.logger.warn("[EntryGuard] Institutional trade limit reached for #{symbol}: #{trades_today} trades today")
+            return false
+          end
+        end
 
         unless result[:allowed]
           reason = result[:reason]
@@ -734,12 +756,67 @@ Rails.logger.error(
         )
       end
 
-      def build_client_order_id(index_cfg:, pick:)
-        "#{index_cfg[:key]}_#{pick[:symbol]}_#{Time.current.to_i}"
+      def apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price:, quantity:)
+        return unless bos_context
+
+        contract = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_contract].to_s : ''
+        if contract == SUPERTREND_CONTRACT
+          # Supertrend direct entries do not have BOS structure risk; derive premium risk from configured SL %.
+          sl_decimal = supertrend_sl_decimal
+          premium_r = entry_price.to_f * sl_decimal
+          entry_risk_rupees = premium_r * quantity.to_i
+          origin_price = entry_price.to_f
+          entry_underlying_price = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_underlying_price] : nil
+        else
+          origin_price = bos_context[:origin_swing][:price].to_f
+          entry_underlying_price = bos_context[:entry_underlying_price]
+          reference_price = entry_underlying_price || entry_price
+          entry_risk_rupees = (reference_price.to_f - origin_price).abs * quantity.to_i
+          premium_r = entry_risk_rupees / quantity.to_f
+        end
+        premium_stop = entry_price.to_f - premium_r
+        premium_target = entry_price.to_f + premium_r
+
+        meta_hash[:structure_invalidation_price] = origin_price
+        meta_hash[:entry_premium] = entry_price.to_f
+        meta_hash[:entry_risk_rupees] = entry_risk_rupees
+        meta_hash[:premium_stop_price] = premium_stop
+        meta_hash[:initial_sl_pct] = (premium_r / entry_price.to_f * 100.0).round(2)
+        meta_hash[:premium_target_price] = premium_target
+        meta_hash[:entry_underlying_price] = entry_underlying_price if entry_underlying_price
+        meta_hash[:bos_confirmed_at] = bos_context[:confirmed_at]&.iso8601
+        meta_hash[:bos_origin_index] = bos_context[:origin_swing][:index]
+        meta_hash[:bos_timeframe] = bos_context[:timeframe]
+        meta_hash[:bos_direction] = bos_context[:direction]
+        meta_hash[:bos_id] = bos_context[:bos_id]
+
+        if entry_metadata.is_a?(Hash)
+          meta_hash[:bos_age_at_entry] = entry_metadata[:bos_age_at_entry] if entry_metadata.key?(:bos_age_at_entry)
+          meta_hash[:retrace_pct] = entry_metadata[:retrace_pct] if entry_metadata.key?(:retrace_pct)
+          meta_hash[:pullback_candles] = entry_metadata[:pullback_candles] if entry_metadata.key?(:pullback_candles)
+          meta_hash[:entry_distance_r] = entry_metadata[:entry_distance_r] if entry_metadata.key?(:entry_distance_r)
+          meta_hash[:continuation_body_position] =
+            entry_metadata[:continuation_body_position] if entry_metadata.key?(:continuation_body_position)
+          meta_hash[:time_from_bos_to_entry] =
+            entry_metadata[:time_from_bos_to_entry] if entry_metadata.key?(:time_from_bos_to_entry)
+          meta_hash[:entry_tf] = entry_metadata[:entry_tf] if entry_metadata.key?(:entry_tf)
+          meta_hash[:htf_tf] = entry_metadata[:htf_tf] if entry_metadata.key?(:htf_tf)
+        end
       end
 
-      def find_instrument(index_cfg)
-        Instrument.find_by(security_id: index_cfg[:sid], segment: index_cfg[:segment])
+      def supertrend_sl_decimal
+        value = AlgoConfig.fetch.dig(:risk, :sl_pct).to_f
+        return 0.12 if value <= 0
+
+        value
+      rescue StandardError
+        0.12
+      end
+
+      def bos_consumed?(index_cfg:, bos_id:)
+        Rails.cache.read(bos_consumed_key(index_cfg: index_cfg, bos_id: bos_id)) == true
+      rescue StandardError
+        false
       end
 
       def cooldown_active_for_index?(index_key, cooldown)

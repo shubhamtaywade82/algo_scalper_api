@@ -42,38 +42,36 @@ module Orders
 
     def config
       symbol = @position.symbol.to_s.upcase
-      risk_cfg = Positions::ExitConfigResolver.for(@position)[:risk] || {}
-      inst_cfg = risk_cfg[:institutional_trailing] || {}
-
       if symbol.include?('SENSEX')
-        ratio = inst_cfg.dig(:sensex, :trailing_distance) || CONFIG[:sensex][:retrace_ratio]
-        { retrace_ratio: ratio.to_f }
+        CONFIG[:sensex]
       else
-        ratio = inst_cfg.dig(:nifty, :trailing_distance) || CONFIG[:nifty][:retrace_ratio]
-        { retrace_ratio: ratio.to_f }
+        CONFIG[:nifty]
       end
     end
 
     def update_extremes
       updated = false
-      lowest = @position.lowest_price.to_f
-      lowest = @entry_price if lowest.zero?
+      meta = (@position.meta || {}).dup
 
       if @ltp > @highest
         @highest = @ltp
+        meta['highest_price'] = @highest
         updated = true
       end
 
+      # Track lowest_price as well (for analytics/future use)
+      lowest = (meta['lowest_price'] || @entry_price).to_f
       if @ltp < lowest
-        lowest = @ltp
+        meta['lowest_price'] = @ltp
         updated = true
       end
 
       if updated
-        @position.update!(
-          highest_price: @highest,
-          lowest_price: lowest
-        )
+        if @position.respond_to?(:update_columns)
+          @position.update_columns(meta: meta)
+        elsif @position.respond_to?(:meta=)
+          @position.meta = meta
+        end
       end
     end
   end

@@ -6,29 +6,13 @@ module Orders
     class << self
       def place_buy(symbol:, qty:, segment:, security_id:, ltp: nil)
         Orders.config.gateway.place_market(
-          side: "buy",
+          side: 'buy',
           segment: segment,
           security_id: security_id,
           qty: qty,
           meta: {
             symbol: symbol,
             ltp: ltp
-          }
-        )
-      end
-
-      # Places an IOC limit order (fills immediately or cancels).
-      # Used as fallback when market orders fail on thin books.
-      def place_ioc_limit(symbol:, qty:, segment:, security_id:, price:, side: "buy")
-        Orders.config.gateway.place_ioc_limit(
-          side: side,
-          segment: segment,
-          security_id: security_id,
-          qty: qty,
-          price: price,
-          meta: {
-            symbol: symbol,
-            client_order_id: "IOC-#{security_id}-#{Time.current.to_i}"
           }
         )
       end
@@ -47,18 +31,6 @@ module Orders
         result[:success] == true
       rescue StandardError => e
         Rails.logger.error("[Orders::Executor] Failed to update SL for #{tracker&.order_no}: #{e.message}")
-        false
-      end
-
-      def exit_market!(tracker:, reason: 'manual_exit')
-        return false unless tracker&.active?
-
-        Rails.logger.info("[Orders::Executor] EXIT_MARKET triggered for #{tracker.symbol} (ID: #{tracker.id}). Reason: #{reason}")
-
-        # Call the gateway to exit the position
-        Orders.config.gateway.exit_market(tracker: tracker)
-      rescue StandardError => e
-        Rails.logger.error("[Orders::Executor] Failed to exit market for #{tracker&.order_no}: #{e.message}")
         false
       end
     end

@@ -29,12 +29,27 @@ module Orders
       { success: false, error: e.message, paper: true }
     end
 
+    # Returns unified shape: { cash:, equity:, mtm:, exposure:, utilized:, margin: }
     def wallet_snapshot
-      balance = AlgoConfig.fetch.dig(:paper_trading, :balance) || 100_000
-      { cash: balance, equity: balance, mtm: 0, exposure: 0 }
+      base = (AlgoConfig.fetch.dig(:paper_trading, :balance) || 100_000).to_f
+
+      # Realized P&L: today's closed paper positions only (daily paper session)
+      today = Time.zone.today
+      realized = PositionTracker.paper.exited
+                                .where(exited_at: today.all_day)
+                                .sum(:last_pnl_rupees).to_f
+
+      # Unrealized P&L: active positions read from Redis cache for live values
+      unrealized = PositionTracker.paper.active.sum { |t| t.current_pnl_rupees.to_f }
+
+      cash   = (base + realized).round(2)
+      mtm    = unrealized.round(2)
+      equity = (cash + mtm).round(2)
+
+      { cash: cash, equity: equity, mtm: mtm, exposure: 0, utilized: 0, margin: 0 }
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] wallet_snapshot failed: #{e.class} - #{e.message}")
-      { cash: 100_000, equity: 100_000, mtm: 0, exposure: 0 } # Return default on error
+      { cash: 100_000, equity: 100_000, mtm: 0, exposure: 0, utilized: 0, margin: 0 }
     end
 
     def cancel_order(order_id)
@@ -42,6 +57,30 @@ module Orders
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] cancel_order failed for #{order_id}: #{e.class} - #{e.message}")
       { success: false, order_id: order_id, status: :failed, error: e.message, paper: true }
+    end
+
+    # Returns unified shape: { qty:, avg_price:, upnl:, rpnl:, last_ltp:, product_type:, exchange_segment:, position_type:, trading_symbol:, status: }
+    def position(segment:, security_id:)
+      tracker = PositionTracker.paper.active.find_by(segment: segment, security_id: security_id.to_s)
+      return nil unless tracker
+
+      is_long = tracker.side.to_s.upcase.start_with?('LONG') || tracker.side.to_s.upcase == 'BUY'
+      position_type = is_long ? 'LONG' : 'SHORT'
+      ltp = Live::TickQuery.for_security(segment: segment, security_id: security_id.to_s)&.ltp
+      upnl = BigDecimal((tracker.current_pnl_rupees || 0).to_s)
+
+      {
+        qty: tracker.quantity,
+        avg_price: tracker.avg_price.to_f,
+        upnl: upnl,
+        rpnl: BigDecimal(0),
+        last_ltp: ltp ? BigDecimal(ltp.to_s) : BigDecimal((tracker.avg_price || 0).to_s),
+        product_type: nil,
+        exchange_segment: tracker.segment,
+        position_type: position_type,
+        trading_symbol: tracker.symbol,
+        status: tracker.status
+      }
     end
   end
 end

@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require 'English'
 require "json"
 
 module AutoExp
@@ -8,21 +7,18 @@ module AutoExp
     SCRIPT = Rails.root.join("scripts/run_backtest.rb")
 
     def run
-      output, status = Open3.capture2e(
-        Rails.root.join('bin/rails').to_s,
-        'runner',
-        SCRIPT.to_s,
-        chdir: Rails.root.to_s
-      )
+      # Run the script using rails runner to ensure environment is loaded
+      # Capture stdout for the JSON metrics and ignore stderr (or handle separately)
+      output = `rails runner #{SCRIPT}`
 
-      unless $CHILD_STATUS.success? # rubocop:disable Style/GlobalVars
-        Rails.logger.error("[AutoExp] Backtest script failed with status #{$CHILD_STATUS.exitstatus}") # rubocop:disable Style/GlobalVars
+      unless $?.success?
+        Rails.logger.error("[AutoExp] Backtest script failed with status #{$?.exitstatus}")
         raise "Backtest failed"
       end
 
       # Extract JSON from output (it might contain logs from Rails boot)
       json_match = output.match(/\{"profit_factor".*\}/m)
-
+      
       unless json_match
         Rails.logger.error("[AutoExp] No JSON found in backtest output: #{output}")
         raise "No JSON metrics found in backtest output"

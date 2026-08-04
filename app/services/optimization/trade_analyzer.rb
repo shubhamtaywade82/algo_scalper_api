@@ -9,8 +9,8 @@ module Optimization
 
         entry_price = tracker.entry_price.to_f
         exit_price = tracker.exit_price.to_f
-        highest_price = tracker.highest_price.to_f
-        lowest_price = tracker.lowest_price.to_f
+        highest_price = tracker.meta['highest_price'].to_f
+        lowest_price = tracker.meta['lowest_price'].to_f
 
         # Fallbacks if highest/lowest were not captured (e.g. fast exit)
         highest_price = [entry_price, exit_price, highest_price].max

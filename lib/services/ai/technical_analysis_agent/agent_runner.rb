@@ -1,10 +1,14 @@
 # frozen_string_literal: true
 
+require 'timeout'
+
 module Services
   module Ai
     class TechnicalAnalysisAgent
       # Agent Runner: Main orchestration loop for intent-aware, micro-step ReAct agent
       module AgentRunner
+        INDICATOR_VALUE_KEYS = %w[value signal direction].freeze
+
         def run_agent_loop(query:, stream: false, &)
           # Step 1: Resolve intent (LLM - small)
           intent_data = resolve_intent(query)
@@ -84,7 +88,7 @@ module Services
 
           # Step 7: Final LLM reasoning (compact facts only)
           yield("📝 [Agent] Synthesizing final analysis...\n") if block_given?
-          final_analysis = synthesize_analysis(context, stream: stream, &)
+          final_analysis = synthesize_analysis(context, query: query, stream: stream, &)
 
           {
             analysis: final_analysis,
@@ -137,7 +141,7 @@ module Services
               end
 
               aggregated[timeframe][name] = if value.is_a?(Hash)
-                                              value.select { |k, _v| %w[value signal direction].include?(k.to_s) }
+                                              value.select { |k, _v| INDICATOR_VALUE_KEYS.include?(k.to_s) }
                                             else
                                               value
                                             end
@@ -152,25 +156,37 @@ module Services
           strikes.first(5) # Max 5 strikes
         end
 
-        def synthesize_analysis(context, stream: false, &)
+        def synthesize_analysis(context, query:, stream: false, &)
           # Build compact prompt with facts only
           facts_prompt = build_facts_prompt(context)
+          synthesis_timeout = ENV.fetch('AI_AGENT_SYNTHESIS_TIMEOUT', '25').to_i
 
-          model = if @client.respond_to?(:preferred_text_model)
-                    @client.preferred_text_model(default: 'llama3.1:8b')
+          model = if @client.provider == :ollama
+                    if @client.respond_to?(:preferred_text_model)
+                      @client.preferred_text_model(default: 'llama3.1:8b')
+                    else
+                      ENV['OLLAMA_MODEL'] || @client.selected_model || 'llama3.1:8b'
+                    end
                   else
                     ENV['OLLAMA_MODEL'] || @client.selected_model || 'llama3.1:8b'
                   end
 
           messages = [
-            { role: 'system', content: build_synthesis_system_prompt },
+            { role: 'system', content: build_synthesis_prompt_for_query(query, context) },
             { role: 'user', content: facts_prompt }
           ]
 
           if stream && block_given?
-            @client.chat_stream(messages: messages, model: model, temperature: 0.3, &)
-          else
-            @client.chat(messages: messages, model: model, temperature: 0.3)
+            streamed = Timeout.timeout(synthesis_timeout) do
+              @client.chat_stream(messages: messages, model: model, temperature: 0.2, &)
+            end
+            return streamed if streamed.present? && !invalid_llm_output?(streamed)
+
+            return build_fallback_analysis(context)
+          end
+
+          response = Timeout.timeout(synthesis_timeout) do
+            @client.chat(messages: messages, model: model, temperature: 0.2)
           end
           return response if response.present? && !invalid_llm_output?(response)
 
@@ -251,11 +267,11 @@ module Services
 
           lines = []
           lines << "Indicator Analysis (#{instrument_name})"
-          lines << "- LTP: #{ltp ? ltp.round(2) : 'N/A'}"
-          lines << "- 15m RSI: #{rsi ? rsi.to_f.round(2) : 'N/A'}" if %w[RSI TREND indicators].include?(requested)
-          lines << "- 15m ADX: #{adx ? adx.to_f.round(2) : 'N/A'} (trend #{strength})"
+          lines << "- LTP: #{ltp ? format('%.2f', ltp) : 'N/A'}"
+          lines << "- 15m RSI: #{rsi ? format('%.2f', rsi.to_f) : 'N/A'}" if %w[RSI TREND indicators].include?(requested)
+          lines << "- 15m ADX: #{adx ? format('%.2f', adx.to_f) : 'N/A'} (trend #{strength})"
           lines << "- 15m Supertrend: #{supertrend || 'N/A'}"
-          lines << "- 15m MACD hist: #{macd_hist ? macd_hist.to_f.round(2) : 'N/A'}"
+          lines << "- 15m MACD hist: #{macd_hist ? format('%.2f', macd_hist.to_f) : 'N/A'}"
           lines << "- Bias: #{bias}"
           lines << "- Action: use this as directional filter only; options strike planning requires an explicit options query."
           lines.join("\n")

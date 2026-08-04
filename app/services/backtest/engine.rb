@@ -1,6 +1,43 @@
 # frozen_string_literal: true
 
 module Backtest
+  # Calculates performance statistics from trades
+  class Metrics
+    def initialize(trades:)
+      @trades = Array(trades)
+    end
+
+    def win_rate
+      return 0.0 if @trades.empty?
+      wins = @trades.count { |t| t[:pnl].positive? }
+      wins.to_f / @trades.size
+    end
+
+    def profit_factor
+      return 0.0 if @trades.empty?
+      gains = @trades.select { |t| t[:pnl].positive? }.sum { |t| t[:pnl] }
+      losses = @trades.select { |t| t[:pnl].negative? }.sum { |t| t[:pnl].abs }
+      
+      return gains.to_f if losses.zero?
+      gains / losses
+    end
+
+    def max_drawdown
+      return 0.0 if @trades.empty?
+      equity = 0.0
+      peak = 0.0
+      dd = 0.0
+
+      @trades.each do |t|
+        equity += t[:pnl]
+        peak = [peak, equity].max
+        dd = [dd, peak - equity].max
+      end
+
+      dd
+    end
+  end
+
   # Main backtest engine runner
   class Engine
     def initialize(data:, strategy:)
@@ -37,12 +74,12 @@ module Backtest
     end
 
     def print
-      Rails.logger.debug "\n--- Backtest Report ---"
-      Rails.logger.debug "Trades: #{@trades.size}"
-      Rails.logger.debug "Win Rate: #{(@metrics.win_rate * 100).round(2)}%"
-      Rails.logger.debug "Profit Factor: #{@metrics.profit_factor.round(2)}"
-      Rails.logger.debug "Max Drawdown: ₹#{@metrics.max_drawdown.round(2)}"
-      Rails.logger.debug "-----------------------\n"
+      puts "\n--- Backtest Report ---"
+      puts "Trades: #{@trades.size}"
+      puts "Win Rate: #{(@metrics.win_rate * 100).round(2)}%"
+      puts "Profit Factor: #{@metrics.profit_factor.round(2)}"
+      puts "Max Drawdown: ₹#{@metrics.max_drawdown.round(2)}"
+      puts "-----------------------\n"
     end
   end
 end

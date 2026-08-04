@@ -21,7 +21,7 @@ module Orchestration
       # 2. Entry Filter (Structure + Liquidity + Volatility)
       filter = Entries::EntryFilterEngine.new(series: series, symbol: @symbol)
       direction = state[:trend] == :bullish ? :bullish : :bearish
-
+      
       unless filter.valid_entry?(direction: direction)
         Rails.logger.debug("[StrategyRunner] #{@symbol} blocked by EntryFilterEngine")
         return
@@ -35,8 +35,8 @@ module Orchestration
         series: series,
         direction: direction
       )
-
-      strike_result = Options::ChainAnalyzer.pick_strikes_with_qualification(
+      
+      picks = Options::ChainAnalyzer.pick_strikes_with_qualification(
         index_cfg: @index_cfg,
         direction: direction,
         permission: :scale_ready, # Default permission for runner
@@ -44,13 +44,12 @@ module Orchestration
         momentum_score: momentum_result.score
       )
 
-      if strike_result.picks.blank?
-        reason = strike_result.failure_reason.presence || 'no qualifying strikes'
-        Rails.logger.info("[StrategyRunner] #{@symbol} no qualifying strikes: #{reason}")
+      if picks.blank?
+        Rails.logger.info("[StrategyRunner] #{@symbol} no qualifying strikes found")
         return
       end
 
-      pick = strike_result.picks.first
+      pick = picks.first
       Rails.logger.info("[StrategyRunner] #{@symbol} Selected Strike: #{pick[:symbol]} (Score: #{pick[:score]})")
 
       # 4. Execution (Market Order)

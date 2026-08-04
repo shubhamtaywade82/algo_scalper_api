@@ -22,13 +22,13 @@ module Options
 
       # 1. Delta Score (0.35 weight)
       d_score = delta_score(option[:delta])
-
+      
       # 2. Liquidity Score (0.30 weight)
       l_score = liquidity_score(option, history)
-
+      
       # 3. Distance Score (0.20 weight)
       dist_score = distance_score(option[:strike])
-
+      
       # 4. Flow Score (0.15 weight)
       f_score = flow_score_normalized(flow_score)
 
@@ -53,15 +53,15 @@ module Options
     def liquidity_score(option, history)
       avg_vol = history&.dig(:avg_volume)&.to_f || option[:volume].to_f
       avg_oi = history&.dig(:avg_oi)&.to_f || option[:oi].to_f
-
+      
       # Ratio calculation as per institutional model
       volume_ratio = avg_vol.positive? ? option[:volume].to_f / avg_vol : 1.0
       oi_ratio = avg_oi.positive? ? option[:oi].to_f / avg_oi : 1.0
-
+      
       # Normalize ratios (cap at 2.0 to prevent outlier dominance)
       v_score = [volume_ratio / 2.0, 1.0].min
       o_score = [oi_ratio / 2.0, 1.0].min
-
+      
       # spread_score = 1 - s.spread
       spread = option[:spread].to_f
       s_score = [1.0 - (spread * 10.0), 0.0].max # High penalty for > 10% spread

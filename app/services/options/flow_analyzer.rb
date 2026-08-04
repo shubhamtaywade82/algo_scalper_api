@@ -11,8 +11,6 @@ module Options
       @chain_data = chain_data # { last_price: float, oc: { strike => { ce: {}, pe: {} } } }
     end
 
-    OPTION_TYPES = %w[ce pe].freeze
-
     # Identifies strikes with strong institutional flow (long buildup)
     # @return [Hash] { 'ce' => [strikes], 'pe' => [strikes] }
     def strong_flow_strikes
@@ -20,7 +18,7 @@ module Options
       return result unless @chain_data && @chain_data[:oc]
 
       @chain_data[:oc].each do |strike, data|
-        OPTION_TYPES.each do |type|
+        %w[ce pe].each do |type|
           option = data[type]
           next unless option && option['oi'].to_i.positive?
 
@@ -49,7 +47,7 @@ module Options
     def calculate_flow_score(strike, type, option)
       # Get historical context from cache
       history = get_strike_history(strike, type)
-
+      
       # Default scores if no history
       return 1.0 if history.blank?
 
@@ -63,10 +61,10 @@ module Options
 
       # 1. OI Change (50% weight)
       oi_change_pct = prev_oi.positive? ? (current_oi - prev_oi) / prev_oi : 0.0
-
+      
       # 2. Volume Spike (30% weight)
       vol_ratio = avg_volume.positive? ? current_volume / avg_volume : 1.0
-
+      
       # 3. Price Change (20% weight)
       price_change_pct = prev_price.positive? ? (current_price - prev_price) / prev_price : 0.0
 
@@ -74,7 +72,7 @@ module Options
       score = (oi_change_pct * 0.5) + (vol_ratio * 0.3) + (price_change_pct * 0.2)
 
       # Record current state for next cycle
-      record_strike_state(strike, type, option, history: history)
+      record_strike_state(strike, type, option)
 
       score
     end
@@ -87,7 +85,7 @@ module Options
       Rails.cache.read(cache_key(strike, type))
     end
 
-    def record_strike_state(strike, type, option, history: nil)
+    def record_strike_state(strike, type, option)
       current_state = {
         oi: option['oi'],
         ltp: option['last_price'],
@@ -96,19 +94,19 @@ module Options
       }
 
       # Update rolling averages (simple 5-period for responsiveness)
-      history ||= get_strike_history(strike, type) || {}
-
+      history = get_strike_history(strike, type) || {}
+      
       prev_volumes = history[:volume_history] || []
       prev_volumes << option['volume'].to_f
       prev_volumes = prev_volumes.last(5)
-
+      
       prev_ois = history[:oi_history] || []
       prev_ois << option['oi'].to_f
       prev_ois = prev_ois.last(5)
-
+      
       current_state[:volume_history] = prev_volumes
       current_state[:avg_volume] = prev_volumes.sum / prev_volumes.size.to_f
-
+      
       current_state[:oi_history] = prev_ois
       current_state[:avg_oi] = prev_ois.sum / prev_ois.size.to_f
 

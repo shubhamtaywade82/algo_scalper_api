@@ -25,20 +25,22 @@ class InstitutionalOptionsStrategy
     return :none if @series.candles.size < 21
 
     # 3. Apply Institutional Entry Filter (Market Structure + Expansion + Volatility)
-    if @in_position
+    if !@in_position
+      # Check for Bullish entry (Institutional alignment)
+      if @filter.valid_entry?(direction: :bullish)
+        @in_position = true
+        @entry_price = tick[:index_price]
+        return :buy
+      end
+    else
       # 4. Institutional Exit (MFE-style underlying logic)
       profit_pct = (tick[:index_price] - @entry_price) / @entry_price
-
+      
       # Stop Loss: -0.3% index move | Take Profit: +0.8% index move
       if profit_pct < -0.003 || profit_pct > 0.008
         @in_position = false
         return :exit
       end
-    elsif @filter.valid_entry?(direction: :bullish)
-      # Check for Bullish entry (Institutional alignment)
-      @in_position = true
-        @entry_price = tick[:index_price]
-        return :buy
     end
 
     :none
@@ -48,10 +50,10 @@ end
 class NiftySensexBacktest
   def self.run(symbol:, days: 30, interval: '5')
     puts "\n=== INSTITUTIONAL BACKTEST: #{symbol} ==="
-
+    
     loader = Backtest::ApiLoader.new(symbol: symbol, days: days, interval: interval)
     data = loader.load
-
+    
     if data.empty?
       puts "❌ No data loaded."
       return

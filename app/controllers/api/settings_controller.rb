@@ -33,10 +33,9 @@ module Api
     # Only top-level keys in PERMITTED_SETTINGS_KEYS are accepted.
     # When SETTINGS_UPDATE_TOKEN is set, PATCH requires header X-Settings-Update-Token or param token.
     def update_bulk
-      # rubocop:disable Rails/StrongParametersExpect -- dynamic allowlist from PERMITTED_SETTINGS_KEYS
-      permitted = params.require(:settings).permit(PERMITTED_SETTINGS_KEYS.index_with { {} })
-      # rubocop:enable Rails/StrongParametersExpect
-      new_config = permitted.to_h.deep_symbolize_keys
+      raw = params.require(:settings).permit!.to_h
+      allowed_keys = PERMITTED_SETTINGS_KEYS.map(&:to_s)
+      new_config = raw.slice(*allowed_keys).deep_symbolize_keys
 
       if new_config.blank?
         render json: { success: false, error: 'No permitted settings keys provided' }, status: :unprocessable_content
