@@ -406,6 +406,61 @@ module Live
       @logger.error("[PnlUpdater] check_and_notify_pnl_milestones failed: #{e.class} - #{e.message}")
     end
 
+    # Broadcast live PnL for a single position to the "positions" ActionCable channel.
+    # pnl_pct is derived fresh from (ltp - entry) / entry * 100 to avoid ambiguity
+    # around how callers store pnl_pct (decimal fraction vs percentage).
+    def broadcast_pnl_update(tracker_id, ltp, pnl, hwm, entry)
+      ltp_f   = ltp.to_f
+      entry_f = entry.to_f
+      pnl_pct = entry_f.positive? ? (((ltp_f - entry_f) / entry_f) * 100).round(2) : 0.0
+
+      ActionCable.server.broadcast("positions", {
+        type: "pnl_update",
+        id: tracker_id,
+        ltp: ltp_f.round(2),
+        pnl: pnl.to_f.round(2),
+        pnl_pct: pnl_pct,
+        hwm_pnl: hwm.to_f.round(2)
+      })
+    rescue StandardError => e
+      @logger.debug("[PnlUpdater] broadcast_pnl_update failed: #{e.message}")
+    end
+
+    # Broadcast aggregate dashboard stats every 1 second to the "dashboard" channel.
+    def maybe_broadcast_heartbeat
+      return if @last_heartbeat_at && (Time.current.to_f - @last_heartbeat_at) < 1.0
+
+      @last_heartbeat_at = Time.current.to_f
+      ActionCable.server.broadcast("dashboard", build_dashboard_stats)
+    rescue StandardError => e
+      @logger.debug("[PnlUpdater] heartbeat broadcast failed: #{e.message}")
+    end
+
+    def build_dashboard_stats
+      {
+        type: "stats",
+        mode: AlgoConfig.mode,
+        balance: safe_wallet_snapshot,
+        today: PositionTracker.paper_trading_stats_with_pct,
+        indices: {
+          nifty: Live::TickCache.ltp('IDX_I', '13'),
+          banknifty: Live::TickCache.ltp('IDX_I', '25'),
+          sensex: Live::TickCache.ltp('IDX_I', '51')
+        },
+        circuit_breaker: Risk::CircuitBreaker.instance.status,
+        system: Live::SystemStatusCache.instance.all_statuses,
+        timestamp: Time.current.iso8601
+      }
+    rescue StandardError
+      { type: "stats", error: true, timestamp: Time.current.iso8601 }
+    end
+
+    def safe_wallet_snapshot
+      Orders.config.gateway.wallet_snapshot
+    rescue StandardError
+      { cash: 0, equity: 0, mtm: 0, exposure: 0 }
+    end
+
     # Check if Telegram milestone notifications are enabled
     # @return [Boolean]
     def telegram_milestones_enabled?

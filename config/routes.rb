@@ -39,11 +39,9 @@ Rails.application.routes.draw do
     post 'analysis/:index_key/optimize',    to: 'analysis#optimize',    as: :analysis_optimize
 
     # Algo Settings
-    get    'settings',              to: 'settings#index'
-    get    'settings/change_logs',  to: 'settings#change_logs'
-    patch  'settings/bulk',         to: 'settings#update_bulk'
-    patch  'settings/deep_merge',   to: 'settings#update_deep_merge'
-    post   'settings/update_ip',    to: 'settings#update_ip'
+    get    'settings',           to: 'settings#index'
+    patch  'settings/bulk',      to: 'settings#update_bulk'
+    post   'settings/update_ip', to: 'settings#update_ip'
 
     resources :calibration_runs, only: %i[index show] do
       post :apply, on: :member
@@ -69,60 +67,9 @@ Rails.application.routes.draw do
       delete :trip, action: :reset, on: :member
     end
 
-    # Trading Strategies (Strategy Creator)
-    resources :trading_strategies, only: %i[index show create update destroy] do
-      member do
-        post :validate
-        post :deploy
-      end
-    end
-
     resource :drawdown_guard, only: [], controller: 'drawdown_guard' do
       delete :reset, on: :member
     end
-
-    # Strategy Platform (Phases 2–5)
-    resources :strategies, param: :slug, only: %i[index show create] do
-      member do
-        post :deploy
-        post :start
-        post :stop
-        post :restart
-        get  :versions
-        get  :signals
-        get  :logs
-        get  :variables
-        put  :variables, action: :update_variables
-      end
-    end
-
-    # Global platform variables
-    get  'variables', to: 'variables#index'
-    put  'variables', to: 'variables#update'
-
-    # Strategy subsystem health
-    get  'strategies/health/pool',     to: 'strategies/health#pool'
-    get  'strategies/health/session',  to: 'strategies/health#session'
-    get  'strategies/health/backtest', to: 'strategies/health#backtest'
-
-    # Research pipeline (offline — signal/candidate backtests + premium lifecycle board)
-    namespace :research do
-      resources :signals, only: %i[index show create]
-      resources :lifecycles, only: %i[index show] do
-        collection do
-          post :run
-          get :expectancy
-        end
-      end
-    end
-  end
-
-  # Redis UI (development only)
-  if Rails.env.development?
-    get 'redis_ui', to: 'redis_ui#index'
-    get 'redis_ui/info', to: 'redis_ui#info'
-    get 'redis_ui/:id', to: 'redis_ui#show', as: :redis_ui_key
-    delete 'redis_ui/:id', to: 'redis_ui#destroy'
   end
 
   # Redis UI (development only)

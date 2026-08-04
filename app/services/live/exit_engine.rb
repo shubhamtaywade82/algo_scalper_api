@@ -49,82 +49,91 @@ module Live
       return { success: false, reason: 'invalid_router' } unless @router
       return { success: false, reason: 'invalid_reason' } if reason.blank?
 
+      tracker.reload
+      return { success: true, reason: 'already_exited', exit_price: tracker.exit_price } if tracker.exited?
+
       # State validation
       return { success: false, reason: 'not_active' } unless tracker.active?
 
-      tracker.with_lock do
-        # Early return if already exited (idempotent - not an error)
-        return { success: true, reason: 'already_exited', exit_price: tracker.exit_price } if tracker.exited?
+      # Acquire process-wide exit lock to avoid dual intent (per-tick vs 5s loop)
+      unless acquire_exit_lock(tracker.id)
+        Rails.logger.info("[ExitEngine] Exit lock already held for #{tracker.order_no}, skipping duplicate exit request.")
+        return { success: false, reason: 'exit_lock_held' }
+      end
 
-        ltp = safe_ltp(tracker)
-        result = @router.exit_market(tracker)
-        success = success?(result)
+      intent_persisted = prepare_exit_intent!(tracker, reason)
+      return { success: true, reason: 'already_exited', exit_price: tracker.exit_price } if tracker.exited?
+      return { success: true, reason: 'exit_already_requested', client_order_id: tracker.exit_coid } unless intent_persisted
 
-        if success
-          begin
-            # Use exit_price from gateway if available (paper mode provides this), fallback to LTP
-            # This ensures paper mode uses correct exit_price (LTP or entry_price fallback)
-            # Live mode gateways don't provide exit_price, so we use LTP
-            exit_price = (result.is_a?(Hash) && result[:exit_price]) || ltp
+      ltp = safe_ltp(tracker)
 
-            tracker.mark_exited!(
-              exit_price: exit_price,
-              exit_reason: reason
-            )
+      cmd_result = Orders::Commands::ExitOrderCommand.new(
+        gateway: @router,
+        tracker: tracker,
+        client_order_id: tracker.exit_coid,
+        reason: reason
+      ).call
 
-            # Reload tracker to get final PnL values after mark_exited!
-            tracker.reload
+      unless cmd_result.success?
+        raise cmd_result.error if cmd_result.reason == 'command_exception' && cmd_result.error
 
-            # Update exit reason with final PnL percentage for consistency
-            # Calculate PnL percentage from final PnL value (includes broker fees)
-            # This matches what Telegram notifier will display
-            final_pnl = tracker.last_pnl_rupees
-            entry_price = tracker.entry_price
-            quantity = tracker.quantity
-
-            if final_pnl.present? && entry_price.present? && quantity.present? &&
-               entry_price.to_f.positive? && quantity.to_i.positive? && reason.present? && reason.include?('%')
-              # Calculate PnL percentage (includes fees) - matches Telegram display
-              pnl_pct_display = ((final_pnl.to_f / (entry_price.to_f * quantity.to_i)) * 100.0).round(2)
-              # Extract the base reason (e.g., "SL HIT" or "TP HIT") - everything before the percentage
-              base_reason = reason.split(/\s+-?\d+\.?\d*%/).first&.strip || reason.split('%').first&.strip || reason
-              updated_reason = "#{base_reason} #{pnl_pct_display}%"
-
-              # Always update to ensure consistency (even if values are close)
-              if reason != updated_reason
-                Rails.logger.info("[ExitEngine] Updating exit reason for #{tracker.order_no}: '#{reason}' -> '#{updated_reason}' (PnL: ₹#{final_pnl}, PnL%: #{pnl_pct_display}%)")
-                # exit_reason is a store_accessor on meta, so update via meta hash
-                meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
-                meta['exit_reason'] = updated_reason
-                tracker.update_column(:meta, meta)
-                reason = updated_reason
-              end
-            else
-              Rails.logger.warn("[ExitEngine] Cannot update exit reason for #{tracker.order_no}: final_pnl=#{final_pnl.inspect}, entry_price=#{entry_price.inspect}, quantity=#{quantity.inspect}, reason=#{reason.inspect}")
-            end
-
-            Rails.logger.info("[ExitEngine] Exit executed #{tracker.order_no}: #{reason}")
-
-            # Send Telegram notification
-            notify_telegram_exit(tracker, reason, exit_price)
-
-            return { success: true, exit_price: exit_price, reason: reason }
-          rescue StandardError => e
-            # Order is placed, but tracker update failed
-            # Check if tracker is already exited (might have been updated by OrderUpdateHandler)
-            tracker.reload
-            if tracker.exited?
-              Rails.logger.info("[ExitEngine] Tracker already exited (likely by OrderUpdateHandler): #{tracker.order_no}")
-              return { success: true, exit_price: tracker.exit_price, reason: tracker.exit_reason || reason }
-            else
-              Rails.logger.error("[ExitEngine] Order placed but tracker update failed: #{tracker.order_no}: #{e.class} - #{e.message}")
-              raise
-            end
-          end
-        else
-          Rails.logger.error("[ExitEngine] Router failed for #{tracker.order_no}: #{result.inspect}")
-          return { success: false, reason: 'router_failed', error: result }
+        error_detail = cmd_result.error
+        if error_detail.nil? && cmd_result.payload.is_a?(Hash) && cmd_result.payload.key?(:raw)
+          error_detail = cmd_result.payload[:raw]
         end
+        error_detail = cmd_result.payload if error_detail.nil?
+
+        Rails.logger.error("[ExitEngine] Router failed for #{tracker.order_no}: #{cmd_result.reason} (coid: #{tracker.exit_coid})")
+        return { success: false, reason: 'router_failed', error: error_detail }
+      end
+
+      # Extract raw broker response from command payload for downstream helpers
+      result = cmd_result.payload[:raw] || {}
+      persist_broker_ack!(tracker, result)
+
+      # Use exit_price from command payload if available, fallback to LTP
+      exit_price = cmd_result.payload[:exit_price] || ltp
+
+      finalize_exit!(tracker, exit_price: exit_price, reason: reason)
+    rescue StandardError => e
+      Rails.logger.error("[ExitEngine] Failed executing exit for #{tracker&.order_no}: #{e.class} - #{e.message} (coid: #{tracker&.exit_coid})")
+      raise
+    end
+
+    private
+
+    # Writes a durable exit intent before placing broker order.
+    # @param tracker [PositionTracker]
+    # @param reason [String]
+    # @return [Boolean] true when a new intent was persisted, false when already requested/exited
+    def prepare_exit_intent!(tracker, reason)
+      tracker.with_lock do
+        tracker.reload
+        return false if tracker.exited? || tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
+
+        coid = tracker.exit_coid.presence || deterministic_exit_coid(tracker)
+        metadata = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
+
+        metadata['exit_reason'] = reason
+        metadata['exit_triggered_at'] = Time.current
+
+        snapshot = safe_pnl_snapshot(tracker)
+        decision_pnl_pct = if snapshot && snapshot[:pnl_pct]
+                             (snapshot[:pnl_pct].to_f * 100.0).round(2)
+                           end
+
+        decision_meta = (metadata['decision'].is_a?(Hash) ? metadata['decision'].dup : {})
+        decision_meta['type'] = reason.to_s
+        decision_meta['path'] ||= 'unknown'
+        decision_meta['decided_at'] = Time.current.iso8601
+        decision_meta['pnl_pct_at_decision'] = decision_pnl_pct if decision_pnl_pct
+        metadata['decision'] = decision_meta
+
+        tracker.update!(
+          exit_requested_at: Time.current,
+          exit_coid: coid,
+          meta: metadata
+        )
       end
 
       tracker.exit_reason
@@ -240,21 +249,6 @@ module Live
       nil
     end
 
-    # Determine if router result indicates success
-    # Handles various return formats: boolean true, hash with success: true, hash with success: 1, etc.
-    def success?(result)
-      return true if result == true
-      return false unless result.is_a?(Hash)
-
-      success_value = result[:success]
-      return true if success_value == true
-      return true if success_value == 1
-      return true if success_value.to_s.downcase == 'true'
-      return true if success_value.to_s.downcase == 'yes'
-
-      false
-    end
-
     # Send Telegram exit notification
     # @param tracker [PositionTracker] Position tracker
     # @param reason [String] Exit reason
@@ -274,6 +268,52 @@ module Live
       )
     rescue StandardError => e
       Rails.logger.error("[ExitEngine] Telegram notification failed: #{e.class} - #{e.message}")
+    end
+
+    def record_trade_telemetry(tracker, exit_price, reason)
+      return unless tracker&.exited?
+      return if TradeTelemetry.exists?(tracker_id: tracker.id)
+
+      entry_risk_rupees = tracker.meta&.dig('entry_risk_rupees')
+      return if entry_risk_rupees.nil?
+
+      entry_risk = BigDecimal(entry_risk_rupees.to_s)
+      return unless entry_risk.positive?
+
+      final_pnl = tracker.last_pnl_rupees
+      max_pnl = tracker.high_water_mark_pnl
+
+      exit_r = final_pnl ? (BigDecimal(final_pnl.to_s) / entry_risk) : nil
+      max_r = max_pnl ? (BigDecimal(max_pnl.to_s) / entry_risk) : nil
+
+      TradeTelemetry.create!(
+        tracker_id: tracker.id,
+        index_key: tracker.meta&.dig('index_key') || tracker.index_key,
+        entry_time: tracker.created_at,
+        exit_time: tracker.exited_at || Time.current,
+        entry_tf: resolved_entry_tf(tracker),
+        htf_tf: tracker.meta&.dig('htf_tf') || '15m', # Default to 15m if missing
+        bos_age_at_entry: tracker.meta&.dig('bos_age_at_entry'),
+        retrace_pct: tracker.meta&.dig('retrace_pct'),
+        pullback_candles: tracker.meta&.dig('pullback_candles'),
+        entry_distance_r: tracker.meta&.dig('entry_distance_r'),
+        continuation_body_position: tracker.meta&.dig('continuation_body_position'),
+        time_from_bos_to_entry: tracker.meta&.dig('time_from_bos_to_entry'),
+        max_r_reached: max_r&.round(3),
+        exit_r: exit_r&.round(3),
+        exit_path: tracker.meta&.dig('exit_path') || reason,
+        pnl_rupees: final_pnl,
+        trade_state_at_exit: tracker.trade_state
+      )
+    rescue StandardError => e
+      Rails.logger.error("[ExitEngine] Failed to record trade telemetry for #{tracker&.order_no}: #{e.class} - #{e.message}")
+    end
+
+    def resolved_entry_tf(tracker)
+      tf = tracker.meta&.dig('entry_tf') || tracker.meta&.dig('timeframe')
+      return tf if tf.present?
+
+      '1m'
     end
 
     # Check if Telegram notifications are enabled

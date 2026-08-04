@@ -156,18 +156,49 @@ module Live
       def run_enforcement_for_tracker(tracker, exit_engine, position_data: nil)
         return if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
 
+        # Get high-performance position snapshot from ActiveCache
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
         return unless position_data
 
+        # Track metadata changes locally to avoid multiple DB updates per cycle
+        @pending_meta = (tracker.meta || {}).deep_dup
+
+        # Advance trade state before evaluating rules (updates trade_state, peak_trend_score etc)
+        # Note: advance_trade_state_for might still do its own updates for state columns
+        advance_trade_state_for(tracker, position_data: position_data)
+
+        # Layers will now update @pending_meta instead of the DB directly
         enforce_premium_r_stop_for(tracker, exit_engine: exit_engine, position_data: position_data)
         return if exit_requested_or_sent?(tracker)
 
-        exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker)
-        return unless exit_decision&.dig(:exit)
+        enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine, position_data: position_data)
+        return if exit_requested_or_sent?(tracker)
 
-        path = exit_decision[:path] || exit_decision[:reason]
-        track_exit_path(tracker, path, exit_decision[:reason])
-        dispatch_exit(exit_engine, tracker, exit_decision[:reason])
+        enforce_profit_floor_for(tracker, exit_engine: exit_engine, position_data: position_data)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_structure_invalidation_for(tracker, exit_engine: exit_engine, position_data: position_data)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_premium_momentum_failure_for(tracker, exit_engine: exit_engine, position_data: position_data)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_rr_profit_booking_for(tracker, exit_engine: exit_engine, position_data: position_data)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_percentage_pnl_exit_for(tracker, exit_engine: exit_engine, position_data: position_data)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_time_stop_for(tracker, exit_engine: exit_engine, position_data: position_data)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_time_based_exit_for(tracker, exit_engine: exit_engine, position_data: position_data)
+      ensure
+        # Perform a single consolidated update at the end of the cycle if meta changed
+        if @pending_meta && @pending_meta != tracker.meta
+          tracker.update_columns(meta: @pending_meta) # rubocop:disable Rails/SkipsModelValidations
+        end
+        @pending_meta = nil
       end
 
       def tick_stream_fresh?

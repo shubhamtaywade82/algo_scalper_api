@@ -11,7 +11,6 @@ module Portfolio
   class PnlTracker
     REDIS_URL      = ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0')
     KEY_REALIZED   = 'portfolio:pnl:realized'
-    KEY_REALIZED_TRACKERS = 'portfolio:pnl:realized_trackers'
     KEY_UNREALIZED = 'portfolio:pnl:unrealized'
     KEY_PEAK       = 'portfolio:pnl:peak'
     KEY_FLOOR      = 'portfolio:pnl:floor'
@@ -36,8 +35,8 @@ module Portfolio
         log_error('update_unrealized', e)
       end
 
-      # Record realized PnL when a position exits. Idempotent — will not add twice
-      # for the same tracker_id on the same day.
+      # Record realized PnL when a position exits. Idempotent — calling twice
+      # adds the PnL twice, so callers must call exactly once per exit.
       #
       # @param tracker_id [Integer]
       # @param pnl [Float] realized PnL in ₹ (can be negative)
@@ -45,22 +44,9 @@ module Portfolio
         return unless enabled?
 
         r = redis
-        unless r
-          Rails.logger.error("[Portfolio::PnlTracker] mark_realized: Redis client not available")
-          return
-        end
+        return unless r
 
-        # Idempotency check: only add to realized total once per tracker per session.
-        # Redis SADD returns 1 if element added, 0 if already present.
-        # In Ruby, 0 is truthy, so we must check specifically for 1.
-        added = r.sadd(KEY_REALIZED_TRACKERS, tracker_id.to_s)
-        if added != 1 && added != true
-          Rails.logger.debug("[Portfolio::PnlTracker] Skip mark_realized: tracker=#{tracker_id} already counted today (added=#{added.inspect})")
-          return
-        end
-        r.expire(KEY_REALIZED_TRACKERS, TTL)
-
-        new_total = r.incrbyfloat(KEY_REALIZED, pnl.to_f)
+        r.incrbyfloat(KEY_REALIZED, pnl.to_f)
         r.expire(KEY_REALIZED, TTL)
 
         # Remove from unrealized — position is now closed
@@ -68,7 +54,7 @@ module Portfolio
 
         Rails.logger.info(
           "[Portfolio::PnlTracker] Realized tracker=#{tracker_id}: " \
-          "₹#{pnl.round(2)} | Total realized: ₹#{new_total.to_f.round(2)}"
+          "₹#{pnl.round(2)} | Total realized: ₹#{realized_pnl.round(2)}"
         )
       rescue StandardError => e
         log_error('mark_realized', e)
@@ -156,7 +142,7 @@ module Portfolio
         r = redis
         return unless r
 
-        [KEY_REALIZED, KEY_REALIZED_TRACKERS, KEY_UNREALIZED, KEY_PEAK, KEY_FLOOR, KEY_LEVEL].each { |k| r.del(k) }
+        [KEY_REALIZED, KEY_UNREALIZED, KEY_PEAK, KEY_FLOOR, KEY_LEVEL].each { |k| r.del(k) }
         Rails.logger.info('[Portfolio::PnlTracker] Daily state reset')
       rescue StandardError => e
         log_error('reset_day!', e)
@@ -185,11 +171,7 @@ module Portfolio
       end
 
       def redis
-        @redis ||= begin
-          r = Redis.new(url: REDIS_URL)
-          Rails.logger.info("[Portfolio::PnlTracker] Initialized Redis client for process #{Process.pid}")
-          r
-        end
+        @redis ||= Redis.new(url: REDIS_URL)
       rescue StandardError => e
         Rails.logger.error("[Portfolio::PnlTracker] Redis init error: #{e.message}")
         nil

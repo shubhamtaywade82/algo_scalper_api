@@ -13,12 +13,10 @@ module Api
         balance: safe_wallet_snapshot,
         today: PositionTracker.trading_stats_with_pct,
         indices: formatted_indices,
-        subscribed_indices: subscribed_indices_payload,
         public_ipv4: ip_info[:public_ipv4],
         public_ipv6: ip_info[:public_ipv6],
         registered_ips: ip_info[:registered_ips],
-        options_buying: build_options_buying_payload,
-        recent_signals: recent_signals_payload,
+        recent_signals: TradingSignal.order(created_at: :desc).limit(10).as_json(methods: [:confidence_level]),
         circuit_breaker: Risk::CircuitBreaker.instance.status,
         system: Live::SystemStatusCache.instance.all_statuses,
         config: {

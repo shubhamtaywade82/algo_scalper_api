@@ -35,6 +35,13 @@ class ApplicationService
 
   # -------- Logging ---------------------------------------------------------
   %i[info warn error debug].each do |lvl|
-    define_method(:"log_#{lvl}") { |msg| Rails.logger.send(lvl, "[#{self.class.name}] #{msg}") }
+    define_method(:"log_#{lvl}") do |msg|
+      Rails.logger.send(lvl, "[#{self.class.name}] #{msg}")
+
+      # Automatically notify telegram for errors only
+      if lvl == :error
+        Notifications::TelegramNotifier.instance.notify_error(msg, context: self.class.name)
+      end
+    end
   end
 end

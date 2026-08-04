@@ -32,142 +32,116 @@ module Ai
 
       private
 
-      # Memoized so detect_leakages reuses the same result without a second query set.
       def performance_stats
-        @performance_stats ||= begin
-          scope = exited_scope
-          total = scope.count
+        trades = PositionTracker.where(paper: true, status: :exited)
+                                .where('meta->>\'index_key\' = ?', @symbol)
+                                .where('exited_at >= ?', @start_time)
 
-          if total.zero?
-            { total_trades: 0 }
-          else
-            # Use DB-level aggregates — no need to load all records into memory
-            total_pnl = scope.sum(:last_pnl_rupees).to_f
-            winners   = scope.where('last_pnl_rupees > 0').count
+        total = trades.size
+        return { count: 0 } if total.zero?
 
-            {
-              total_trades: total,
-              win_rate: (winners.to_f / total * 100).round(2),
-              total_pnl: total_pnl.round(2),
-              avg_pnl: (total_pnl / total).round(2),
-              profit_factor: calculate_profit_factor(scope),
-              max_drawdown: calculate_drawdown(scope)
-            }
-          end
-        end
+        winners = trades.count { |t| t.last_pnl_rupees.to_f > 0 }
+
+        {
+          total_trades: total,
+          win_rate: (winners.to_f / total * 100).round(2),
+          total_pnl: trades.sum { |t| t.last_pnl_rupees.to_f }.round(2),
+          avg_pnl: (trades.sum { |t| t.last_pnl_rupees.to_f } / total).round(2),
+          profit_factor: calculate_profit_factor(trades),
+          max_drawdown: calculate_drawdown(trades)
+        }
       end
 
       def exit_diagnostics
-        reasons = PositionTracker
-                  .where(index_key: @symbol)
-                  .where(exited_at: @start_time..)
-                  .group(:exit_reason)
-                  .count
+        reasons = PositionTracker.where('meta->>\'index_key\' = ?', @symbol)
+                                 .where('exited_at >= ?', @start_time)
+                                 .group("meta->>'exit_reason'")
+                                 .count
 
-        total = reasons.values.sum.to_f
         {
           reason_breakdown: reasons,
-          sl_hit_rate: total.zero? ? 0.0 : (reasons['sl'] || 0).to_f / total
+          sl_hit_rate: (reasons['sl'] || 0).to_f / reasons.values.sum.to_f
         }
       end
 
       def signal_accuracy
-        scope = TradingSignal
-                .where(index_key: @symbol)
-                .where(created_at: @start_time..)
-
-        total = scope.count
-        return { count: 0 } if total.zero?
+        # Join TradingSignal with PositionTracker to see how signals performed
+        # For simplicity, we compare TradingSignal direction vs ultimate trade outcome
+        signals = TradingSignal.where(index_key: @symbol)
+                               .where('created_at >= ?', @start_time)
+        
+        return { count: 0 } if signals.empty?
 
         {
-          total_signals: total,
-          avg_confidence: scope.average(:confidence_score).to_f.round(2),
-          # Count only signals that have a linked position_id in metadata
-          signals_with_trades: scope.where("metadata->>'position_id' IS NOT NULL").count
+          total_signals: signals.size,
+          avg_confidence: signals.average(:confidence_score).to_f.round(2),
+          # We check if signals resulted in a winner
+          signals_with_trades: signals.count { |s| s.metadata&.dig('position_id').present? }
         }
       end
 
       def capture_efficiency
-        analytics = TradeAnalytic
-                    .joins(:position_tracker)
-                    .where(position_trackers: { paper: true })
-                    .where(position_trackers: { index_key: @symbol })
-                    .where(position_trackers: { exited_at: @start_time.. })
+        analytics = TradeAnalytic.joins(:position_tracker)
+                                 .where(position_trackers: { paper: true })
+                                 .where('position_trackers.meta->>\'index_key\' = ?', @symbol)
+                                 .where('position_trackers.exited_at >= ?', @start_time)
 
-        count = analytics.count
-        return { count: 0 } if count.zero?
+        return { count: 0 } if analytics.empty?
 
         {
-          count: count,
           avg_mfe: analytics.average(:max_favorable_excursion).to_f.round(2),
           avg_mae: analytics.average(:max_adverse_excursion).to_f.round(2),
+          # Profit Capture = (Exit - Entry) / (Highest - Entry)
           pnl_capture_ratio: calculate_capture_ratio(analytics)
         }
       end
 
       def detect_leakages
-        stats = performance_stats # memoized — no extra query
-        return [] if stats[:total_trades].to_i.zero?
-
         leaks = []
-        leaks << "Low win rate (#{stats[:win_rate]}%)" if stats[:win_rate] < 40
-        leaks << 'Negative profit factor' if stats[:profit_factor] < 1.0
+        stats = performance_stats
+        return [] if stats[:count] == 0
 
+        leaks << "Low win rate (#{stats[:win_rate]}%)" if stats[:win_rate] < 40
+        leaks << "Negative profit factor" if stats[:profit_factor] < 1.0
+        
         exits = exit_diagnostics
-        if exits[:sl_hit_rate] > 0.6
-          leaks << "High SL hit rate (#{(exits[:sl_hit_rate] * 100).round(1)}%)"
-        end
+        leaks << "High SL hit rate (#{(exits[:sl_hit_rate]*100).round(1)}%)" if exits[:sl_hit_rate] > 0.6
 
         leaks
       end
 
-      # Uses DB WHERE conditions to avoid loading all records for gross profit/loss.
-      def calculate_profit_factor(scope)
-        gross_profit = scope.where('last_pnl_rupees > 0').sum(:last_pnl_rupees).to_f
-        gross_loss   = scope.where('last_pnl_rupees < 0').sum(:last_pnl_rupees).to_f.abs
+      def calculate_profit_factor(trades)
+        gross_profit = trades.select { |t| t.last_pnl_rupees.to_f > 0 }.sum { |t| t.last_pnl_rupees.to_f }
+        gross_loss   = trades.select { |t| t.last_pnl_rupees.to_f < 0 }.sum { |t| t.last_pnl_rupees.to_f }.abs
         return gross_profit if gross_loss.zero?
-
         (gross_profit / gross_loss).round(2)
       end
 
-      # Drawdown requires sequential iteration — must load records ordered by exit time.
-      def calculate_drawdown(scope)
-        balance = 0.0
-        peak    = 0.0
-        max_dd  = 0.0
-
-        scope.order(:exited_at).find_each(batch_size: 1000) do |tracker|
-          pnl = tracker.last_pnl_rupees.to_f
-          balance += pnl
-          peak     = balance if balance > peak
-          dd       = peak - balance
-          max_dd   = dd if dd > max_dd
+      def calculate_drawdown(trades)
+        # Simplified peak-to-trough drawdown of PnL curve
+        balance = 0
+        peak = 0
+        max_dd = 0
+        trades.order(:exited_at).each do |t|
+          balance += t.last_pnl_rupees.to_f
+          peak = balance if balance > peak
+          dd = peak - balance
+          max_dd = dd if dd > max_dd
         end
-
         max_dd.round(2)
       end
 
-      # Capture ratio still needs per-row data — no DB aggregate available for this formula.
       def calculate_capture_ratio(analytics)
-        captured  = 0.0
+        captured = 0.0
         available = 0.0
-
-        analytics.find_each(batch_size: 1000) do |analytic|
-          pnl = analytic.exit_price.to_f - analytic.entry_price.to_f
-          captured  += pnl if pnl.positive?
-          available += analytic.max_favorable_excursion.to_f if analytic.max_favorable_excursion.to_f.positive?
+        analytics.each do |a|
+          pnl = a.exit_price - a.entry_price
+          mfe = a.max_favorable_excursion
+          captured += pnl if pnl > 0
+          available += mfe if mfe > 0
         end
-
         return 0.0 if available.zero?
-
         (captured / available).round(2)
-      end
-
-      def exited_scope
-        PositionTracker
-          .where(paper: true, status: :exited)
-          .where(index_key: @symbol)
-          .where(exited_at: @start_time..)
       end
     end
   end

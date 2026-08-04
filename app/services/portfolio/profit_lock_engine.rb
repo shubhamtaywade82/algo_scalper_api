@@ -8,13 +8,13 @@ module Portfolio
   # and triggers DrawdownGuard when a breach is detected.
   #
   # Levels are configurable in algo.yml under profit_lock.levels.
-  # Default: ₹20k → 60% floor, ₹35k → 70% floor, ₹50k → 73% floor
+  # Default: ₹10k → 60% floor, ₹20k → 70% floor, ₹30k → 73% floor
   class ProfitLockEngine
     # Fallback levels used when algo.yml profit_lock.levels is absent or malformed.
     DEFAULT_LEVELS = [
-      { trigger: 20_000, lock_ratio: 0.60 },
-      { trigger: 35_000, lock_ratio: 0.70 },
-      { trigger: 50_000, lock_ratio: 0.73 }
+      { trigger: 10_000, lock_ratio: 0.60 },
+      { trigger: 20_000, lock_ratio: 0.70 },
+      { trigger: 30_000, lock_ratio: 0.73 }
     ].freeze
 
     class << self
@@ -29,26 +29,6 @@ module Portfolio
         net   = PnlTracker.net_pnl
         peak  = PnlTracker.peak_pnl
         level = PnlTracker.current_level
-
-        # Ratchet sub-level peak even before any milestone is armed so the
-        # early-giveback check has accurate data.
-        if net > peak
-          PnlTracker.update_lock(new_peak: net, new_floor: 0.0, new_level: 0)
-          peak = net
-        end
-
-        if early_giveback_breach?(net: net, peak: peak)
-          Rails.logger.warn(
-            "[Portfolio::ProfitLockEngine] 🚨 EARLY GIVEBACK BREACH! " \
-            "net=₹#{net.round(2)} ≤ peak=₹#{peak.round(2)} × keep=#{early_giveback[:keep_ratio]}"
-          )
-          DrawdownGuard.trigger_global_exit!(
-            net_pnl: net,
-            floor: peak * early_giveback[:keep_ratio].to_f,
-            level: 0
-          )
-          return true
-        end
 
         # Determine which milestone level we're now at
         new_level = determine_level(net)
@@ -92,7 +72,7 @@ module Portfolio
       end
 
       # Returns the highest level milestone currently exceeded by pnl.
-      # 0 = below all thresholds, 1 = ≥₹20k, 2 = ≥₹35k, 3 = ≥₹50k, etc.
+      # 0 = below all thresholds, 1 = ≥₹10k, 2 = ≥₹20k, 3 = ≥₹30k, etc.
       #
       # @param pnl [Float]
       # @return [Integer]
@@ -128,26 +108,6 @@ module Portfolio
         AlgoConfig.fetch.dig(:profit_lock, :enabled) != false
       rescue StandardError
         true
-      end
-
-      def early_giveback
-        @early_giveback ||= begin
-          cfg = AlgoConfig.fetch.dig(:profit_lock, :early_giveback) || {}
-          {
-            enabled: cfg[:enabled] != false,
-            min_peak: cfg[:min_peak].to_f.positive? ? cfg[:min_peak].to_f : 2_000.0,
-            keep_ratio: cfg[:keep_ratio].to_f.positive? ? cfg[:keep_ratio].to_f : 0.40
-          }
-        rescue StandardError
-          { enabled: true, min_peak: 2_000.0, keep_ratio: 0.40 }
-        end
-      end
-
-      def early_giveback_breach?(net:, peak:)
-        return false unless early_giveback[:enabled]
-        return false if peak < early_giveback[:min_peak]
-
-        net <= peak * early_giveback[:keep_ratio]
       end
     end
   end

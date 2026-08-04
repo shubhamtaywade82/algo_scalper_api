@@ -15,6 +15,16 @@ module Live
 
         # Priority order (first match wins)
 
+        # 0. Portfolio Floor Breach (highest priority — overrides all per-position logic)
+        if portfolio_floor_breach?
+          return {
+            exit: true,
+            reason: 'PORTFOLIO_FLOOR_BREACH',
+            path: 'profit_lock',
+            pnl_pct: (pnl_pct * 100.0).round(2)
+          }
+        end
+
         # 1. Early Trend Failure (if enabled and applicable)
         if early_exit_triggered?(tracker, snapshot)
           return {
@@ -74,6 +84,14 @@ module Live
         Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
       rescue StandardError
         nil
+      end
+
+      # True if the portfolio profit floor has been breached today (DrawdownGuard has fired).
+      # This is the highest-priority exit signal — overrides all per-position logic.
+      def portfolio_floor_breach?
+        Portfolio::DrawdownGuard.triggered?
+      rescue StandardError
+        false
       end
 
       def early_exit_triggered?(tracker, snapshot)

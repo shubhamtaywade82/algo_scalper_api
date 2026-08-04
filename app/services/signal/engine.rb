@@ -142,8 +142,71 @@ module Signal
           enable_confirmation: enable_confirmation
         )
 
-        # 12. Create Signal
-        signal = TradingSignal.create_from_analysis(
+        # ===== OPTIONS BEHAVIOR ANALYSIS =====
+        # 1. Expiry Day Session Filter
+        expiry_blocked = expiry_trade_allowed?(index_cfg[:key]) == false
+
+        # 2. Gamma Ramp Detection & Volatility Proxy
+        expiry_date = Options::DerivativeChainAnalyzer.new(index_key: index_cfg[:key]).nearest_expiry
+        chain_data = instrument.fetch_option_chain(expiry_date)
+        
+        gamma_pressure_result = if chain_data
+                                  detector = Options::GammaRampDetector.new(
+                                    index_key: index_cfg[:key],
+                                    expiry_date: expiry_date,
+                                    chain_data: chain_data
+                                  )
+                                  {
+                                    score: detector.gamma_pressure_score(direction: final_direction),
+                                    strike: detector.ramp_strike(direction: final_direction)&.dig(:strike)
+                                  }
+                                else
+                                  { score: 0.0, strike: nil }
+                                end
+
+        iv_rank_result = validate_iv_rank(index_cfg, primary_series, effective_validation_mode)
+        theta_risk_result = validate_theta_risk(index_cfg, final_direction, effective_validation_mode)
+        # ===== END OPTIONS BEHAVIOR ANALYSIS =====
+
+        # Prepare enriched diagnostic diagnostic_metadata payload
+        diagnostic_metadata = {
+          # Market State Diagnostics
+          regime: regime,
+          regime_confidence: regime_result&.[](:confidence) || 0,
+          regime_metrics: regime_result&.[](:metrics) || {},
+          # Multi-Timeframe Diagnostics
+          ta_signal: ta_result&.dig(:signal),
+          ta_confidence: ta_result&.dig(:confidence),
+          ta_bias: ta_result&.dig(:bias_summary, :summary, :bias),
+          mtf_rsi: ta_result&.dig(:indicators)&.transform_values { |v| v[:rsi] },
+          mtf_macd: ta_result&.dig(:indicators)&.transform_values { |v| v[:macd] },
+          mtf_atr: ta_result&.dig(:indicators)&.transform_values { |v| v[:atr] },
+          # Options Behavior / Greeks
+          gamma_pressure: gamma_pressure_result&.dig(:score),
+          gamma_ramp_strike: gamma_pressure_result&.dig(:strike),
+          iv_rank_proxy: iv_rank_result&.dig(:iv_rank_proxy),
+          theta_risk_score: theta_risk_result&.dig(:risk_score),
+          expiry_blocked: expiry_blocked,
+          # Execution Context
+          entry_path: entry_path,
+          strategy: strategy_recommendation&.dig(:strategy_name) || 'supertrend_adx',
+          strategy_mode: use_strategy_recommendations ? 'recommended' : 'supertrend_adx',
+          primary_timeframe: primary_tf,
+          effective_timeframe: effective_timeframe,
+          confirmation_timeframe: confirmation_tf,
+          confirmation_enabled: enable_confirmation,
+          confirmation_direction: confirmation_analysis&.dig(:direction),
+          validation_mode: effective_validation_mode || signals_cfg[:validation_mode] || 'balanced',
+          validation_passed: validation_result[:valid],
+          state_count: state_snapshot[:count],
+          state_multiplier: state_snapshot[:multiplier],
+          original_timeframe: primary_tf,
+          # SMC/Permission integration
+          smc_decision: smc_decision.to_s,
+          smc_permission: permission.to_s
+        }
+
+        TradingSignal.create_from_analysis(
           index_key: index_cfg[:key],
           direction: final_direction.to_s,
           timeframe: effective_timeframe,
@@ -173,6 +236,15 @@ module Signal
         )
 
         # Rails.logger.info("[Signal] Signal state for #{index_cfg[:key]}: count=#{state_snapshot[:count]} multiplier=#{state_snapshot[:multiplier]}")
+
+        # ===== EXIT IF BLOCKED BY OPTIONS BEHAVIOR =====
+        if expiry_blocked
+          Rails.logger.info("[Signal] ExpiryModel BLOCKED #{index_cfg[:key]}: Midday decay period")
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
+
+        # ===== END OPTIONS BEHAVIOR ANALYSIS =====
 
         # ===== STRIKE QUALIFICATION LAYER (HARD GATE) =====
         # First point where we have:
@@ -259,10 +331,29 @@ module Signal
           return false
         end
 
-        Rails.logger.info(
-          "\n\n[Signal] ----------------------------------------------------- " \
-          "Starting analysis for #{index_cfg[:key]} (IDX_I) " \
-          "--------------------------------------------------------"
+        # Rails.logger.info("[Signal] Fetched #{series.candles.size} candles for #{index_cfg[:key]} @ #{timeframe}")
+        # Rails.logger.debug { "[Signal] Adaptive Supertrend config: #{supertrend_cfg}" }
+
+        # [DYNAMIC CONFIG] Use optimized parameters if available
+        signals_cfg = AlgoConfig.fetch[:signals] || {}
+        supertrend_cfg = resolved_supertrend_cfg(instrument, interval, signals_cfg)
+        st_service = Indicators::Supertrend.new(series: series, **supertrend_cfg)
+        st = st_service.call
+        st[:adaptive_multipliers]&.compact&.last
+        # Rails.logger.info(
+        #   "[Signal] Supertrend(#{timeframe}) for #{index_cfg[:key]}: trend=#{st[:trend]} last_value=#{st[:last_value]} multiplier=#{last_multiplier}"
+        # )
+
+        # [DYNAMIC CONFIG] Use optimized ADX strength if available
+        adx_min = resolved_adx_min(instrument, interval, index_cfg, timeframe)
+        adx_value = instrument.adx(14, interval: interval)
+        # Rails.logger.info("[Signal] ADX(#{timeframe}) for #{index_cfg[:key]}: #{adx_value}")
+
+        direction = decide_direction(
+          st,
+          adx_value,
+          min_strength: adx_min,
+          timeframe_label: timeframe
         )
         true
       end
@@ -282,31 +373,24 @@ module Signal
         enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, true)
         confirmation_tf = (signals_cfg[:confirmation_timeframe].to_s if enable_confirmation && signals_cfg[:confirmation_tf].present?)
 
-        {
-          entry_primary: entry_primary,
-          primary_tf: primary_tf,
-          enable_confirmation: enable_confirmation,
-          confirmation_tf: confirmation_tf
-        }
+        # supertrend_cfg = signals_cfg[:supertrend] # No longer needed here, resolved in analyze_timeframe
+        # unless supertrend_cfg
+        #   Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
+        #   return { status: :error, message: 'Supertrend configuration missing' }
+        # end
 
-        picks.each_with_index do |pick, _index|
-          # Rails.logger.info("[Signal] Attempting entry #{index + 1}/#{picks.size} for #{index_cfg[:key]}: #{pick[:symbol]} (scale x#{state_snapshot[:multiplier]})")
-          result = Entries::EntryGuard.try_enter(
-            index_cfg: index_cfg,
-            pick: pick,
-            direction: final_direction,
-            scale_multiplier: state_snapshot[:multiplier],
-            entry_metadata: entry_metadata,
-            permission: permission
-          )
-          Signal::StateTracker.reset(index_cfg[:key])
-          record_cycle_block!("analysis_unavailable")
-          return
-        end
+        # adx_cfg = signals_cfg[:adx] || {} # No longer needed here, resolved in analyze_timeframe
+        # enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, true)
+        # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
+        # adx_min_strength = enable_adx_filter ? adx_cfg[:min_strength] : 0 # No longer needed here, resolved in analyze_timeframe
 
-        trend_direction = SupertrendTrend.direction(
-          series: primary_analysis[:series],
-          supertrend_result: primary_analysis[:supertrend]
+        # Analyze primary timeframe
+        primary_analysis = analyze_timeframe(
+          index_cfg: index_cfg,
+          instrument: instrument,
+          timeframe: primary_tf
+          # supertrend_cfg: supertrend_cfg, # Removed
+          # adx_min_strength: adx_min_strength # Removed
         )
         if trend_direction == :none
           Rails.logger.info("[Signal] SupertrendTrend :none — no trade for #{index_cfg[:key]}")
@@ -315,20 +399,24 @@ module Signal
           return
         end
 
-        final_direction = trend_direction == :long ? :bullish : :bearish
-        primary_series = primary_analysis[:series]
+        primary_direction = primary_analysis[:direction]
+        confirmation_analysis = nil
+        confirmation_direction = nil
 
-        regime_result = MarketRegimeDetector.new(primary_series).detect
-        regime_sym = regime_result[:regime].to_s
-        effective_validation_mode = if %w[RANGING CHOPPY].include?(regime_sym)
-                                      'conservative'
-                                    else
-                                      (signals_cfg[:validation_mode] || 'balanced').to_s
-                                    end
-        if %w[RANGING CHOPPY].include?(regime_sym)
-          Rails.logger.info(
-            "[Signal] Switching to CONSERVATIVE validation for #{index_cfg[:key]} " \
-            "due to #{regime_sym} regime (supertrend path)"
+        if confirmation_tf.present?
+          # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
+          # confirmation_adx_min = if enable_adx_filter # No longer needed here, resolved in analyze_timeframe
+          #                          adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
+          #                        else
+          #                          0
+          #                        end
+
+          confirmation_analysis = analyze_timeframe(
+            index_cfg: index_cfg,
+            instrument: instrument,
+            timeframe: confirmation_tf
+            # supertrend_cfg: supertrend_cfg, # Removed
+            # adx_min_strength: confirmation_adx_min # Removed
           )
         end
 
@@ -762,9 +850,17 @@ module Signal
         0.0
       end
 
-      def get_smc_bias_direction(index_cfg)
-        instrument = Instrument.find_by(tradingsymbol: index_cfg[:key])
-        return :neutral unless instrument
+      # Validate IV Rank - avoid extreme volatility conditions
+      def validate_iv_rank(_index_cfg, series, mode_config = nil)
+        if mode_config.nil? || mode_config.is_a?(String) || mode_config.is_a?(Symbol)
+          mode_config = get_validation_mode_config(override_mode: mode_config)
+        end
+
+        unless mode_config.is_a?(Hash)
+          Rails.logger.error("[Signal] CRITICAL: mode_config is #{mode_config.class} (#{mode_config.inspect}) in validate_iv_rank")
+          # Force it to be a valid hash to prevent crash
+          mode_config = get_validation_mode_config
+        end
 
         decision = Smc::BiasEngine.new(instrument).decision
         case decision
@@ -776,11 +872,15 @@ module Signal
         :neutral
       end
 
-      def calculate_confidence_score(primary_analysis:, validation_result:, index_cfg: nil)
-        base_confidence = 0.5
-        adx_factor = adx_confidence_factor(primary_analysis[:adx_value])
-        validation_factor = validation_result[:valid] ? 0.1 : 0.0
-        supertrend_factor = supertrend_confidence_factor(primary_analysis[:supertrend])
+      # Validate theta risk - avoid high theta decay situations
+      def validate_theta_risk(_index_cfg, _direction, mode_config = nil)
+        if mode_config.nil? || mode_config.is_a?(String) || mode_config.is_a?(Symbol)
+          mode_config = get_validation_mode_config(override_mode: mode_config)
+        end
+
+        current_time = Time.zone.now
+        hour = current_time.hour
+        minute = current_time.min
 
         direction = primary_analysis[:direction]
         series = primary_analysis[:series]
@@ -790,7 +890,30 @@ module Signal
         capped = [base_confidence + adx_factor + validation_factor + supertrend_factor + macd_factor + smc_factor, 1.0].min
         return capped if validation_result[:valid]
 
-        [capped, 0.79].min
+      # Enhanced ADX validation with trend strength assessment
+      def validate_adx_strength(index_cfg, adx, _supertrend_result, mode_config = nil)
+        if mode_config.nil? || mode_config.is_a?(String) || mode_config.is_a?(Symbol)
+          mode_config = get_validation_mode_config(override_mode: mode_config)
+        end
+
+        adx_value = adx[:value].to_f
+        # 1. Check per-index override
+        # 2. Check mode config (e.g., balanced/strict)
+        # 3. Check global signals default
+        min_strength =
+          index_cfg.dig(:adx_thresholds, :primary_min_strength) ||
+          mode_config[:adx_min_strength] ||
+          AlgoConfig.fetch.dig(:signals, :adx, :min_strength).to_f
+
+        if adx_value < min_strength
+          { valid: false, name: 'ADX Strength', message: "Weak trend strength (#{adx_value.round(1)} < #{min_strength})" }
+        elsif adx_value >= 40
+          { valid: true, name: 'ADX Strength', message: "Very strong trend (#{adx_value.round(1)})" }
+        elsif adx_value >= 25
+          { valid: true, name: 'ADX Strength', message: "Strong trend (#{adx_value.round(1)})" }
+        else
+          { valid: true, name: 'ADX Strength', message: "Moderate trend (#{adx_value.round(1)})" }
+        end
       end
 
       def adx_confidence_factor(adx_value)
@@ -1687,6 +1810,45 @@ module Signal
             signal: signal
           )
         end
+      end
+
+      # --- Dynamic Configuration Helpers ---
+
+      def dynamic_config_enabled?
+        AlgoConfig.fetch.dig(:signals, :use_optimized_params) != false
+      end
+
+      def resolved_supertrend_cfg(instrument, interval, signals_cfg)
+        base_cfg = (signals_cfg[:supertrend] || { period: 7, multiplier: 3.0 }).dup
+
+        return base_cfg unless dynamic_config_enabled?
+
+        # Try to find optimized params for this specific instrument + interval
+        optimized = BestIndicatorParam.best_for_indicator(instrument.id, interval, :supertrend).first
+        return base_cfg unless optimized && optimized.params.is_a?(Hash)
+
+        # Map optimized keys (atr_period, multiplier) to service keys (period, base_multiplier)
+        params = optimized.params.symbolize_keys
+        base_cfg[:period] = params[:atr_period] if params[:atr_period]
+        base_cfg[:base_multiplier] = params[:multiplier] if params[:multiplier]
+
+        Rails.logger.info("[Signal] 🚀 Using optimized Supertrend for #{instrument.symbol_name} @ #{interval}: #{base_cfg}")
+        base_cfg
+      end
+
+      def resolved_adx_min(instrument, interval, index_cfg, timeframe_label)
+        static_min = index_cfg.dig(:adx_thresholds, timeframe_label == 'primary' ? :primary_min_strength : :confirmation_min_strength) || 15
+
+        return static_min unless dynamic_config_enabled?
+
+        optimized = BestIndicatorParam.best_for_indicator(instrument.id, interval, :adx).first
+        return static_min unless optimized && optimized.params.is_a?(Hash)
+
+        optimized_min = optimized.params.symbolize_keys[:min_strength]
+        return static_min unless optimized_min
+
+        Rails.logger.info("[Signal] 🚀 Using optimized ADX min for #{instrument.symbol_name} @ #{interval}: #{optimized_min}")
+        optimized_min
       end
     end
   end

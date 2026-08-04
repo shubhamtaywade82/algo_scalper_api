@@ -71,8 +71,7 @@ module Portfolio
         r.del(KEY_TRIGGERED)
         r.del(KEY_ENTRIES_BLOCKED)
         Portfolio::PnlTracker.reset_day!
-        Portfolio::PaperPeakTracker.reset_day!
-
+        
         Rails.logger.info('[Portfolio::DrawdownGuard] Daily state reset')
       rescue StandardError => e
         Notifications::TelegramNotifier.instance.notify_error(e.message, context: 'Portfolio::DrawdownGuard')
@@ -107,7 +106,7 @@ module Portfolio
           next unless tracker&.active?
 
           begin
-            exit_engine = Rails.application.config.x.trading_supervisor[:exit_manager]
+            exit_engine = Live::ExitEngine.instance
             exit_engine.execute_exit(tracker, 'PORTFOLIO_FLOOR_BREACH')
           rescue StandardError => e
             Rails.logger.error(

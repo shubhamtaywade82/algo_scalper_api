@@ -35,14 +35,20 @@ class PositionTracker < ApplicationRecord
   after_update_commit :clear_redis_cache_if_exited
 
   # Associations
-  belongs_to :instrument # Kept for backward compatibility during transition
-  belongs_to :watchable, polymorphic: true
+  belongs_to :instrument, optional: false, inverse_of: :position_trackers # Kept for backward compatibility during transition
+  belongs_to :watchable, polymorphic: true, optional: false
+  has_one :trade_analytic, dependent: :destroy, inverse_of: :position_tracker
+  has_one :trade_telemetry, class_name: 'TradeTelemetry', foreign_key: :tracker_id, dependent: :destroy,
+                            inverse_of: :tracker
 
   # Scopes
   # Note: enum automatically creates scopes for :pending, :active, :exited, :cancelled
   scope :paper, -> { where(paper: true) }
   scope :live, -> { where(paper: false) }
   scope :exited_paper, -> { where(paper: true, status: :exited) }
+  scope :today, -> { where(created_at: Time.zone.today.all_day) }
+  # Active with exit requested but not yet exited (stuck if order failed or pending)
+  scope :active_with_exit_requested, -> { active.where.not(exit_requested_at: nil) }
 
   # Class Methods
   class << self
@@ -112,7 +118,10 @@ class PositionTracker < ApplicationRecord
         avg_realized_pnl_pct: avg_realized_pnl_pct,
         avg_unrealized_pnl_pct: avg_unrealized_pnl_pct,
         winners: exited.count { |t| (t.last_pnl_rupees || 0).positive? },
-        losers: exited.count { |t| (t.last_pnl_rupees || 0).negative? }
+        losers: exited.count { |t| (t.last_pnl_rupees || 0).negative? },
+        is_blocked: Portfolio::DrawdownGuard.triggered?,
+        blocked_reason: Portfolio::DrawdownGuard.triggered? ? 'Drawdown Guard Active' : nil,
+        peak_pnl: Portfolio::PnlTracker.peak_pnl.to_f.round(2)
       }
     end
 
@@ -243,6 +252,17 @@ class PositionTracker < ApplicationRecord
       quantity: quantity.to_i,
       segment: segment
     }
+  end
+
+  def in_profit?
+    current_pnl_rupees.to_f.positive?
+  end
+
+  # Returns the state machine for this tracker, giving callers a clean
+  # capability-based interface (can_trail?, can_request_exit?, etc.) and
+  # validated transition helpers without reading raw status strings.
+  def state_machine
+    Positions::States::PositionStateMachine.new(self)
   end
 
   def mark_active!(avg_price:, quantity:)

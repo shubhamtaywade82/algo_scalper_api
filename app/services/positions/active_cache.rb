@@ -2,112 +2,123 @@
 
 require 'singleton'
 require 'concurrent/map'
+require_relative '../concerns/broker_fee_calculator'
 
 module Positions
+  # Position data structure - defined outside ActiveCache to avoid re-definition issues
+  class PositionData
+    attr_accessor :tracker_id, :security_id, :segment, :entry_price, :quantity,
+                  :sl_price, :tp_price, :high_water_mark, :current_ltp, :pnl,
+                  :pnl_pct, :peak_profit_pct, :min_profit_pct, :trend,
+                  :time_in_position, :breakeven_locked, :trailing_stop_price,
+                  :sl_offset_pct, :position_direction, :index_key,
+                  :underlying_segment, :underlying_security_id, :underlying_symbol,
+                  :underlying_trend_score, :underlying_ltp, :price_history,
+                  :last_updated_at
+
+    def initialize(attrs = {})
+      attrs.each do |k, v|
+        public_send("#{k}=", v) if respond_to?("#{k}=")
+      end
+    end
+
+    def composite_key
+      "#{segment}:#{security_id}"
+    end
+
+    def valid?
+      entry_price&.positive? && current_ltp&.positive?
+    end
+
+    def capital_deployed
+      return 0.0 unless entry_price && quantity
+      entry_price * quantity
+    end
+
+    def sl_hit?
+      return false unless sl_price && current_ltp&.positive?
+
+      # Determine position type from position_direction or tracker side
+      # position_direction can be :bullish/:bearish or 'long_ce'/'long_pe'
+      is_ce = ce_position?
+
+      # For CE (long_ce): SL is below entry, price going down hits SL
+      # For PE (long_pe): SL is above entry, price going up hits SL
+      is_ce ? (current_ltp <= sl_price) : (current_ltp >= sl_price)
+    end
+
+    def tp_hit?
+      return false unless tp_price && current_ltp&.positive?
+
+      # Determine position type
+      is_ce = ce_position?
+
+      # For CE (long_ce): TP is above entry, price going up hits TP
+      # For PE (long_pe): TP is below entry, price going down hits TP
+      is_ce ? (current_ltp >= tp_price) : (current_ltp <= tp_price)
+    end
+
+    # Determine if this is a CE (Call) position
+    def ce_position?
+      # Check position_direction (can be :bullish/:bearish or 'long_ce'/'long_pe')
+      dir = position_direction.to_s.downcase
+      return true if %w[long_ce bullish].include?(dir)
+      return false if %w[long_pe bearish].include?(dir)
+
+      # Fallback: default to CE if unknown (safer default for long positions)
+      true
+    end
+
+    def update_ltp(ltp, timestamp: Time.current)
+      self.current_ltp = ltp.to_f
+      self.last_updated_at = timestamp
+
+      # Maintain price history (last 10 ticks) for velocity/acceleration
+      self.price_history ||= []
+      self.price_history << ltp.to_f
+      self.price_history.shift if self.price_history.size > 10
+
+      recalculate_pnl
+    end
+
+    # rubocop:disable Metrics/AbcSize
+    def recalculate_pnl
+      return unless entry_price&.positive? && current_ltp&.positive? && quantity&.positive?
+
+      gross_pnl = (current_ltp - entry_price) * quantity
+      # Deduct broker fees (₹20 per order)
+      self.pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: false)
+
+      # Calculate Net pnl_pct as decimal (0.0573 for 5.73%)
+      invested_capital = entry_price * quantity
+      self.pnl_pct = invested_capital.positive? ? (pnl / invested_capital) : 0.0
+
+      # Update HWM
+      self.high_water_mark = pnl if high_water_mark.nil? || pnl > high_water_mark
+
+      # Update peak profit percentage
+      self.peak_profit_pct = pnl_pct if peak_profit_pct.nil? || pnl_pct > peak_profit_pct
+
+      # Update min profit percentage (MAE)
+      self.min_profit_pct = pnl_pct if min_profit_pct.nil? || pnl_pct < min_profit_pct
+    end
+    # rubocop:enable Metrics/AbcSize
+
+    def [](key)
+      public_send(key)
+    end
+
+    def []=(key, value)
+      public_send("#{key}=", value)
+    end
+  end
+
   # Ultra-fast in-memory position cache for NEMESIS V3
   # Mirrors Redis PnL + RedisTickCache for sub-millisecond lookups
   # Subscribes directly to MarketFeedHub callbacks for real-time updates
   # rubocop:disable Metrics/ClassLength
   class ActiveCache
     include Singleton
-
-    # Position data structure
-    PositionData = Struct.new(
-      :tracker_id,
-      :security_id,
-      :segment,
-      :entry_price,
-      :quantity,
-      :sl_price,
-      :tp_price,
-      :high_water_mark,
-      :current_ltp,
-      :pnl,
-      :pnl_pct,
-      :peak_profit_pct,
-      :trend,
-      :time_in_position,
-      :breakeven_locked,
-      :trailing_stop_price,
-      :sl_offset_pct,
-      :position_direction,
-      :index_key,
-      :underlying_segment,
-      :underlying_security_id,
-      :underlying_symbol,
-      :underlying_trend_score,
-      :underlying_ltp,
-      :last_updated_at,
-      keyword_init: true
-    ) do
-      def composite_key
-        "#{segment}:#{security_id}"
-      end
-
-      def valid?
-        entry_price&.positive? && current_ltp&.positive?
-      end
-
-      def sl_hit?
-        return false unless sl_price && current_ltp&.positive?
-
-        # Determine position type from position_direction or tracker side
-        # position_direction can be :bullish/:bearish or 'long_ce'/'long_pe'
-        is_ce = ce_position?
-
-        # For CE (long_ce): SL is below entry, price going down hits SL
-        # For PE (long_pe): SL is above entry, price going up hits SL
-        is_ce ? (current_ltp <= sl_price) : (current_ltp >= sl_price)
-      end
-
-      def tp_hit?
-        return false unless tp_price && current_ltp&.positive?
-
-        # Determine position type
-        is_ce = ce_position?
-
-        # For CE (long_ce): TP is above entry, price going up hits TP
-        # For PE (long_pe): TP is below entry, price going down hits TP
-        is_ce ? (current_ltp >= tp_price) : (current_ltp <= tp_price)
-      end
-
-      # Determine if this is a CE (Call) position
-      def ce_position?
-        # Check position_direction (can be :bullish/:bearish or 'long_ce'/'long_pe')
-        dir = position_direction.to_s.downcase
-        return true if %w[long_ce bullish].include?(dir)
-        return false if %w[long_pe bearish].include?(dir)
-
-        # Fallback: default to CE if unknown (safer default for long positions)
-        true
-      end
-
-      def update_ltp(ltp, timestamp: Time.current)
-        self.current_ltp = ltp.to_f
-        self.last_updated_at = timestamp
-        recalculate_pnl
-      end
-
-      # rubocop:disable Metrics/AbcSize
-      def recalculate_pnl
-        return unless entry_price&.positive? && current_ltp&.positive? && quantity&.positive?
-
-        self.pnl = (current_ltp - entry_price) * quantity
-        # Calculate pnl_pct as decimal (0.0573 for 5.73%) for consistent storage (matches Redis format)
-        self.pnl_pct = entry_price.positive? ? ((current_ltp - entry_price) / entry_price) : 0.0
-
-        # Update HWM
-        self.high_water_mark = pnl if high_water_mark.nil? || pnl > high_water_mark
-
-        # Update peak profit percentage (highest profit % achieved)
-        self.peak_profit_pct = pnl_pct if peak_profit_pct.nil? || pnl_pct > peak_profit_pct
-
-        # NEW (Step 12): Persist peak if it was updated
-        # Note: Peak persistence is handled by ActiveCache.update_ltp, not here
-        # This avoids calling private methods from PositionData struct
-      end
-      # rubocop:enable Metrics/AbcSize
-    end
 
     def initialize
       @cache = Concurrent::Map.new # composite_key => PositionData
@@ -126,6 +137,8 @@ module Positions
         Rails.logger.error("[ActiveCache] Redis init error: #{e.class} - #{e.message}")
         nil
       end
+      @last_bulk_load_count = nil
+      @last_profit_lock_check = Time.current
     end
 
     # Start the cache (subscribe to MarketFeedHub callbacks)
@@ -308,7 +321,7 @@ module Positions
       old_peak = position.peak_profit_pct if peak_updated
 
       updates.each do |key, value|
-        position[key] = value if position.respond_to?("#{key}=")
+        position.public_send("#{key}=", value) if position.respond_to?("#{key}=")
       end
 
       # NEW (Step 12): Persist peak if it was updated
@@ -389,6 +402,9 @@ module Positions
 
       # Check exit triggers
       check_exit_triggers(position)
+
+      # Evaluate portfolio-level profit lock
+      evaluate_profit_lock
     rescue StandardError => e
       @stats[:errors] += 1
       Rails.logger.error("[Positions::ActiveCache] Error handling tick: #{e.class} - #{e.message}")
@@ -412,6 +428,16 @@ module Positions
                                         tracker_id: position.tracker_id,
                                         position: position
                                       })
+    end
+
+    def evaluate_profit_lock
+      now = Time.current
+      return unless now - @last_profit_lock_check >= 2.0
+
+      @last_profit_lock_check = now
+      Portfolio::ProfitLockEngine.evaluate!
+    rescue StandardError => e
+      Rails.logger.error("[ActiveCache] ProfitLock evaluation failed: #{e.message}")
     end
 
     # Calculate default SL from tracker (30% below entry for CE)

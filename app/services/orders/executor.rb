@@ -50,7 +50,7 @@ module Orders
         false
       end
 
-      def exit_market!(tracker:, reason: "manual_exit")
+      def exit_market!(tracker:, reason: 'manual_exit')
         return false unless tracker&.active?
 
         Rails.logger.info("[Orders::Executor] EXIT_MARKET triggered for #{tracker.symbol} (ID: #{tracker.id}). Reason: #{reason}")

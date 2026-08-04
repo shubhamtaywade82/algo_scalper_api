@@ -25,11 +25,12 @@ module Optimization
       }
     }.freeze
 
-    def initialize(instrument:, interval:, indicator:, lookback_days: 45)
+    def initialize(instrument:, interval:, indicator:, lookback_days: 45, dry_run: false)
       @instrument = instrument
       @interval = interval
       @lookback = lookback_days
       @indicator = indicator.to_sym
+      @dry_run = dry_run
 
       return if INDICATOR_PARAM_SPACES.key?(@indicator)
 
@@ -171,6 +172,7 @@ module Optimization
     end
 
     def persist(best)
+      return if @dry_run
       return unless defined?(BestIndicatorParam)
       return unless best[:params] && best[:metrics]
 

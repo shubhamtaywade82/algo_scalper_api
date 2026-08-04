@@ -7,6 +7,8 @@ module Ai
     class TaskRunner
       def self.run(solver_key, symbol, days = 30, dry_run: false)
         case solver_key.to_s
+        when 'calibration'
+          Ai::Calibration::Runner.call(symbol: symbol, days: days, dry_run: dry_run)
         when 'indicator_tuning'
           run_indicator_optimization(symbol, days, dry_run: dry_run)
         when 'trailing_optimization'
@@ -20,8 +22,7 @@ module Ai
         private
 
         def run_indicator_optimization(symbol, days, dry_run: false)
-          index_cfg = IndiaIndexRegistry.for_key(symbol) || { key: symbol }
-          instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
+          instrument = IndexInstrumentCache.instance.get_or_fetch(key: symbol)
           return { error: 'Instrument not found' } unless instrument
 
           # Run for the primary indicators
@@ -42,7 +43,7 @@ module Ai
         def run_trailing_optimization(symbol, dry_run: false)
           optimizer = Optimization::TrailingOptimizer.new(index_key: symbol)
           result = optimizer.optimize
-
+          
           if result && result[:best_params]
             # We need to apply these to algo.yml as TrailingOptimizer doesn't self-persist yet
             apply_trailing_params(symbol, result[:best_params], dry_run: dry_run)
@@ -52,26 +53,23 @@ module Ai
 
         def apply_trailing_params(symbol, params, dry_run: false)
           if dry_run
-            Rails.logger.info("[TaskRunner] [DRY_RUN] Would apply trailing params to algo_config_document for #{symbol}: #{params.inspect}")
+            Rails.logger.info("[TaskRunner] [DRY_RUN] Would apply trailing params to algo.yml for #{symbol}: #{params.inspect}")
             return
           end
 
-          idx_key = symbol.to_s.downcase
-          patch = {
-            risk: {
-              institutional_trailing: {
-                idx_key.to_sym => params.transform_keys(&:to_sym)
-              }
-            }
-          }
-
-          AlgoConfig::DocumentStore.apply_deep_merge_patch!(
-            patch,
-            source: 'ai_autonomous_trailing',
-            actor: 'TaskRunner',
-            metadata: { index_key: idx_key }
-          )
-          Rails.logger.info("[TaskRunner] Applied trailing params to algo_config_document for #{symbol}")
+          # Reusing logic from optimize_trailing.rake but in a service context
+          config_path = Rails.root.join('config/algo.yml')
+          config = YAML.safe_load(File.read(config_path))
+          
+          idx_key = symbol.downcase
+          if config['risk'] && config['risk']['institutional_trailing']
+            config['risk']['institutional_trailing'][idx_key] ||= {}
+            params.each do |k, v|
+              config['risk']['institutional_trailing'][idx_key][k.to_s] = v
+            end
+            File.write(config_path, config.to_yaml)
+            Rails.logger.info("[TaskRunner] Applied trailing params to algo.yml for #{symbol}")
+          end
         end
       end
     end

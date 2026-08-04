@@ -33,6 +33,13 @@ development:
     priority: 5
     description: "AI technical analysis for SENSEX - post-close scheduled run; intraday flow is event-driven from tick events"
 
+  dhan_auto_ip_sync:
+    class: Dhan::AutoIpUpdaterJob
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 20
+    description: "Auto-syncs local public IP with Dhan whitelisting slots when cooldown expires"
+
 production:
   pre_market_iv_baseline:
     class: PreMarketIvBaselineJob
@@ -180,10 +187,3 @@ production:
     queue_name: background
     priority: 20
     description: "Auto-syncs local public IP with Dhan whitelisting slots when cooldown expires"
-
-  public_ip_log:
-    class: PublicIpLogJob
-    schedule: every 15 minutes
-    queue_name: background
-    priority: 25
-    description: "Persists public IP last-seen (throttled); dashboard polling does not write public_ip_logs"

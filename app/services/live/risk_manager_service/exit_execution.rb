@@ -10,22 +10,17 @@ module Live
       # RiskManagerService no longer supports self-managed fallback execution.
       def dispatch_exit(exit_engine, tracker, reason)
         if exit_engine.respond_to?(:execute_exit) && !exit_engine.equal?(self)
-          result = exit_engine.execute_exit(tracker, reason)
+          exit_engine.execute_exit(tracker, reason)
 
-          # ONLY record realized PnL if the exit was successful and NOT already processed
-          # This prevents double-counting PnL when multiple ticks trigger the same exit
-          if result.is_a?(Hash) && result[:success] && %w[already_exited exit_lock_held].exclude?(result[:reason])
-            begin
-              pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)&.dig(:pnl) ||
-                    tracker.last_pnl_rupees.to_f
-              Portfolio::PnlTracker.mark_realized(tracker_id: tracker.id, pnl: pnl.to_f)
-            rescue StandardError => e
-              Rails.logger.error(
-                "[RiskManager] Portfolio::PnlTracker.mark_realized failed for tracker=#{tracker.id}: #{e.message}"
-              )
-            end
-          elsif result.is_a?(Hash) && result[:success] && result[:reason] == 'already_exited'
-             Rails.logger.debug("[RiskManager] Tracker #{tracker.id} already exited, skipping mark_realized in dispatch_exit")
+          # Record realized PnL in portfolio tracker after exit (best-effort)
+          begin
+            pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)&.dig(:pnl) ||
+                  tracker.last_pnl_rupees.to_f
+            Portfolio::PnlTracker.mark_realized(tracker_id: tracker.id, pnl: pnl.to_f)
+          rescue StandardError => e
+            Rails.logger.error(
+              "[RiskManager] Portfolio::PnlTracker.mark_realized failed for tracker=#{tracker.id}: #{e.message}"
+            )
           end
         else
           Rails.logger.fatal(
