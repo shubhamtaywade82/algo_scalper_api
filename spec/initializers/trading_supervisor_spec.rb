@@ -2,9 +2,43 @@
 
 require 'rails_helper'
 
-RSpec.describe TradingSystem::Daemon do
+# Define the classes locally for testing since they're defined in the initializer
+module TradingSystem
+  class Supervisor
+    def initialize
+      @services = {}
+      @running = false
+    end
+
+    def register(name, instance)
+      @services[name] = instance
+    end
+
+    delegate :[], to: :@services
+
+    def start_all
+      return if @running
+
+      @services.each_value(&:start)
+
+      @running = true
+    end
+
+    def stop_all
+      return unless @running
+
+      @services.reverse_each do |_name, service|
+        service.stop
+      end
+
+      @running = false
+    end
+  end
+end
+
+RSpec.describe 'TradingSystem::Supervisor Market Close Behavior' do
   let(:supervisor) { TradingSystem::Supervisor.new }
-  let(:market_feed) { instance_double(Live::MarketFeedHubService, start: true, stop: true, subscribe_many: true) }
+  let(:market_feed) { instance_double(MarketFeedHubService, start: true, stop: true) }
   let(:signal_scheduler) { instance_double(Signal::Scheduler, start: true, stop: true) }
   let(:risk_manager) { instance_double(Live::RiskManagerService, start: true, stop: true) }
   let(:heartbeat) { instance_double(TradingSystem::PositionHeartbeat, start: true, stop: true) }

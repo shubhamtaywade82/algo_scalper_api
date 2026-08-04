@@ -17,6 +17,43 @@ module Trading
         policy = POLICIES.fetch(key, POLICIES[:blocked])
         deep_dup(policy) # return a fresh, immutable object each call
       end
+
+      # Deep freeze helper - must be public to be called during constant definition
+      def deep_freeze(obj)
+        case obj
+        when Hash
+          obj.each_value { |v| deep_freeze(v) }
+        when Array
+          obj.each { |v| deep_freeze(v) }
+        end
+        obj.freeze
+      end
+
+      private
+
+      def normalize_permission(permission)
+        return :blocked if permission.nil?
+
+        if permission.is_a?(String)
+          normalized = permission.strip.downcase
+          return :blocked if normalized == ''
+
+          return normalized.to_sym
+        end
+
+        permission.is_a?(Symbol) ? permission : :blocked
+      end
+
+      def deep_dup(obj)
+        case obj
+        when Hash
+          obj.transform_values { |v| deep_dup(v) }.freeze
+        when Array
+          obj.map { |v| deep_dup(v) }.freeze
+        else
+          obj # primitives are already frozen in our constants
+        end
+      end
     end
 
     # NOTE: :execution_only allows 1-lot scalping but blocks scaling.
@@ -71,47 +108,5 @@ module Trading
         }
       )
     }.freeze
-
-    class << self
-      private
-
-      def normalize_permission(permission)
-        return :blocked if permission.nil?
-
-        if permission.is_a?(String)
-          normalized = permission.strip.downcase
-          return :blocked if normalized == ''
-
-          return normalized.to_sym
-        end
-
-        permission.is_a?(Symbol) ? permission : :blocked
-      end
-
-      def deep_freeze(obj)
-        case obj
-        when Hash
-          obj.each_value { |v| deep_freeze(v) }
-          obj.freeze
-        when Array
-          obj.each { |v| deep_freeze(v) }
-          obj.freeze
-        else
-          obj.freeze
-        end
-      end
-
-      def deep_dup(obj)
-        case obj
-        when Hash
-          obj.each_with_object({}) { |(k, v), h| h[k] = deep_dup(v) }.freeze
-        when Array
-          obj.map { |v| deep_dup(v) }.freeze
-        else
-          obj # primitives are already frozen in our constants
-        end
-      end
-    end
   end
 end
-

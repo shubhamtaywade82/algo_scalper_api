@@ -658,29 +658,12 @@ module Options
         chain_data = begin
           instrument.fetch_option_chain(expiry_date)
         rescue StandardError => e
-          if defined?(Rails)
-            Rails.logger.warn(
-              "[Options] Could not fetch option chain for #{index_cfg[:key]} #{expiry_date}: #{e.class} - #{e.message}"
-            )
-          end
+          Rails.logger.warn(
+            "[Options] Could not fetch option chain for #{index_cfg[:key]} #{expiry_date}: #{e.class} - #{e.message}"
+          ) if defined?(Rails)
           nil
         end
-
-        unless chain_data && chain_data[:oc].is_a?(Hash)
-          if defined?(Rails)
-            Rails.logger.warn(
-              "[Options] No option chain data for #{index_cfg[:key]} #{expiry_date} " \
-              "(chain_data: #{chain_data.present? ? 'present but invalid' : 'nil'})"
-            )
-          end
-          return []
-        end
-
-        # Log chain data availability for debugging
-        if chain_data[:oc].empty?
-          Rails.logger.warn("[Options] Option chain for #{index_cfg[:key]} #{expiry_date} is empty")
-          return []
-        end
+        return [] unless chain_data && chain_data[:oc].is_a?(Hash)
 
         spot = chain_data[:last_price]&.to_f
         unless spot&.positive?
@@ -698,57 +681,20 @@ module Options
         side_sym = direction == :bullish ? :CE : :PE
         oc_side = direction == :bullish ? :ce : :pe
 
-        # Filter option chain to only include strikes that exist in database
-        # This ensures we only select strikes that have derivatives synced
-        expiry_date_obj = Date.parse(expiry_date)
-        option_type = side_sym.to_s
-
-        # Get all available strikes from database for this expiry and option type
-        available_strikes_bd = instrument.derivatives.where(
-          expiry_date: expiry_date_obj,
-          option_type: option_type
-        ).pluck(:strike_price).map { |sp| BigDecimal(sp.to_s) }.to_set
-
-        # Filter option chain to only include strikes that exist in database
-        filtered_chain = chain_data[:oc].select do |strike_key, _strike_data|
-          strike_float = strike_key.to_f
-          strike_bd = BigDecimal(strike_float.to_s)
-          available_strikes_bd.include?(strike_bd)
-        end
-
-        if filtered_chain.empty?
-          Rails.logger.warn(
-            "[Options] No option chain strikes match database derivatives for #{index_cfg[:key]} " \
-            "expiry=#{expiry_date}, option_type=#{option_type}. " \
-            "Chain has #{chain_data[:oc].size} strikes, DB has #{available_strikes_bd.size} derivatives. " \
-            "Available DB strikes: #{available_strikes_bd.to_a.map(&:to_f).sort.first(10).inspect}"
-          ) if defined?(Rails)
-          return []
-        end
-
-        if filtered_chain.size < chain_data[:oc].size
-          Rails.logger.debug(
-            "[Options] Filtered option chain: #{chain_data[:oc].size} -> #{filtered_chain.size} strikes " \
-            "(only strikes with DB derivatives) for #{index_cfg[:key]}"
-          ) if defined?(Rails)
-        end
-
         selector = Options::StrikeQualification::StrikeSelector.new
         selection = selector.call(
           index_key: index_cfg[:key],
           side: side_sym,
           permission: normalized_permission,
           spot: spot,
-          option_chain: filtered_chain,
+          option_chain: chain_data[:oc],
           trend: direction
         )
 
         unless selection[:ok]
-          if defined?(Rails)
-            Rails.logger.info(
-              "[Options] StrikeSelector BLOCKED #{index_cfg[:key]}: #{selection[:reason]}"
-            )
-          end
+          Rails.logger.info(
+            "[Options] StrikeSelector BLOCKED #{index_cfg[:key]}: #{selection[:reason]}"
+          ) if defined?(Rails)
           return []
         end
 
@@ -766,12 +712,6 @@ module Options
         used_strike_type = selection[:strike_type]
 
         if legs.blank? && selection[:strike_type] != :ATM
-          if defined?(Rails)
-            Rails.logger.debug do
-              "[Options] Selected strike #{selection[:strike]} (#{selection[:strike_type]}) not found, " \
-                "falling back to ATM #{selection[:atm_strike]} for #{index_cfg[:key]}"
-            end
-          end
           legs = filter_and_rank_from_instrument_data(
             chain_data[:oc],
             atm: spot,
@@ -784,19 +724,11 @@ module Options
           used_strike_type = :ATM
         end
 
-        if legs.blank?
-          if defined?(Rails)
-            Rails.logger.warn(
-              "[Options] No legs found after filtering for #{index_cfg[:key]} " \
-              "(strike: #{selection[:strike]}, type: #{used_strike_type}, side: #{oc_side})"
-            )
-          end
-          return []
-        end
+        return [] if legs.blank?
 
         leg = legs.first
         pick = leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id, :strike)
-                  .merge(strike_type: used_strike_type)
+                 .merge(strike_type: used_strike_type)
 
         validator = Options::StrikeQualification::ExpectedMoveValidator.new
         validation = validator.call(
@@ -808,11 +740,9 @@ module Options
         )
 
         unless validation[:ok]
-          if defined?(Rails)
-            Rails.logger.info(
-              "[Options] ExpectedMoveValidator BLOCKED #{index_cfg[:key]}: #{validation[:reason]}"
-            )
-          end
+          Rails.logger.info(
+            "[Options] ExpectedMoveValidator BLOCKED #{index_cfg[:key]}: #{validation[:reason]}"
+          ) if defined?(Rails)
           return []
         end
 
@@ -884,12 +814,12 @@ module Options
         # For buying options, focus on ATM and nearby strikes only (ATM, 1OTM, 2OTM max)
         # This prevents selecting expensive ITM options or far OTM options
         computed_target_strikes = if [:ce, 'ce'].include?(side)
-                                    # CE: ATM, ATM+1, ATM+2 (OTM calls, max 2OTM)
-                                    [atm_strike, atm_strike + strike_interval, atm_strike + (2 * strike_interval)]
-                                  else
-                                    # PE: ATM, ATM-1, ATM-2 (OTM puts, max 2OTM)
-                                    [atm_strike, atm_strike - strike_interval, atm_strike - (2 * strike_interval)]
-                                  end
+                           # CE: ATM, ATM+1, ATM+2 (OTM calls, max 2OTM)
+                           [atm_strike, atm_strike + strike_interval, atm_strike + (2 * strike_interval)]
+                         else
+                           # PE: ATM, ATM-1, ATM-2 (OTM puts, max 2OTM)
+                           [atm_strike, atm_strike - strike_interval, atm_strike - (2 * strike_interval)]
+                         end
         available_strikes = option_chain_data.keys.map(&:to_f)
         target_strikes = (target_strikes.presence || computed_target_strikes).map(&:to_f)
         target_strikes = target_strikes.select { |s| available_strikes.include?(s) }
@@ -1025,9 +955,23 @@ module Options
           # Use BigDecimal for accurate float comparison
           strike_bd = BigDecimal(strike.to_s)
 
-          # Try to find derivative using instrument.derivatives association first
-          derivative = if instrument.respond_to?(:derivatives)
-                         instrument.derivatives.where(
+          derivative_scope =
+            if instrument.respond_to?(:derivatives) && (instrument.derivatives.present? || instrument.persisted?)
+              instrument.derivatives
+            end
+
+          derivative = if derivative_scope
+                         Array(derivative_scope).detect do |d|
+                           d.expiry_date == expiry_date_obj &&
+                             d.option_type == option_type &&
+                             BigDecimal(d.strike_price.to_s) == strike_bd
+                         end
+                       else
+                         # Fall back to querying the Derivative model when association is unavailable
+                         Derivative.where(
+                           underlying_symbol: instrument.symbol_name,
+                           exchange: instrument.exchange,
+                           segment: instrument.segment,
                            expiry_date: expiry_date_obj,
                            option_type: option_type
                          ).detect do |d|
@@ -1089,8 +1033,7 @@ module Options
             next
           end
 
-          security_id = derivative.security_id.to_s
-          unless valid_security_id?(security_id)
+          if security_id.blank?
             Rails.logger.debug do
               "[Options::ChainAnalyzer] Invalid security_id for #{index_cfg[:key]} #{strike} #{side}: " \
                 "#{security_id.inspect} (derivative_id=#{derivative.id})"

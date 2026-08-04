@@ -78,4 +78,3 @@ RSpec.describe Trading::PermissionExecutionPolicy do
     end
   end
 end
-

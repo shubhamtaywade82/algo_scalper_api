@@ -211,29 +211,6 @@ module Signal
         end
         # ===== END PERMISSION RESOLUTION =====
 
-        # ===== SMC DECISION ALIGNMENT (HARD FILTER) =====
-        # Check if SMC decision (call/put/no_trade) aligns with signal direction
-        # This provides additional confirmation beyond permission levels
-        # Skip this check if SMC+AVRZ permission system is disabled
-        enable_smc_permission = signals_cfg.fetch(:enable_smc_avrz_permission, true)
-        enable_smc_alignment = signals_cfg.fetch(:enable_smc_decision_alignment, true)
-
-        if enable_smc_permission && enable_smc_alignment
-          smc_decision = get_smc_decision(index_cfg, instrument, signals_cfg, final_direction)
-          unless smc_decision_aligned?(smc_decision, final_direction)
-            Rails.logger.info(
-              "[Signal] SMC Decision BLOCKED #{index_cfg[:key]}: " \
-              "signal=#{final_direction}, smc=#{smc_decision} (misaligned or no_trade)"
-            )
-            Signal::StateTracker.reset(index_cfg[:key])
-            return
-          end
-          Rails.logger.info("[Signal] SMC Decision CONFIRMED #{index_cfg[:key]}: #{smc_decision} aligns with #{final_direction}")
-        else
-          Rails.logger.debug { "[Signal] SMC Decision alignment check SKIPPED for #{index_cfg[:key]} (SMC+AVRZ disabled)" }
-        end
-        # ===== END SMC DECISION ALIGNMENT =====
-
         # Get state snapshot first for signal persistence
         state_snapshot = Signal::StateTracker.record(
           index_key: index_cfg[:key],
@@ -303,25 +280,7 @@ module Signal
           }
         )
 
-        if signals_cfg.dig(:setup_validator, :enabled)
-          validator = SetupValidator.new(
-            underlying: index_cfg[:key],
-            direction: final_direction,
-            series: primary_analysis[:series],
-            supertrend_result: primary_analysis[:supertrend],
-            index_cfg: index_cfg
-          )
-          setup_result = validator.valid?
-          unless setup_result.valid
-            Rails.logger.info("[Signal] SetupValidator blocked #{index_cfg[:key]}: #{setup_result.reason}")
-            record_signal_skip(signal, setup_result.reason, stage: "setup_validator", code: setup_result.reason)
-            Signal::StateTracker.reset(index_cfg[:key])
-            record_cycle_block!("setup_validator", regime: regime, direction: final_direction)
-            return summary
-          end
-          diagnostic_metadata[:iv_percentile] = setup_result.metadata[:iv_percentile]
-          diagnostic_metadata[:momentum_score] = setup_result.metadata[:momentum_score]
-        end
+        # Rails.logger.info("[Signal] Signal state for #{index_cfg[:key]}: count=#{state_snapshot[:count]} multiplier=#{state_snapshot[:multiplier]}")
 
         # ===== STRIKE QUALIFICATION LAYER (HARD GATE) =====
         # First point where we have:
@@ -337,6 +296,20 @@ module Signal
           rescue StandardError
             nil
           end
+
+        unless expected_spot_move&.positive?
+          Rails.logger.info("[Signal] Missing expected_spot_move (ATR) -> BLOCK #{index_cfg[:key]}")
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
+
+        picks = Options::ChainAnalyzer.pick_strikes_with_qualification(
+          index_cfg: index_cfg,
+          direction: final_direction,
+          permission: permission,
+          expected_spot_move: expected_spot_move
+        )
+        # ===== END STRIKE QUALIFICATION LAYER =====
 
         unless expected_spot_move&.positive?
           Rails.logger.info("[Signal] Missing expected_spot_move (ATR) -> BLOCK #{index_cfg[:key]}")
@@ -619,6 +592,11 @@ module Signal
       def validate_market_timing
         # TODO: Implement market timing validation if needed
         current_time = Time.zone.now
+
+        # First check if it's a trading day using Market::Calendar
+        unless Market::Calendar.trading_day_today?
+          return { valid: false, name: 'Market Timing', message: 'Not a trading day (weekend/holiday)' }
+        end
 
         expiry_model.trade_allowed?(symbol: symbol)
       rescue StandardError => e

@@ -9,16 +9,7 @@ module Entries
       # @param lookback_minutes [Integer] Minutes to look back for BOS
       # @return [Boolean]
       def bos?(bars, lookback_minutes: 10)
-        direction = bos_direction(bars, lookback_minutes: lookback_minutes)
-        direction != :neutral
-      end
-
-      # Break of Structure (BOS) direction - returns :bullish, :bearish, or :neutral
-      # @param bars [Array<Candle>] Array of candle objects
-      # @param lookback_minutes [Integer] Minutes to look back for BOS
-      # @return [Symbol] :bullish, :bearish, or :neutral
-      def bos_direction(bars, lookback_minutes: 10)
-        return :neutral if bars.nil? || bars.empty? || bars.size < 3
+        return false if bars.blank? || bars.size < 3
 
         lookback_count = [lookback_minutes, bars.size].min
         recent_bars = bars.last(lookback_count)

@@ -34,11 +34,10 @@ class AiTechnicalAnalysisJob < ApplicationJob
         # Set environment variable and execute command
         result = system({ 'STREAM' => 'true' }, "bundle exec rake 'ai:technical_analysis[\"#{query}\"]'")
 
-        if result
-          Rails.logger.info("[AiTechnicalAnalysisJob] Successfully executed for #{index_name}")
-        else
-          Rails.logger.error("[AiTechnicalAnalysisJob] Failed to execute for #{index_name} (exit code: #{$CHILD_STATUS.exitstatus})")
-        end
+      if result
+        Rails.logger.info("[AiTechnicalAnalysisJob] Successfully executed for #{index_name}")
+      else
+        Rails.logger.error("[AiTechnicalAnalysisJob] Failed to execute for #{index_name} (exit code: #{$CHILD_STATUS.exitstatus})")
       end
     end
   rescue StandardError => e

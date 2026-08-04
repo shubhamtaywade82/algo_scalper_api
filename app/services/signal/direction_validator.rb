@@ -67,7 +67,7 @@ module Signal
 
       unless valid
         reasons << "Insufficient directional agreement: #{score}/6 factors agree (minimum: #{min_agreement})"
-        reasons.concat(factors.values.select { |f| !f[:agrees] }.map { |f| f[:reason] })
+        reasons.concat(factors.values.reject { |f| f[:agrees] }.pluck(:reason))
       end
 
       Result.new(
@@ -81,8 +81,6 @@ module Signal
       Rails.logger.error("[DirectionValidator] Validation error: #{e.class} - #{e.message}")
       invalid_result("Validation error: #{e.message}")
     end
-
-    private
 
     def self.check_htf_supertrend(instrument:, index_cfg:, primary_supertrend:)
       # Check 15m Supertrend as HTF confirmation (reuse primary_supertrend to avoid recalculation)
