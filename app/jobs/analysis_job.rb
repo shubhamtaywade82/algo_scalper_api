@@ -14,7 +14,7 @@ class AnalysisJob < ApplicationJob
   self.queue_adapter = :async
   queue_as :background
 
-  retry_on StandardError, wait: -> (executions) { 2**executions }, attempts: 2
+  retry_on StandardError, wait: ->(executions) { 2**executions }, attempts: 2
 
   AI_TIMEOUT = 120 # seconds
 

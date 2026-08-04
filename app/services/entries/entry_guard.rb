@@ -13,48 +13,12 @@ module Entries
     BOS_MAX_ENTRY_DISTANCE_R = 0.5
 
     class << self
+      def entry_guard_pipeline
+        @entry_guard_pipeline ||= EntryGuardPipeline.new
+      end
+
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
         Rails.logger.info("[EntryGuard] Attempting entry for #{index_cfg[:key]} (#{direction})")
-
-        # Circuit breaker — highest priority, checked before everything else
-        if Risk::CircuitBreaker.instance.tripped?
-          cb = Risk::CircuitBreaker.instance.status
-          Rails.logger.error("[EntryGuard] Entry blocked — circuit breaker tripped: #{cb[:reason]} (at: #{cb[:at]})")
-          return false
-        end
-
-        unless bos_contract_present?(entry_metadata)
-Rails.logger.error(
-            "[EntryGuard] Direct entry blocked for #{index_cfg[:key]}: BOS contract missing. Metadata: #{entry_metadata.inspect}"
-          )
-          return false
-        end
-        Rails.logger.debug "[EntryGuard] Contract check passed for #{index_cfg[:key]}"
-
-        # Time regime validation (session-aware entry rules)
-        unless time_regime_allows_entry?(index_cfg: index_cfg, pick: pick, direction: direction)
-          Rails.logger.info("[EntryGuard] Entry blocked by time regime rules for #{index_cfg[:key]}")
-          return false
-        end
-
-        # Edge failure detector (rolling PnL window, consecutive SLs, session-based)
-        edge_check = Live::EdgeFailureDetector.instance.entries_paused?(index_key: index_cfg[:key])
-        if edge_check[:paused]
-          resume_at = edge_check[:resume_at]
-          resume_str = resume_at ? resume_at.strftime('%H:%M IST') : 'manual override'
-          Rails.logger.info(
-            "[EntryGuard] Entry blocked by edge failure detector for #{index_cfg[:key]}: #{edge_check[:reason]} (resume at: #{resume_str})"
-          )
-          signal&.record_entry_outcome('skipped', 'drawdown_guard_active')
-          return false
-        end
-
-        # Portfolio-level policy gate (fast fail before building context)
-        entry_policy = Policies::EntryPolicy.new(index_cfg: index_cfg, direction: direction)
-        unless entry_policy.permitted?
-          Rails.logger.info("[EntryGuard] EntryPolicy blocked — #{entry_policy.reasons.join(', ')}")
-          return false
-        end
 
         context = {
           index_cfg: index_cfg,
@@ -71,71 +35,12 @@ Rails.logger.error(
           return false
         end
 
+        instrument = context[:instrument]
+        side = context[:side]
+        is_supertrend = context[:is_supertrend]
+        ltp = context[:ltp]
         multiplier = [scale_multiplier.to_i, 1].max
-        Rails.logger.info("[EntryGuard] Scale multiplier for #{index_cfg[:key]}: x#{multiplier}") if multiplier > 1
-
-        side = direction == :bullish ? 'long_ce' : 'long_pe'
-        is_supertrend = entry_metadata&.dig(:entry_contract).to_s == SUPERTREND_CONTRACT
-
-        # Exposure check for Supertrend: Allow only ONE active position per index to prevent over-trading
-        if is_supertrend
-          active_idx_pos = PositionTracker.active.where("(meta->>'index_key') = ?", index_cfg[:key].to_s).exists?
-          if active_idx_pos
-            Rails.logger.debug { "[EntryGuard] Supertrend exposure check failed: Active position already exists for #{index_cfg[:key]}" }
-            return false
-          end
-        elsif !exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
-          Rails.logger.debug { "[EntryGuard] Exposure check failed for #{index_cfg[:key]}: #{pick[:symbol]} (side: #{side}, max_same_side: #{index_cfg[:max_same_side]})" }
-          return false
-        end
-
-        if cooldown_active?(pick[:symbol], index_cfg[:cooldown_sec].to_i)
-          Rails.logger.warn("[EntryGuard] Cooldown active for #{index_cfg[:key]}: #{pick[:symbol]}")
-          return false
-        end
-        unless bos_context
-          signal&.record_entry_outcome('blocked', 'bos_structure_gate')
-          return false
-        end
-
-    class << self
-      include Live::UnderlyingLtpResolver
-
-        # ===== Unified instrument profile + capital cap sizing (hard rules) =====
-        symbol = index_cfg[:key].to_s.upcase
-        permission_sym = (permission || entry_metadata&.dig(:permission) || :scale_ready).to_s.downcase.to_sym
-
-        # Weekly expiry only (hard rule) - block monthly contracts for NIFTY/SENSEX.
-        if %w[NIFTY SENSEX].include?(symbol) && !weekly_contract?(pick: pick, index_cfg: index_cfg)
-          Rails.logger.info("[EntryGuard] Weekly-only expiry rule blocked #{symbol} entry for #{pick[:symbol]}")
-          return false
-        end
-
-        profile = Trading::InstrumentExecutionProfile.for(symbol)
-
-        if permission_sym == :execution_only && profile[:allow_execution_only] == false
-          Rails.logger.info("[EntryGuard] Execution-only blocked for #{symbol} by profile")
-          return false
-        end
-
-        permission_cap = profile[:max_lots_by_permission][permission_sym].to_i
-        lot_size = Trading::LotCalculator.lot_size_for(symbol)
-
-        cap_lots = Trading::CapitalAllocator.max_lots(
-          premium: ltp.to_f,
-          lot_size: lot_size,
-          permission_cap: permission_cap
-        )
-
-        if cap_lots <= 0
-          Rails.logger.info(
-            "[EntryGuard] Trade blocked by sizing for #{symbol}: permission=#{permission_sym}, " \
-            "permission_cap=#{permission_cap}, lot_size=#{lot_size}, premium=#{ltp}"
-          )
-          signal&.record_entry_outcome('blocked', 'reentry_cooldown')
-          return false
-        end
-
+        
         if entry_metadata&.dig(:entry_contract).to_s == SUPERTREND_CONTRACT
           # Bypass BOS gate for Supertrend-only mode
           bos_context = {
@@ -159,13 +64,21 @@ Rails.logger.error(
         end
         return false unless bos_context
 
+        # ===== Cooldown check (prevent overtrading) =====
+        symbol_name = pick[:symbol]
+        if cooldown_active?(symbol_name, 5.minutes)
+          Rails.logger.info("[EntryGuard] Entry blocked for #{symbol_name}: Reentry cooldown active (5 mins)")
+          return false
+        end
+
         # ===== Unified instrument profile + capital cap sizing (hard rules) =====
         symbol = index_cfg[:key].to_s.upcase
         permission_sym = (permission || entry_metadata&.dig(:permission) || :scale_ready).to_s.downcase.to_sym
 
         # Weekly expiry only (hard rule) - block monthly contracts for NIFTY/SENSEX.
-        # Bypass for Supertrend testing mode.
-        if !is_supertrend && %w[NIFTY SENSEX].include?(symbol) && !weekly_contract?(pick: pick, index_cfg: index_cfg)
+        # Bypass for Supertrend testing mode or Paper trading (simulated contracts may be monthly)
+        is_paper = entry_metadata&.dig(:paper) || Rails.env.local?
+        if !is_supertrend && !is_paper && %w[NIFTY SENSEX].include?(symbol) && !weekly_contract?(pick: pick, index_cfg: index_cfg)
           Rails.logger.info("[EntryGuard] Weekly-only expiry rule blocked #{symbol} entry for #{pick[:symbol]}")
           signal&.record_entry_outcome('blocked', 'weekly_only_expiry_rule')
           return false
@@ -370,22 +283,10 @@ Rails.logger.error(
 
         tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
 
-        tracker = PositionTracker.create!(
-          order_no: order_no,
-          instrument: instrument,
-          watchable: instrument,
-          security_id: pick[:security_id],
-          segment: pick[:segment] || index_cfg[:segment],
-          side: side,
-          quantity: quantity,
-          entry_price: ltp,
-          avg_price: ltp,
-          symbol: pick[:symbol],
-          status: :active,
-          paper: false,
-          **tracker_attrs,
-          meta: legacy_meta
-        )
+          # Deduct broker fees (₹20 per order, ₹40 per trade if exited)
+          pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: tracker.exited?)
+          # Store as decimal (e.g. 0.05 for 5%)
+          pnl_pct = entry.positive? ? ((exit_price - entry) / entry) : 0
 
         tracker.create_position_meta_snapshot!(
           config_version_hash: version['hash'].to_s,
@@ -394,41 +295,20 @@ Rails.logger.error(
           entry_at: entry_at
         )
 
-        tracker
-      end
+          tracker.update!(
+            last_pnl_rupees: pnl,
+            last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil,
+            high_water_mark_pnl: hwm,
+            avg_price: exit_price
+          )
 
-      def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:, order_no:, entry_metadata:, bos_context:)
-        PositionTracker.transaction do
-          meta_hash = build_base_meta(index_cfg: index_cfg, pick: pick, direction: bos_context&.dig(:direction))
-          apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
-
-        snapshot = meta_hash.delete('config_snapshot')
-        version = meta_hash.delete('config_version') || {}
-        entry_at = meta_hash.delete('entry_at')
-
-        tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
-
-        tracker = PositionTracker.create!(
-          order_no: order_no,
-          instrument: instrument,
-          watchable: instrument,
-          security_id: pick[:security_id],
-          segment: pick[:segment] || index_cfg[:segment],
-          side: side,
-          quantity: quantity,
-          entry_price: ltp,
-          avg_price: ltp,
-          symbol: pick[:symbol],
-          status: :active,
-          paper: true,
-          **tracker_attrs,
-          meta: legacy_meta
-        )
-        tracker.create_position_meta_snapshot!(
-          config_version_hash: version['hash'].to_s,
-          config_change_log_id: version['change_log_id'],
-          config_snapshot: snapshot
-        )
+          if pnl_pct
+            Rails.logger.debug { "[EntryGuard] Calculated PnL for paper position #{tracker.order_no}: PnL=₹#{pnl.round(2)} (#{(pnl_pct.to_f * 100).round(2)}%)" }
+          else
+            Rails.logger.debug { "[EntryGuard] Calculated PnL for paper position #{tracker.order_no}: PnL=₹#{pnl.round(2)}" }
+          end
+          return
+        end
 
         # For live positions, try to get from Redis PnL cache first (has pre-calculated PnL)
         # Then fall back to calculating from tick data
@@ -481,7 +361,44 @@ Rails.logger.error(
         tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
         return tick.ltp if tick
 
-        return false unless derivative
+        # Try tradable's fetch method (derivative or instrument)
+        tradable = tracker.tradable
+        if tradable
+          ltp = tradable.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
+          return BigDecimal(ltp.to_s) if ltp
+        end
+
+        # Fallback: Direct API call
+        begin
+          return nil if ltp_api_rate_limited?(segment: segment, security_id: security_id)
+
+          # DhanHQ 2.6.x DATA_API: LTP payload is Hash{String => Array<Integer>}
+          segment_key = segment.to_s
+          sid_int = security_id.to_i
+          response = DhanHQ::Models::MarketFeed.ltp({ segment_key => [sid_int] })
+          if response['status'] == 'success' || response[:status] == 'success'
+            data = response['data'] || response[:data]
+            option_data = data&.dig(segment_key, sid_int.to_s) || data&.dig(segment_key, sid_int)
+            return BigDecimal(option_data['last_price'].to_s) if option_data&.dig('last_price')
+            return BigDecimal(option_data[:last_price].to_s) if option_data&.dig(:last_price)
+          end
+        rescue StandardError => e
+          if rate_limit_error?(e)
+            mark_ltp_api_rate_limited!(segment: segment, security_id: security_id)
+            Rails.logger.debug { "[EntryGuard] LTP API rate limited for #{tracker.order_no}" }
+          else
+            Rails.logger.error("[EntryGuard] Failed to fetch LTP for #{tracker.order_no}: #{e.message}")
+          end
+        end
+        nil
+      end
+
+      def rate_limit_error?(error)
+        return false unless error
+
+        message = error.message.to_s
+        message.include?('429') || message.match?(/rate\s*limit/i) || error.class.name.include?('RateLimitError')
+      end
 
         flag = derivative.expiry_flag.to_s.upcase
         flag.start_with?('W') # WEEK / WEEKLY
@@ -666,12 +583,26 @@ Rails.logger.error(
           return nearest if nearest
         end
 
-        # Fallback: last Thursday of month
-        last_day = today.end_of_month
-        last_thu = last_day - ((last_day.wday - 4) % 7).days
-        if last_thu < today
-          last_day = (today + 1.month).end_of_month
-          last_thu = last_day - ((last_day.wday - 4) % 7).days
+        instrument
+      end
+
+      def build_client_order_id(index_cfg:, pick:)
+        # DhanHQ PlaceOrderContract (v2.6.x) correlation_id max 30 characters
+        # Format: AS-{KEY}-{SID}-{TIMESTAMP}
+        # Keep it under 25 chars by using shorter timestamp
+        timestamp = Time.current.to_i.to_s[-6..] # Last 6 digits of timestamp
+        "AS-#{index_cfg[:key][0..3]}-#{pick[:security_id]}-#{timestamp}"
+      end
+
+      def extract_order_no(response)
+        return if response.blank?
+
+        if response.respond_to?(:order_id)
+          response.order_id
+        elsif response.is_a?(Hash)
+          response[:order_id] || response[:order_no]
+        elsif response.respond_to?(:[]) # Struct-like (e.g., OpenStruct)
+          response[:order_id] || response[:order_no] || response.order_id
         end
         last_thu
       end
@@ -1020,21 +951,7 @@ Rails.logger.error(
         meta_hash[:entry_validation_mode] ||= entry_metadata[:validation_mode]
       end
 
-      def split_meta_hash(meta_hash)
-        promoted = {}
-        legacy = {}
-
-        meta_hash.each do |key, val|
-          str_key = key.to_s
-          if PositionTracker::PROMOTED_META_KEYS.include?(str_key)
-            promoted[str_key] = val
-          else
-            legacy[key] = val
-          end
-        end
-
-        [promoted, legacy]
-      end
+      public :find_instrument, :bos_contract_present?, :needs_api_ltp?, :resolve_entry_ltp
     end
   end
 end

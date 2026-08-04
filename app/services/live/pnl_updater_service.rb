@@ -38,7 +38,7 @@ module Live
           ltp: safe_decimal(ltp),
           hwm: safe_decimal(hwm),
           hwm_pnl_pct: safe_decimal(hwm_pnl_pct),
-          updated_at: Time.now.to_i
+          updated_at: Time.current.to_i
         }
       end
 
@@ -263,10 +263,10 @@ module Live
         hwm_bd ||= (tracker.high_water_mark_pnl.present? ? safe_decimal(tracker.high_water_mark_pnl) : BigDecimal(0))
         hwm_bd = BigDecimal(0) if hwm_bd.nil?
 
-        # Calculate hwm_pnl_pct if not provided
+        # Calculate hwm_pnl_pct if not provided (Store as decimal, e.g. 0.05 for 5%)
         hwm_pnl_pct_bd = payload[:hwm_pnl_pct]
         if hwm_pnl_pct_bd.nil? && entry_bd.positive? && qty_bd.positive? && hwm_bd.positive?
-          hwm_pnl_pct_bd = (hwm_bd / (entry_bd * qty_bd)) * 100
+          hwm_pnl_pct_bd = (hwm_bd / (entry_bd * qty_bd))
         end
 
         # Persist to Redis (use floats for storage to remain compatible)
@@ -276,8 +276,8 @@ module Live
           pnl_pct: pnl_pct_bd.to_f,
           ltp: ltp_bd.to_f,
           hwm: hwm_bd.to_f,
-          hwm_pnl_pct: hwm_pnl_pct_bd&.to_f,
-          timestamp: Time.zone.now,
+          hwm_pnl_pct: hwm_pnl_pct_bd.to_f,
+          timestamp: Time.current,
           tracker: tracker
         )
 
@@ -290,6 +290,7 @@ module Live
           hwm: hwm_bd.to_f,
           timestamp: Time.current
         })
+
 
         broadcast_pnl_update(tracker_id, ltp_bd, pnl_bd, hwm_bd, entry_bd)
 
@@ -457,10 +458,9 @@ module Live
 
     # Broadcast aggregate dashboard stats every 1 second to the "dashboard" channel.
     def maybe_broadcast_heartbeat
-      return if @last_heartbeat_at && (Time.current.to_f - @last_heartbeat_at) < 1.0
+      return if @last_heartbeat_at && (Time.current.to_f - @last_heartbeat_at) < 5.0
 
       @last_heartbeat_at = Time.current.to_f
-      Live::SystemStatusCache.instance.report_heartbeat(:pnl_updater)
       ActionCable.server.broadcast("dashboard", build_dashboard_stats)
     rescue StandardError => e
       @logger.debug("[PnlUpdater] heartbeat broadcast failed: #{e.message}")

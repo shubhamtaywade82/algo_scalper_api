@@ -25,17 +25,13 @@ RSpec.describe TradingSystem::Daemon do
     supervisor.register(:exit_manager, exit_engine)
     supervisor.register(:active_cache, active_cache)
     supervisor.register(:reconciliation, reconciliation)
-    allow(ENV).to receive(:[]).and_call_original
+allow(ENV).to receive(:[]).and_call_original
     allow(ENV).to receive(:[]).with('ENABLE_TRADING_SERVICES').and_return('true')
     allow(ENV).to receive(:[]).with('DISABLE_TRADING_SERVICES').and_return(nil)
     allow(ENV).to receive(:[]).with('BACKTEST_MODE').and_return(nil)
     allow(ENV).to receive(:[]).with('SCRIPT_MODE').and_return(nil)
 
-    allow(TradingSystem::Bootstrap).to receive(:boot_reconciliation!).and_return(true)
-  end
-
-  before do
-    allow(TradingSystem::Bootstrap).to receive(:boot_reconciliation!).and_return(true)
+allow(TradingSystem::Bootstrap).to receive(:boot_reconciliation!).and_return(true)
   end
 
   describe 'when market is closed' do

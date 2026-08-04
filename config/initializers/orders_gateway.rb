@@ -8,19 +8,7 @@ Rails.application.config.to_prepare do
     end
   end
 
-  paper_mode =
-    begin
-      AlgoConfig.fetch.dig(:paper_trading, :enabled)
-    rescue StandardError
-      true
-    end
-
-  gateway =
-    if paper_mode
-      Orders::GatewayPaper.new
-    else
-      Orders::GatewayLive.new
-    end
+  gateway = Orders::GatewayFactory.build
 
   Orders.config = Orders::Config.new(gateway: gateway)
 

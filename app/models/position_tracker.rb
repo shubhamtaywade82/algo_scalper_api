@@ -78,11 +78,213 @@ class PositionTracker < ApplicationRecord
   validates :security_id, presence: true
   validate :segment_must_be_tradable
 
-  belongs_to :instrument, optional: false, inverse_of: :position_trackers
-  belongs_to :watchable, polymorphic: true, optional: false
-  has_one :trade_analytic, dependent: :destroy, inverse_of: :position_tracker
-  has_one :trade_telemetry, class_name: 'TradeTelemetry', foreign_key: :tracker_id, dependent: :destroy,
-                            inverse_of: :tracker
+  # Callbacks
+  after_commit :register_in_index, on: %i[create update]
+  after_commit :unregister_from_index, on: :destroy
+  after_update_commit :refresh_index_if_relevant
+  after_update_commit :cleanup_if_exited
+  after_create_commit :subscribe_to_feed
+  after_destroy_commit :clear_redis_pnl_cache
+  after_update_commit :clear_redis_cache_if_exited
+
+  # Associations
+  belongs_to :instrument # Kept for backward compatibility during transition
+  belongs_to :watchable, polymorphic: true
+
+  # Scopes
+  # Note: enum automatically creates scopes for :pending, :active, :exited, :cancelled
+  scope :paper, -> { where(paper: true) }
+  scope :live, -> { where(paper: false) }
+  scope :exited_paper, -> { where(paper: true, status: :exited) }
+
+  # Class Methods
+  class << self
+    def active_for(seg, sid)
+      where(segment: seg, security_id: sid, status: :active).first
+    end
+
+    def exited_for(seg, sid)
+      where(segment: seg, security_id: sid, status: :exited).order(id: :desc).first
+    end
+
+    def paper_trading_stats_with_pct(date: nil)
+      # Filter by date if provided, otherwise use all exited positions
+      if date
+        date_start = date.beginning_of_day
+        date_end = date.end_of_day
+        exited = exited_paper.where(exited_at: date_start..date_end)
+      else
+        # Default: only today's exited positions
+        today_start = Time.zone.today.beginning_of_day
+        today_end = Time.zone.today.end_of_day
+        exited = exited_paper.where(exited_at: today_start..today_end)
+      end
+      active = paper.active
+      # Load once to avoid multiple queries (any? + count + iteration)
+      exited = exited.load
+      active = active.load
+
+      active_count = active.size
+      realized_pnl_rupees = exited.sum { |t| t.last_pnl_rupees.to_f }
+      # Use current_pnl_rupees for active positions (reads from Redis cache for live values)
+      unrealized_pnl_rupees = active.sum { |t| t.current_pnl_rupees.to_f }
+
+      total_pnl_rupees = realized_pnl_rupees + unrealized_pnl_rupees
+
+      # Calculate PnL percentages based on initial capital, not by summing individual trade percentages
+      initial_capital = Capital::Allocator.paper_trading_balance.to_f
+      realized_pnl_pct = initial_capital.positive? ? (realized_pnl_rupees / initial_capital * 100.0) : 0.0
+      unrealized_pnl_pct = initial_capital.positive? ? (unrealized_pnl_rupees / initial_capital * 100.0) : 0.0
+      total_pnl_pct = initial_capital.positive? ? (total_pnl_rupees / initial_capital * 100.0) : 0.0
+
+      # Calculate average per-trade percentages (for reference)
+      # last_pnl_pct is stored as decimal (0.0573), convert to percentage for display
+      avg_realized_pnl_pct = if exited.any?
+                               (exited.filter_map do |t|
+                                 t.last_pnl_pct.to_f * 100.0
+                               end.sum / exited.size.to_f).round(2)
+                             else
+                               0.0
+                             end
+      # current_pnl_pct returns decimal from Redis, convert to percentage for display
+      avg_unrealized_pnl_pct = if active.any?
+                                 (active.filter_map do |t|
+                                   (t.current_pnl_pct || 0).to_f * 100.0
+                                 end.sum / active.size.to_f).round(2)
+                               else
+                                 0.0
+                               end
+
+      {
+        total_trades: exited.size,
+        active_positions: active_count,
+        total_pnl_rupees: total_pnl_rupees.round(2),
+        total_pnl_pct: total_pnl_pct.round(2),
+        realized_pnl_rupees: realized_pnl_rupees.round(2),
+        realized_pnl_pct: realized_pnl_pct.round(2),
+        unrealized_pnl_rupees: unrealized_pnl_rupees.round(2),
+        unrealized_pnl_pct: unrealized_pnl_pct.round(2),
+        win_rate: paper_win_rate(date: date, exited: exited),
+        avg_realized_pnl_pct: avg_realized_pnl_pct,
+        avg_unrealized_pnl_pct: avg_unrealized_pnl_pct,
+        winners: exited.count { |t| (t.last_pnl_rupees || 0).positive? },
+        losers: exited.count { |t| (t.last_pnl_rupees || 0).negative? }
+      }
+    end
+
+    def paper_positions_details
+      paper.includes(:instrument).map do |t|
+        entry_price = t.entry_price.to_f
+        exit_price = t.last_pnl_rupees.present? && t.status == 'exited' ? t.exit_price.to_f : nil
+        current_price = exit_price || t.avg_price.to_f
+        side = t.side
+        qty = t.quantity.to_i
+        pnl_abs = t.last_pnl_rupees.to_f
+        # last_pnl_pct is stored as decimal (0.0573), convert to percentage for display
+        pnl_pct = if t.last_pnl_pct.present?
+                    t.last_pnl_pct.to_f * 100.0
+                  elsif entry_price.positive? && current_price.positive?
+                    if side == 'BUY'
+                      ((current_price - entry_price) / entry_price * 100.0)
+                    else
+                      ((entry_price - current_price) / entry_price * 100.0)
+                    end
+                  else
+                    0.0
+                  end
+
+        {
+          id: t.id,
+          order_no: t.order_no,
+          symbol: t.symbol,
+          side: side,
+          status: t.status,
+          quantity: qty,
+          entry_price: entry_price,
+          exit_price: exit_price,
+          avg_price: t.avg_price.to_f,
+          last_pnl_rupees: pnl_abs.round(2),
+          last_pnl_pct: pnl_pct.round(2),
+          high_water_mark_pnl: t.high_water_mark_pnl.to_f,
+          created_at: t.created_at&.strftime('%Y-%m-%d %H:%M'),
+          updated_at: t.updated_at&.strftime('%Y-%m-%d %H:%M'),
+          watchable_type: t.watchable_type,
+          segment: t.segment,
+          security_id: t.security_id,
+          paper: t.paper?,
+          unrealized?: t.status != 'exited'
+        }
+      end
+    end
+
+    def total_paper_pnl
+      exited_paper.sum do |tracker|
+        tracker.last_pnl_rupees || BigDecimal(0)
+      end
+    end
+
+    def active_paper_positions_count
+      paper.active.count
+    end
+
+    def paper_win_rate(date: nil, exited: nil)
+      # Use preloaded collection when provided to avoid duplicate query
+      if !exited.nil? && exited.respond_to?(:size) && exited.respond_to?(:count)
+        return 0.0 if exited.empty?
+
+        winners = exited.count { |t| (t.last_pnl_rupees || 0).positive? }
+        return (winners.to_f / exited.size * 100).round(2)
+      end
+
+      # Filter by date if provided, otherwise use today's exited positions
+      if date
+        date_start = date.beginning_of_day
+        date_end = date.end_of_day
+        exited = exited_paper.where(exited_at: date_start..date_end)
+      else
+        # Default: only today's exited positions
+        today_start = Time.zone.today.beginning_of_day
+        today_end = Time.zone.today.end_of_day
+        exited = exited_paper.where(exited_at: today_start..today_end)
+      end
+      exited = exited.load
+      return 0.0 if exited.empty?
+
+      winners = exited.count { |t| (t.last_pnl_rupees || 0).positive? }
+      (winners.to_f / exited.size * 100).round(2)
+    end
+
+    def paper_trading_stats
+      exited = exited_paper.load
+      active = paper.active.load
+      active_count = active.size
+
+      # Calculate realized PnL from exited positions
+      realized_pnl = total_paper_pnl.to_f
+
+      # Calculate unrealized PnL from active positions (use Redis cache)
+      unrealized_pnl = active.sum do |tracker|
+        tracker.current_pnl_rupees.to_f
+      end
+
+      # Total PnL = realized (exited) + unrealized (active)
+      total_pnl = realized_pnl + unrealized_pnl
+
+      {
+        total_trades: exited.size,
+        active_positions: active_count,
+        total_pnl: total_pnl,
+        realized_pnl: realized_pnl,
+        unrealized_pnl: unrealized_pnl,
+        win_rate: paper_win_rate,
+        average_pnl: exited.empty? ? 0.0 : (realized_pnl / exited.size).to_f,
+        winners: exited.count { |t| (t.last_pnl_rupees || 0).positive? },
+        losers: exited.count { |t| (t.last_pnl_rupees || 0).negative? }
+      }
+    end
+
+    def clear_orphaned_redis_pnl!
+      return unless should_clear_orphaned?
 
   def metadata_for_index
     {
@@ -169,6 +371,7 @@ class PositionTracker < ApplicationRecord
   end
 
   # Get current PnL percentage from Redis cache (preferred) or fallback to DB
+  # Returns decimal (e.g. 0.05 for 5%)
   def current_pnl_pct
     return last_pnl_pct if exited? # Exited positions: use DB (final value)
 
@@ -397,12 +600,12 @@ class PositionTracker < ApplicationRecord
     # This ensures last_pnl_pct reflects actual P&L, not stale cache values
     entry_price = BigDecimal((self.entry_price || 0).to_s)
     quantity = (self.quantity || 0).to_i
-    pnl_value = BigDecimal((last_pnl_rupees || cache[:pnl] || 0).to_s)
+    pnl_value = BigDecimal((self.last_pnl_rupees || cache[:pnl] || 0).to_s)
 
-    if entry_price.positive? && quantity.positive?
+    if entry_price.positive? && quantity.positive? && pnl_value != 0
       self.last_pnl_pct = pnl_value / (entry_price * quantity)
     else
-      self.last_pnl_pct = BigDecimal('0')
+      self.last_pnl_pct = nil
     end
   end
 

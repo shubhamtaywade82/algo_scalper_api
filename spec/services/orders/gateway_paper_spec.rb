@@ -7,6 +7,7 @@ RSpec.describe Orders::GatewayPaper do
   let(:tracker) do
     create(:position_tracker, :option_position,
            status: 'active',
+           paper: true,
            segment: 'NSE_FNO',
            security_id: '55111',
            order_no: 'TEST123',

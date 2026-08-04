@@ -66,6 +66,7 @@ module Live
     def check_peak_drawdown(position_data, exit_engine, tracker: nil)
       return false unless exit_engine && position_data.peak_profit_pct
 
+      # peak and current are decimal (e.g. 0.05 for 5%)
       peak = position_data.peak_profit_pct.to_f
       current = position_data.pnl_pct.to_f
 
@@ -73,7 +74,7 @@ module Live
       # Peak drawdown rule should only trigger when position had profit and is drawing down
       if peak <= 0
         Rails.logger.debug do
-          "[TrailingEngine] Skipping peak drawdown check: peak=#{peak.round(2)}% <= 0% " \
+          "[TrailingEngine] Skipping peak drawdown check: peak=#{(peak * 100).round(2)}% <= 0% " \
             '(position never profitable)'
         end
         return false
@@ -97,6 +98,7 @@ module Live
       capital_deployed = calculate_capital_deployed(position_data)
 
       # Check if drawdown threshold is breached (with capital-aware thresholds)
+      # peak_drawdown_triggered? expects decimals
       return false unless Positions::TrailingConfig.peak_drawdown_triggered?(
         peak,
         current,
@@ -106,16 +108,19 @@ module Live
       # Apply peak-drawdown activation gating (if enabled)
       if peak_drawdown_activation_enabled?
         # Use peak profit % (not current) for activation check
+        # Convert sl_offset to decimal to match config
+        sl_offset_decimal = current_sl_offset_pct(position_data).to_f / 100.0
+
         activation_ready = Positions::TrailingConfig.peak_drawdown_active?(
-          profit_pct: peak, # Use peak, not current
-          current_sl_offset_pct: current_sl_offset_pct(position_data)
+          profit_pct: peak,
+          current_sl_offset_pct: sl_offset_decimal
         )
         unless activation_ready
           capital_info = capital_deployed ? " capital=₹#{capital_deployed.round(0)}" : ''
           Rails.logger.debug do
-            "[TrailingEngine] Peak drawdown gating: peak=#{peak.round(2)}% " \
-              "sl_offset=#{current_sl_offset_pct(position_data)&.round(2)}% " \
-              "not activated (drawdown=#{(peak - current).round(2)}%#{capital_info})"
+            "[TrailingEngine] Peak drawdown gating: peak=#{(peak * 100).round(2)}% " \
+              "sl_offset=#{(sl_offset_decimal * 100).round(2)}% " \
+              "not activated (drawdown=#{(peak - current) * 100.0.round(2)}%#{capital_info})"
           end
           return false
         end
@@ -127,10 +132,10 @@ module Live
         return false
       end
 
-      drawdown = peak - current
-      threshold = Positions::TrailingConfig.calculate_tiered_drawdown_threshold(peak)
+      drawdown_pct = (peak - current) * 100.0
+      threshold_pct = Positions::TrailingConfig.calculate_tiered_drawdown_threshold(peak) * 100.0
       capital_info = capital_deployed ? " (capital: ₹#{capital_deployed.round(0)})" : ''
-      reason = "peak_drawdown_exit (drawdown: #{drawdown.round(2)}%, threshold: #{threshold.round(2)}%, peak: #{peak.round(2)}%#{capital_info})"
+      reason = "peak_drawdown_exit (drawdown: #{drawdown_pct.round(2)}%, threshold: #{threshold_pct.round(2)}%, peak: #{(peak * 100).round(2)}%#{capital_info})"
 
       # Wrap exit in tracker lock for idempotency
       tracker.with_lock do
@@ -229,12 +234,13 @@ module Live
 
       entry_price = position_data.entry_price.to_f
       current_price = position_data.current_ltp.to_f
-      current_profit_pct = position_data.pnl_pct.to_f
+      current_profit_pct = position_data.pnl_pct.to_f # decimal
       current_sl = position_data.sl_price.to_f
 
       return { updated: false, new_sl_price: current_sl, reason: 'no_current_price' } unless current_price.positive?
 
       # Calculate new SL based on current price (maintains fixed distance below)
+      # calculate_direct_trailing_sl expects decimal (consistent with other methods now)
       new_sl_price = Positions::TrailingConfig.calculate_direct_trailing_sl(
         current_price: current_price,
         entry_price: entry_price,
@@ -255,7 +261,7 @@ module Live
       bracket_result = @bracket_placer.update_bracket(
         tracker: tracker,
         sl_price: new_sl_price,
-        reason: "direct_trailing (price: ₹#{current_price.round(2)}, profit: #{current_profit_pct.round(2)}%)"
+        reason: "direct_trailing (price: ₹#{current_price.round(2)}, profit: #{(current_profit_pct * 100.0).round(2)}%)"
       )
 
       if bracket_result[:success]
@@ -270,7 +276,7 @@ module Live
         Rails.logger.info(
           "[TrailingEngine] Updated SL (direct trailing) for #{tracker.order_no}: " \
           "₹#{current_sl.round(2)} → ₹#{new_sl_price.round(2)} " \
-          "(price: ₹#{current_price.round(2)}, profit: #{current_profit_pct.round(2)}%)"
+          "(price: ₹#{current_price.round(2)}, profit: #{(current_profit_pct * 100.0).round(2)}%)"
         )
         { updated: true, new_sl_price: new_sl_price, reason: 'sl_updated' }
       else
@@ -291,9 +297,10 @@ module Live
       return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
 
       entry_price = position_data.entry_price.to_f
-      current_profit_pct = position_data.pnl_pct.to_f
+      current_profit_pct = position_data.pnl_pct.to_f # decimal
       current_sl = position_data.sl_price.to_f
 
+      # sl_offset_for expects decimal (consistent with other methods now)
       sl_offset_pct = Positions::TrailingConfig.sl_offset_for(current_profit_pct)
       return { updated: false, new_sl_price: current_sl, reason: 'tier_not_reached' } unless sl_offset_pct
 
@@ -308,7 +315,7 @@ module Live
       bracket_result = @bracket_placer.update_bracket(
         tracker: tracker,
         sl_price: new_sl_price,
-        reason: "tiered_trailing (profit: #{current_profit_pct.round(2)}%)"
+        reason: "tiered_trailing (profit: #{(current_profit_pct * 100.0).round(2)}%)"
       )
 
       if bracket_result[:success]
@@ -323,7 +330,7 @@ module Live
         Rails.logger.info(
           "[TrailingEngine] Updated SL for #{tracker.order_no}: " \
           "₹#{current_sl.round(2)} → ₹#{new_sl_price.round(2)} " \
-          "(profit: #{current_profit_pct.round(2)}%)"
+          "(profit: #{(current_profit_pct * 100.0).round(2)}%)"
         )
         { updated: true, new_sl_price: new_sl_price, reason: 'sl_updated' }
       else

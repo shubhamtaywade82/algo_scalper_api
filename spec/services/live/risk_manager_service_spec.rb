@@ -470,6 +470,104 @@ RSpec.describe Live::RiskManagerService do
         expect(tracker.meta['exit_reason']).to eq('trailing stop (drop 3.0%)')
         expect(tracker.meta['exit_triggered_at']).to be_present
       end
+
+      it 'calls exit_position to place exit order' do
+        expect(service).to receive(:exit_position).with(position, tracker).and_return(true)
+
+        service.send(:execute_exit, position, tracker, reason: 'take-profit (60.0%)')
+      end
+
+      context 'when exit order is successful' do
+        it 'clears Redis cache for tracker' do
+          redis_cache = Live::RedisPnlCache.instance
+          expect(redis_cache).to receive(:clear_tracker).with(tracker.id)
+
+          service.send(:execute_exit, position, tracker, reason: 'trailing stop (drop 3.0%)')
+        end
+
+        it 'marks tracker as exited' do
+          expect(tracker).to receive(:mark_exited!)
+
+          service.send(:execute_exit, position, tracker, reason: 'time-based exit (15:20)')
+        end
+
+        it 'logs success message' do
+          allow(Rails.logger).to receive(:info).and_call_original
+          expect(Rails.logger).to receive(:info).with(match(/Triggering exit for ORD123456/)).at_least(:once)
+          expect(Rails.logger).to receive(:info).with(match(/Successfully exited position ORD123456/)).at_least(:once)
+
+          service.send(:execute_exit, position, tracker, reason: 'take-profit (60.0%)')
+        end
+      end
+
+      context 'when exit order fails' do
+        before do
+          allow(service).to receive(:exit_position).and_return(false)
+        end
+
+        it 'does not mark tracker as exited' do
+          expect(tracker).not_to receive(:mark_exited!)
+
+          service.send(:execute_exit, position, tracker, reason: 'hard stop-loss (30.0%)')
+        end
+
+        it 'logs error message' do
+          expect(Rails.logger).to receive(:error).with(match(/Failed to place exit order for ORD123456/))
+
+          service.send(:execute_exit, position, tracker, reason: 'take-profit (60.0%)')
+        end
+      end
+
+      context 'error handling' do
+        it 'handles exceptions gracefully' do
+          allow(service).to receive(:exit_position).and_raise(StandardError, 'Exit error')
+          expect(Rails.logger).to receive(:error).with(match(/Failed to exit position ORD123456/))
+
+          expect { service.send(:execute_exit, position, tracker, reason: 'manual') }.not_to raise_error
+        end
+      end
+    end
+
+    describe '#current_ltp_with_freshness_check' do
+      let(:position) do
+        double(
+          'Position',
+          security_id: '50074',
+          exchange_segment: 'NSE_FNO'
+        )
+      end
+
+      context 'when Redis cache has fresh tick' do
+        it 'returns LTP from Redis cache if fresh' do
+          redis_cache = Live::RedisPnlCache.instance
+          allow(redis_cache).to receive_messages(is_tick_fresh?: true,
+                                                 fetch_tick: {
+                                                   ltp: 105.0, timestamp: Time.current
+                                                 })
+
+          ltp = service.send(:current_ltp_with_freshness_check, tracker, position, max_age_seconds: 5)
+
+          expect(ltp).to eq(BigDecimal('105.0'))
+        end
+      end
+
+      context 'when Redis cache is stale' do
+        it 'falls back to current_ltp and stores in Redis' do
+          redis_cache = Live::RedisPnlCache.instance
+          allow(redis_cache).to receive(:is_tick_fresh?).and_return(false)
+          allow(service).to receive(:current_ltp).with(tracker, position).and_return(BigDecimal('110.0'))
+          expect(redis_cache).to receive(:store_tick).with(
+            segment: 'NSE_FNO',
+            security_id: '50074',
+            ltp: BigDecimal('110.0'),
+            timestamp: kind_of(Time)
+          )
+
+          ltp = service.send(:current_ltp_with_freshness_check, tracker, position, max_age_seconds: 5)
+
+          expect(ltp).to eq(BigDecimal('110.0'))
+        end
+      end
     end
 
     describe '#update_pnl_in_redis' do

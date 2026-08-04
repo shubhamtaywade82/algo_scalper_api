@@ -37,10 +37,9 @@ module Orders
         end
 
         payload = {
-          dhanClientId: DhanHQ.configuration.client_id || ENV['DHAN_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
-          transactionType: 'BUY',
-          exchangeSegment: seg,
-          securityId: sid.to_s,
+          transaction_type: DhanHQ::Constants::TransactionType::BUY,
+          exchange_segment: seg,
+          security_id: sid.to_s,
           quantity: qty.to_i,
           order_type: DhanHQ::Constants::OrderType::MARKET,
           product_type: product_type,
@@ -290,16 +289,15 @@ module Orders
         end
 
         payload = {
-          dhanClientId: DhanHQ.configuration.client_id || ENV['DHAN_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
-          transactionType: 'SELL',
-          exchangeSegment: position ? position[:exchange_segment] : seg,
-          securityId: sid.to_s,
+          transaction_type: DhanHQ::Constants::TransactionType::SELL,
+          exchange_segment: position ? position[:exchange_segment] : seg,
+          security_id: sid.to_s,
           quantity: actual_qty.to_i,
-          orderType: 'MARKET',
-          productType: position ? position[:product_type] : product_type,
-          validity: 'DAY',
-          disclosedQuantity: 0,
-          correlationId: normalized_id
+          order_type: DhanHQ::Constants::OrderType::MARKET,
+          product_type: position ? position[:product_type] : product_type,
+          validity: DhanHQ::Constants::Validity::DAY,
+          disclosed_quantity: 0,
+          correlation_id: normalized_id
         }
 
         Rails.logger.info("[Orders::Placer] BUY LIMIT payload: #{payload.inspect}")
@@ -496,10 +494,9 @@ module Orders
                            end
 
         payload = {
-          dhanClientId: DhanHQ.configuration.client_id || ENV['DHAN_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
-          transactionType: transaction_type,
-          exchangeSegment: actual_segment,
-          securityId: sid.to_s,
+          transaction_type: transaction_type,
+          exchange_segment: actual_segment,
+          security_id: sid.to_s,
           quantity: actual_qty.to_i,
           order_type: DhanHQ::Constants::OrderType::MARKET,
           product_type: position_details[:product_type],
@@ -545,6 +542,7 @@ module Orders
       end
 
       def with_token_auto_heal(context:)
+        retried = false
         yield
       rescue StandardError => e
         Rails.logger.error("[Orders::Placer] #{context} failed: #{e.class} - #{e.message}")
@@ -553,13 +551,15 @@ module Orders
           return nil
         end
 
+        if retried
+          Rails.logger.error("[Orders::Placer] #{context} retry failed: #{e.class} - #{e.message}")
+          return nil
+        end
+
         Rails.logger.warn("[Orders::Placer] #{context} unauthorized; refreshing token and retrying once")
         Dhan::TokenManager.refresh! if defined?(Dhan::TokenManager)
-
-        yield
-      rescue StandardError => e
-        Rails.logger.error("[Orders::Placer] #{context} retry failed: #{e.class} - #{e.message}")
-        nil
+        retried = true
+        retry
       end
 
       def order_placement_enabled?

@@ -6,12 +6,11 @@ RSpec.describe Trading::TrailingEngine do
   let(:instrument) { create(:instrument, symbol_name: symbol) }
   let(:tracker) do
     create(:position_tracker,
-      instrument: instrument,
-      entry_price: 100.0,
-      quantity: 50,
-      symbol: symbol,
-      segment: segment
-    )
+           instrument: instrument,
+           entry_price: 100.0,
+           quantity: 50,
+           symbol: symbol,
+           segment: segment)
   end
   let(:engine) { described_class.new(tracker: tracker, ltp: ltp) }
 
@@ -108,6 +107,7 @@ RSpec.describe Trading::TrailingEngine do
         before do
           described_class.new(tracker: tracker, ltp: 150.0).call
         end
+
         let(:ltp) { 140.0 }
 
         it 'maintains SL from the peak' do

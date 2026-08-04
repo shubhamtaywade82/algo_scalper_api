@@ -17,7 +17,7 @@ class MultiIndicatorStrategy
     @indicators = build_indicators(indicators, config)
 
     # Allow threshold config to override confirmation_mode and min_confidence
-    threshold_config = Indicators::ThresholdConfig.merge_with_thresholds(:multi_indicator, config)
+    threshold_config = Indicators::ThresholdConfig.merge_with_thresholds(:multi_indicator, config, config[:indicator_preset])
     effective_confirmation_mode = threshold_config[:confirmation_mode] || confirmation_mode
     effective_min_confidence = min_confidence || threshold_config[:min_confidence] || 60
 
@@ -108,16 +108,11 @@ class MultiIndicatorStrategy
 
   def determine_direction(indicator_results)
     case confirmation_mode
-    when :all_must_agree
-      all_must_agree(indicator_results)
-    when :majority_vote
-      majority_vote(indicator_results)
-    when :weighted_sum
-      weighted_sum_direction(indicator_results)
-    when :any_confirms
-      any_confirms(indicator_results)
-    else
-      all_must_agree(indicator_results)
+    when :all_must_agree then all_must_agree(indicator_results)
+    when :majority_vote then majority_vote(indicator_results)
+    when :weighted_sum then weighted_sum_direction(indicator_results)
+    when :any_confirms then any_confirms(indicator_results)
+    else all_must_agree(indicator_results)
     end
   end
 
@@ -140,7 +135,6 @@ class MultiIndicatorStrategy
     return nil if bullish_count == bearish_count # Tie
 
     return :ce if bullish_count > bearish_count && bullish_count > neutral_count && (bullish_count.to_f / total >= 0.5)
-
     return :pe if bearish_count > bullish_count && bearish_count > neutral_count && (bearish_count.to_f / total >= 0.5)
 
     nil
@@ -233,31 +227,25 @@ class MultiIndicatorStrategy
     neutral_count = results.count { |r| r[:direction] == :neutral }
 
     # Determine dominant direction
-    dominant_direction = if bullish_count > bearish_count && bullish_count > neutral_count
- :bullish
-                         elsif bearish_count > bullish_count && bearish_count > neutral_count
- :bearish
-                         else
-                           :neutral
+    dominant_direction = case
+                         when bullish_count > bearish_count && bullish_count > neutral_count then :bullish
+                         when bearish_count > bullish_count && bearish_count > neutral_count then :bearish
+                         else :neutral
                          end
 
     # Calculate confluence score (0-100): percentage of indicators agreeing with dominant direction
-    confluence_score = if dominant_direction == :neutral
-                         0
-                       else
-                         agreeing_count = dominant_direction == :bullish ? bullish_count : bearish_count
-                         (agreeing_count.to_f / total_indicators * 100).round
+    confluence_score = case dominant_direction
+                       when :neutral then 0
+                       when :bullish then (bullish_count.to_f / total_indicators * 100).round
+                       else (bearish_count.to_f / total_indicators * 100).round
                        end
 
     # Determine confluence strength
-    confluence_strength = if confluence_score >= 80
- :strong
-                          elsif confluence_score >= 60
- :moderate
-                          elsif confluence_score >= 40
- :weak
-                          else
-                            :none
+    confluence_strength = case
+                          when confluence_score >= 80 then :strong
+                          when confluence_score >= 60 then :moderate
+                          when confluence_score >= 40 then :weak
+                          else :none
                           end
 
     # Build indicator breakdown

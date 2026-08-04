@@ -26,8 +26,7 @@ RSpec.describe Live::TickQuery do
     end
 
     it 'returns nil when no cache ltp is present' do
-      allow(Live::TickCache).to receive(:fetch).and_return(nil)
-      allow(Live::TickCache).to receive(:ltp).and_return(nil)
+      allow(Live::TickCache).to receive_messages(fetch: nil, ltp: nil)
 
       expect(described_class.for_security(segment: 'NSE_FNO', security_id: '12345')).to be_nil
     end

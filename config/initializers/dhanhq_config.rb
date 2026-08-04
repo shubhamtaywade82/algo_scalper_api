@@ -115,6 +115,7 @@ DhanHQ.configure do |config|
   config.on_token_expired = lambda do |_error|
     Rails.logger.warn "[SCALPER] Token expired, clearing cache..."
     Rails.cache.delete("scalper:dhan_token")
+    Dhan::TokenManager.clear_cache! if defined?(Dhan::TokenManager)
   end
 end
 

@@ -42,9 +42,16 @@ module Orders
     end
 
     def wallet_snapshot
-      if ledger_wallet_enabled?
-        ledger = Ledger::WalletReader.snapshot(mode: :paper)
-        return ledger if ledger[:utilized] >= 0
+      base = (AlgoConfig.fetch.dig(:paper_trading, :balance) || 100_000).to_f
+
+      # Realized P&L: today's closed paper positions only (daily paper session)
+      today = Time.zone.today
+      realized = PositionTracker.paper.exited
+                                .where(exited_at: today.all_day)
+                                .sum(:last_pnl_rupees).to_f
+
+      # Unrealized P&L: active positions read from Redis cache for live values
+      unrealized = PositionTracker.paper.active.sum { |t| t.current_pnl_rupees.to_f }
 
         Rails.logger.warn("[GatewayPaper] ledger wallet state invalid (utilized=#{ledger[:utilized]}), falling back to legacy")
       end
@@ -60,6 +67,23 @@ module Orders
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] cancel_order failed for #{order_id}: #{e.class} - #{e.message}")
       { success: false, order_id: order_id, status: :failed, error: e.message, paper: true }
+    end
+
+    # Paper position by segment/security_id. Returns same shape as GatewayLive#position for compatibility.
+    def position(segment:, security_id:)
+      tracker = PositionTracker.paper.active.find_by(segment: segment, security_id: security_id.to_s)
+      return nil unless tracker
+
+      position_type = (tracker.side.to_s.upcase.start_with?('LONG') || tracker.side.to_s.upcase == 'BUY') ? 'LONG' : 'SHORT'
+      {
+        qty: tracker.quantity,
+        avg_price: tracker.avg_price.to_f,
+        product_type: nil,
+        exchange_segment: tracker.segment,
+        position_type: position_type,
+        trading_symbol: tracker.symbol,
+        status: tracker.status
+      }
     end
   end
 end

@@ -33,6 +33,15 @@ module Signal
                             signals_cfg[:confirmation_timeframe].to_s
                           end
 
+        # Initialize diagnostic variables to prevent NoMethodError in cross-strategy metadata building
+        ta_result = nil
+        regime_result = { regime: 'UNKNOWN', confidence: 0, metrics: {} }
+        regime = 'UNKNOWN'
+
+        # Default TA settings
+        ta_timeframes = signals_cfg[:ta_timeframes] || [5, 15, 60]
+        ta_days_back = signals_cfg[:ta_days_back] || 30
+
         if entry_primary == 'supertrend'
           # ===== SUPERTREND-ONLY ENTRY (entry_strategy.primary: supertrend) =====
           # Direction from SupertrendTrend (flip only). No Index TA, no strategy recs,
@@ -78,6 +87,15 @@ module Signal
             primary_analysis[:supertrend], { value: primary_analysis[:adx_value] },
             supertrend_only: true
           )
+
+          # Collect diagnostics for Supertrend mode
+          index_symbol = index_cfg[:key].to_s.downcase.to_sym
+          ta_analyzer = IndexTechnicalAnalyzer.new(index_symbol)
+          ta_analysis = ta_analyzer.call(timeframes: ta_timeframes, days_back: ta_days_back)
+          ta_result = ta_analysis[:success] ? ta_analyzer.result : nil
+
+          regime_result = MarketRegimeDetector.new(primary_analysis[:series]).detect
+          regime = regime_result[:regime]
         else
           # ===== INDEX TECHNICAL ANALYSIS STEP =====
           # Perform multi-timeframe TA analysis before signal generation
@@ -227,11 +245,19 @@ module Signal
             return
           end
 
-          # ===== DIRECTION GATE (HARD FILTER) =====
-          # MUST run BEFORE SMC, AVRZ, Permission resolution, or any entry logic.
-          # Blocks impossible trades based on market regime.
-          # Can be disabled via config: signals.enable_direction_gate = false
-          enable_direction_gate = signals_cfg.fetch(:enable_direction_gate, true)
+          # ===== MARKET REGIME & DIRECTION GATE =====
+          # Always compute regime for diagnostics. Filter via signals.enable_direction_gate.
+          primary_series = primary_analysis[:series]
+          regime_result = MarketRegimeDetector.new(primary_series).detect
+          regime = regime_result[:regime]
+
+          # DYNAMIC VALIDATION MODE: Use conservative mode in ranging/choppy markets
+          if %w[RANGING CHOPPY].include?(regime)
+            signals_cfg[:validation_mode] = 'conservative'
+            Rails.logger.info("[Signal] Switching to CONSERVATIVE validation for #{index_cfg[:key]} due to #{regime} regime")
+          end
+
+          enable_direction_gate = signals_cfg.fetch(:enable_direction_gate, false)
 
           if enable_direction_gate
             trade_side = final_direction == :bullish ? :CE : :PE
@@ -308,6 +334,7 @@ module Signal
               "[Signal] SMC Decision BLOCKED #{index_cfg[:key]}: " \
               "signal=#{final_direction}, smc=#{smc_decision} (misaligned or no_trade)"
             )
+            # HARD BLOCK: If TA is neutral or SMC is neutral/misaligned, we do not trade
             Signal::StateTracker.reset(index_cfg[:key])
             return
           end
@@ -518,8 +545,8 @@ module Signal
         end
 
         # Rails.logger.info("[Signal] Completed analysis for #{index_cfg[:key]}")
-      rescue Exception => e
-        Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%Q{\n})}")
+      rescue StandardError => e
+        Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%(\n))}")
         Rails.logger.error("[Signal] #{index_cfg[:key]} #{e.class} #{e.message}")
         summary&.block!("error")
         summary
@@ -570,8 +597,8 @@ module Signal
           direction: direction,
           last_candle_timestamp: series.candles.last&.timestamp
         }
-      rescue Exception => e
-        Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%Q{\n})}")
+      rescue StandardError => e
+        Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%(\n))}")
         Rails.logger.error("[Signal] Timeframe analysis failed for #{index_cfg[:key]} @ #{timeframe}: #{e.class} - #{e.message}")
         { status: :error, message: e.message }
       end
@@ -650,8 +677,8 @@ module Signal
           validation_result: validation_result,
           effective_validation_mode: effective_validation_mode
         }
-      rescue Exception => e
-        Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%Q{\n})}")
+      rescue StandardError => e
+        Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%(\n))}")
         Rails.logger.error("[Signal] Multi-timeframe analysis failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
         { status: :error, message: e.message }
       end
@@ -1232,8 +1259,8 @@ module Signal
         else
           result
         end
-      rescue Exception => e
-        Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%Q{\n})}")
+      rescue StandardError => e
+        Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%(\n))}")
         Rails.logger.error("[Signal] Strategy-based analysis failed for #{index_cfg[:key]} @ #{timeframe}: #{e.class} - #{e.message}")
         { status: :error, message: e.message }
       end
@@ -1263,8 +1290,18 @@ module Signal
         min_required = min_strength.to_f
         adx_numeric = adx_value.to_f
 
-        optimized = BestIndicatorParam.best_for_indicator(instrument.id, interval, :supertrend).first
-        return base_cfg unless optimized&.params.is_a?(Hash)
+        # Rails.logger.debug { "[Signal] ADX check(#{timeframe_label}): value=#{adx_numeric}, min_required=#{min_required}" }
+
+        # Only apply ADX filter if min_required is positive (i.e., ADX filter is enabled)
+        if min_required.positive? && adx_numeric < min_required
+          Rails.logger.info("[Signal] ADX too weak on #{timeframe_label}: #{adx_numeric} < #{min_required}")
+          return :avoid
+        end
+
+        if supertrend_result.blank? || supertrend_result[:trend].nil?
+          Rails.logger.warn("[Signal] Supertrend result invalid on #{timeframe_label}: #{supertrend_result}")
+          return :avoid
+        end
 
         trend = supertrend_result[:trend]
         # Rails.logger.debug { "[Signal] Supertrend trend(#{timeframe_label}): #{trend}" }
@@ -1322,8 +1359,8 @@ module Signal
           end
 
           decision
-        rescue Exception => e
-        Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%Q{\n})}")
+        rescue StandardError => e
+        Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%(\n))}")
           Rails.logger.warn("[Signal] SMC decision check failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
           # Default to signal direction on error (allows trades instead of blocking)
           # :call for bullish signals, :put for bearish signals

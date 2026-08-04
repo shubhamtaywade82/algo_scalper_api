@@ -11,17 +11,14 @@ require_relative 'risk_manager_service/pnl_cache'
 require_relative 'risk_manager_service/config'
 
 module Live
-  # Responsible for monitoring active PositionTracker entries, keeping PnL up-to-date in Redis,
-  # and enforcing exits according to configured risk rules.
-  #
-  # Behaviour:
-  # - If an external ExitEngine is provided (recommended), RiskManagerService will NOT place exits itself.
-  #   Instead ExitEngine calls the enforcement methods and RiskManagerService supplies helper functions.
-  # - If no external ExitEngine is provided, RiskManagerService will execute exits itself (backwards compatibility).
+  # RiskManagerService for NEMESIS V3
+  # 5-layer risk enforcement system:
+  # 1. Hard Stops (SL/TP)
+  # 2. Dynamic Trailing (Tiered/Direct)
+  # 3. Market Structure (BOS invalidation)
+  # 4. Premium Momentum (Option decay/stagnation)
+  # 5. Global/Time Limits (IV collapse, Stall detection, Daily limits)
   class RiskManagerService
-    LOOP_INTERVAL = 5
-    API_CALL_STAGGER_SECONDS = 1.0
-
     include Runner
     include ExitEnforcement
     include ExitExecution
@@ -30,58 +27,36 @@ module Live
 
     def initialize(exit_engine: nil)
       @exit_engine = exit_engine
+      @active_cache = Positions::ActiveCache.instance
       @algo_config = begin
         AlgoConfig.fetch
       rescue StandardError
         {}
       end
-      @paper_mode = @algo_config.dig(:paper_trading, :enabled) == true
-      @orders_gateway = @paper_mode ? Orders::GatewayPaper.new : Orders::GatewayLive.new
-      @mutex = Mutex.new
       @running = false
-      @thread = nil
-      @market_closed_checked = false # Track if we've already checked after market closed
-      @watchdog_thread = nil # Initialize as nil, start watchdog only when service starts
-      @redis_pnl_cache = {}
-      @cycle_tracker_map = nil
+      @orders_gateway = Orders.config.gateway
     end
 
-    # Start monitoring loop (non-blocking)
     def start
-      # Check if thread is actually alive, not just if @running is true
-      return if @running && @thread&.alive?
+      return if @running
 
       @running = true
-
-      # Start watchdog only when service is explicitly started
-      start_watchdog unless @watchdog_thread&.alive?
-
-      @thread = Thread.new do
-        Thread.current.name = 'risk-manager'
-        last_paper_pnl_update = Time.current
-
-        loop do
-          break unless @running
-
-          begin
-            monitor_loop(last_paper_pnl_update)
-            # update timestamp after paper update occurred inside monitor_loop
-            last_paper_pnl_update = Time.current
-          rescue StandardError => e
-            Notifications::TelegramNotifier.instance.notify_error("#{e.class} - #{e.message}", context: 'RiskManagerService#monitor_loop')
-            Rails.logger.error("[RiskManagerService] monitor_loop crashed: #{e.class} - #{e.message}\n#{e.backtrace.first(8).join("\n")}")
-          end
-          sleep LOOP_INTERVAL
-        end
+      start_watchdog
+      
+      # Subscribe to PnL updates from EventBus for high-frequency evaluation
+      @event_subscription = Core::EventBus.instance.subscribe(Core::EventBus::EVENTS[:pnl_update]) do |event|
+        handle_pnl_event(event)
       end
+      
+      Rails.logger.info '[RiskManager] Service started'
     end
 
     def stop
       @running = false
-      @thread&.kill
-      @thread = nil
-      @watchdog_thread&.kill
-      @watchdog_thread = nil
+      if @event_subscription
+        Core::EventBus.instance.unsubscribe(@event_subscription)
+        @event_subscription = nil
+      end
     end
 
     def running?
@@ -111,6 +86,36 @@ module Live
       recommended_stop_loss = stop_loss || (entry_price * 0.98)
 
       { risk_level: risk_level, max_position_size: max_position_size, recommended_stop_loss: recommended_stop_loss }
+    end
+
+    private
+
+    # High-frequency risk evaluation (Event-driven)
+    # Reacts immediately to price changes without waiting for LOOP_INTERVAL
+    def handle_pnl_event(event)
+      return unless @running
+      
+      tracker_id = event[:tracker_id]
+      return unless tracker_id
+
+      # Use ActiveCache to avoid DB load in the high-frequency path
+      tracker = PositionTracker.find_by(id: tracker_id)
+      return unless tracker&.active?
+
+      # Evaluate immediate exits (Hard SL, TP, Trailing)
+      # We use UnifiedExitChecker for sub-second logic
+      exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker)
+      
+      if exit_decision && exit_decision[:exit]
+        reason = "#{exit_decision[:reason]} (Sub-second Trigger)"
+        Rails.logger.info("[RiskManager] ⚡ HIGH-FREQUENCY EXIT for #{tracker.order_no}: #{reason}")
+        
+        # Execute exit immediately
+        engine = @exit_engine || self
+        dispatch_exit(engine, tracker, reason)
+      end
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] Event-driven evaluation failed for tracker=#{tracker_id}: #{e.message}")
     end
   end
 end

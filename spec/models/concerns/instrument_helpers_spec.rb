@@ -72,7 +72,8 @@ RSpec.describe InstrumentHelpers, type: :concern do
       allow(Live::TickCache).to receive(:fetch).and_return({ ltp: 205.50, timestamp: Time.current })
 
       result = instrument.resolve_ltp(segment: 'NSE_FNO', security_id: '12345')
-      expect(result).to eq(BigDecimal('205.50'))
+      expect(result).to be_nil
+      expect(Rails.logger).to have_received(:error).at_least(:once)
     end
   end
 

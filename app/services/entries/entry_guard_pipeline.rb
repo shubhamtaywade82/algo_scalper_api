@@ -2,6 +2,7 @@
 
 module Entries
   # Runs entry request through a chain of guards. First guard that blocks wins.
+  # Used by EntryGuard.try_enter to make guard order explicit and each step testable.
   class EntryGuardPipeline
     PASS = :pass
 
@@ -9,23 +10,15 @@ module Entries
       @handlers = handlers
     end
 
-    # @param context [Hash] Mutable context (index_cfg, pick, direction, etc.)
+    # @param context [Hash] Mutable context (index_cfg, pick, direction, etc.). Handlers may set :instrument, :ltp, :side, :is_supertrend.
     # @return [Symbol] :pass if all handlers passed
-    # @return [Hash] { blocked: String, evaluated: Array<Hash> } if a handler blocked.
-    #   `evaluated` lists every guard run before the block, in order, so callers can
-    #   report the full decision trail rather than only the guard that finally blocked.
+    # @return [Hash] { blocked: String } if a handler blocked
     def run(context)
-      evaluated = []
       @handlers.each do |handler|
         result = handler.call(context)
-        if result == PASS
-          evaluated << { guard: handler.name, result: :pass }
-          next
-        end
+        next if result == PASS
 
-        reason = result.is_a?(Hash) ? result[:blocked] : result.to_s
-        evaluated << { guard: handler.name, result: :blocked, reason: reason }
-        return { blocked: reason, evaluated: evaluated }
+        return result
       end
       PASS
     end
@@ -34,36 +27,16 @@ module Entries
 
     def default_handlers
       [
-        Guards::DrawdownGuard,
-        Guards::EntryPolicyGuard,
         Guards::CircuitBreakerGuard,
         Guards::BosContractGuard,
         Guards::TimeRegimeGuard,
-        Guards::MiddayQualityGuard,
         Guards::BankniftyLastWeekGuard,
         Guards::EdgeFailureGuard,
-        Guards::LossStreakGuard,
         Guards::DailyLimitsGuard,
-        Guards::MaxConcurrentGuard,
-        Guards::GlobalMaxConcurrentGuard,
         Guards::InstrumentLookupGuard,
-        Guards::LtpResolutionGuard,
-        Guards::BidAskSpreadGuard,
-        Guards::TransactionCostGuard,        # pre-trade TCM: block when fees+spread+slippage > expected edge
-        Guards::BreakoutReadyGuard,          # intraday: 1m breakout + OI unwind armed
-        Guards::RsiBiasGuard,
-        Guards::ExpiryWeekPowerTrendGuard,   # enriches context[:expiry_power_trend] when pattern detected
-        Guards::TimeRegimeGuard,             # reads context[:expiry_power_trend] to bypass S3/S4 block
-        Guards::DteEntryWindowGuard,
-        Guards::BankniftyLastWeekGuard,
-        Guards::WeeklyExpiryGuard,
-        Guards::BosStructureGuard,
-        Guards::SizingGuard,
-        Guards::PremiumBandGuard,
         Guards::ExposureGuard,
         Guards::CooldownGuard,
-        Guards::LtpResolutionGuard,
-        Guards::SmcNavigatorGuard
+        Guards::LtpResolutionGuard
       ]
     end
   end

@@ -297,15 +297,23 @@ module Smc
                             '{}'
                           end
 
-            {
-              id: tc_hash['id'] || tc_hash[:id] || SecureRandom.hex(8),
-              type: 'function',
-              function: {
-                name: func_name,
-                arguments: args_string
-              }
-            }
-          end
+      {
+        count: candles.size,
+        latest: {
+          timestamp: candles.last.timestamp,
+          open: candles.last.open,
+          high: candles.last.high,
+          low: candles.last.low,
+          close: candles.last.close,
+          volume: candles.last.volume
+        },
+        summary: {
+          high: candles.map(&:high).max,
+          low: candles.map(&:low).min,
+          avg_volume: (candles.sum(&:volume).to_f / candles.size).round(2)
+        }
+      }
+    end
 
           @messages << {
             role: 'assistant',

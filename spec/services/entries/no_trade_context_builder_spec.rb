@@ -26,6 +26,24 @@ RSpec.describe Entries::NoTradeContextBuilder do
         minus_di: 10.0
       )
 
+      # Mock NoTradeThresholds to avoid dependency on production values changing
+      allow(Entries::NoTradeThresholds).to receive(:for_index).with('NIFTY').and_return({
+        iv_hard_reject: 10,
+        vwap_chop_pct: 0.08,
+        vwap_chop_candles: 3,
+        atr_downtrend_bars: 5,
+        oi_trap_range_pct: 0.08,
+        spread_hard_reject: 3
+      })
+      allow(Entries::NoTradeThresholds).to receive(:for_index).with('BANKNIFTY').and_return({
+        iv_hard_reject: 13,
+        vwap_chop_pct: 0.1,
+        vwap_chop_candles: 3,
+        atr_downtrend_bars: 4,
+        oi_trap_range_pct: 0.1,
+        spread_hard_reject: 4
+      })
+
       # Mock structure detection
       allow(Entries::StructureDetector).to receive_messages(bos?: true, inside_opposite_ob?: false, inside_fvg?: false)
 
@@ -160,8 +178,12 @@ RSpec.describe Entries::NoTradeContextBuilder do
 
     context 'when ADX calculation fails' do
       before do
-        allow(described_class).to receive(:calculate_adx_data).and_raise(StandardError.new('ADX error'))
+        allow(described_class).to receive(:calculate_adx_data).and_call_original
+        allow(described_class).to receive(:extract_adx_with_di) do
+          raise StandardError.new('ADX error')
+        end
         allow_any_instance_of(CandleSeries).to receive(:adx).and_return(18.0)
+        allow(Rails.logger).to receive(:warn)
       end
 
       it 'falls back to simple ADX value' do
@@ -176,11 +198,16 @@ RSpec.describe Entries::NoTradeContextBuilder do
         expect(ctx.adx_5m).to eq(18.0)
         expect(ctx.plus_di_5m).to eq(0)
         expect(ctx.minus_di_5m).to eq(0)
+        expect(Rails.logger).to have_received(:warn).with(match(/ADX calculation failed/)).at_least(:once)
       end
     end
 
     context 'when bars_5m has insufficient data' do
       let(:insufficient_bars) { build_list(:candle, 5) }
+
+      before do
+        allow(described_class).to receive(:calculate_adx_data).and_call_original
+      end
 
       it 'returns zero ADX values' do
         ctx = described_class.build(

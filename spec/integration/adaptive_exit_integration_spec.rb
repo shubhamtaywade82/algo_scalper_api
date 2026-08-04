@@ -19,33 +19,42 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
   before do
     allow(exit_engine).to receive(:execute_exit)
     allow(service).to receive_messages(seconds_below_entry: 0, calculate_atr_ratio: 1.0)
-    Positions::TrailingConfig.reset_config!
+    
+    # Mock MarketFeedHub to avoid real WebSocket calls and leaks
+    allow(Live::MarketFeedHub.instance).to receive(:subscribe).and_return({ success: true })
+    allow(Live::MarketFeedHub.instance).to receive(:unsubscribe).and_return({ success: true })
+    
+    # Reset TrailingConfig memoization so it picks up the test config
+    Positions::TrailingConfig.instance_variable_set(:@config, nil)
+    
+    # Ensure ActiveCache is clean
+    Positions::ActiveCache.instance.clear
+  end
 
-    # Mock RedisPnlCache
-    allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_wrap_original do |_method, *args|
-      args.first == tracker.id ? pnl_data : nil
-    end
-
-    # Mock ActiveCache (used by TrailingEngine)
-    active_cache = Positions::ActiveCache.instance
-    allow(active_cache).to receive(:get_by_tracker_id).and_wrap_original do |_method, *args|
-      if args.first == tracker.id && defined?(pnl_data)
-        Positions::ActiveCache::PositionData.new(
-          tracker_id: tracker.id,
-          security_id: tracker.security_id,
-          segment: tracker.segment,
-          entry_price: tracker.entry_price,
-          quantity: tracker.quantity,
-          current_ltp: pnl_data[:ltp] || (tracker.entry_price.to_f * (1 + pnl_data[:pnl_pct].to_f)),
-          pnl: pnl_data[:pnl],
-          pnl_pct: pnl_data[:pnl_pct],
-          high_water_mark: pnl_data[:hwm_pnl],
-          peak_profit_pct: pnl_data[:peak_profit_pct] || pnl_data[:hwm_pnl_pct] || (pnl_data[:hwm_pnl] && tracker.entry_price.to_f > 0 ? (pnl_data[:hwm_pnl] / (tracker.entry_price.to_f * tracker.quantity)) : 0.05),
-          position_direction: %w[long_ce long_pe].include?(tracker.side) ? :long : :short,
-          index_key: 'NIFTY'
-        )
-      end
-    end
+  def setup_active_cache(tracker, pnl_data)
+    # Add position to ActiveCache
+    pos = Positions::ActiveCache.instance.add_position(tracker: tracker)
+    
+    # Update with test PnL data
+    Positions::ActiveCache.instance.update_position(
+      tracker.id,
+      pnl_pct: pnl_data[:pnl_pct].to_f,
+      peak_profit_pct: (pnl_data[:hwm_pnl] / (tracker.entry_price * tracker.quantity)).to_f,
+      current_ltp: (tracker.entry_price * (1 + pnl_data[:pnl_pct].to_f)).to_f
+    )
+    
+    # Update RedisPnlCache for UnifiedExitChecker
+    Live::RedisPnlCache.instance.store_pnl(
+      tracker_id: tracker.id,
+      pnl: pnl_data[:pnl],
+      pnl_pct: pnl_data[:pnl_pct].to_f,
+      ltp: (tracker.entry_price * (1 + pnl_data[:pnl_pct].to_f)).to_f,
+      hwm: pnl_data[:hwm_pnl],
+      timestamp: Time.current,
+      tracker: tracker
+    )
+    
+    tracker.update_columns(trade_state: 'expansion')
   end
 
   describe 'full exit flow with different configurations' do
@@ -58,28 +67,33 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
             exit_drop_pct: 0.02, # Tighter trailing
             breakeven_after_gain: 0.05,
             drawdown: {
-              activation_profit_pct: 3.0,
-              profit_min: 3.0,
-              profit_max: 30.0,
-              dd_start_pct: 10.0, # Tighter
-              dd_end_pct: 0.5,    # Tighter
+              activation_profit_pct: 0.03,
+              profit_min: 0.03,
+              profit_max: 0.30,
+              dd_start_pct: 0.10,
+              dd_end_pct: 0.005,
               exponential_k: 5.0,
-              index_floors: { 'NIFTY' => 0.5 }
+              index_floors: { 'NIFTY' => 0.005 }
+            },
+            tiered_drawdown_thresholds: {
+              low: 0.01 # 1% threshold for 5% peak
             },
             reverse_loss: {
               enabled: true,
-              max_loss_pct: 15.0, # Tighter
-              min_loss_pct: 3.0,  # Tighter
-              loss_span_pct: 30.0,
-              time_tighten_per_min: 3.0
+              max_loss_pct: 0.15, # Tighter
+              min_loss_pct: 0.03,  # Tighter
+              loss_span_pct: 0.30,
+              time_tighten_per_min: 0.03
             },
             etf: {
               enabled: true,
-              activation_profit_pct: 5.0,
-              trend_score_drop_pct: 25.0,
+              activation_profit_pct: 0.05,
+              trend_score_drop_pct: 0.25,
               adx_collapse_threshold: 12,
               atr_ratio_threshold: 0.60
-            }
+            },
+            # Direct trailing enabled for conservative
+            direct_trailing: { enabled: true }
           }
         }
       end
@@ -98,8 +112,9 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
         end
 
         it 'triggers adaptive trailing stop' do
-          # Peak: 5%, Current: 2%, Drop: 3%
-          # With conservative config, should trigger peak_drawdown_exit
+          setup_active_cache(tracker, pnl_data)
+          # Peak: 5%, Current: 3%, Drop: 2%
+          # With conservative config, should trigger
           expect(exit_engine).to receive(:execute_exit).with(
             tracker,
             match(/ADAPTIVE_TRAILING_STOP|TRAILING_STOP|peak_drawdown_exit/)
@@ -140,25 +155,25 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
             exit_drop_pct: 0.05, # Wider trailing
             breakeven_after_gain: 0.10,
             drawdown: {
-              activation_profit_pct: 3.0,
-              profit_min: 3.0,
-              profit_max: 30.0,
-              dd_start_pct: 20.0, # Wider
-              dd_end_pct: 2.0,    # Wider
+              activation_profit_pct: 0.05,
+              profit_min: 0.05,
+              profit_max: 0.50,
+              dd_start_pct: 0.20,
+              dd_end_pct: 0.02,
               exponential_k: 2.0,
-              index_floors: { 'NIFTY' => 2.0 }
+              index_floors: { 'NIFTY' => 0.02 }
             },
             reverse_loss: {
               enabled: true,
-              max_loss_pct: 25.0, # Wider
-              min_loss_pct: 7.0,  # Wider
-              loss_span_pct: 30.0,
-              time_tighten_per_min: 1.0
+              max_loss_pct: 0.25,
+              min_loss_pct: 0.10,
+              loss_span_pct: 0.50,
+              time_tighten_per_min: 0.01
             },
             etf: {
               enabled: true,
-              activation_profit_pct: 10.0,
-              trend_score_drop_pct: 40.0,
+              activation_profit_pct: 0.10,
+              trend_score_drop_pct: 0.40,
               adx_collapse_threshold: 8,
               atr_ratio_threshold: 0.50
             }
@@ -173,15 +188,16 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
       context 'when position is profitable' do
         let(:pnl_data) do
           {
-            pnl: BigDecimal('400.0'), # +8% current
-            pnl_pct: BigDecimal('0.08'),
+            pnl: BigDecimal('425.0'), # +8.5% current
+            pnl_pct: BigDecimal('0.085'),
             hwm_pnl: BigDecimal('500.0') # +10% peak
           }
         end
 
         it 'allows wider drawdown' do
-          # Peak: 10%, Current: 8%, Drop: 2%
-          # With aggressive config, 2% drop should be within allowed range
+          setup_active_cache(tracker, pnl_data)
+          # Peak: 10%, Current: 8.5%, Drop: 1.5%
+          # With aggressive config, 1.5% drop should be within allowed range (2%)
           expect(exit_engine).not_to receive(:execute_exit)
           service.enforce_trailing_stops(exit_engine: exit_engine)
         end
@@ -213,25 +229,25 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
             exit_drop_pct: 0.03,
             breakeven_after_gain: 0.05,
             drawdown: {
-              activation_profit_pct: 3.0,
-              profit_min: 3.0,
-              profit_max: 30.0,
-              dd_start_pct: 15.0,
-              dd_end_pct: 1.0,
-              exponential_k: 3.0,
-              index_floors: { 'NIFTY' => 1.0 }
+              activation_profit_pct: 0.05,
+              profit_min: 0.05,
+              profit_max: 0.50,
+              dd_start_pct: 0.20,
+              dd_end_pct: 0.02,
+              exponential_k: 2.0,
+              index_floors: { 'NIFTY' => 0.02 }
             },
             reverse_loss: {
               enabled: true,
-              max_loss_pct: 20.0,
-              min_loss_pct: 5.0,
-              loss_span_pct: 30.0,
-              time_tighten_per_min: 2.0
+              max_loss_pct: 0.25,
+              min_loss_pct: 0.10,
+              loss_span_pct: 0.50,
+              time_tighten_per_min: 0.01
             },
             etf: {
               enabled: true,
-              activation_profit_pct: 7.0,
-              trend_score_drop_pct: 30.0,
+              activation_profit_pct: 0.07,
+              trend_score_drop_pct: 0.30,
               adx_collapse_threshold: 10,
               atr_ratio_threshold: 0.55
             }
@@ -243,11 +259,20 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
         allow(AlgoConfig).to receive(:fetch).and_return(config)
       end
 
-      it 'invokes run_interval_enforcement_if_needed from monitor_loop' do
-        allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
-        allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([])
-        allow(service).to receive(:run_interval_enforcement_if_needed)
+      it 'executes all enforcement methods in order' do
+        pnl_data = {
+          pnl: BigDecimal('250.0'),
+          pnl_pct: BigDecimal('0.05'),
+          hwm_pnl: BigDecimal('250.0')
+        }
+        setup_active_cache(tracker, pnl_data)
 
+        expect(service).to receive(:enforce_hard_limits_for).with(tracker, exit_engine: exit_engine).and_call_original
+        expect(service).to receive(:enforce_early_trend_failure_for).with(tracker, exit_engine: exit_engine).and_call_original
+        expect(service).to receive(:enforce_premium_r_stop_for).with(tracker, exit_engine: exit_engine).and_call_original
+        expect(service).to receive(:enforce_dynamic_trailing_stops_for).with(tracker, exit_engine: exit_engine).and_call_original
+
+        service.instance_variable_set(:@exit_engine, exit_engine)
         service.send(:monitor_loop, Time.current)
 
         expect(service).to have_received(:run_interval_enforcement_if_needed)

@@ -14,7 +14,8 @@ module Live
         snapshot = pnl_snapshot(tracker)
         return nil unless snapshot
 
-        pnl_pct = snapshot[:pnl_pct].to_f * 100.0
+        # snapshot[:pnl_pct] is decimal (e.g. 0.05 for 5%)
+        pnl_pct = snapshot[:pnl_pct].to_f
 
         # Build RuleContext
         context = Risk::Rules::RuleContext.new(
@@ -47,7 +48,7 @@ module Live
             exit: true,
             reason: 'EARLY_TREND_FAILURE',
             path: 'early_trend_failure',
-            pnl_pct: pnl_pct
+            pnl_pct: (pnl_pct * 100.0).round(2)
           }
         end
 
@@ -57,7 +58,7 @@ module Live
             exit: true,
             reason: 'STOP_LOSS',
             path: 'stop_loss',
-            pnl_pct: pnl_pct
+            pnl_pct: (pnl_pct * 100.0).round(2)
           }
         end
 
@@ -80,7 +81,7 @@ module Live
             exit: true,
             reason: 'TAKE_PROFIT',
             path: 'take_profit',
-            pnl_pct: pnl_pct
+            pnl_pct: (pnl_pct * 100.0).round(2)
           }
         end
 
@@ -120,7 +121,7 @@ module Live
             exit: true,
             reason: 'TRAILING_STOP',
             path: 'trailing_stop',
-            pnl_pct: pnl_pct
+            pnl_pct: (pnl_pct * 100.0).round(2)
           }
         end
 
@@ -134,7 +135,7 @@ module Live
             exit: true,
             reason: 'TIME_BASED',
             path: 'time_based',
-            pnl_pct: pnl_pct
+            pnl_pct: (pnl_pct * 100.0).round(2)
           }
         end
 
@@ -162,7 +163,7 @@ module Live
         return false unless config[:early_exit][:enabled]
 
         pnl_pct = snapshot[:pnl_pct].to_f
-        threshold = config[:early_exit][:profit_threshold].to_f # Already DECIMAL (e.g. 0.07)
+        threshold = config[:early_exit][:profit_threshold].to_f  # Already DECIMAL (e.g. 0.07)
         return false if pnl_pct >= threshold
 
         # Check ETF conditions
@@ -175,31 +176,34 @@ module Live
 
       def loss_limit_hit?(tracker, snapshot)
         config = exit_config
-        pnl_pct = snapshot[:pnl_pct].to_f * 100.0
+        pnl_pct = snapshot[:pnl_pct].to_f # e.g. -0.0396 (DECIMAL format)
 
         # Dynamic reverse SL (if enabled and below entry)
         if pnl_pct.negative? && config[:stop_loss][:type] == 'adaptive'
           seconds_below = seconds_below_entry(tracker)
           atr_ratio = calculate_atr_ratio(tracker)
 
+          # allowed_loss is DECIMAL from schedule (e.g. 0.10 for 10%)
+          # Pass DECIMAL pnl_pct directly (DrawdownSchedule now uses DECIMAL)
           allowed_loss = Positions::DrawdownSchedule.reverse_dynamic_sl_pct(
             pnl_pct,
             seconds_below_entry: seconds_below,
             atr_ratio: atr_ratio
           )
 
+          # Both pnl_pct and allowed_loss are DECIMAL: -0.0396 <= -0.10 (False)
           return true if allowed_loss && pnl_pct <= -allowed_loss
         end
 
-        # Static stop loss
+        # Static stop loss (config value is DECIMAL, e.g. 0.12 for 12%)
         static_sl = config[:stop_loss][:value].to_f
         pnl_pct <= -static_sl
       end
 
       def profit_target_hit?(tracker, snapshot)
         config = exit_config
-        pnl_pct = snapshot[:pnl_pct].to_f * 100.0
-        tp = config[:take_profit].to_f
+        pnl_pct = snapshot[:pnl_pct].to_f # DECIMAL format (e.g., 0.05 for 5%)
+        tp = config[:take_profit].to_f # Already DECIMAL (e.g., 0.50 for 50%)
 
         return false unless pnl_pct >= tp
 
@@ -278,18 +282,19 @@ module Live
         hwm = snapshot[:hwm_pnl]
         return false if hwm.nil? || hwm.zero?
 
-        pnl_pct = snapshot[:pnl_pct].to_f * 100.0
+        pnl_pct = snapshot[:pnl_pct].to_f
         return false if pnl_pct <= 0
 
         # Adaptive trailing (if enabled)
         if config[:trailing][:type] == 'adaptive'
           # peak_profit_pct is DECIMAL (e.g. 0.20 for 20%)
           peak_profit_pct = (hwm / (tracker.entry_price.to_f * tracker.quantity.to_i))
-          activation = config[:trailing][:activation_profit].to_f # Already DECIMAL
+          activation = config[:trailing][:activation_profit].to_f  # Already DECIMAL
 
           return false if peak_profit_pct < activation
 
           index_key = tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
+          # Pass DECIMAL peak_profit_pct; returns DECIMAL allowed_dd
           allowed_dd = Positions::DrawdownSchedule.allowed_upward_drawdown_pct(peak_profit_pct, index_key: index_key)
 
           if allowed_dd
@@ -300,7 +305,7 @@ module Live
         end
 
         # Fixed trailing
-        drop_threshold = config[:trailing][:drop_threshold].to_f # Already DECIMAL
+        drop_threshold = config[:trailing][:drop_threshold].to_f  # Already DECIMAL
         drop_pct = (hwm - pnl) / hwm
         drop_pct >= drop_threshold
       end
@@ -399,26 +404,54 @@ module Live
 
       def exit_config
         @exit_config ||= begin
-          cfg = AlgoConfig.fetch[:exit] || {}
+          algo_cfg = AlgoConfig.fetch
+          risk_cfg = algo_cfg[:risk] || {}
+          exit_cfg = algo_cfg[:exit] || {}
+
+          # Read SL from risk config (sl_pct stored as DECIMAL like 0.12 for 12%)
+          sl_value = risk_cfg[:sl_pct]
+          if sl_value
+            sl_value_pct = sl_value.to_f  # Use DECIMAL directly (0.12)
+          else
+            sl_value_pct = exit_cfg.dig(:stop_loss, :value) || 0.12  # Default 12% as DECIMAL
+          end
+
+          # Read TP from config (can be in either location, stored as DECIMAL)
+          tp_value = exit_cfg[:take_profit]
+          unless tp_value
+            if risk_cfg[:tp_pct]
+              tp_value = risk_cfg[:tp_pct].to_f  # Use DECIMAL directly (0.50)
+            else
+              tp_value = 0.50  # Default 50% as DECIMAL
+            end
+          end
+
+          # Read trailing config (now using DECIMAL format from algo.yml)
+          trailing_activation = exit_cfg.dig(:trailing, :activation_profit)
+          trailing_activation ||= risk_cfg.dig(:trailing, :activation_pct) || 0.035
+
+          trailing_drop = exit_cfg.dig(:trailing, :drop_threshold)
+          trailing_drop ||= risk_cfg.dig(:trailing, :drawdown_pct) || 0.025
+
           {
             stop_loss: {
-              type: cfg.dig(:stop_loss, :type) || 'static',
-              value: cfg.dig(:stop_loss, :value) || 3.0
+              type: exit_cfg.dig(:stop_loss, :type) || 'static',
+              value: sl_value_pct
             },
-            take_profit: cfg[:take_profit] || 5.0,
+            take_profit: tp_value,
             trailing: {
-              enabled: cfg.dig(:trailing, :enabled) != false,
-              type: cfg.dig(:trailing, :type) || 'adaptive',
-              activation_profit: cfg.dig(:trailing, :activation_profit) || 3.0,
-              drop_threshold: cfg.dig(:trailing, :drop_threshold) || 3.0
+              enabled: exit_cfg.dig(:trailing, :enabled) != false,
+              type: exit_cfg.dig(:trailing, :type) || 'adaptive',
+              activation_profit: trailing_activation,
+              drop_threshold: trailing_drop
             },
             early_exit: {
-              enabled: cfg.dig(:early_exit, :enabled) != false,
-              profit_threshold: cfg.dig(:early_exit, :profit_threshold) || 7.0
+              enabled: exit_cfg.dig(:early_exit, :enabled) != false,
+              profit_threshold: exit_cfg.dig(:early_exit, :profit_threshold) || 0.07
             },
             time_based: {
-              enabled: cfg.dig(:time_based, :enabled) == true,
-              exit_time: cfg.dig(:time_based, :exit_time) || '15:20'
+              enabled: exit_cfg.dig(:time_based, :enabled) == true,
+              exit_time: exit_cfg.dig(:time_based, :exit_time) || '15:20'
             }
           }
         rescue StandardError
@@ -428,10 +461,10 @@ module Live
 
       def default_exit_config
         {
-          stop_loss: { type: 'static', value: 3.0 },
-          take_profit: 5.0,
-          trailing: { enabled: true, type: 'adaptive', activation_profit: 3.0, drop_threshold: 3.0 },
-          early_exit: { enabled: true, profit_threshold: 7.0 },
+          stop_loss: { type: 'static', value: 0.12 },  # 12% stop loss (DECIMAL)
+          take_profit: 0.50,  # 50% take profit (DECIMAL)
+          trailing: { enabled: true, type: 'adaptive', activation_profit: 0.035, drop_threshold: 0.025 },
+          early_exit: { enabled: true, profit_threshold: 0.07 },
           time_based: { enabled: false, exit_time: '15:20' }
         }
       end

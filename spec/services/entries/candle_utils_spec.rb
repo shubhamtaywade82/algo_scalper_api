@@ -64,8 +64,8 @@ RSpec.describe Entries::CandleUtils do
     it 'detects alternating engulfing candles' do
       bars = [
         build(:candle, :bullish, open: 25_000, high: 25_100, low: 24_950, close: 25_050),
-        build(:candle, :bearish, open: 25_050, high: 25_100, low: 24_900, close: 24_950), # Engulfs previous
-        build(:candle, :bullish, open: 24_950, high: 25_150, low: 24_900, close: 25_100) # Engulfs previous
+        build(:candle, :bearish, open: 25_050, high: 25_110, low: 24_940, close: 24_950), # Engulfs previous
+        build(:candle, :bullish, open: 24_950, high: 25_120, low: 24_930, close: 25_100) # Engulfs previous
       ]
 
       result = described_class.alternating_engulfing?(bars)

@@ -49,10 +49,18 @@ module Risk
 
         return skip_result unless time_limit
 
-        # Bypass time stop if the trade is in profit (let winners run)
         pnl = context.position.pnl.to_f
-        if pnl > 0.0
-          Rails.logger.debug { "[TimeStopRule] Bypassing time stop for #{tracker.order_no} as it is in profit (₹#{pnl.round(2)})" }
+        index_key = tracker.meta&.dig('index_key') || 'NIFTY'
+
+        # Dynamic time stop tightening if position is negative
+        if pnl < 0.0 && time_limit > 5
+          time_limit = 5 # Reduce time limit to 5 minutes if negative PnL (Theta protection)
+        end
+
+        # Bypass time stop if the trade is in profit (let winners run)
+        # EXCEPT for SENSEX where we want to book profits fast or exit if it stalls
+        if pnl > 0.0 && index_key != 'SENSEX'
+          # Rails.logger.debug { "[TimeStopRule] Bypassing time stop for #{tracker.order_no} as it is in profit (₹#{pnl.round(2)})" }
           return skip_result
         end
 

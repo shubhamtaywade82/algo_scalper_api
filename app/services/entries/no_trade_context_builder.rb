@@ -84,6 +84,47 @@ module Entries
         )
       end
 
+      # Get full ADX result (includes DI+ and DI-)
+      # Public so it can be mocked in tests
+      def extract_adx_with_di(series)
+        return { adx: 0, plus_di: 0, minus_di: 0 } if series.candles.size < 15
+
+        # Use TechnicalAnalysis gem directly to get full ADX result
+        hlc = series.hlc
+        result = TechnicalAnalysis::Adx.calculate(hlc, period: 14)
+        return { adx: 0, plus_di: 0, minus_di: 0 } if result.empty?
+
+        # Get last result (most recent)
+        last_result = result.last
+
+        # Handle different property naming (adx/adx, plus_di/plusDi, minus_di/minusDi)
+        adx_value = if last_result.respond_to?(:adx)
+                      last_result.adx
+                    else
+                      (last_result.respond_to?(:adx_value) ? last_result.adx_value : 0)
+                    end
+        plus_di_value = if last_result.respond_to?(:plus_di)
+                          last_result.plus_di
+                        elsif last_result.respond_to?(:plusDi)
+                          last_result.plusDi
+                        else
+                          0
+                        end
+        minus_di_value = if last_result.respond_to?(:minus_di)
+                           last_result.minus_di
+                         elsif last_result.respond_to?(:minusDi)
+                           last_result.minusDi
+                         else
+                           0
+                         end
+
+        {
+          adx: adx_value || 0,
+          plus_di: plus_di_value || 0,
+          minus_di: minus_di_value || 0
+        }
+      end
+
       private
 
       def normalize_time(time)
@@ -131,13 +172,21 @@ module Entries
         series = build_candle_series(bars)
         return { adx: 0, plus_di: 0, minus_di: 0 } unless series
 
-        # Get full ADX result (includes DI+ and DI-)
-        adx_result = extract_adx_with_di(series)
-        {
-          adx: adx_result[:adx] || 0,
-          plus_di: adx_result[:plus_di] || 0,
-          minus_di: adx_result[:minus_di] || 0
-        }
+        begin
+          # Get full ADX result (includes DI+ and DI-)
+          # Call via self to allow mocking in tests
+          adx_result = NoTradeContextBuilder.extract_adx_with_di(series)
+          {
+            adx: adx_result[:adx] || 0,
+            plus_di: adx_result[:plus_di] || 0,
+            minus_di: adx_result[:minus_di] || 0
+          }
+        rescue StandardError => e
+          Rails.logger.warn("[NoTradeContextBuilder] ADX calculation failed: #{e.message}")
+          # Fallback to simple ADX value (DI values will be 0)
+          adx_value = series.adx(14) || 0
+          { adx: adx_value, plus_di: 0, minus_di: 0 }
+        end
       end
 
       def build_candle_series(bars)
@@ -146,50 +195,6 @@ module Entries
         series = CandleSeries.new(symbol: 'temp', interval: '5')
         bars.each { |c| series.add_candle(c) }
         series
-      end
-
-      def extract_adx_with_di(series)
-        return { adx: 0, plus_di: 0, minus_di: 0 } if series.candles.size < 15
-
-        # Use TechnicalAnalysis gem directly to get full ADX result
-        hlc = series.hlc
-        result = TechnicalAnalysis::Adx.calculate(hlc, period: 14)
-        return { adx: 0, plus_di: 0, minus_di: 0 } if result.empty?
-
-        # Get last result (most recent)
-        last_result = result.last
-
-        # Handle different property naming (adx/adx, plus_di/plusDi, minus_di/minusDi)
-        adx_value = if last_result.respond_to?(:adx)
-                      last_result.adx
-                    else
-                      (last_result.respond_to?(:adx_value) ? last_result.adx_value : 0)
-                    end
-        plus_di_value = if last_result.respond_to?(:plus_di)
-                          last_result.plus_di
-                        elsif last_result.respond_to?(:plusDi)
-                          last_result.plusDi
-                        else
-                          0
-                        end
-        minus_di_value = if last_result.respond_to?(:minus_di)
-                           last_result.minus_di
-                         elsif last_result.respond_to?(:minusDi)
-                           last_result.minusDi
-                         else
-                           0
-                         end
-
-        {
-          adx: adx_value || 0,
-          plus_di: plus_di_value || 0,
-          minus_di: minus_di_value || 0
-        }
-      rescue StandardError => e
-        Rails.logger.warn("[NoTradeContextBuilder] ADX calculation failed: #{e.message}")
-        # Fallback to simple ADX value (DI values will be 0)
-        adx_value = series.adx(14) || 0
-        { adx: adx_value, plus_di: 0, minus_di: 0 }
       end
     end
   end

@@ -35,7 +35,9 @@ The primary WebSocket gateway. `Live::MarketFeedHub` is a Singleton that manages
 
 ## Live::PnlUpdaterService
 
-**File:** `app/services/live/pnl_updater_service.rb`
+**Dependencies:**
+- `DhanHQ::WS::Client` (market feed)
+- `Live::MarketFeedHub::Parser`
 
 **Purpose:**
 250ms PnL flush service. Batches per-tick LTP updates into periodic PnL calculations.

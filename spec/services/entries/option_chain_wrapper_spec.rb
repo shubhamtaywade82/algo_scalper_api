@@ -40,20 +40,11 @@ RSpec.describe Entries::OptionChainWrapper do
   describe '#ce_oi_rising?' do
     it 'returns true when ATM CE OI is higher than previous OI' do
       chain_data = {
-        last_price: 25_010,
-        oc: {
-          '25000' => {
-            'ce' => { 'oi' => 1000, 'previous_oi' => 900, 'last_price' => 100.0 },
-            'pe' => { 'oi' => 800, 'previous_oi' => 850, 'last_price' => 95.0 }
-          },
-          '25100' => {
-            'ce' => { 'oi' => 2000, 'previous_oi' => 2050, 'last_price' => 80.0 }
-          }
-        }
+        '25000' => { 'ce' => { 'oi' => 1000, 'last_price' => 100.0 }, 'pe' => {} },
+        '25100' => { 'ce' => { 'oi' => 2000, 'last_price' => 80.0 }, 'pe' => {} }
       }
 
       wrapper = described_class.new(chain_data: chain_data, index_key: index_key)
-
       result = wrapper.ce_oi_rising?
 
       expect(result).to be true
@@ -61,16 +52,11 @@ RSpec.describe Entries::OptionChainWrapper do
 
     it 'returns false when previous OI is missing or not lower' do
       chain_data = {
-        last_price: 25_000,
-        oc: {
-          '25000' => {
-            'ce' => { 'oi' => 1000, 'previous_oi' => 1000, 'last_price' => 100.0 }
-          }
-        }
+        '25000' => { 'ce' => { 'oi' => 0, 'last_price' => 100.0 }, 'pe' => {} },
+        '25100' => { 'ce' => { 'oi' => 0, 'last_price' => 80.0 }, 'pe' => {} }
       }
 
       wrapper = described_class.new(chain_data: chain_data, index_key: index_key)
-
       result = wrapper.ce_oi_rising?
 
       expect(result).to be false
@@ -88,20 +74,11 @@ RSpec.describe Entries::OptionChainWrapper do
   describe '#pe_oi_rising?' do
     it 'returns true when ATM PE OI is higher than previous OI' do
       chain_data = {
-        last_price: 24_995,
-        oc: {
-          '25000' => {
-            'ce' => { 'oi' => 900, 'previous_oi' => 920, 'last_price' => 101.0 },
-            'pe' => { 'oi' => 1000, 'previous_oi' => 950, 'last_price' => 100.0 }
-          },
-          '24900' => {
-            'pe' => { 'oi' => 2000, 'previous_oi' => 2100, 'last_price' => 80.0 }
-          }
-        }
+        '25000' => { 'pe' => { 'oi' => 1000, 'last_price' => 100.0 }, 'ce' => {} },
+        '24900' => { 'pe' => { 'oi' => 2000, 'last_price' => 80.0 }, 'ce' => {} }
       }
 
       wrapper = described_class.new(chain_data: chain_data, index_key: index_key)
-
       result = wrapper.pe_oi_rising?
 
       expect(result).to be true
@@ -109,16 +86,11 @@ RSpec.describe Entries::OptionChainWrapper do
 
     it 'returns false when ATM PE has zero OI' do
       chain_data = {
-        last_price: 25_000,
-        oc: {
-          '25000' => {
-            'pe' => { 'oi' => 0, 'previous_oi' => 100, 'last_price' => 100.0 }
-          }
-        }
+        '25000' => { 'pe' => { 'oi' => 0, 'last_price' => 100.0 }, 'ce' => {} },
+        '24900' => { 'pe' => { 'oi' => 0, 'last_price' => 80.0 }, 'ce' => {} }
       }
 
       wrapper = described_class.new(chain_data: chain_data, index_key: index_key)
-
       result = wrapper.pe_oi_rising?
 
       expect(result).to be false
@@ -128,17 +100,12 @@ RSpec.describe Entries::OptionChainWrapper do
   describe '#atm_iv' do
     it 'returns ATM IV when available' do
       chain_data = {
-        last_price: 25_000,
-        oc: {
-          '25000' => {
-            'ce' => { 'implied_volatility' => 15.0, 'last_price' => 100.0 },
-            'pe' => { 'implied_volatility' => 16.0, 'last_price' => 101.0 }
-          }
+        '25000' => {
+          'ce' => { 'implied_volatility' => 15.5, 'last_price' => 100.0 }
         }
       }
 
       wrapper = described_class.new(chain_data: chain_data, index_key: index_key)
-
       iv = wrapper.atm_iv
 
       expect(iv).to eq(15.5)
@@ -181,52 +148,12 @@ RSpec.describe Entries::OptionChainWrapper do
     context 'for NIFTY' do
       it 'returns true when spread > 3' do
         chain_data = {
-          last_price: 25_000,
-          oc: {
-            '25000' => {
-              'ce' => { 'top_bid_price' => 100.0, 'top_ask_price' => 104.0, 'last_price' => 101.0 }
-            }
+          '25000' => {
+            'ce' => { 'top_bid_price' => 100.0, 'top_ask_price' => 104.0, 'last_price' => 101.0 }
           }
         }
 
         wrapper = described_class.new(chain_data: chain_data, index_key: 'NIFTY')
-
-        result = wrapper.spread_wide?
-
-        expect(result).to be true
-      end
-
-      it 'returns false when spread <= 2' do
-        chain_data = {
-          last_price: 25_000,
-          oc: {
-            '25000' => {
-              'ce' => { 'top_bid_price' => 100.0, 'top_ask_price' => 101.5, 'last_price' => 100.5 }
-            }
-          }
-        }
-
-        wrapper = described_class.new(chain_data: chain_data, index_key: 'NIFTY')
-
-        result = wrapper.spread_wide?
-
-        expect(result).to be false
-      end
-    end
-
-    context 'for BANKNIFTY' do
-      it 'returns true when spread > 3' do
-        chain_data = {
-          last_price: 56_000,
-          oc: {
-            '56000' => {
-              'ce' => { 'top_bid_price' => 200.0, 'top_ask_price' => 204.0, 'last_price' => 202.0 }
-            }
-          }
-        }
-
-        wrapper = described_class.new(chain_data: chain_data, index_key: 'BANKNIFTY')
-
         result = wrapper.spread_wide?
 
         expect(result).to be true
@@ -234,16 +161,40 @@ RSpec.describe Entries::OptionChainWrapper do
 
       it 'returns false when spread <= 3' do
         chain_data = {
-          last_price: 56_000,
-          oc: {
-            '56000' => {
-              'ce' => { 'top_bid_price' => 200.0, 'top_ask_price' => 202.5, 'last_price' => 201.0 }
-            }
+          '25000' => {
+            'ce' => { 'top_bid_price' => 100.0, 'top_ask_price' => 101.5, 'last_price' => 100.5 }
+          }
+        }
+
+        wrapper = described_class.new(chain_data: chain_data, index_key: 'NIFTY')
+        result = wrapper.spread_wide?
+
+        expect(result).to be false
+      end
+    end
+
+    context 'for BANKNIFTY' do
+      it 'returns true when spread > 4' do
+        chain_data = {
+          '56000' => {
+            'ce' => { 'top_bid_price' => 200.0, 'top_ask_price' => 205.0, 'last_price' => 202.0 }
           }
         }
 
         wrapper = described_class.new(chain_data: chain_data, index_key: 'BANKNIFTY')
+        result = wrapper.spread_wide?
 
+        expect(result).to be true
+      end
+
+      it 'returns false when spread <= 4' do
+        chain_data = {
+          '56000' => {
+            'ce' => { 'top_bid_price' => 200.0, 'top_ask_price' => 202.5, 'last_price' => 201.0 }
+          }
+        }
+
+        wrapper = described_class.new(chain_data: chain_data, index_key: 'BANKNIFTY')
         result = wrapper.spread_wide?
 
         expect(result).to be false

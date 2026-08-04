@@ -65,27 +65,26 @@ module Live
         }
       end
 
-      # 3. Check trade frequency limit (per-index)
-      daily_trades = get_daily_trades(index_key)
-      max_daily_trades = risk_config[:max_daily_trades] || risk_config[:daily_trade_limit]
-      if max_daily_trades && (daily_trades >= max_daily_trades.to_i)
+      # Trade frequency limits
+      max_trades = risk_config[:max_daily_trades] || 10
+      current_trades = get_daily_trades(index_key)
+      if max_trades && current_trades >= max_trades.to_i
         return {
           allowed: false,
           reason: 'trade_frequency_limit_exceeded',
-          daily_trades: daily_trades,
-          max_daily_trades: max_daily_trades.to_i,
+          current_trades: current_trades,
+          max_trades: max_trades.to_i,
           index_key: index_key
         }
       end
 
-      # 4. Check global trade frequency limit
+      max_global_trades = risk_config[:max_global_daily_trades] || 20
       global_trades = get_global_daily_trades
-      max_global_trades = risk_config[:max_global_daily_trades] || risk_config[:global_daily_trade_limit]
       if max_global_trades && global_trades >= max_global_trades.to_i
         return {
           allowed: false,
           reason: 'global_trade_frequency_limit_exceeded',
-          global_daily_trades: global_trades,
+          global_trades: global_trades,
           max_global_trades: max_global_trades.to_i
         }
       end

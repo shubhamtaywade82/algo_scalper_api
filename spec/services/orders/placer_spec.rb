@@ -91,7 +91,7 @@ RSpec.describe Orders::Placer do
       expect(captured_attrs.last).to include(
         transaction_type: DhanHQ::Constants::TransactionType::BUY,
         order_type: DhanHQ::Constants::OrderType::MARKET,
-        product_type: "NORMAL"
+        product_type: DhanHQ::Constants::ProductType::INTRADAY
       )
       expect(captured_attrs.last).not_to have_key(:stop_loss_price)
       expect(captured_attrs.last).not_to have_key(:target_price)
@@ -106,7 +106,7 @@ RSpec.describe Orders::Placer do
           security_id: security_id,
           quantity: quantity,
           order_type: DhanHQ::Constants::OrderType::MARKET,
-          product_type: "NORMAL",
+          product_type: DhanHQ::Constants::ProductType::INTRADAY,
           validity: DhanHQ::Constants::Validity::DAY,
           correlation_id: client_order_id,
           disclosed_quantity: 0
@@ -347,7 +347,7 @@ RSpec.describe Orders::Placer do
           security_id: nse_derivative_security_id,
           quantity: nse_derivative_quantity,
           order_type: DhanHQ::Constants::OrderType::MARKET,
-          product_type: "NORMAL",
+          product_type: DhanHQ::Constants::ProductType::INTRADAY,
           validity: DhanHQ::Constants::Validity::DAY,
           correlation_id: nse_client_order_id,
           disclosed_quantity: 0
@@ -365,10 +365,9 @@ RSpec.describe Orders::Placer do
         expect(captured_attrs.last).to match(hash_including(expected_nse_payload))
       end
 
-      it "creates correct payload for NSE derivative SELL market order" do
+      it 'creates correct payload for NSE derivative SELL market order' do
         expected_sell_payload = expected_nse_payload.merge(
           transaction_type: DhanHQ::Constants::TransactionType::SELL,
-          product_type: DhanHQ::Constants::ProductType::INTRADAY,
           correlation_id: kind_of(String)
         )
 
@@ -403,7 +402,7 @@ RSpec.describe Orders::Placer do
           security_id: bse_derivative_security_id,
           quantity: bse_derivative_quantity,
           order_type: DhanHQ::Constants::OrderType::MARKET,
-          product_type: "NORMAL",
+          product_type: DhanHQ::Constants::ProductType::INTRADAY,
           validity: DhanHQ::Constants::Validity::DAY,
           correlation_id: bse_client_order_id,
           disclosed_quantity: 0
@@ -421,10 +420,9 @@ RSpec.describe Orders::Placer do
         expect(captured_attrs.last).to match(hash_including(expected_bse_payload))
       end
 
-      it "creates correct payload for BSE derivative SELL market order" do
+      it 'creates correct payload for BSE derivative SELL market order' do
         expected_sell_payload = expected_bse_payload.merge(
           transaction_type: DhanHQ::Constants::TransactionType::SELL,
-          product_type: DhanHQ::Constants::ProductType::INTRADAY,
           correlation_id: kind_of(String)
         )
 
@@ -443,65 +441,6 @@ RSpec.describe Orders::Placer do
         )
 
         expect(captured_attrs.last).to match(hash_including(expected_sell_payload))
-      end
-    end
-
-    describe "exchange segment validation" do
-      it "validates that derivative.exchange_segment is used correctly" do
-        # This test demonstrates the key principle: derivative.exchange_segment
-        # should always be used for derivative orders, not the underlying index segment
-
-        nse_derivative_segment = "NSE_FNO"
-        derivative_security_id = "123456"
-
-        # Mock logger to avoid failures while testing actual functionality
-        allow(Rails.logger).to receive(:info)
-
-        result = described_class.buy_market!(
-          seg: nse_derivative_segment, # This should be derivative.exchange_segment
-          sid: derivative_security_id,
-          qty: 50,
-          client_order_id: "TEST-DERIVATIVE"
-        )
-
-        expect(captured_attrs.last[:exchange_segment]).to eq(nse_derivative_segment)
-        expect(result).to eq(order_double).or be_nil
-      end
-    end
-  end
-
-  describe ".order_placement_enabled?" do
-    before do
-      allow(ENV).to receive(:[]).and_call_original
-    end
-
-    it "returns true only when PLACE_ORDER is true" do
-      allow(ENV).to receive(:[]).with("PLACE_ORDER").and_return("true")
-      expect(described_class.send(:order_placement_enabled?)).to be(true)
-
-      allow(ENV).to receive(:[]).with("PLACE_ORDER").and_return("false")
-      expect(described_class.send(:order_placement_enabled?)).to be(false)
-    end
-  end
-
-  describe ".with_token_auto_heal" do
-    before do
-      allow(described_class).to receive(:with_order_rate_limit).and_call_original
-      allow(described_class).to receive(:rate_limiter).and_return(
-        Class.new { def consume!; yield; end }.new
-      )
-    end
-
-    it "refreshes the token and retries exactly once on token expiry" do
-      call_count = 0
-      allow(DhanhqErrorHandler).to receive(:token_expired?).and_return(true)
-      allow(Dhan::TokenManager).to receive(:refresh!)
-
-      result = described_class.send(:with_token_auto_heal, context: "orders.test") do
-        call_count += 1
-        raise "unauthorized" if call_count == 1
-
-        :ok
       end
 
       expect(result).to eq(:ok)

@@ -7,7 +7,7 @@ PATH
 GEM
   remote: https://rubygems.org/
   specs:
-    DhanHQ (2.7.0)
+    DhanHQ (2.6.2)
       activesupport
       base64
       bindata
@@ -158,13 +158,13 @@ GEM
       concurrent-ruby (~> 1.0)
       dry-core (~> 1.1)
       zeitwerk (~> 2.6)
-    dry-schema (1.15.0)
+    dry-schema (1.16.0)
       concurrent-ruby (~> 1.0)
       dry-configurable (~> 1.0, >= 1.0.1)
       dry-core (~> 1.1)
       dry-initializer (~> 3.2)
       dry-logic (~> 1.6)
-      dry-types (~> 1.8)
+      dry-types (~> 1.9, >= 1.9.1)
       zeitwerk (~> 2.6)
     dry-types (1.9.1)
       bigdecimal (>= 3.0)
@@ -286,7 +286,8 @@ GEM
     mcp (0.22.0)
       json_schemer (>= 2.4)
     mini_mime (1.1.5)
-    minitest (6.0.1)
+    minitest (6.0.2)
+      drb (~> 2.0)
       prism (~> 1.5)
     msgpack (1.8.0)
     multipart-post (2.4.1)
@@ -608,7 +609,7 @@ GEM
       base64
       websocket-extensions (>= 0.1.0)
     websocket-extensions (0.1.5)
-    zeitwerk (2.7.4)
+    zeitwerk (2.7.5)
 
 PLATFORMS
   aarch64-linux
@@ -622,7 +623,7 @@ PLATFORMS
   x86_64-linux-musl
 
 DEPENDENCIES
-  DhanHQ (= 2.7.0)
+  DhanHQ (= 2.6.2)
   activerecord-import
   annotaterb
   bootsnap

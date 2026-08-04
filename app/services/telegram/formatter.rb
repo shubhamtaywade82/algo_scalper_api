@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # app/services/telegram/formatter.rb
 require "cgi"
 
@@ -14,14 +16,14 @@ module Telegram
         # 1️⃣ Protect triple backtick code blocks
         code_blocks = []
         normalized = normalized.gsub(/```(.*?)```/m) do
-          code_blocks << $1
+          code_blocks << ::Regexp.last_match(1)
           "%%CODE_BLOCK_#{code_blocks.size - 1}%%"
         end
 
         # 2️⃣ Protect inline code
         inline_codes = []
         normalized = normalized.gsub(/`([^`]+)`/) do
-          inline_codes << $1
+          inline_codes << ::Regexp.last_match(1)
           "%%INLINE_CODE_#{inline_codes.size - 1}%%"
         end
 
@@ -64,22 +66,22 @@ module Telegram
       # ---------- Headings ----------
       def format_headings(text)
         text
-          .gsub(/^###\s*(.+)$/) { "<b>#{strip_md($1)}</b>" }
-          .gsub(/^####\s*(.+)$/) { "<b>#{strip_md($1)}</b>" }
+          .gsub(/^###\s*(.+)$/) { "<b>#{strip_md(::Regexp.last_match(1))}</b>" }
+          .gsub(/^####\s*(.+)$/) { "<b>#{strip_md(::Regexp.last_match(1))}</b>" }
       end
 
       # ---------- Blockquotes ----------
       def format_blockquotes(text)
         text.gsub(/^&gt;\s?(.*)$/) do
-          "<blockquote>#{$1}</blockquote>"
+          "<blockquote>#{::Regexp.last_match(1)}</blockquote>"
         end
       end
 
       # ---------- Lists ----------
       def format_lists(text)
         text
-          .gsub(/^\d+\.\s+(.+)$/) { "• #{$1}" }
-          .gsub(/^\-\s+(.+)$/) { "• #{$1}" }
+          .gsub(/^\d+\.\s+(.+)$/) { "• #{::Regexp.last_match(1)}" }
+          .gsub(/^-\s+(.+)$/) { "• #{::Regexp.last_match(1)}" }
       end
 
       # ---------- Inline formatting ----------
@@ -99,7 +101,7 @@ module Telegram
 
       def truncate(text)
         return text if text.length <= TELEGRAM_LIMIT
-        text[0...TELEGRAM_LIMIT - 25] + "<b>\n…truncated</b>"
+        "#{text[0...(TELEGRAM_LIMIT - 25)]}<b>\n…truncated</b>"
       end
     end
   end

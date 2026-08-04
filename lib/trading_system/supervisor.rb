@@ -30,7 +30,12 @@ module TradingSystem
       @mutex.synchronize do
         return if @running
 
-        @services.each_key { |name| start_one(name) }
+        @services.each do |name, service|
+            service.start
+            Rails.logger.info("[Supervisor] started #{name}")
+        rescue StandardError => e
+            Rails.logger.error("[Supervisor] failed starting #{name}: #{e.class} - #{e.message}")
+        end
 
         @running = true
       end
@@ -40,7 +45,12 @@ module TradingSystem
       @mutex.synchronize do
         return unless @running
 
-        @services.keys.reverse_each { |name| stop_one(name) }
+        @services.reverse_each do |name, service|
+            service.stop
+            Rails.logger.info("[Supervisor] stopped #{name}")
+        rescue StandardError => e
+            Rails.logger.error("[Supervisor] error stopping #{name}: #{e.class} - #{e.message}")
+        end
 
         @running = false
       end

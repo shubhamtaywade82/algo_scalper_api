@@ -60,8 +60,8 @@ module Options
           strike_type == :ATM ? 0.48 : 0.40
         when 'SENSEX'
           strike_type == :ATM ? 0.50 : 0.42
-        else
-          nil
+        when 'BANKNIFTY'
+          strike_type == :ATM ? 0.45 : 0.38
         end
       end
 
@@ -79,8 +79,6 @@ module Options
             scale_ready: 15.0,
             full_deploy: 25.0
           }[permission]
-        else
-          nil
         end
       end
 

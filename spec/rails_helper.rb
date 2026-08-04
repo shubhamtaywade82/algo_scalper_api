@@ -78,10 +78,29 @@ RSpec.configure do |config|
     end
   end
 
-  # Optional: Per-example timeout to surface hanging specs (e.g. RSPEC_TIMEOUT=60)
-  if (timeout_sec = ENV['RSPEC_TIMEOUT']&.to_i) && timeout_sec.positive?
-    config.around(:each) do |example|
-      Timeout.timeout(timeout_sec) { example.run }
+  # Global cleanup for singletons to prevent state/mock leakage
+  config.before(:each) do
+    if defined?(Live::MarketFeedHub)
+      hub = Live::MarketFeedHub.instance
+      hub.instance_variable_set(:@ws_client, nil)
+      hub.instance_variable_set(:@running, false)
+      hub.instance_variable_set(:@subscribed_keys, Concurrent::Set.new)
+    end
+
+    if defined?(Live::RedisPnlCache)
+      Live::RedisPnlCache.instance.instance_variable_set(:@redis, nil)
+    end
+
+    if defined?(Live::RedisTickCache)
+      Live::RedisTickCache.instance.instance_variable_set(:@redis, nil)
+    end
+
+    if defined?(Live::DailyLimits)
+      # DailyLimits is not a singleton but might be cached in some services
+    end
+
+    if defined?(Positions::ActivePositionsCache)
+      Positions::ActivePositionsCache.instance.clear!
     end
   end
 end

@@ -9,9 +9,9 @@
 #   # => { symbol: 'NIFTY', ce_aggregate: {...}, pe_aggregate: {...}, cycles: [...], calibration: {...} }
 class HistoricalOptionsAnalyzer
   SESSIONS = {
-    'Morning'   => (9 * 60 + 15)..(11 * 60),
-    'Midday'    => (11 * 60 + 1)..(13 * 60),
-    'Afternoon' => (13 * 60 + 1)..(15 * 60 + 30)
+    'Morning' => ((9 * 60) + 15)..(11 * 60),
+    'Midday' => ((11 * 60) + 1)..(13 * 60),
+    'Afternoon' => ((13 * 60) + 1)..((15 * 60) + 30)
   }.freeze
 
   DOW = %w[Sun Mon Tue Wed Thu Fri Sat].freeze
@@ -107,7 +107,7 @@ class HistoricalOptionsAnalyzer
   def expiry_windows(weeks)
     today = Time.zone.today
     current_expiry = last_thursday(today)
-    windows = Array.new(weeks) do |i|
+    Array.new(weeks) do |i|
       expiry = current_expiry - (i * 7).days
       { expiry: expiry, from: expiry - 6.days, to: expiry }
     end
@@ -128,7 +128,7 @@ class HistoricalOptionsAnalyzer
       expiry_code: 1,
       strike: 'ATM',
       drv_option_type: opt_type,
-      required_data: REQUIRED_OHLCV_FIELDS,
+      required_data: %w[open high low close volume oi spot strike],
       from_date: from_str,
       to_date: to_str
     )
@@ -139,18 +139,18 @@ class HistoricalOptionsAnalyzer
     d['timestamp'].map.with_index do |ts, i|
       t = Time.at(ts).in_time_zone('Asia/Kolkata')
       {
-        time:    t.iso8601,
-        day:     t.wday,
+        time: t.iso8601,
+        day: t.wday,
         day_str: DOW[t.wday],
-        mins:    t.hour * 60 + t.min,
-        open:    d['open'][i].to_f,
-        high:    d['high'][i].to_f,
-        low:     d['low'][i].to_f,
-        close:   d['close'][i].to_f,
-        volume:  d['volume'][i].to_i,
-        oi:      d['oi'][i].to_i,
-        spot:    d['spot'][i].to_f,
-        strike:  d['strike'][i].to_f
+        mins: (t.hour * 60) + t.min,
+        open: d['open'][i].to_f,
+        high: d['high'][i].to_f,
+        low: d['low'][i].to_f,
+        close: d['close'][i].to_f,
+        volume: d['volume'][i].to_i,
+        oi: d['oi'][i].to_i,
+        spot: d['spot'][i].to_f,
+        strike: d['strike'][i].to_f
       }
     end
   rescue StandardError => e
@@ -162,35 +162,35 @@ class HistoricalOptionsAnalyzer
     return nil if candles.empty?
 
     entry   = candles.first[:open].to_f
-    max_h   = candles.map { |c| c[:high] }.max.to_f
-    min_l   = candles.map { |c| c[:low] }.min.to_f
+    max_h   = candles.pluck(:high).max.to_f
+    min_l   = candles.pluck(:low).min.to_f
     final_c = candles.last[:close].to_f
-    vols    = candles.map { |c| c[:volume] }
-    ois     = candles.map { |c| c[:oi] }
-    spots   = candles.map { |c| c[:spot] }
+    vols    = candles.pluck(:volume)
+    ois     = candles.pluck(:oi)
+    spots   = candles.pluck(:spot)
 
     peak_idx   = candles.index { |c| c[:high] == max_h }
     post_peak  = candles[(peak_idx || 0)..]
-    pullback_l = post_peak.map { |c| c[:low] }.min.to_f
+    pullback_l = post_peak.pluck(:low).min.to_f
 
     {
-      entry:             entry.round(2),
-      max_high:          max_h.round(2),
-      max_low:           min_l.round(2),
-      exit:              final_c.round(2),
-      max_gain_pct:      pct(max_h, entry),
-      max_loss_pct:      pct(min_l, entry),
+      entry: entry.round(2),
+      max_high: max_h.round(2),
+      max_low: min_l.round(2),
+      exit: final_c.round(2),
+      max_gain_pct: pct(max_h, entry),
+      max_loss_pct: pct(min_l, entry),
       open_to_close_pct: pct(final_c, entry),
       post_peak_retrace: pct(pullback_l, max_h).round(2),
-      avg_volume:        (vols.compact.sum / [vols.size, 1].max).round(0),
-      oi_open:           ois.first.to_i,
-      oi_close:          ois.last.to_i,
-      oi_change_pct:     pct(ois.last.to_f, ois.first.to_f),
-      spot_open:         spots.first.to_f.round(2),
-      spot_close:        spots.last.to_f.round(2),
-      spot_change_pct:   pct(spots.last.to_f, spots.first.to_f),
-      strike:            candles.first[:strike].to_f.round(0),
-      candle_count:      candles.size
+      avg_volume: (vols.compact.sum / [vols.size, 1].max).round(0),
+      oi_open: ois.first.to_i,
+      oi_close: ois.last.to_i,
+      oi_change_pct: pct(ois.last.to_f, ois.first.to_f),
+      spot_open: spots.first.to_f.round(2),
+      spot_close: spots.last.to_f.round(2),
+      spot_change_pct: pct(spots.last.to_f, spots.first.to_f),
+      strike: candles.first[:strike].to_f.round(0),
+      candle_count: candles.size
     }
   end
 
@@ -201,14 +201,14 @@ class HistoricalOptionsAnalyzer
       day_high  = day_candles.map { |c| c[:high] }.max.to_f
       day_low   = day_candles.map { |c| c[:low] }.min.to_f
       {
-        open:     day_open.round(2),
-        high:     day_high.round(2),
-        low:      day_low.round(2),
-        close:    day_close.round(2),
+        open: day_open.round(2),
+        high: day_high.round(2),
+        low: day_low.round(2),
+        close: day_close.round(2),
         high_pct: pct(day_high, day_open),
-        low_pct:  pct(day_low, day_open),
-        oc_pct:   pct(day_close, day_open),
-        candles:  day_candles.size
+        low_pct: pct(day_low, day_open),
+        oc_pct: pct(day_close, day_open),
+        candles: day_candles.size
       }
     end
   end
@@ -223,14 +223,14 @@ class HistoricalOptionsAnalyzer
       s_high  = sess.map { |c| c[:high] }.max.to_f
       s_low   = sess.map { |c| c[:low] }.min.to_f
       {
-        open:     s_open.round(2),
-        high:     s_high.round(2),
-        low:      s_low.round(2),
-        close:    s_close.round(2),
+        open: s_open.round(2),
+        high: s_high.round(2),
+        low: s_low.round(2),
+        close: s_close.round(2),
         high_pct: pct(s_high, s_open),
-        low_pct:  pct(s_low, s_open),
-        oc_pct:   pct(s_close, s_open),
-        candles:  sess.size
+        low_pct: pct(s_low, s_open),
+        oc_pct: pct(s_close, s_open),
+        candles: sess.size
       }
     end
   end
@@ -253,10 +253,10 @@ class HistoricalOptionsAnalyzer
     sy  = pairs.sum { |_, y| y }
     sx2 = pairs.sum { |x, _| x**2 }
     sxy = pairs.sum { |x, y| x * y }
-    denom = (n * sx2 - sx**2)
+    denom = ((n * sx2) - (sx**2))
     return nil if denom.zero?
 
-    slope = ((n * sxy - sx * sy) / denom).round(2)
+    slope = (((n * sxy) - (sx * sy)) / denom).round(2)
     { slope: slope, note: "Option moves ~#{slope}x per 1% spot move" }
   end
 
@@ -265,9 +265,9 @@ class HistoricalOptionsAnalyzer
     return nil if valid.empty?
 
     keys = %i[max_gain_pct max_loss_pct open_to_close_pct post_peak_retrace oi_change_pct spot_change_pct]
-    avg = keys.to_h { |k| [k, (valid.sum { |s| s[k].to_f } / valid.size).round(2)] }
-    max = keys.to_h { |k| [k, valid.map { |s| s[k].to_f }.max.round(2)] }
-    min = keys.to_h { |k| [k, valid.map { |s| s[k].to_f }.min.round(2)] }
+    avg = keys.index_with { |k| (valid.sum { |s| s[k].to_f } / valid.size).round(2) }
+    max = keys.index_with { |k| valid.map { |s| s[k].to_f }.max.round(2) }
+    min = keys.index_with { |k| valid.map { |s| s[k].to_f }.min.round(2) }
 
     { avg: avg, max: max, min: min, n: valid.size }
   end

@@ -87,8 +87,6 @@ production:
     database: algo_scalper_api_production
     username: algo_scalper_api
     password: <%= ENV["ALGO_SCALPER_API_DATABASE_PASSWORD"] %>
-    host: <%= ENV.fetch("ALGO_SCALPER_API_DATABASE_HOST", "localhost") %>
-    port: <%= ENV.fetch("ALGO_SCALPER_API_DATABASE_PORT", 5432) %>
     connect_timeout: 1
     variables:
       statement_timeout: 5000

@@ -27,20 +27,18 @@ module Options
         return blocked('invalid_permission') unless VALID_PERMISSIONS.include?(perm)
         return blocked('invalid_spot') unless spot.to_f.positive?
         return blocked('invalid_chain') unless option_chain.is_a?(Hash)
-        return blocked('invalid_trend') if trend_sym && !VALID_TRENDS.include?(trend_sym)
+        return blocked('invalid_trend') if trend_sym && VALID_TRENDS.exclude?(trend_sym)
 
         step = strike_step_for(index)
         atm_strike = round_to_step(spot.to_f, step)
 
         # Get available strikes from the filtered chain (only strikes that exist)
         # Handle different key formats in option chain
-        # rubocop:disable Style/MultilineBlockChain
         available_strikes = option_chain.keys.filter_map do |k|
           k.to_f
         rescue StandardError
           nil
         end.to_set
-        # rubocop:enable Style/MultilineBlockChain
 
         desired = desired_strike(
           index: index,
@@ -54,13 +52,13 @@ module Options
         # Check if desired strike exists in chain before checking liquidity
         desired_strike_float = desired[:strike].to_f
         if available_strikes.include?(desired_strike_float) && liquid_in_chain?(option_chain: option_chain, strike: desired[:strike], side: side_sym)
-          return ok(desired.merge(atm_strike: atm_strike))
+            return ok(desired.merge(atm_strike: atm_strike))
         end
 
         # Fallback to ATM if it exists in chain
         atm_strike_float = atm_strike.to_f
         if available_strikes.include?(atm_strike_float) && liquid_in_chain?(option_chain: option_chain, strike: atm_strike, side: side_sym)
-          return ok(strike: atm_strike, strike_type: :ATM, atm_strike: atm_strike)
+            return ok(strike: atm_strike, strike_type: :ATM, atm_strike: atm_strike)
         end
 
         # Fallback to ATM.

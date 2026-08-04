@@ -5,7 +5,7 @@ module Entries
     class InstrumentLookupGuard
       class << self
         def call(context)
-          instrument = IndexInstrumentCache.instance.get_or_fetch(context[:index_cfg])
+          instrument = EntryGuard.find_instrument(context[:index_cfg])
           return { blocked: "instrument not found for #{context[:index_cfg][:key]}" } unless instrument
 
           context[:instrument] = instrument

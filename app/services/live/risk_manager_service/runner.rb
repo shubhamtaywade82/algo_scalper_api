@@ -65,54 +65,53 @@ module Live
           return
         end
 
-        advance_trade_states!
-
         # ============================================================
-        # NEW 5-LAYER EXIT SYSTEM (optimized for intraday options buying)
-        # ============================================================
+        # 5-LAYER EXIT SYSTEM (Template Method: run_enforcement_cycle)
         # Priority order: first-match-wins, evaluation stops on exit
         # This replaces the previous over-engineered system with a clean,
         # options-aligned exit mechanism.
         # ============================================================
         exit_engine = @exit_engine || self
+        run_enforcement_cycle(exit_engine)
+      end
 
-        # LAYER 0: EXECUTABLE R STOP (Premium-based hard stop)
-        enforce_premium_r_stop(exit_engine: exit_engine)
+      # Template method: single algorithm skeleton for all exit enforcement layers.
+      # Add or reorder enforcement by editing this method.
+      def run_enforcement_cycle(exit_engine)
+        PositionTracker.active.find_each do |tracker|
+          # Skip if position is already being exited (prevents race conditions with high-frequency triggers)
+          next if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
 
-        # LAYER 1: HARD RISK CIRCUIT BREAKER (Account protection - highest priority)
-        # Purpose: Account protection ONLY - no trade logic
-        enforce_hard_rupee_stop_loss(exit_engine: exit_engine)
+          # Advance trade state before evaluating rules (updates trade_state, peak_trend_score etc)
+          advance_trade_state_for(tracker)
 
-        # PROFIT FLOOR (Stateful guarantee - protect locked profits)
-        # Purpose: Once net PnL reaches lock_rupees, exit if it drops back to that floor
-        enforce_profit_floor(exit_engine: exit_engine)
+          enforce_hard_limits_for(tracker, exit_engine: exit_engine)
+          enforce_early_trend_failure_for(tracker, exit_engine: exit_engine)
+          enforce_premium_r_stop_for(tracker, exit_engine: exit_engine)
+          enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine)
+          enforce_profit_floor_for(tracker, exit_engine: exit_engine)
+          enforce_structure_invalidation_for(tracker, exit_engine: exit_engine)
+          enforce_premium_momentum_failure_for(tracker, exit_engine: exit_engine)
+          enforce_rr_profit_booking_for(tracker, exit_engine: exit_engine)
+          enforce_percentage_pnl_exit_for(tracker, exit_engine: exit_engine)
+          enforce_time_stop_for(tracker, exit_engine: exit_engine)
+          enforce_time_based_exit_for(tracker, exit_engine: exit_engine)
+        end
+      end
 
-        # LAYER 2: STRUCTURE INVALIDATION (Primary exit - structure breaks against position)
-        # Purpose: Exit when trade thesis is broken - structure-first, not PnL-first
-        enforce_structure_invalidation(exit_engine: exit_engine)
+      def exits_blocked_by_time?
+        restrictions = AlgoConfig.fetch[:trading_time_restrictions]
+        return false unless restrictions&.[](:enabled) && restrictions[:block_exits]
+        return false if restrictions[:avoid_periods].blank?
 
-        # LAYER 3: PREMIUM MOMENTUM FAILURE (Kill dead option trades before theta eats them)
-        # Purpose: Exit when premium stops making progress - aligns with gamma/theta behavior
-        enforce_premium_momentum_failure(exit_engine: exit_engine)
-
-        # LAYER 4: TIME STOP (Early, contextual - prevent holding dead trades)
-        # Purpose: Exit regardless of PnL when time limit exceeded
-        enforce_time_stop(exit_engine: exit_engine)
-
-        # LAYER 5: END-OF-DAY FLATTEN (Operational safety - 3:20 PM exit)
-        # Purpose: Operational safety - always exit before market close
-        enforce_time_based_exit(exit_engine: exit_engine)
-
-        # ============================================================
-        # LEGACY RULES DISABLED (kept for reference, not called)
-        # ============================================================
-        # These are replaced by the new 5-layer system:
-        # - enforce_early_trend_failure → replaced by premium_momentum_failure
-        # - enforce_global_time_overrides → replaced by structure_invalidation + premium_momentum_failure
-        # - enforce_hard_limits (rupee TP) → removed (not aligned with options)
-        # - enforce_post_profit_zone → removed (not aligned with options)
-        # - enforce_trailing_stops → replaced by premium_momentum_failure
-        # ============================================================
+        current_hm = Time.zone.now.strftime('%H:%M')
+        restrictions[:avoid_periods].any? do |period|
+          start_time, end_time = period.split('-')
+          current_hm >= start_time && current_hm < end_time
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] exits_blocked_by_time? error: #{e.message}")
+        false
       end
     end
   end

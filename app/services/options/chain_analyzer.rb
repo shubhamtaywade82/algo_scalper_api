@@ -208,7 +208,9 @@ module Options
       bid = option_data['top_bid_price']&.to_f
       ask = option_data['top_ask_price']&.to_f
 
-      spread_pct = (((ask - bid) / bid) * 100 if bid && ask && bid.positive?)
+      spread_pct = if bid && ask && bid.positive?
+                     (ask - bid) / bid
+                   end
 
       thresholds = @config[:liquidity_filter]
 
@@ -218,7 +220,7 @@ module Options
         spread_pct: spread_pct,
         meets_oi_threshold: oi >= thresholds[:min_oi],
         meets_volume_threshold: volume >= thresholds[:min_volume],
-        meets_spread_threshold: spread_pct.nil? || spread_pct <= thresholds[:max_spread_pct],
+        meets_spread_threshold: spread_pct.nil? || spread_pct <= (thresholds[:max_spread_pct] / 100.0),
         overall_liquidity: calculate_liquidity_score(oi, volume, spread_pct)
       }
     end
@@ -523,11 +525,11 @@ module Options
                  20
                end
 
-      # Spread penalty
+      # Spread penalty (spread_pct is decimal, e.g. 0.02 for 2%)
       if spread_pct
-        if spread_pct > 2.0
+        if spread_pct > 0.02 # 2%
           score *= 0.8
-        elsif spread_pct > 1.0
+        elsif spread_pct > 0.01 # 1%
           score *= 0.9
         end
       end
@@ -753,7 +755,7 @@ module Options
         if (filtered_chain.size < chain_data[:oc].size) && defined?(Rails)
           Rails.logger.debug(
             "[Options] Filtered option chain: #{chain_data[:oc].size} -> #{filtered_chain.size} strikes " \
-            "(only strikes with DB derivatives) for #{key}"
+            "(only strikes with DB derivatives) for #{index_cfg[:key]}"
           )
         end
 

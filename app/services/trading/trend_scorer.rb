@@ -50,13 +50,10 @@ module Trading
       is_uptrend = highs.last > highs[-2] && lows.last > lows[-2]
       is_downtrend = highs.last < highs[-2] && lows.last < lows[-2]
 
-      if is_uptrend
-        { score: 40, bias: :bullish }
-      elsif is_downtrend
-        { score: 40, bias: :bearish }
-      else
-        { score: 0, bias: :neutral }
-      end
+      return { score: 40, bias: :bullish } if is_uptrend
+      return { score: 40, bias: :bearish } if is_downtrend
+
+      { score: 0, bias: :neutral }
     end
 
     def score_vwap_bias
@@ -64,13 +61,10 @@ module Trading
       vwap = series_5m.current_vwap
       return { score: 0, bias: :neutral } unless vwap
 
-      if ltp > vwap
-        { score: 20, bias: :bullish }
-      elsif ltp < vwap
-        { score: 20, bias: :bearish }
-      else
-        { score: 0, bias: :neutral }
-      end
+      return { score: 20, bias: :bullish } if ltp > vwap
+      return { score: 20, bias: :bearish } if ltp < vwap
+
+      { score: 0, bias: :neutral }
     end
 
     def score_supertrend
@@ -94,26 +88,20 @@ module Trading
 
       return { score: 0, bias: :neutral } unless ema_15m
 
-      if last_15m_close > ema_15m
-        { score: 25, bias: :bullish }
-      elsif last_15m_close < ema_15m
-        { score: 25, bias: :bearish }
-      else
-        { score: 0, bias: :neutral }
-      end
+      return { score: 25, bias: :bullish } if last_15m_close > ema_15m
+      return { score: 25, bias: :bearish } if last_15m_close < ema_15m
+
+      { score: 0, bias: :neutral }
     end
 
     def determine_bias(components)
       bullish_count = components.values.count { |v| v[:bias] == :bullish }
       bearish_count = components.values.count { |v| v[:bias] == :bearish }
 
-      if bullish_count > bearish_count && bullish_count >= 2
-        :bullish
-      elsif bearish_count > bullish_count && bearish_count >= 2
-        :bearish
-      else
-        :neutral
-      end
+      return :bullish if bullish_count > bearish_count && bullish_count >= 2
+      return :bearish if bearish_count > bullish_count && bearish_count >= 2
+
+      :neutral
     end
   end
 end
