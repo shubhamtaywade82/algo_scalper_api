@@ -4,7 +4,7 @@ module Signal
   # Validates trade direction using multi-factor confirmation
   # Requires at least 2 factors to agree for direction validation
   class DirectionValidator
-    Result = Struct.new(:valid, :direction, :score, :factors, :reasons)
+    Result = Struct.new(:valid, :direction, :score, :factors, :reasons, keyword_init: true)
 
     # Validate direction with multi-factor confirmation
     # @param index_cfg [Hash] Index configuration

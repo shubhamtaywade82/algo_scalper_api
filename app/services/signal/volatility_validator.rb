@@ -4,7 +4,7 @@ module Signal
   # Validates volatility health before entry
   # Ensures market has sufficient volatility for profitable trades
   class VolatilityValidator
-    Result = Struct.new(:valid, :atr_ratio, :factors, :reasons)
+    Result = Struct.new(:valid, :atr_ratio, :factors, :reasons, keyword_init: true)
 
     # Validate volatility health
     # @param series [CandleSeries] Primary timeframe series
