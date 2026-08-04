@@ -55,7 +55,8 @@ function AppShell(props) {
   const {
     mode, connected, isStale: dashboardStale, stats, balance, indices, subscribedIndices, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker,
-    lastUpdated, recentSignals, config
+    lastUpdated, recentSignals, config,
+    marketStatus
   } = useDashboard(() => fetchPositions())
 
   const { sidebarCollapsed, toggleSidebar } = useUIStore()
