@@ -282,10 +282,7 @@ module Live
         # Compute lock threshold
         lock_rupees = if lock_pct
                         capital = safe_big_decimal(position_data.capital_deployed)
-                        pct_arm = capital&.positive? ? (capital * BigDecimal(lock_pct.to_s)).ceil : nil
-                        min_arm = cfg[:min_arm_rupees] ? BigDecimal(cfg[:min_arm_rupees].to_s) : nil
-                        candidates = [pct_arm, min_arm, lock_rupees_static&.then { |v| BigDecimal(v.to_s) }].compact
-                        candidates.empty? ? nil : candidates.min
+                        capital&.positive? ? (capital * BigDecimal(lock_pct.to_s)).ceil : lock_rupees_static
                       else
                         lock_rupees_static
                       end
@@ -297,7 +294,8 @@ module Live
         end
 
         # Ratchet the floor upward as HWM PnL grows (trailing floor).
-        if trail_pct && (pending_meta || tracker.meta || {})['profit_floor_rupees'].present?
+        trail_pct = cfg[:trail_pct]
+        if trail_pct && tracker.profit_floor_rupees.present?
           hwm_pnl = safe_big_decimal(position_data.high_water_mark)
           update_trailing_floor!(tracker, hwm_pnl, trail_pct: trail_pct)
         end
@@ -349,7 +347,7 @@ module Live
         ltp = position_data.current_ltp
         return unless ltp
 
-        premium_stop = (pending_meta || tracker.meta || {})['premium_stop_price']
+        premium_stop = tracker.meta&.dig('premium_stop_price')
         return unless premium_stop
 
         if ltp.to_f <= premium_stop.to_f
@@ -422,7 +420,7 @@ module Live
 
         # Use passed position_data or fetch from cache if not provided
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
-
+        
         # We can use PnL from position_data instead of hydration
         pnl_rupees = position_data ? position_data.pnl : tracker.current_pnl_rupees.to_f
 
@@ -452,7 +450,7 @@ module Live
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
         return unless position_data
 
-        entry_risk_rupees = (pending_meta || tracker.meta || {})['entry_risk_rupees']
+        entry_risk_rupees = tracker.meta&.dig('entry_risk_rupees')
         risk_value = safe_big_decimal(entry_risk_rupees)
 
         # Ensure we always update peak trend score if possible
@@ -488,7 +486,7 @@ module Live
       def update_peak_trend_score(tracker, position_data)
         # Use trend score from position_data if available (from ActiveCache)
         trend_score = position_data.respond_to?(:underlying_trend_score) ? position_data.underlying_trend_score : nil
-
+        
         # Fallback to calculation only if not in position_data
         if trend_score.nil?
           instrument = tracker.instrument || tracker.watchable&.instrument
@@ -512,12 +510,14 @@ module Live
           trend_score = val.to_f + momentum_score(series.candles)
         end
 
-        peak = pending_meta&.dig('peak_trend_score') || tracker.runtime_meta_fetch('peak_trend_score') || 0
-        if trend_score > peak.to_f
-          if pending_meta
-            pending_meta['peak_trend_score'] = trend_score
-          elsif !exit_in_flight?(tracker)
-            Live::PositionRuntimeCache.instance.merge(tracker.id, peak_trend_score: trend_score)
+        peak = (@pending_meta || tracker.meta || {})['peak_trend_score'] || 0
+        if trend_score > peak
+          if @pending_meta
+            @pending_meta['peak_trend_score'] = trend_score
+          else
+            meta = tracker.meta || {}
+            meta['peak_trend_score'] = trend_score
+            tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
           end
         end
       rescue StandardError
@@ -588,16 +588,15 @@ module Live
         return unless hwm_pnl&.positive?
 
         dynamic_floor = (BigDecimal(hwm_pnl.to_s) * BigDecimal(trail_pct.to_s)).ceil
-        floor_raw = (pending_meta || {})['profit_floor_rupees'] || tracker.profit_floor_rupees
-        return if floor_raw.blank?
-
-        current_floor = BigDecimal(floor_raw.to_s)
+        current_floor = BigDecimal(tracker.profit_floor_rupees.to_s)
         return if dynamic_floor <= current_floor
 
-        if pending_meta
-          pending_meta['profit_floor_rupees'] = dynamic_floor.to_i
-        elsif !exit_in_flight?(tracker)
-          Positions::MetaPatch.merge_meta!(tracker.id, 'profit_floor_rupees' => dynamic_floor.to_i)
+        if @pending_meta
+          @pending_meta['profit_floor_rupees'] = dynamic_floor.to_i
+        else
+          meta = (tracker.meta || {}).stringify_keys
+          meta['profit_floor_rupees'] = dynamic_floor.to_i
+          tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
         end
 
         Rails.logger.info(

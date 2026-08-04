@@ -131,6 +131,13 @@ development:
     priority: 20
     description: "Auto-syncs local public IP with Dhan whitelisting slots when cooldown expires"
 
+  dhan_auto_ip_sync:
+    class: Dhan::AutoIpUpdaterJob
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 20
+    description: "Auto-syncs local public IP with Dhan whitelisting slots when cooldown expires"
+
 production:
   pre_market_iv_baseline:
     class: PreMarketIvBaselineJob

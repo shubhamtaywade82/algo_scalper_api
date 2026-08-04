@@ -862,6 +862,20 @@ module Signal
           mode_config = get_validation_mode_config
         end
 
+        # For now, we'll use a simple volatility check based on recent price movement
+        # In a full implementation, you'd calculate actual IV rank from historical IV data
+
+        candles = series.candles
+        if candles.blank? || candles.size < 5
+          return { valid: false, name: 'IV Rank', message: 'Insufficient data for volatility assessment' }
+        end
+
+        unless mode_config.is_a?(Hash)
+          Rails.logger.error("[Signal] CRITICAL: mode_config is #{mode_config.class} (#{mode_config.inspect}) in validate_iv_rank")
+          # Force it to be a valid hash to prevent crash
+          mode_config = get_validation_mode_config
+        end
+
         decision = Smc::BiasEngine.new(instrument).decision
         case decision
         when :call then :bullish
@@ -1909,6 +1923,45 @@ module Signal
             signal: signal
           )
         end
+      end
+
+      # --- Dynamic Configuration Helpers ---
+
+      def dynamic_config_enabled?
+        AlgoConfig.fetch.dig(:signals, :use_optimized_params) != false
+      end
+
+      def resolved_supertrend_cfg(instrument, interval, signals_cfg)
+        base_cfg = (signals_cfg[:supertrend] || { period: 7, multiplier: 3.0 }).dup
+
+        return base_cfg unless dynamic_config_enabled?
+
+        # Try to find optimized params for this specific instrument + interval
+        optimized = BestIndicatorParam.best_for_indicator(instrument.id, interval, :supertrend).first
+        return base_cfg unless optimized && optimized.params.is_a?(Hash)
+
+        # Map optimized keys (atr_period, multiplier) to service keys (period, base_multiplier)
+        params = optimized.params.symbolize_keys
+        base_cfg[:period] = params[:atr_period] if params[:atr_period]
+        base_cfg[:base_multiplier] = params[:multiplier] if params[:multiplier]
+
+        Rails.logger.info("[Signal] 🚀 Using optimized Supertrend for #{instrument.symbol_name} @ #{interval}: #{base_cfg}")
+        base_cfg
+      end
+
+      def resolved_adx_min(instrument, interval, index_cfg, timeframe_label)
+        static_min = index_cfg.dig(:adx_thresholds, timeframe_label == 'primary' ? :primary_min_strength : :confirmation_min_strength) || 15
+
+        return static_min unless dynamic_config_enabled?
+
+        optimized = BestIndicatorParam.best_for_indicator(instrument.id, interval, :adx).first
+        return static_min unless optimized && optimized.params.is_a?(Hash)
+
+        optimized_min = optimized.params.symbolize_keys[:min_strength]
+        return static_min unless optimized_min
+
+        Rails.logger.info("[Signal] 🚀 Using optimized ADX min for #{instrument.symbol_name} @ #{interval}: #{optimized_min}")
+        optimized_min
       end
 
       # --- Dynamic Configuration Helpers ---

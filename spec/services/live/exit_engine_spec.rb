@@ -92,7 +92,8 @@ RSpec.describe Live::ExitEngine do
       it 'persists exit request timestamps on successful exit' do
         engine.execute_exit(tracker, 'stop_loss')
 
-        expect(tracker.reload.exit_requested_at).to be_present
+        tracker.reload
+        expect(tracker.exit_requested_at).to be_present
         expect(tracker.exit_sent_at).to be_present
       end
 
@@ -127,7 +128,7 @@ RSpec.describe Live::ExitEngine do
         expect(router).to have_received(:exit_market).once
       end
 
-      it 'returns not_active if tracker is already exited' do
+      it 'returns already_exited when tracker is already exited' do
         tracker.update!(status: 'exited', meta: { 'exit_reason' => 'previous_exit' })
         result = engine.execute_exit(tracker, 'new_exit')
 

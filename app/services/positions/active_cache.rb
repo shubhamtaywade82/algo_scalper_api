@@ -107,6 +107,23 @@ module Positions
     def [](key)
       public_send(key)
     end
+    # rubocop:enable Metrics/AbcSize
+
+    def [](key)
+      public_send(key)
+    end
+
+    def []=(key, value)
+      public_send("#{key}=", value)
+    end
+  end
+
+  # Ultra-fast in-memory position cache for NEMESIS V3
+  # Mirrors Redis PnL + RedisTickCache for sub-millisecond lookups
+  # Subscribes directly to MarketFeedHub callbacks for real-time updates
+  # rubocop:disable Metrics/ClassLength
+  class ActiveCache
+    include Singleton
 
     def []=(key, value)
       public_send("#{key}=", value)

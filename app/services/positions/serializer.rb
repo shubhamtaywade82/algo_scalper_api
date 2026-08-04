@@ -11,9 +11,6 @@ module Positions
       qty = tracker.quantity.to_i
       net_pnl = (cache[:pnl] || tracker.last_pnl_rupees.to_f).to_f
 
-      sl_price = cache[:sl_price] || (entry.positive? ? entry * 0.70 : nil)
-      tp_price = cache[:tp_price] || (entry.positive? ? entry * 1.60 : nil)
-
       base_attributes(tracker).merge(
         entry_price: entry.round(2),
         ltp: ltp.round(2),

@@ -74,6 +74,9 @@ gem 'openai', '~> 0.41', group: :production
 # Local Ollama client
 gem 'ollama-client', path: '~/project/ai-workspace/ollama-client'
 
+# Local Ollama client
+gem 'ollama-client', path: '~/project/ai-workspace/ollama-client'
+
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 # gem "image_processing", "~> 1.2"
 

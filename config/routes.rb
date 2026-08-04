@@ -71,13 +71,9 @@ Rails.application.routes.draw do
     post 'analysis/:index_key/optimize',    to: 'analysis#optimize',    as: :analysis_optimize
 
     # Algo Settings
-    get    'settings', to: 'settings#index'
-    get    'settings/fast_entry_mode', to: 'settings#fast_entry_mode'
-    patch  'settings/fast_entry_mode', to: 'settings#update_fast_entry_mode'
-    get    'settings/change_logs',  to: 'settings#change_logs'
-    patch  'settings/bulk',         to: 'settings#update_bulk'
-    patch  'settings/deep_merge',   to: 'settings#update_deep_merge'
-    post   'settings/update_ip',    to: 'settings#update_ip'
+    get    'settings',           to: 'settings#index'
+    patch  'settings/bulk',      to: 'settings#update_bulk'
+    post   'settings/update_ip', to: 'settings#update_ip'
 
     resources :calibration_runs, only: %i[index show] do
       post :apply, on: :member

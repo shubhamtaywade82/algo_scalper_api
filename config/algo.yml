@@ -333,8 +333,8 @@ broker_fees:
 # ============================================
 risk:
   auto_update_ip: false # Set to true to automatically update whitelisted IP on Dhan after cooldown
-  sl_pct: 0.10 # -10% base premium SL — intraday options buying (tightened from 15%)
-  tp_pct: 0.45 # +45% TAKE PROFIT — capture convexity outliers
+  sl_pct: 0.10 # -10% STOP LOSS (was 6%, too tight — frequent noise stops)
+  tp_pct: 0.25 # +25% TAKE PROFIT (was 12%, cut winners too short)
   per_trade_risk_pct: 0.40
 
   # DTE-resolved intraday parameters — pinned into config_snapshot at entry
