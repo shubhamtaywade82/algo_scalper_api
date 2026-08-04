@@ -325,23 +325,22 @@ module InstrumentHelpers
     nil
   end
 
-  def intraday_ohlc(interval: '5', oi: false, from_date: nil, to_date: nil, days: 2) # rubocop:disable Naming/MethodParameterName
-    to_date ||= if defined?(Market::Calendar) && Market::Calendar.respond_to?(:today_or_last_trading_day)
-                  Market::Calendar.today_or_last_trading_day.to_s
-                elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
-                  MarketCalendar.today_or_last_trading_day.to_s
+  def intraday_ohlc(interval: '5', oi: false, from_date: nil, to_date: nil, days: 2)
+    # Default to_date to yesterday - DhanHQ API may not have today's data available yet
+    # Only use today if explicitly requested via to_date parameter
+    today = Time.zone.today
+    to_date ||= if defined?(Market::Calendar) && Market::Calendar.respond_to?(:trading_days_ago)
+                  # Use yesterday (1 trading day ago) as default for intraday data
+                  Market::Calendar.trading_days_ago(1).to_s
                 else
-                  (Time.zone.today - 1).to_s
+                  (today - 1).to_s
                 end
 
-    # Use trading days, not calendar days, to avoid weekends/holidays
-    from_date ||= if defined?(Market::Calendar) && Market::Calendar.respond_to?(:trading_days_ago)
-                    Market::Calendar.trading_days_ago(days).to_s
-                  elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:trading_days_ago)
-                    MarketCalendar.trading_days_ago(days).to_s
-                  else
-                    (Date.parse(to_date) - days).to_s # Fallback to calendar days
-                  end
+    # Ensure to_date is not in the future
+    to_date_obj = Date.parse(to_date)
+    to_date = [to_date_obj, today].min.to_s if to_date_obj > today
+
+    from_date ||= (Date.parse(to_date) - days).to_s
 
     instrument_code = resolve_instrument_code
     DhanHQ::Models::HistoricalData.intraday(
@@ -350,8 +349,8 @@ module InstrumentHelpers
       instrument: instrument_code,
       interval: interval,
       oi: oi,
-      from_date: from_date || (Time.zone.today - days).to_s,
-      to_date: to_date || (Time.zone.today - 1).to_s
+      from_date: from_date || (today - days).to_s,
+      to_date: to_date || (today - 1).to_s
     )
   rescue StandardError => e
     DhanhqErrorHandler.handle_dhanhq_error(
@@ -359,6 +358,7 @@ module InstrumentHelpers
       context: "intraday_ohlc(#{self.class.name} #{security_id})"
     )
     Rails.logger.error("Failed to fetch Intraday OHLC for #{self.class.name} #{security_id}: #{e.message}")
+    Rails.logger.debug { "OHLC fetch params: interval=#{interval}, from_date=#{from_date}, to_date=#{to_date}, days=#{days}" }
     nil
   end
 

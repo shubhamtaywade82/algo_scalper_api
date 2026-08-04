@@ -1041,98 +1041,83 @@ data_freshness:
   option_chain_cache_duration_minutes: 2
 
 # ============================================
-# WEBSOCKET WATCHLIST
+# SMC (SMART MONEY CONCEPTS) CONFIGURATION
 # ============================================
-# WebSocket watchlist for market feed subscription
-# Format: Array of strings "SEGMENT:SECURITY_ID" or empty array []
-# Example: ["NSE_EQ:11536", "NSE_EQ:11536"]
-# Can also be set via ENV['DHANHQ_WS_WATCHLIST'] as fallback
-watchlist:
-  - segment: IDX_I
-    security_id: "21"   # India VIX — keeps TickCache warm for VixGate
+smc:
+  # Enable/disable SMC trading system
+  enabled: true # Set to true to enable SMC live trading
 
-# ============================================
-# TELEGRAM NOTIFICATIONS
-# ============================================
-telegram:
-  enabled: true # Set to false to disable Telegram notifications
-  # Bot token and chat ID should be set via environment variables:
-  # TELEGRAM_BOT_TOKEN - Your Telegram bot token from @BotFather
-  # TELEGRAM_CHAT_ID - Your Telegram chat ID (can be obtained from @userinfobot)
-  pnl_update_interval_seconds: 300 # Minimum seconds between PnL update notifications per position
-  notify_entry: true # Send notifications on entry
-  notify_exit: true # Send notifications on exit
-  notify_pnl_updates: false # Send periodic PnL updates (throttled)
-  notify_pnl_milestones: true # Send notifications for PnL milestones (10%, 20%, etc.)
-  pnl_milestones: [10, 20, 30, 50, 100] # PnL percentage milestones to notify
-  notify_risk_alerts: true # Send risk alert notifications
-  notify_daily_profit_target: true # Telegram when global daily profit cap is hit (entries blocked)
-  include_stats_on_exit: true # Include trading stats summary in exit notifications
-  notify_stats_at_market_close: true # Send daily trading stats at end of market session (3:30 PM IST)
-  # SMC Alert Settings
-  smc_alert_cooldown_minutes: 30 # Cooldown between duplicate alerts (same instrument+decision)
-  smc_max_alerts_per_session: 2 # Max alerts per instrument per trading session (prevents overtrading)
+  # Candle interval for SMC analysis (options: "1", "5", "15", "60")
+  interval: "5" # 5-minute candles (recommended for options trading)
 
-# AI Integration Configuration
-ai:
-  enabled: true # Set to true to enable AI integration
-  # Dashboard / DB override (Settings → AI): false = local Ollama, true = Ollama Cloud.
-  # URLs and secrets still come from ENV (see comments below).
-  ollama_use_cloud: true
-  # When true, skip Ollama calls while the cash session is closed (snapshot, AnalysisJob :ai,
-  # tick SMC digest AI). Dashboard auto-snapshot respects this via API payload. Set false for
-  # 24/7 research. POST /api/analysis/:key/ai_snapshot?force=true bypasses when allowed.
-  skip_generative_ai_when_market_closed: true
-  # Timeout settings (in seconds):
-  # - OLLAMA_HOST_URL: Remote Ollama server URL (e.g., http://192.168.0.200:11434)
-  #   Alternative to OLLAMA_BASE_URL (both are supported)
-  # - OLLAMA_BASE_URL: Remote Ollama server URL (legacy, use OLLAMA_HOST_URL if possible)
-  # - OLLAMA_TIMEOUT: Request timeout for non-streaming requests (default: 20 seconds)
-  # - OLLAMA_STREAM_TIMEOUT: Timeout for streaming requests (default: 120 seconds / 2 minutes)
-  #   Increase this if models are slow or responses are long (e.g., 300 for very slow models)
-  # - OLLAMA_OPEN_TIMEOUT: Connection timeout for Ollama (default: 5 seconds)
-  # - OLLAMA_REQUEST_DELAY_MS: Delay between requests in milliseconds (default: 500ms)
-  #   Useful for long streaming responses. Set higher if you experience timeouts.
-  # Provider: Ollama only (`ollama-client` gem). There is no OpenAI/ruby-openai integration.
-  # Ollama Configuration:
-  #   - OLLAMA_LOCAL_URL: Optional; used when ollama_use_cloud is false (overrides HOST/BASE fallbacks)
-  #   - OLLAMA_CLOUD_URL: Optional; used when ollama_use_cloud is true (else OLLAMA_BASE_URL, else ollama.com)
-  #   - OLLAMA_HOST_URL / OLLAMA_BASE_URL: Fallback for local mode (see OllamaClient)
-  #   - OLLAMA_API_KEY: Required when ollama_use_cloud is true (Ollama Cloud Bearer token)
-  #   - OLLAMA_MODEL: Optional - explicitly set model (e.g., 'phi3:mini', 'llama3')
-  #     If not set, system automatically fetches available models and selects the best one
-  #
-  # Technical Analysis Agent Configuration:
-  #   - AI_AGENT_MAX_ITERATIONS: Maximum iterations before safety limit (default: 15, range: 3-100)
-  #     Controls how many iterations the agent can perform before stopping
-  #     Example: export AI_AGENT_MAX_ITERATIONS=20
-  #   - AI_AGENT_MAX_CONSECUTIVE_TOOLS: Maximum consecutive tool calls before forcing analysis (default: 8, range: 3-15)
-  #     Prevents the agent from getting stuck in tool-calling loops
-  #     Example: export AI_AGENT_MAX_CONSECUTIVE_TOOLS=5
-  #   - AI_AGENT_STREAM_TIMEOUT: Timeout for streaming responses per iteration (default: 60 seconds)
-  #     If AI doesn't respond within this time, iteration is aborted and retried
-  #     Example: export AI_AGENT_STREAM_TIMEOUT=30
+  # ADX (Average Directional Index) filter settings
+  adx_min_strength: 18 # Minimum ADX value to consider trend strong enough (default: 18)
+  # ADX thresholds:
+  # - < 20: Weak trend (no trade)
+  # - 20-25: Moderate trend (cautious)
+  # - 25-40: Strong trend (preferred)
+  # - > 40: Very strong trend (aggressive)
 
-# ===== ENTRY QUALITY FILTER =====
-entry_quality:
-  enforce: true                      # false = log-only mode (no blocking)
-  min_score: 55                      # tightened minimum quality score (0-100)
-  gates:
-    min_adx: 25                      # hard gate: minimum ADX value
-    block_choppy_regime: true        # hard gate: block CHOPPY regime
-    min_body_ratio: 0.40             # hard gate: minimum candle body/range ratio
-    require_momentum_confirm: true   # hard gate: close must be beyond Supertrend level
-  scoring:
-    candle_body_weight: 25           # max points for candle body strength
-    adx_strength_weight: 20          # max points for ADX bonus
-    bos_weight: 20                   # max points for break of structure
-    range_expansion_weight: 20       # max points for range expansion
-    momentum_weight: 15              # max points for momentum strength
-  session_overrides:
-    chop_decay:
-      min_score: 60
-      gates:
-        min_adx: 30
-  index_overrides:
-    SENSEX:
-      min_adx: 25                    # SENSEX keeps slightly higher ADX floor
+  # Implied Volatility (IV) filters
+  max_iv: 60.0 # Maximum IV% to accept (reject if IV > 60%)
+  min_iv: 5.0 # Minimum IV% to accept (reject if IV < 5%)
+
+  # Volume confirmation
+  volume_expansion_ratio: 1.25 # Current volume must be 1.25x average of last 4 candles
+
+  # Capital allocation
+  capital_alloc_pct: 0.30 # Allocate 30% of available capital per SMC signal
+
+  # Risk/Reward settings
+  r_mult: 1.5 # Risk multiplier for target calculation (1.5 = 1.5R target)
+  # Target calculation: spot * (1 + 0.0075 * r_mult) for bullish, (1 - 0.0075 * r_mult) for bearish
+
+  # Structure detection settings
+  structure:
+    swing_lookback: 5 # Number of candles to look back for swing detection (default: 5)
+    fvg_lookback: 3 # Number of candles to look back for FVG detection (default: 3)
+    atr_period: 14 # ATR period for tick buffer calculation (default: 14)
+    tick_buffer_multiplier: 0.25 # ATR multiplier for tick buffer (default: 0.25 = 25% of ATR)
+
+  # Order block settings
+  order_block:
+    require_mitigation: true # Require price to tap OB/FVG before entry (recommended: true)
+    allow_immediate_breakout: true # Allow immediate breakout if liquidity sweep + volume (recommended: true)
+
+  # Liquidity sweep detection
+  liquidity_sweep:
+    lookback: 20 # Number of candles to look back for liquidity sweep detection (default: 20)
+    require_volume_confirmation: true # Require volume expansion for sweep confirmation
+
+  # Strike selection
+  strike_selection:
+    default_steps: 0 # Default OTM steps (0 = ATM, 1 = 1OTM, 2 = 2OTM)
+    high_iv_steps: 1 # OTM steps when IV > 35% (default: 1 = 1OTM)
+    high_iv_threshold: 35.0 # IV threshold to use high_iv_steps (default: 35%)
+
+  # Signal filters
+  filters:
+    require_bos: true # Require Break of Structure (BOS) for signal (mandatory)
+    require_supertrend_alignment: false # Require Supertrend alignment (if false, ADX strength can override)
+    require_volume_expansion: true # Require volume expansion confirmation
+    require_mitigation_or_sweep: true # Require either mitigation (tap OB/FVG) or liquidity sweep
+
+  # Minimum data requirements
+  min_candles: 20 # Minimum number of candles required for analysis (default: 20)
+
+  # Live service settings
+  live_service:
+    loop_interval_seconds: 300 # Service loop interval in seconds (default: 300 = 5 minutes)
+    cooldown_seconds: 300 # Cooldown between signals per index (default: 300 = 5 minutes)
+
+
+  # Per-index SMC overrides (optional - can be added to indices[] section)
+  # Example:
+  # indices:
+  #   - key: NIFTY
+  #     smc:
+  #       enabled: true
+  #       interval: "5"
+  #       adx_min_strength: 20
+  #       max_iv: 55.0
+  #       capital_alloc_pct: 0.25
