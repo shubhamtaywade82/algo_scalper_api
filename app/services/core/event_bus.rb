@@ -15,33 +15,56 @@ module Core
     # Event types
     EVENTS = {
       ltp: :ltp,
+      entry_filled: :entry_filled,
       sl_hit: :sl_hit,
       tp_hit: :tp_hit,
+      structure_break: :structure_break,
       exit_triggered: :exit_triggered,
+      risk_alert: :risk_alert,
+      breakeven_lock: :breakeven_lock,
+      trailing_triggered: :trailing_triggered,
+      danger_zone: :danger_zone,
+      volatility_spike: :volatility_spike,
+      trend_flip: :trend_flip,
       bracket_placed: :bracket_placed,
-      bracket_modified: :bracket_modified,
-      candle_closed: :candle_closed,
-      strategy_signal: :strategy_signal,
-      strategy_error: :strategy_error,
-      strategy_status_change: :strategy_status_change
+      bracket_modified: :bracket_modified
     }.freeze
 
     def initialize
       @subscribers = Concurrent::Map.new { |h, k| h[k] = Concurrent::Array.new }
       @lock = Mutex.new
+      @stats = {
+        events_published: 0,
+        events_delivered: 0,
+        errors: 0
+      }
     end
 
     # Subscribe to an event type
     # @param event_type [Symbol] Event type (e.g., :ltp, :sl_hit)
+    # @param subscriber [Object, Proc] Subscriber object or proc
+    # @param method_name [Symbol, nil] Method name to call on subscriber (if object)
     # @return [String] Subscription ID for unsubscribing
-    def subscribe(event_type, &block)
+    def subscribe(event_type, subscriber = nil, method_name: nil, &block)
       raise ArgumentError, "Unknown event type: #{event_type}" unless EVENTS.value?(event_type)
-      raise ArgumentError, 'Must provide a block' unless block
+
+      handler = if block
+                  block
+                elsif subscriber.is_a?(Proc)
+                  subscriber
+                elsif subscriber && method_name
+                  ->(event) { subscriber.public_send(method_name, event) }
+                elsif subscriber.respond_to?(:call)
+                  ->(event) { subscriber.call(event) }
+                else
+                  raise ArgumentError, 'Must provide block, proc, or subscriber with method_name'
+                end
 
       subscription_id = SecureRandom.uuid
       @subscribers[event_type] << {
         id: subscription_id,
-        handler: block
+        handler: handler,
+        subscriber: subscriber
       }
 
       Rails.logger.debug { "[Core::EventBus] Subscribed to #{event_type} (#{subscription_id[0..7]})" }
@@ -58,12 +81,15 @@ module Core
       subscribers = @subscribers[event_type]
       return 0 if subscribers.empty?
 
+      @stats[:events_published] += 1
       notified = 0
 
       subscribers.each do |subscription|
         subscription[:handler].call(event)
         notified += 1
+        @stats[:events_delivered] += 1
       rescue StandardError => e
+        @stats[:errors] += 1
         Rails.logger.error(
           "[Core::EventBus] Error delivering #{event_type} to subscriber: #{e.class} - #{e.message}"
         )
@@ -93,9 +119,40 @@ module Core
       found
     end
 
+    # Unsubscribe all handlers for a specific subscriber object
+    # @param subscriber [Object] Subscriber object to remove
+    # @return [Integer] Number of subscriptions removed
+    def unsubscribe_all(subscriber)
+      removed = 0
+      @subscribers.each_value do |subs|
+        subs.delete_if do |sub|
+          if sub[:subscriber] == subscriber
+            removed += 1
+            true
+          else
+            false
+          end
+        end
+      end
+
+      Rails.logger.debug { "[Core::EventBus] Unsubscribed all for #{subscriber.class.name} (#{removed} subscriptions)" } if removed.positive?
+      removed
+    end
+
+    # Get statistics
+    # @return [Hash] Statistics hash
+    def stats
+      @stats.dup
+    end
+
     # Clear all subscriptions (for testing/cleanup)
     def clear
       @subscribers.clear
+      @stats = {
+        events_published: 0,
+        events_delivered: 0,
+        errors: 0
+      }
       Rails.logger.debug('[Core::EventBus] Cleared all subscriptions')
     end
 

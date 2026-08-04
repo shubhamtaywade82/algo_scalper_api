@@ -8,7 +8,7 @@ module Live
 
     REDIS_KEY_PREFIX = 'pnl:tracker'
     TTL_SECONDS = 6.hours.to_i
-    DEFAULT_SYNC_THROTTLE_SECONDS = 30 # Only sync to DB every 30 seconds per tracker (default)
+    SYNC_THROTTLE_SECONDS = 30 # Only sync to DB every 30 seconds per tracker
 
     def initialize
       @redis = Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
@@ -50,17 +50,6 @@ module Live
         data['order_no'] = tracker.order_no.to_s if tracker.order_no.present?
         data['paper'] = (tracker.paper? ? '1' : '0')
         data['entry_timestamp'] = tracker.created_at.to_i.to_s if tracker.created_at.present?
-
-        # Cache active Stop Loss and Take Profit levels
-        begin
-          pos_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
-          sl_price = pos_data&.sl_price || (tracker.entry_price.present? ? tracker.entry_price.to_f * 0.70 : nil)
-          tp_price = pos_data&.tp_price || (tracker.entry_price.present? ? tracker.entry_price.to_f * 1.60 : nil)
-          data['sl_price'] = sl_price.to_f.round(2).to_s if sl_price
-          data['tp_price'] = tp_price.to_f.round(2).to_s if tp_price
-        rescue StandardError
-          nil
-        end
 
         # Calculated fields
         if tracker.entry_price.present? && ltp.to_f.positive?
@@ -143,9 +132,7 @@ module Live
         drawdown_rupees: raw['drawdown_rupees']&.to_f,
         drawdown_pct: raw['drawdown_pct']&.to_f,
         index_key: raw['index_key'],
-        direction: raw['direction']&.to_sym,
-        sl_price: raw['sl_price']&.to_f,
-        tp_price: raw['tp_price']&.to_f
+        direction: raw['direction']&.to_sym
       }
     rescue StandardError => e
       Rails.logger.error("[RedisPnL] fetch_pnl error: #{e.message}") if defined?(Rails)
@@ -165,7 +152,7 @@ module Live
     end
 
     # Sync PnL from Redis to PositionTracker database (throttled)
-    # Only syncs every sync_throttle_seconds per tracker to reduce DB hits
+    # Only syncs every SYNC_THROTTLE_SECONDS (30s) per tracker to reduce DB hits
     def sync_pnl_to_database_throttled(tracker_id, pnl, pnl_pct, hwm, hwm_pnl_pct = nil)
       return unless tracker_id
 
@@ -174,7 +161,7 @@ module Live
         now = Time.current
 
         # Skip if synced recently (within throttle window)
-        return if last_sync && (now - last_sync) < sync_throttle_seconds
+        return if last_sync && (now - last_sync) < SYNC_THROTTLE_SECONDS
 
         # Update timestamp
         @sync_timestamps[tracker_id] = now
@@ -200,9 +187,11 @@ module Live
           high_water_mark_pnl: hwm ? BigDecimal(hwm.to_s) : tracker.high_water_mark_pnl
         }
 
-        # Store hwm_pnl_pct in runtime cache (flushed to DB meta on exit)
+        # Store hwm_pnl_pct in meta if provided
         if hwm_pnl_pct
-          Live::PositionRuntimeCache.instance.merge(tracker_id, hwm_pnl_pct: hwm_pnl_pct.to_f)
+          meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
+          meta['hwm_pnl_pct'] = hwm_pnl_pct.to_f
+          attrs[:meta] = meta
         end
 
         tracker.update!(attrs)

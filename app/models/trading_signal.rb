@@ -54,9 +54,6 @@ class TradingSignal < ApplicationRecord
       confidence_score: confidence_score,
       metadata: slim
     )
-
-    Signal::LiveMetadataCache.instance.store(signal.id, full_metadata) if full_metadata.any?
-    signal
   rescue ActiveRecord::RecordInvalid
     # Rails.logger.error("Failed to persist trading signal: #{e.record.errors.full_messages.to_sentence}")
     nil

@@ -21,11 +21,9 @@ module Live
       @mutex = Monitor.new
       @running = false
       @thread = nil
-      @logger = defined?(Rails) ? Rails.logger : Logger.new($stdout) # rubocop:disable Style/GlobalVars
+      @logger = defined?(Rails) ? Rails.logger : Logger.new($stdout)
       @sleep_mutex = Mutex.new
       @sleep_cv = ConditionVariable.new
-      @last_heartbeat_at = nil
-      @last_positions_keepalive_at = nil
     end
 
     # Accept arbitrary payload fields; last-wins for a tracker id
@@ -38,7 +36,7 @@ module Live
           ltp: safe_decimal(ltp),
           hwm: safe_decimal(hwm),
           hwm_pnl_pct: safe_decimal(hwm_pnl_pct),
-          updated_at: Time.current.to_i
+          updated_at: Time.now.to_i
         }
       end
 
@@ -131,8 +129,6 @@ module Live
         end
 
         processed = flush!
-        maybe_broadcast_heartbeat
-        maybe_broadcast_positions_keepalive
         sleep_duration = next_interval(queue_empty: !processed && queue_empty?)
         wait_for_interval(sleep_duration)
       end
@@ -263,13 +259,10 @@ module Live
         hwm_bd ||= (tracker.high_water_mark_pnl.present? ? safe_decimal(tracker.high_water_mark_pnl) : BigDecimal(0))
         hwm_bd = BigDecimal(0) if hwm_bd.nil?
 
-        # Continuously update HWM from current PnL (don't wait for DB sync)
-        hwm_bd = [hwm_bd, pnl_bd].max if pnl_bd.positive?
-
-        # Calculate hwm_pnl_pct if not provided (Store as decimal, e.g. 0.05 for 5%)
+        # Calculate hwm_pnl_pct if not provided
         hwm_pnl_pct_bd = payload[:hwm_pnl_pct]
         if hwm_pnl_pct_bd.nil? && entry_bd.positive? && qty_bd.positive? && hwm_bd.positive?
-          hwm_pnl_pct_bd = (hwm_bd / (entry_bd * qty_bd))
+          hwm_pnl_pct_bd = (hwm_bd / (entry_bd * qty_bd)) * 100
         end
 
         # Persist to Redis (use floats for storage to remain compatible)
@@ -279,8 +272,8 @@ module Live
           pnl_pct: pnl_pct_bd.to_f,
           ltp: ltp_bd.to_f,
           hwm: hwm_bd.to_f,
-          hwm_pnl_pct: hwm_pnl_pct_bd.to_f,
-          timestamp: Time.current,
+          hwm_pnl_pct: hwm_pnl_pct_bd&.to_f,
+          timestamp: Time.zone.now,
           tracker: tracker
         )
 
@@ -361,33 +354,33 @@ module Live
 
     # Check for PnL milestones and send notifications
     # @param tracker [PositionTracker] Position tracker
-    # @param pnl_pct [BigDecimal] PnL as decimal (e.g. 0.05 for 5%)
+    # @param pnl_pct [BigDecimal] PnL percentage
     # @param pnl [BigDecimal] PnL value
     def check_and_notify_pnl_milestones(tracker, pnl_pct, pnl)
       return unless telegram_milestones_enabled?
 
       config = AlgoConfig.fetch[:telegram] || {}
       milestones = config[:pnl_milestones] || [10, 20, 30, 50, 100]
-      pnl_pct_decimal = pnl_pct.to_f
-      pnl_pct_as_percent = pnl_pct_decimal * 100.0
+      pnl_pct_value = pnl_pct.to_f
 
-      # Get notified milestones from runtime cache (no per-milestone DB write)
-      notified_milestones = Live::PositionRuntimeCache.instance.telegram_milestones_for(tracker)
+      # Get notified milestones from tracker meta
+      meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
+      notified_milestones = meta['telegram_notified_milestones'] || []
 
       milestones.each do |milestone_pct|
-        # Check if milestone reached (positive or negative); compare percentage to percentage
-        milestone_reached = if pnl_pct_as_percent.positive?
-                              pnl_pct_as_percent >= milestone_pct && notified_milestones.exclude?(milestone_pct)
-                            elsif pnl_pct_as_percent.negative?
-                              pnl_pct_as_percent <= -milestone_pct && notified_milestones.exclude?(-milestone_pct)
+        # Check if milestone reached (positive or negative)
+        milestone_reached = if pnl_pct_value.positive?
+                              pnl_pct_value >= milestone_pct && notified_milestones.exclude?(milestone_pct)
+                            elsif pnl_pct_value.negative?
+                              pnl_pct_value <= -milestone_pct && notified_milestones.exclude?(-milestone_pct)
                             else
                               false
                             end
 
         next unless milestone_reached
 
-        # Send notification (notifier expects pnl_pct in percentage, e.g. 5.0 for 5%)
-        milestone_text = if pnl_pct_as_percent.positive?
+        # Send notification
+        milestone_text = if pnl_pct_value.positive?
                            "#{milestone_pct}% profit"
                          else
                            "#{milestone_pct}% loss"
@@ -398,154 +391,19 @@ module Live
             tracker,
             milestone: milestone_text,
             pnl: pnl,
-            pnl_pct: pnl_pct_as_percent
+            pnl_pct: pnl_pct_value
           )
 
-          # Mark milestone as notified (Redis only until exit flush)
-          milestone_key = pnl_pct_as_percent.positive? ? milestone_pct : -milestone_pct
-          Live::PositionRuntimeCache.instance.append_telegram_milestone!(tracker, milestone_key)
+          # Mark milestone as notified
+          milestone_key = pnl_pct_value.positive? ? milestone_pct : -milestone_pct
+          notified_milestones << milestone_key
+          tracker.update!(meta: meta.merge('telegram_notified_milestones' => notified_milestones))
         rescue StandardError => e
-          @logger.error("[PnlUpdater] Failed to notify milestone for #{tracker.id}: #{e.class} - #{e.message}")
+          @logger.error("[PnlUpdater] Failed to notify milestone for #{tracker_id}: #{e.class} - #{e.message}")
         end
       end
     rescue StandardError => e
       @logger.error("[PnlUpdater] check_and_notify_pnl_milestones failed: #{e.class} - #{e.message}")
-    end
-
-    # Broadcast live PnL for a single position to the "positions" ActionCable channel.
-    # pnl_pct is derived fresh from (ltp - entry) / entry * 100 to avoid ambiguity
-    # around how callers store pnl_pct (decimal fraction vs percentage).
-    def broadcast_pnl_update(tracker_id, ltp, pnl, hwm, entry)
-      ltp_f   = ltp.to_f
-      entry_f = entry.to_f
-      pnl_pct = entry_f.positive? ? (((ltp_f - entry_f) / entry_f) * 100).round(2) : 0.0
-
-      begin
-        pos_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker_id)
-        sl_price = pos_data&.sl_price || (entry_f.positive? ? entry_f * 0.70 : nil)
-        tp_price = pos_data&.tp_price || (entry_f.positive? ? entry_f * 1.60 : nil)
-      rescue StandardError
-        sl_price = entry_f.positive? ? entry_f * 0.70 : nil
-        tp_price = entry_f.positive? ? entry_f * 1.60 : nil
-      end
-
-      ActionCable.server.broadcast("positions", {
-        type: "pnl_update",
-        id: tracker_id,
-        ltp: ltp_f.round(2),
-        pnl: pnl.to_f.round(2),
-        pnl_pct: pnl_pct,
-        hwm_pnl: hwm.to_f.round(2),
-        sl_price: sl_price&.to_f&.round(2),
-        tp_price: tp_price&.to_f&.round(2),
-        ltp_stale: false
-      })
-      begin
-        Rails.cache.delete("pnl_stale:#{tracker_id}")
-      rescue StandardError
-        nil
-      end
-    rescue StandardError => e
-      @logger.debug("[PnlUpdater] broadcast_pnl_update failed: #{e.message}")
-    end
-
-    # Notify the frontend that LTP (and thus live PnL) is stale for this tracker.
-    # Debounced to avoid flooding the WS channel during cache outages.
-    def maybe_broadcast_pnl_stale(tracker_id)
-      return if tracker_id.blank?
-
-      debounce_key = "pnl_stale:#{tracker_id}"
-      return if Rails.cache&.read(debounce_key)
-
-      Rails.cache&.write(debounce_key, true, expires_in: PNL_STALE_DEBOUNCE_SECONDS)
-      ActionCable.server.broadcast("positions", { type: "pnl_stale", id: tracker_id })
-    rescue StandardError => e
-      @logger.debug("[PnlUpdater] maybe_broadcast_pnl_stale failed: #{e.message}")
-    end
-
-    # Broadcast aggregate dashboard stats every 1 second to the "dashboard" channel.
-    def maybe_broadcast_heartbeat
-      return if @last_heartbeat_at && (Time.current.to_f - @last_heartbeat_at) < 1.0
-
-      @last_heartbeat_at = Time.current.to_f
-      Live::SystemStatusCache.instance.report_heartbeat(:pnl_updater)
-      ActionCable.server.broadcast("dashboard", build_dashboard_stats)
-    rescue StandardError => e
-      @logger.debug("[PnlUpdater] heartbeat broadcast failed: #{e.message}")
-    end
-
-    # Keep the positions WS channel warm when ticks are quiet (illiquid strikes).
-    def maybe_broadcast_positions_keepalive
-      return if @last_positions_keepalive_at && (Time.current.to_f - @last_positions_keepalive_at) < 3.0
-      return unless Positions::ActivePositionsCache.instance.active_trackers.any?
-
-      @last_positions_keepalive_at = Time.current.to_f
-      ActionCable.server.broadcast("positions", { type: 'keepalive', timestamp: Time.current.iso8601 })
-    rescue StandardError => e
-      @logger.debug("[PnlUpdater] positions keepalive broadcast failed: #{e.message}")
-    end
-
-    def build_dashboard_stats
-      {
-        type: "stats",
-        mode: AlgoConfig.mode,
-        balance: safe_wallet_snapshot,
-        today: PositionTracker.trading_stats_with_pct,
-        indices: {
-          nifty: Live::TickCache.ltp('IDX_I', '13'),
-          banknifty: Live::TickCache.ltp('IDX_I', '25'),
-          sensex: Live::TickCache.ltp('IDX_I', '51'),
-          nifty_prev_close: Live::TickCache.fetch('IDX_I', '13')&.dig(:prev_close),
-          banknifty_prev_close: Live::TickCache.fetch('IDX_I', '25')&.dig(:prev_close),
-          sensex_prev_close: Live::TickCache.fetch('IDX_I', '51')&.dig(:prev_close)
-        },
-        options_buying: {
-          nifty: build_options_buying_state('NIFTY'),
-          banknifty: build_options_buying_state('BANKNIFTY'),
-          sensex: build_options_buying_state('SENSEX')
-        },
-        options_buying: {
-          nifty: build_options_buying_state('NIFTY'),
-          banknifty: build_options_buying_state('BANKNIFTY'),
-          sensex: build_options_buying_state('SENSEX')
-        },
-        circuit_breaker: Risk::CircuitBreaker.instance.status,
-        system: Live::SystemStatusCache.instance.all_statuses.merge(
-          pnl_updater_running: running?,
-          ws_order_update: Live::OrderUpdateHub.instance.running?
-        ),
-        timestamp: Time.current.iso8601
-      }
-    rescue StandardError => e
-      @logger.error("[PnlUpdater] build_dashboard_stats failed: #{e.message}")
-      { type: "stats", error: true, timestamp: Time.current.iso8601 }
-    end
-
-    def build_options_buying_state(index_key)
-      direction = if OptionsBuying::StateStore.breakout_ready?(index_key, direction: :bullish)
-                    'BULLISH'
-                  elsif OptionsBuying::StateStore.breakout_ready?(index_key, direction: :bearish)
-                    'BEARISH'
-                  end
-      {
-        regime: OptionsBuying::RegimeClassifier.detect(index_key),
-        breakout_ready: !direction.nil?,
-        direction: direction,
-        compression_armed: OptionsBuying::StateStore.compression_armed?(index_key),
-        support: OptionsBuying::StateStore.support(index_key),
-        resistance: OptionsBuying::StateStore.resistance(index_key),
-        daily_atr: OptionsBuying::StateStore.daily_atr(index_key),
-        radar_strikes: OptionsBuying::StateStore.radar_strikes(index_key)
-      }
-    rescue StandardError => e
-      @logger.warn("[PnlUpdater] failed to build options_buying state for #{index_key}: #{e.message}")
-      { regime: 'UNKNOWN', breakout_ready: false, direction: nil }
-    end
-
-    def safe_wallet_snapshot
-      Orders.config.gateway.wallet_snapshot
-    rescue StandardError
-      { cash: 0, equity: 0, mtm: 0, exposure: 0 }
     end
 
     # Check if Telegram milestone notifications are enabled

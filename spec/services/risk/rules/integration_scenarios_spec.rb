@@ -13,49 +13,27 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
       quantity: 10
     )
   end
-
-  before do
-    allow(Live::UnderlyingMonitor).to receive(:evaluate).and_return(nil)
-  end
-
   let(:risk_config) do
     {
-      sl_pct: 0.02,
-      tp_pct: 0.05,
+      sl_pct: 2.0,
+      tp_pct: 5.0,
       secure_profit_threshold_rupees: 1000.0,
-      secure_profit_drawdown_pct: 0.03,
+      secure_profit_drawdown_pct: 3.0,
       time_exit_hhmm: '15:20',
-      min_profit_rupees: 200.0,
-      trailing: { activation_pct: 0.10 }
+      min_profit_rupees: 200.0
     }
   end
-
-  # SessionEndRule returns no_action first and blocks SL/TP/time tests — drop it unless
-  # the scenario explicitly tests session behaviour (Scenario 4).
-  # StopLossRule and BracketLimitRule also return no_action when not triggered; the engine
-  # stops at the first non-skip result, so later rules never run unless earlier rules are removed.
-  let(:engine) do
-    eng = Risk::Rules::RuleFactory.create_engine(risk_config: risk_config)
-    eng.remove_rule(Risk::Rules::SessionEndRule)
-    eng
-  end
-
-  def pruned_engine(risk_cfg, *rule_classes)
-    eng = Risk::Rules::RuleFactory.create_engine(risk_config: risk_cfg)
-    eng.remove_rule(Risk::Rules::SessionEndRule)
-    rule_classes.each { |klass| eng.remove_rule(klass) }
-    eng
-  end
+  let(:engine) { Risk::Rules::RuleFactory.create_engine(risk_config: risk_config) }
 
   describe 'Scenario 1: Stop Loss Hit' do
     let(:position_data) do
-      Positions::PositionData.new(
+      Positions::ActiveCache::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
         current_ltp: 96.0,
         pnl: -40.0,
-        pnl_pct: -0.04
+        pnl_pct: -4.0
       )
     end
     let(:context) do
@@ -70,27 +48,19 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
       result = engine.evaluate(context)
       expect(result.exit?).to be true
       expect(result.reason).to include('SL HIT')
-      expect(result.reason).to include('-4.0%')
+      expect(result.reason).to include('-4.00%')
     end
   end
 
   describe 'Scenario 2: Take Profit Hit' do
-    let(:engine) do
-      pruned_engine(
-        risk_config,
-        Risk::Rules::StopLossRule,
-        Risk::Rules::BracketLimitRule
-      )
-    end
-
     let(:position_data) do
-      Positions::PositionData.new(
+      Positions::ActiveCache::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
         current_ltp: 107.0,
         pnl: 70.0,
-        pnl_pct: 0.07
+        pnl_pct: 7.0
       )
     end
     let(:context) do
@@ -105,19 +75,19 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
       result = engine.evaluate(context)
       expect(result.exit?).to be true
       expect(result.reason).to include('TP HIT')
-      expect(result.reason).to include('7.0%')
+      expect(result.reason).to include('7.00%')
     end
   end
 
   describe 'Scenario 4: Session End Overrides Everything' do
     let(:position_data) do
-      Positions::PositionData.new(
+      Positions::ActiveCache::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
         current_ltp: 110.0,
         pnl: 100.0,
-        pnl_pct: 0.10
+        pnl_pct: 10.0
       )
     end
     let(:context) do
@@ -127,7 +97,6 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
         risk_config: risk_config
       )
     end
-    let(:engine) { Risk::Rules::RuleFactory.create_engine(risk_config: risk_config) }
 
     before do
       allow(TradingSession::Service).to receive(:should_force_exit?).and_return(
@@ -144,13 +113,13 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
 
   describe 'Scenario 5: Stop Loss Overrides Take Profit' do
     let(:position_data) do
-      Positions::PositionData.new(
+      Positions::ActiveCache::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
         current_ltp: 96.0,
         pnl: -40.0,
-        pnl_pct: -0.04
+        pnl_pct: -4.0
       )
     end
     let(:context) do
@@ -169,30 +138,15 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
   end
 
   describe 'Scenario 7: Peak Drawdown Exit' do
-    let(:risk_config) { super().merge(tp_pct: 0.25) }
-
-    let(:engine) do
-      pruned_engine(
-        risk_config,
-        Risk::Rules::StopLossRule,
-        Risk::Rules::BracketLimitRule,
-        Risk::Rules::TakeProfitRule,
-        Risk::Rules::SecureProfitRule,
-        Risk::Rules::TimeBasedExitRule,
-        Risk::Rules::TrailingStopRule,
-        Risk::Rules::UnderlyingExitRule
-      )
-    end
-
     let(:position_data) do
-      Positions::PositionData.new(
+      Positions::ActiveCache::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
         current_ltp: 120.0,
         pnl: 1000.0,
-        pnl_pct: 0.20,
-        peak_profit_pct: 0.25
+        pnl_pct: 20.0,
+        peak_profit_pct: 25.0
       )
     end
     let(:context) do
@@ -204,15 +158,9 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
     end
 
     before do
-      allow(Positions::TrailingConfig).to receive_messages(
-        peak_drawdown_triggered?: true,
-        peak_drawdown_active?: true,
-        config: {
-          peak_drawdown_pct: 0.05,
-          activation_profit_pct: 0.25,
-          activation_sl_offset_pct: 0.10
-        }
-      )
+      allow(Positions::TrailingConfig).to receive_messages(peak_drawdown_triggered?: true, peak_drawdown_active?: true, config: { peak_drawdown_pct: 5.0,
+                                                                                                                                  activation_profit_pct: 25.0,
+                                                                                                                                  activation_sl_offset_pct: 10.0 })
     end
 
     it 'exits due to peak drawdown' do
@@ -223,24 +171,14 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
   end
 
   describe 'Scenario 10: Time-Based Exit with Minimum Profit' do
-    let(:engine) do
-      pruned_engine(
-        risk_config,
-        Risk::Rules::StopLossRule,
-        Risk::Rules::BracketLimitRule,
-        Risk::Rules::TakeProfitRule,
-        Risk::Rules::SecureProfitRule
-      )
-    end
-
     let(:position_data) do
-      Positions::PositionData.new(
+      Positions::ActiveCache::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
         current_ltp: 101.0,
         pnl: 100.0,
-        pnl_pct: 0.01
+        pnl_pct: 1.0
       )
     end
     let(:exit_time) { Time.zone.parse('15:20') }
@@ -260,24 +198,14 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
   end
 
   describe 'Scenario 11: Time-Based Exit Triggered' do
-    let(:engine) do
-      pruned_engine(
-        risk_config,
-        Risk::Rules::StopLossRule,
-        Risk::Rules::BracketLimitRule,
-        Risk::Rules::TakeProfitRule,
-        Risk::Rules::SecureProfitRule
-      )
-    end
-
     let(:position_data) do
-      Positions::PositionData.new(
+      Positions::ActiveCache::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
         current_ltp: 103.0,
         pnl: 300.0,
-        pnl_pct: 0.03
+        pnl_pct: 3.0
       )
     end
     let(:exit_time) { Time.zone.parse('15:20') }
@@ -299,13 +227,13 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
 
   describe 'Scenario 16: Multiple Rules Could Trigger (Priority Wins)' do
     let(:position_data) do
-      Positions::PositionData.new(
+      Positions::ActiveCache::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
         current_ltp: 96.0,
         pnl: -40.0,
-        pnl_pct: -0.04
+        pnl_pct: -4.0
       )
     end
     let(:exit_time) { Time.zone.parse('15:20') }
@@ -327,21 +255,17 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
 
   describe 'Scenario 17: Rule Disabled' do
     let(:position_data) do
-      Positions::PositionData.new(
+      Positions::ActiveCache::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
         current_ltp: 96.0,
         pnl: -40.0,
-        pnl_pct: -0.04
+        pnl_pct: -4.0
       )
     end
     let(:disabled_config) { risk_config.merge(sl_pct: 0) }
-    let(:engine) do
-      eng = Risk::Rules::RuleFactory.create_engine(risk_config: disabled_config)
-      eng.remove_rule(Risk::Rules::SessionEndRule)
-      eng
-    end
+    let(:engine) { Risk::Rules::RuleFactory.create_engine(risk_config: disabled_config) }
     let(:context) do
       Risk::Rules::RuleContext.new(
         position: position_data,
@@ -360,13 +284,13 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
 
   describe 'Scenario 19: Position Already Exited' do
     let(:position_data) do
-      Positions::PositionData.new(
+      Positions::ActiveCache::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
         current_ltp: 96.0,
         pnl: -40.0,
-        pnl_pct: -0.04
+        pnl_pct: -4.0
       )
     end
     let(:context) do
@@ -389,7 +313,7 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
 
   describe 'Scenario 20: Missing Entry Price' do
     let(:position_data) do
-      Positions::PositionData.new(
+      Positions::ActiveCache::PositionData.new(
         tracker_id: tracker.id,
         entry_price: nil,
         quantity: 10,
@@ -414,26 +338,15 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
   end
 
   describe 'Scenario 29: Securing Profit Above ₹1000' do
-    let(:risk_config) { super().merge(tp_pct: 0.25) }
-
-    let(:engine) do
-      pruned_engine(
-        risk_config,
-        Risk::Rules::StopLossRule,
-        Risk::Rules::BracketLimitRule,
-        Risk::Rules::TakeProfitRule
-      )
-    end
-
     let(:position_data) do
-      Positions::PositionData.new(
+      Positions::ActiveCache::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
         current_ltp: 120.0,
         pnl: 1100.0,
-        pnl_pct: 0.22,
-        peak_profit_pct: 0.25
+        pnl_pct: 22.0,
+        peak_profit_pct: 25.0
       )
     end
     let(:context) do
@@ -453,23 +366,14 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
   end
 
   describe 'Scenario 30: Riding Profits Below Threshold' do
-    let(:engine) do
-      pruned_engine(
-        risk_config,
-        Risk::Rules::StopLossRule,
-        Risk::Rules::BracketLimitRule,
-        Risk::Rules::TakeProfitRule
-      )
-    end
-
     let(:position_data) do
-      Positions::PositionData.new(
+      Positions::ActiveCache::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
         current_ltp: 105.0,
         pnl: 500.0,
-        pnl_pct: 0.04
+        pnl_pct: 5.0
       )
     end
     let(:context) do
@@ -488,26 +392,15 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
   end
 
   describe 'Scenario 31: Allowing Further Upside After Securing' do
-    let(:risk_config) { super().merge(tp_pct: 0.35) }
-
-    let(:engine) do
-      pruned_engine(
-        risk_config,
-        Risk::Rules::StopLossRule,
-        Risk::Rules::BracketLimitRule,
-        Risk::Rules::TakeProfitRule
-      )
-    end
-
     let(:position_data) do
-      Positions::PositionData.new(
+      Positions::ActiveCache::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
         current_ltp: 130.0,
         pnl: 1500.0,
-        pnl_pct: 0.30,
-        peak_profit_pct: 0.30
+        pnl_pct: 30.0,
+        peak_profit_pct: 30.0
       )
     end
     let(:context) do

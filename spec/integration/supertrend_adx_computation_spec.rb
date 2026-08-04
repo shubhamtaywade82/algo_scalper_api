@@ -495,7 +495,7 @@ RSpec.describe 'Supertrend & ADX Computation Integration', :vcr, type: :integrat
         200.times do |i|
           base_price = 100.0 + (i * 0.1)
           series.add_candle(Candle.new(
-                              timestamp: (Time.current - (200 - i).minutes).to_i,
+                              timestamp: (Time.current - (1000 - i).minutes).to_i,
                               open: base_price,
                               high: base_price + 1.0,
                               low: base_price - 1.0,

@@ -64,9 +64,9 @@ class Instrument < ApplicationRecord
   has_many :position_trackers, dependent: :restrict_with_error
   accepts_nested_attributes_for :derivatives, allow_destroy: true
   has_many :watchlist_items, as: :watchable, dependent: :nullify, inverse_of: :watchable
-  has_one :watchlist_item, lambda {
+  has_one  :watchlist_item,  lambda {
     where(active: true)
-  }, as: :watchable, class_name: "WatchlistItem", dependent: :nullify, inverse_of: :watchable
+  }, as: :watchable, class_name: 'WatchlistItem', dependent: :nullify, inverse_of: :watchable
 
   scope :enabled, -> { where(enabled: true) }
 
@@ -276,9 +276,7 @@ class Instrument < ApplicationRecord
       e,
       context: "fetch_option_chain(Instrument #{security_id}, expiry: #{expiry})"
     )
-    msg = "Failed to fetch Option Chain for Instrument #{security_id}: #{e.message}"
-    Notifications::TelegramNotifier.instance.notify_error(msg, context: "Instrument")
-    Rails.logger.error(msg)
+    Rails.logger.error("Failed to fetch Option Chain for Instrument #{security_id}: #{e.message}")
     nil
   end
 

@@ -17,7 +17,7 @@ module Options
       VALID_PERMISSIONS = %i[execution_only scale_ready full_deploy].freeze
       VALID_TRENDS = %i[bullish bearish chop neutral range].freeze
 
-      def call(index_key:, side:, permission:, spot:, option_chain:, trend: nil, momentum_score: nil)
+      def call(index_key:, side:, permission:, spot:, option_chain:, trend: nil)
         index = index_key.to_s.strip.upcase
         side_sym = side.to_s.strip.upcase.to_sym
         perm = permission.to_s.strip.downcase.to_sym
@@ -27,32 +27,18 @@ module Options
         return blocked('invalid_permission') unless VALID_PERMISSIONS.include?(perm)
         return blocked('invalid_spot') unless spot.to_f.positive?
         return blocked('invalid_chain') unless option_chain.is_a?(Hash)
-        return blocked('invalid_trend') if trend_sym && VALID_TRENDS.exclude?(trend_sym)
-
-        # Check for institutional strike selection based on momentum (if provided)
-        if momentum_score.present? && !Signal::FastEntryMode.enabled?
-          institutional_type = Options::StrikeSelector.strike_type_for_momentum(momentum_score)
-          if institutional_type == :skip
-            return blocked('weak_momentum_skip')
-          end
-          # ITM options usually preferred for moderate momentum
-          if institutional_type == :itm
-            Rails.logger.info("[StrikeSelector] Institutional rule selected ITM due to moderate momentum (#{momentum_score}/3)")
-          end
-        end
+        return blocked('invalid_trend') if trend_sym && !VALID_TRENDS.include?(trend_sym)
 
         step = strike_step_for(index)
         atm_strike = round_to_step(spot.to_f, step)
 
         # Get available strikes from the filtered chain (only strikes that exist)
         # Handle different key formats in option chain
-        # rubocop:disable Style/MultilineBlockChain
-        available_strikes = option_chain.keys.filter_map do |k|
+        available_strikes = option_chain.keys.map do |k|
           k.to_f
         rescue StandardError
           nil
-        end.to_set
-        # rubocop:enable Style/MultilineBlockChain
+        end.compact.to_set
 
         desired = desired_strike(
           index: index,
@@ -60,24 +46,27 @@ module Options
           permission: perm,
           trend: trend_sym,
           atm_strike: atm_strike,
-          step: step,
-          momentum_score: momentum_score
+          step: step
         )
 
         # Check if desired strike exists in chain before checking liquidity
         desired_strike_float = desired[:strike].to_f
-        if available_strikes.include?(desired_strike_float) && liquid_in_chain?(option_chain: option_chain, strike: desired[:strike], side: side_sym)
-          return ok(desired.merge(atm_strike: atm_strike))
+        if available_strikes.include?(desired_strike_float)
+          if liquid_in_chain?(option_chain: option_chain, strike: desired[:strike], side: side_sym)
+            return ok(desired.merge(atm_strike: atm_strike))
+          end
         end
 
         # Fallback to ATM if it exists in chain
         atm_strike_float = atm_strike.to_f
-        atm_data = option_data_for(option_chain: option_chain, strike: atm_strike, side: side_sym)
-        if available_strikes.include?(atm_strike_float) && liquid_in_chain?(option_chain: option_chain, strike: atm_strike, side: side_sym, data: atm_data)
-          return ok(strike: atm_strike, strike_type: :ATM, atm_strike: atm_strike)
+        if available_strikes.include?(atm_strike_float)
+          if liquid_in_chain?(option_chain: option_chain, strike: atm_strike, side: side_sym)
+            return ok(strike: atm_strike, strike_type: :ATM, atm_strike: atm_strike)
+          end
         end
 
         # Enhanced error reporting
+        atm_data = option_data_for(option_chain: option_chain, strike: atm_strike, side: side_sym)
         if atm_data.nil?
           Rails.logger.warn("[StrikeSelector] ATM strike #{atm_strike} #{side_sym} not found in option chain for #{index}")
           return blocked('atm_strike_not_in_chain')
@@ -110,17 +99,7 @@ module Options
         ((value / step.to_f).round * step).to_i
       end
 
-      def desired_strike(index:, side:, permission:, trend:, atm_strike:, step:, momentum_score: nil)
-        # Institutional momentum-based selection
-        if momentum_score.present?
-          institutional_type = Options::StrikeSelector.strike_type_for_momentum(momentum_score)
-          if institutional_type == :itm
-            # Select ITM (strike lower than ATM for CE, higher than ATM for PE)
-            itm_strike = side == :CE ? atm_strike - step : atm_strike + step
-            return { strike: itm_strike, strike_type: :ITM }
-          end
-        end
-
+      def desired_strike(index:, side:, permission:, trend:, atm_strike:, step:)
         return { strike: atm_strike, strike_type: :ATM } if permission == :execution_only
         return { strike: atm_strike, strike_type: :ATM } if index == 'SENSEX' && permission != :full_deploy
         return { strike: atm_strike, strike_type: :ATM } if %i[chop neutral range].include?(trend)
@@ -141,8 +120,8 @@ module Options
         { strike: atm_strike, strike_type: :ATM }
       end
 
-      def liquid_in_chain?(option_chain:, strike:, side:, data: nil)
-        data ||= option_data_for(option_chain: option_chain, strike: strike, side: side)
+      def liquid_in_chain?(option_chain:, strike:, side:)
+        data = option_data_for(option_chain: option_chain, strike: strike, side: side)
         unless data.is_a?(Hash)
           Rails.logger.debug { "[StrikeSelector] No option data found for strike #{strike} #{side}" }
           return false
@@ -153,13 +132,33 @@ module Options
         bid = data['top_bid_price']&.to_f
         ask = data['top_ask_price']&.to_f
 
-        # Same liquidity gates for paper and live (both use live Dhan chain data).
+        # Check if strike exists in chain (basic presence check)
+        # If strike exists but has no LTP, it might be market closed - be more lenient
+        strike_exists = !data.empty?
+
+        # For paper trading or when market might be closed, be more lenient
+        # Allow if strike exists in chain, even if LTP/OI are 0 (will use bid/ask or fallback)
+        paper_trading = AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
+
+        # In paper mode, if strike exists in chain, allow it even with 0 LTP/OI
+        # EntryGuard will resolve LTP from REST API if needed
+        if paper_trading && strike_exists && (ltp.nil? || ltp.zero?)
+          Rails.logger.debug { "[StrikeSelector] Paper mode: Allowing strike #{strike} #{side} with 0 LTP (will resolve via API)" }
+          return true
+        end
+
+        # Standard liquidity checks (for live trading or when LTP is available)
         unless ltp&.positive?
           Rails.logger.debug { "[StrikeSelector] Strike #{strike} #{side} has invalid LTP: #{ltp.inspect}" }
           return false
         end
 
+        # OI check - be lenient if OI is 0 but strike exists (might be new contract)
         unless oi&.positive?
+          if paper_trading && strike_exists
+            Rails.logger.debug { "[StrikeSelector] Paper mode: Allowing strike #{strike} #{side} with 0 OI" }
+            return true
+          end
           Rails.logger.debug { "[StrikeSelector] Strike #{strike} #{side} has invalid OI: #{oi.inspect}" }
           return false
         end
@@ -192,8 +191,8 @@ module Options
         possible_keys = [
           strike_int.to_s,
           strike_float.to_s,
-          format('%<v>.6f', v: strike_float),  # Format like "25750.000000"
-          format('%<v>.2f', v: strike_float),  # Format like "25750.00"
+          format('%.6f', strike_float),  # Format like "25750.000000"
+          format('%.2f', strike_float),  # Format like "25750.00"
           strike_int,
           strike_float,
           strike_int.to_s.to_sym, # Symbol keys sometimes
@@ -214,7 +213,7 @@ module Options
         # If exact match not found, try fuzzy matching (find closest key)
         unless strike_data.is_a?(Hash)
           # Try to find key that matches when converted to float
-          option_chain.each_key do |key|
+          option_chain.keys.each do |key|
             key_float = key.to_f
             next unless (key_float - strike_float).abs < 0.01 # Within 0.01 tolerance
 

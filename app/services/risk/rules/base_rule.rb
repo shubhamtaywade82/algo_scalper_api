@@ -35,9 +35,8 @@ module Risk
       end
 
       # Check if this rule is enabled
-      # @param context [Risk::Rules::RuleContext] Optional context
       # @return [Boolean] true if enabled, false otherwise
-      def enabled?(context = nil)
+      def enabled?
         config.fetch(:enabled, true)
       end
 

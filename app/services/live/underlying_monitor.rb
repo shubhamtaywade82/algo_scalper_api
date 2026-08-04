@@ -5,8 +5,7 @@ require 'concurrent/map'
 
 module Live
   class UnderlyingMonitor
-    CACHE_TTL = 0.25       # seconds — position state refresh cadence
-    BIAS_TTL  = 60.0       # seconds — SMC BiasEngine is candle-based; re-check every 60s
+    CACHE_TTL = 0.25 # seconds
 
     class << self
       def evaluate(position_data)
@@ -43,7 +42,6 @@ module Live
 
         bos_state, bos_direction = structure_state(candles, normalized_direction(position_data))
         _atr_value, atr_ratio, atr_trend = atr_snapshot(candles)
-        smc_bias_flip = smc_bias_flipped?(index_cfg, position_data)
 
         OpenStruct.new(
           trend_score: trend_score,
@@ -52,8 +50,7 @@ module Live
           atr_trend: atr_trend,
           atr_ratio: atr_ratio,
           mtf_confirm: mtf_confirm,
-          ltp: ltp,
-          smc_bias_flip: smc_bias_flip
+          ltp: ltp
         )
       rescue StandardError => e
         Rails.logger.error("[UnderlyingMonitor] compute_state failed: #{e.class} - #{e.message}")
@@ -68,17 +65,12 @@ module Live
           atr_trend: :unknown,
           atr_ratio: nil,
           mtf_confirm: false,
-          ltp: nil,
-          smc_bias_flip: false
+          ltp: nil
         )
       end
 
       def cache
         @cache ||= Concurrent::Map.new
-      end
-
-      def bias_cache
-        @bias_cache ||= Concurrent::Map.new
       end
 
       def cache_key_for(position_data)
@@ -206,7 +198,7 @@ module Live
         return position_data.underlying_ltp if position_data.underlying_ltp.to_f.positive?
         return nil unless index_cfg
 
-        Live::TickQuery.for_security(segment: index_cfg[:segment], security_id: index_cfg[:sid])&.ltp
+        Live::TickCache.ltp(index_cfg[:segment], index_cfg[:sid])
       rescue StandardError
         nil
       end
@@ -231,32 +223,6 @@ module Live
         AlgoConfig.fetch[:signals] || {}
       rescue StandardError
         {}
-      end
-
-      # Returns true when the SMC HTF/MTF/LTF bias has flipped against the position's entry direction.
-      # Throttled to BIAS_TTL seconds to avoid hammering the BiasEngine on every tick.
-      def smc_bias_flipped?(index_cfg, position_data)
-        return false unless index_cfg
-        return false unless AlgoConfig.fetch.dig(:risk, :use_smc_bias_flip) == true
-
-        bias_key = [index_cfg[:key], position_data.tracker_id].join(':')
-        now = monotonic_now
-        cached = bias_cache[bias_key]
-        return cached[:flip] if cached && (now - cached[:at]) < BIAS_TTL
-
-        instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
-        return false unless instrument
-
-        decision = Smc::BiasEngine.new(instrument, delay_seconds: 0).decision
-        direction = normalized_direction(position_data)
-        flip = (direction == :bullish && decision == :put) ||
-               (direction == :bearish && decision == :call)
-
-        bias_cache[bias_key] = { flip: flip, at: now }
-        flip
-      rescue StandardError => e
-        Rails.logger.error("[UnderlyingMonitor] smc_bias_flipped? failed: #{e.class} - #{e.message}")
-        false
       end
     end
   end

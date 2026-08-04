@@ -103,13 +103,12 @@ module Services
           result = tool_result.dup
           if result[:indicators] || result['indicators']
             indicators = result[:indicators] || result['indicators']
-            permitted_keys = %w[value signal direction]
             aggregated = {}
             indicators.each do |timeframe, tf_indicators|
               aggregated[timeframe] = {}
               tf_indicators.each do |name, value|
                 aggregated[timeframe][name] = if value.is_a?(Hash)
-                                                value.select { |k, _v| permitted_keys.include?(k.to_s) }
+                                                value.select { |k, _v| %w[value signal direction].include?(k.to_s) }
                                               else
                                                 value
                                               end

@@ -9,7 +9,7 @@ module TradingSystem
       @gateway = gateway
     end
 
-    # Required by Supervisor (calls start/stop)
+    # Required by BaseService (Supervisor calls start/stop)
     def start
       Rails.logger.info('[OrderRouter] ready (no-op)')
       true
@@ -20,11 +20,7 @@ module TradingSystem
       true
     end
 
-    # Routes exit requests to the configured gateway with retry handling.
-    # @param tracker [PositionTracker]
-    # @param client_order_id [String, nil]
-    # @return [Hash]
-    def exit_market(tracker, client_order_id: nil)
+    def exit_market(tracker)
       with_retries do
         @gateway.exit_market(tracker, client_order_id: client_order_id)
       end

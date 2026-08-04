@@ -7,7 +7,6 @@ RSpec.describe Orders::GatewayPaper do
   let(:tracker) do
     create(:position_tracker, :option_position,
            status: 'active',
-           paper: true,
            segment: 'NSE_FNO',
            security_id: '55111',
            order_no: 'TEST123',
@@ -23,14 +22,7 @@ RSpec.describe Orders::GatewayPaper do
     it 'returns success hash with exit_price from LTP' do
       result = gateway.exit_market(tracker)
 
-      expect(result).to include(
-        success: true,
-        exit_price: BigDecimal('101.5'),
-        order_id: "PAPER-EXIT-#{tracker.id}",
-        client_order_id: "PAPER-EXIT-#{tracker.id}",
-        status: :accepted,
-        paper: true
-      )
+      expect(result).to eq({ success: true, exit_price: BigDecimal('101.5') })
     end
 
     it 'uses entry_price as fallback when LTP is nil' do
@@ -38,7 +30,7 @@ RSpec.describe Orders::GatewayPaper do
 
       result = gateway.exit_market(tracker)
 
-      expect(result).to include(success: true, exit_price: BigDecimal('100.0'))
+      expect(result).to eq({ success: true, exit_price: BigDecimal('100.0') })
     end
 
     it 'uses entry_price as fallback when LTP raises error' do
@@ -46,21 +38,14 @@ RSpec.describe Orders::GatewayPaper do
 
       result = gateway.exit_market(tracker)
 
-      expect(result).to include(success: true, exit_price: BigDecimal('100.0'))
-    end
-
-    it 'uses provided client_order_id as order identity' do
-      result = gateway.exit_market(tracker, client_order_id: 'COID-123')
-
-      expect(result).to include(order_id: 'COID-123', client_order_id: 'COID-123', status: :accepted)
+      expect(result).to eq({ success: true, exit_price: BigDecimal('100.0') })
     end
 
     it 'does not update tracker directly' do
-      allow(tracker).to receive(:mark_exited!)
+      expect(tracker).not_to receive(:mark_exited!)
 
       gateway.exit_market(tracker)
 
-      expect(tracker).not_to have_received(:mark_exited!)
       tracker.reload
       expect(tracker.status).to eq('active')
     end
@@ -73,8 +58,8 @@ RSpec.describe Orders::GatewayPaper do
   end
 
   describe '#place_market' do
-    it 'returns a simulated broker acknowledgement without persisting tracker' do
-      expect do
+    context 'when tracker does not exist' do
+      it 'creates new PositionTracker' do
         result = gateway.place_market(
           side: 'buy',
           segment: 'NSE_FNO',
@@ -83,54 +68,138 @@ RSpec.describe Orders::GatewayPaper do
           meta: { price: 100.5, symbol: 'NIFTY24JAN20000CE' }
         )
 
-        expect(result).to include(success: true, paper: true)
-        expect(result[:order_id]).to start_with('PAPER-')
-      end.not_to change(PositionTracker, :count)
+        expect(result[:success]).to be true
+        expect(result[:paper]).to be true
+        expect(result[:tracker_id]).to be_present
+
+        tracker = PositionTracker.find(result[:tracker_id])
+        expect(tracker.status).to eq('active')
+        expect(tracker.quantity).to eq(50)
+        expect(tracker.avg_price).to eq(100.5)
+        expect(tracker.symbol).to eq('NIFTY24JAN20000CE')
+      end
+
+      it 'generates unique order_no' do
+        result1 = gateway.place_market(
+          side: 'buy',
+          segment: 'NSE_FNO',
+          security_id: '55111',
+          qty: 50
+        )
+        result2 = gateway.place_market(
+          side: 'buy',
+          segment: 'NSE_FNO',
+          security_id: '55112',
+          qty: 50
+        )
+
+        tracker1 = PositionTracker.find(result1[:tracker_id])
+        tracker2 = PositionTracker.find(result2[:tracker_id])
+
+        expect(tracker1.order_no).not_to eq(tracker2.order_no)
+        expect(tracker1.order_no).to start_with('PAPER-')
+        expect(tracker2.order_no).to start_with('PAPER-')
+      end
+
+      it 'uses security_id as symbol fallback' do
+        result = gateway.place_market(
+          side: 'buy',
+          segment: 'NSE_FNO',
+          security_id: '55111',
+          qty: 50
+        )
+
+        tracker = PositionTracker.find(result[:tracker_id])
+        expect(tracker.symbol).to eq('55111')
+      end
+
+      it 'sets side to uppercase' do
+        result = gateway.place_market(
+          side: 'buy',
+          segment: 'NSE_FNO',
+          security_id: '55111',
+          qty: 50
+        )
+
+        tracker = PositionTracker.find(result[:tracker_id])
+        expect(tracker.side).to eq('BUY')
+      end
+
+      it 'uses 0 as avg_price fallback' do
+        result = gateway.place_market(
+          side: 'buy',
+          segment: 'NSE_FNO',
+          security_id: '55111',
+          qty: 50
+        )
+
+        tracker = PositionTracker.find(result[:tracker_id])
+        expect(tracker.avg_price).to eq(0)
+      end
     end
 
-    it 'uses provided client_order_id when present' do
-      result = gateway.place_market(
-        side: 'buy',
-        segment: 'NSE_FNO',
-        security_id: '55111',
-        qty: 50,
-        meta: { client_order_id: 'ENTRY-COID-123' }
-      )
+    context 'when tracker already exists' do
+      it 'returns existing tracker' do
+        existing_tracker = create(:position_tracker,
+                                  status: 'active',
+                                  segment: 'NSE_FNO',
+                                  security_id: '55111')
 
-      expect(result).to include(success: true, order_id: 'ENTRY-COID-123', paper: true)
+        result = gateway.place_market(
+          side: 'buy',
+          segment: 'NSE_FNO',
+          security_id: '55111',
+          qty: 50
+        )
+
+        expect(result[:tracker_id]).to eq(existing_tracker.id)
+        expect(PositionTracker.where(segment: 'NSE_FNO', security_id: '55111').count).to eq(1)
+      end
     end
 
-    it 'logs errors when simulation fails' do
-      allow(SecureRandom).to receive(:hex).and_raise(StandardError.new('RNG error'))
-      allow(Rails.logger).to receive(:error)
+    context 'with errors' do
+      it 'handles PositionTracker.create! failures gracefully' do
+        allow(PositionTracker).to receive(:active_for).and_return(nil)
+        allow(PositionTracker).to receive(:create!).and_raise(ActiveRecord::RecordInvalid.new(PositionTracker.new))
 
-      result = gateway.place_market(
-        side: 'buy',
-        segment: 'NSE_FNO',
-        security_id: '55111',
-        qty: 50
-      )
+        result = gateway.place_market(
+          side: 'buy',
+          segment: 'NSE_FNO',
+          security_id: '55111',
+          qty: 50
+        )
 
-      expect(Rails.logger).to have_received(:error).with(/GatewayPaper.*place_market failed/)
-      expect(result).to include(success: false, paper: true)
-      expect(result[:error]).to be_present
+        expect(result[:success]).to be false
+        expect(result[:error]).to be_present
+        expect(result[:paper]).to be true
+      end
+
+      it 'logs errors' do
+        allow(PositionTracker).to receive(:active_for).and_return(nil)
+        allow(PositionTracker).to receive(:create!).and_raise(StandardError.new('DB error'))
+
+        expect(Rails.logger).to receive(:error).with(/GatewayPaper.*place_market failed/)
+
+        gateway.place_market(
+          side: 'buy',
+          segment: 'NSE_FNO',
+          security_id: '55111',
+          qty: 50
+        )
+      end
     end
   end
 
   describe '#position' do
     context 'when tracker exists' do
-      it 'returns position hash with unified shape' do
+      it 'returns position hash with consistent format' do
         tracker.update!(quantity: 50, avg_price: 100.5, side: 'BUY', symbol: 'NIFTY24JAN20000CE')
-        allow(Live::TickQuery).to receive(:for_security).and_return(double(ltp: BigDecimal('102.0')))
 
         result = gateway.position(segment: 'NSE_FNO', security_id: '55111')
 
-        expect(result).to include(
+        expect(result).to eq(
           qty: 50,
           avg_price: 100.5,
-          upnl: be_a(BigDecimal),
-          rpnl: BigDecimal(0),
-          last_ltp: BigDecimal('102.0'),
           product_type: nil,
           exchange_segment: 'NSE_FNO',
           position_type: 'LONG',
@@ -166,125 +235,14 @@ RSpec.describe Orders::GatewayPaper do
   end
 
   describe '#wallet_snapshot' do
-    it 'returns unified wallet keys with configured balance when no positions' do
+    it 'returns wallet hash with configured balance' do
       result = gateway.wallet_snapshot
 
       expect(result).to eq(
         cash: 100_000,
         equity: 100_000,
         mtm: 0,
-        exposure: 0,
-        utilized: 0,
-        margin: 0
-      )
-    end
-
-    it 'adds cumulative realized PnL from paper exits on prior days' do
-      create(:position_tracker, :option_position, :exited, paper: true,
-                                                           segment: 'NSE_FNO',
-                                                           order_no: 'PAPER-EXIT-PRIOR',
-                                                           exited_at: 2.days.ago,
-                                                           last_pnl_rupees: 5_000)
-
-      result = gateway.wallet_snapshot
-
-      expect(result).to eq(
-        cash: 105_000,
-        equity: 105_000,
-        mtm: 0,
-        exposure: 0,
-        utilized: 0,
-        margin: 0
-      )
-    end
-
-    it 'reduces cash and sets exposure to deployed premium for active paper legs' do
-      create(:position_tracker, :option_position, paper: true,
-                                                  segment: 'NSE_FNO',
-                                                  order_no: 'PAPER-ACTIVE-1',
-                                                  status: 'active',
-                                                  entry_price: 100.0,
-                                                  quantity: 50,
-                                                  last_pnl_rupees: 200)
-
-      result = gateway.wallet_snapshot
-
-      expect(result).to eq(
-        cash: 95_000,
-        equity: 100_200,
-        mtm: 200,
-        exposure: 5_000,
-        utilized: 5_000,
-        margin: 0
-      )
-    end
-
-    context 'when realized_scope is daily' do
-      before do
-        allow(AlgoConfig).to receive(:fetch).and_return(
-          { paper_trading: { balance: 100_000, realized_scope: 'daily' } }
-        )
-      end
-
-      it 'ignores exits before today for realized cash' do
-        create(:position_tracker, :option_position, :exited, paper: true,
-                                                             segment: 'NSE_FNO',
-                                                             order_no: 'PAPER-EXIT-YEST',
-                                                             exited_at: 1.day.ago,
-                                                             last_pnl_rupees: 7_000)
-
-        result = gateway.wallet_snapshot
-
-        expect(result).to eq(
-          cash: 100_000,
-          equity: 100_000,
-          mtm: 0,
-          exposure: 0,
-          utilized: 0,
-          margin: 0
-        )
-      end
-
-      it 'includes exits that exited today' do
-        create(:position_tracker, :option_position, :exited, paper: true,
-                                                             segment: 'NSE_FNO',
-                                                             order_no: 'PAPER-EXIT-TODAY',
-                                                             exited_at: Time.zone.now,
-                                                             last_pnl_rupees: 3_000)
-
-        result = gateway.wallet_snapshot
-
-        expect(result).to eq(
-          cash: 103_000,
-          equity: 103_000,
-          mtm: 0,
-          exposure: 0,
-          utilized: 0,
-          margin: 0
-        )
-      end
-    end
-
-    it 'clamps cash at zero when base plus realized is below deployed' do
-      create(:position_tracker, :option_position, paper: true,
-                                                  segment: 'NSE_FNO',
-                                                  order_no: 'PAPER-BIG-DEPLOY',
-                                                  status: 'active',
-                                                  entry_price: 10_000.0,
-                                                  quantity: 20,
-                                                  last_pnl_rupees: 0)
-
-      allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: { balance: 50_000 } })
-
-      result = gateway.wallet_snapshot
-
-      expect(result).to eq(
-        cash: 0,
-        equity: 200_000,
-        mtm: 0,
-        exposure: 200_000,
-        utilized: 200_000,
-        margin: 0
+        exposure: 0
       )
     end
 
@@ -293,14 +251,8 @@ RSpec.describe Orders::GatewayPaper do
 
       result = gateway.wallet_snapshot
 
-      expect(result).to eq(
-        cash: 100_000,
-        equity: 100_000,
-        mtm: 0,
-        exposure: 0,
-        utilized: 0,
-        margin: 0
-      )
+      expect(result[:cash]).to eq(100_000)
+      expect(result[:equity]).to eq(100_000)
     end
 
     it 'handles AlgoConfig.fetch errors gracefully' do
@@ -312,32 +264,16 @@ RSpec.describe Orders::GatewayPaper do
         cash: 100_000,
         equity: 100_000,
         mtm: 0,
-        exposure: 0,
-        utilized: 0,
-        margin: 0
+        exposure: 0
       )
     end
 
     it 'logs errors' do
-      allow(Rails.logger).to receive(:error)
       allow(AlgoConfig).to receive(:fetch).and_raise(StandardError.new('Config error'))
 
+      expect(Rails.logger).to receive(:error).with(/GatewayPaper.*wallet_snapshot failed/)
+
       gateway.wallet_snapshot
-
-      expect(Rails.logger).to have_received(:error).with(/GatewayPaper.*wallet_snapshot failed/)
-    end
-  end
-
-  describe '#cancel_order' do
-    it 'returns a simulated cancel acknowledgement' do
-      result = gateway.cancel_order('PAPER-ORD-1')
-
-      expect(result).to eq(
-        success: true,
-        order_id: 'PAPER-ORD-1',
-        status: :canceled,
-        paper: true
-      )
     end
   end
 end

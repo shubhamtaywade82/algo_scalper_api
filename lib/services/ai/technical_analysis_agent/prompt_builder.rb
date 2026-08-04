@@ -43,7 +43,7 @@ module Services
         end
 
         def format_tools_for_prompt
-          tool_sections = @tools.map do |tool_name, tool_def|
+          @tools.map do |tool_name, tool_def|
             params = tool_def[:parameters].map { |p| "  - #{p[:name]} (#{p[:type]}): #{p[:description]}" }.join("\n")
             <<~TOOL
               **#{tool_name}**
@@ -51,19 +51,17 @@ module Services
               Parameters:
               #{params}
             TOOL
-          end
-          tool_sections.join("\n\n")
+          end.join("\n\n")
         end
 
         # Concise version for smaller prompts
         def format_tools_for_prompt_concise
-          tool_lines = @tools.map do |tool_name, tool_def|
+          @tools.map do |tool_name, tool_def|
             # Shorten descriptions and parameters
             short_desc = tool_def[:description].split('.').first # First sentence only
             params = tool_def[:parameters].map { |p| "#{p[:name]}(#{p[:type]})" }.join(', ')
             "#{tool_name}: #{short_desc}. Params: #{params}"
-          end
-          tool_lines.join("\n")
+          end.join("\n")
         end
       end
     end

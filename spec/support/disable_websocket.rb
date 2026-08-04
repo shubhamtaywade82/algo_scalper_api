@@ -7,11 +7,16 @@
 RSpec.configure do |config|
   # Disable WebSocket connections globally for all tests
   config.before(:suite) do
+    # Ensure WebSocket is disabled via environment variables
+    ENV['DHANHQ_WS_ENABLED'] = 'false'
+    ENV['DHANHQ_ORDER_WS_ENABLED'] = 'false'
+    ENV['DISABLE_TRADING_SERVICES'] = '1'
+
     # Remove credentials to prevent WebSocket initialization
     # (MarketFeedHub.enabled? checks for credentials)
-    ENV.delete('DHAN_CLIENT_ID')
+    ENV.delete('DHANHQ_CLIENT_ID')
     ENV.delete('CLIENT_ID')
-    ENV.delete('DHAN_ACCESS_TOKEN')
+    ENV.delete('DHANHQ_ACCESS_TOKEN')
     ENV.delete('ACCESS_TOKEN')
   end
 
@@ -19,16 +24,6 @@ RSpec.configure do |config|
   # Let the rest of the code execute normally so we can verify method calls
   config.before(:each) do
     if defined?(Live::MarketFeedHub)
-      # Reset the hub before each test to prevent state leakage
-      # NOTE: Using instance_variable_set because calling stop! might trigger methods
-      # on leaked instance doubles from previous tests
-      hub = Live::MarketFeedHub.instance
-      hub.instance_variable_set(:@ws_client, nil)
-      hub.instance_variable_set(:@running, false)
-      hub.instance_variable_set(:@connection_state, :disconnected)
-      hub.instance_variable_get(:@subscribed_keys)&.clear
-      hub.instance_variable_get(:@callbacks)&.clear
-
       # Create a mock WebSocket client that can track method calls
       mock_ws_client = instance_double('DhanHQ::WS::Client',
                                        start: true,
@@ -40,7 +35,8 @@ RSpec.configure do |config|
                                        subscribe_many: true,
                                        unsubscribe_one: true)
 
-      # Allow any instance to return the mock, but also stop it after each test
+      # Only stub build_client to prevent actual WebSocket client creation
+      # This is the minimal stub needed - everything else should execute normally
       allow_any_instance_of(Live::MarketFeedHub).to receive(:build_client).and_return(mock_ws_client)
 
       # Stub ensure_running! to not raise, but allow it to execute logic
@@ -58,23 +54,6 @@ RSpec.configure do |config|
         rescue RuntimeError => e
           # If it raises "not running", allow it to pass (we've mocked running? to true)
           raise e unless e.message.include?('not running')
-        end
-      end
-    end
-  end
-
-  # NEW: Stop the singleton hub after each test to prevent state leakage
-  config.after(:each) do
-    if defined?(Live::MarketFeedHub)
-      hub = Live::MarketFeedHub.instance
-      # Only call stop! if it's the real instance or explicitly allowed on a mock
-      if hub.respond_to?(:stop!)
-        begin
-          hub.stop!
-        rescue RSpec::Mocks::MockExpectationError
-          # Ignore if it's a mock that didn't expect stop!
-        rescue StandardError
-          # Ignore other errors during cleanup
         end
       end
     end

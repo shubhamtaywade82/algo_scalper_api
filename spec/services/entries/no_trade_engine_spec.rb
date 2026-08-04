@@ -36,7 +36,7 @@ RSpec.describe Entries::NoTradeEngine do
       end
 
       it 'allows trade when only 1 condition is triggered' do
-        ctx.adx_5m = 13 # Weak trend (NIFTY < 14)
+        ctx.adx_5m = 14 # Weak trend
         ctx.plus_di_5m = 25
         ctx.minus_di_5m = 10
         ctx.bos_present = true
@@ -60,13 +60,13 @@ RSpec.describe Entries::NoTradeEngine do
 
         expect(result.allowed).to be true
         expect(result.score).to eq(1)
-        expect(result.reasons).to include('Weak trend: ADX < 14')
+        expect(result.reasons).to include('Weak trend: ADX < 15')
       end
 
       it 'allows trade when only 2 conditions are triggered' do
-        ctx.adx_5m = 13 # Weak trend (NIFTY < 14, score +1)
+        ctx.adx_5m = 14 # Weak trend
         ctx.plus_di_5m = 20
-        ctx.minus_di_5m = 19 # DI overlap (diff 1.0 < 2.0, score +1)
+        ctx.minus_di_5m = 19 # DI overlap
         ctx.bos_present = true
         ctx.in_opposite_ob = false
         ctx.inside_fvg = false
@@ -88,17 +88,17 @@ RSpec.describe Entries::NoTradeEngine do
 
         expect(result.allowed).to be true
         expect(result.score).to eq(2)
-        expect(result.reasons).to include('Weak trend: ADX < 14')
-        expect(result.reasons).to include(match(/DI overlap: no directional strength/))
+        expect(result.reasons).to include('Weak trend: ADX < 15')
+        expect(result.reasons).to include('DI overlap: no directional strength')
       end
     end
 
     context 'when score reaches threshold (score >= 3)' do
       it 'blocks trade when 3 conditions are triggered' do
-        ctx.adx_5m = 13 # Weak trend (NIFTY < 14, score +1)
+        ctx.adx_5m = 14 # Weak trend
         ctx.plus_di_5m = 20
-        ctx.minus_di_5m = 19 # DI overlap (diff 1.0 < 2.0, score +1)
-        ctx.bos_present = false # No BOS (score +1)
+        ctx.minus_di_5m = 19 # DI overlap
+        ctx.bos_present = false # No BOS
         ctx.in_opposite_ob = false
         ctx.inside_fvg = false
         ctx.near_vwap = false
@@ -119,8 +119,8 @@ RSpec.describe Entries::NoTradeEngine do
 
         expect(result.allowed).to be false
         expect(result.score).to eq(3)
-        expect(result.reasons).to include('Weak trend: ADX < 14')
-        expect(result.reasons).to include(match(/DI overlap: no directional strength/))
+        expect(result.reasons).to include('Weak trend: ADX < 15')
+        expect(result.reasons).to include('DI overlap: no directional strength')
         expect(result.reasons).to include('No BOS in last 10m')
       end
 
@@ -154,33 +154,7 @@ RSpec.describe Entries::NoTradeEngine do
     end
 
     describe 'trend weakness checks' do
-      it 'blocks when ADX < 14' do
-        ctx.adx_5m = 13
-        ctx.plus_di_5m = 25
-        ctx.minus_di_5m = 10
-        ctx.bos_present = true
-        ctx.in_opposite_ob = false
-        ctx.inside_fvg = false
-        ctx.near_vwap = false
-        ctx.trapped_between_vwap = false
-        ctx.range_10m_pct = 0.5
-        ctx.atr_downtrend = false
-        ctx.ce_oi_up = false
-        ctx.pe_oi_up = false
-        ctx.iv = 15
-        ctx.min_iv_threshold = 10
-        ctx.iv_falling = false
-        ctx.spread_wide = false
-        ctx.avg_wick_ratio = 1.0
-        ctx.time = '10:30'
-        ctx.time_between = ->(_start, _end) { false }
-
-        result = described_class.validate(ctx)
-
-        expect(result.reasons).to include('Weak trend: ADX < 14')
-      end
-
-      it 'allows when ADX >= 14' do
+      it 'blocks when ADX < 15' do
         ctx.adx_5m = 14
         ctx.plus_di_5m = 25
         ctx.minus_di_5m = 10
@@ -203,7 +177,33 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).not_to include('Weak trend: ADX < 14')
+        expect(result.reasons).to include('Weak trend: ADX < 15')
+      end
+
+      it 'allows when ADX >= 15' do
+        ctx.adx_5m = 15
+        ctx.plus_di_5m = 25
+        ctx.minus_di_5m = 10
+        ctx.bos_present = true
+        ctx.in_opposite_ob = false
+        ctx.inside_fvg = false
+        ctx.near_vwap = false
+        ctx.trapped_between_vwap = false
+        ctx.range_10m_pct = 0.5
+        ctx.atr_downtrend = false
+        ctx.ce_oi_up = false
+        ctx.pe_oi_up = false
+        ctx.iv = 15
+        ctx.min_iv_threshold = 10
+        ctx.iv_falling = false
+        ctx.spread_wide = false
+        ctx.avg_wick_ratio = 1.0
+        ctx.time = '10:30'
+        ctx.time_between = ->(_start, _end) { false }
+
+        result = described_class.validate(ctx)
+
+        expect(result.reasons).not_to include('Weak trend: ADX < 15')
       end
 
       it 'blocks when DI overlap < 2' do
@@ -229,7 +229,7 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).to include(match(/DI overlap: no directional strength/))
+        expect(result.reasons).to include('DI overlap: no directional strength')
       end
 
       it 'allows when DI difference >= 2' do
@@ -363,7 +363,7 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).to include(match(/VWAP magnet zone/))
+        expect(result.reasons).to include('VWAP magnet zone')
       end
 
       it 'blocks when trapped between VWAP and AVWAP' do
@@ -394,7 +394,7 @@ RSpec.describe Entries::NoTradeEngine do
     end
 
     describe 'volatility checks' do
-      it 'blocks when 10-minute range < 0.06%' do
+      it 'blocks when 10-minute range < 0.1%' do
         ctx.adx_5m = 20
         ctx.plus_di_5m = 25
         ctx.minus_di_5m = 10
@@ -417,8 +417,7 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).to include(match(/Low volatility: 10m range/))
-        expect(result.reasons).to include(match(/< 0.06%/))
+        expect(result.reasons).to include('Low volatility: 10m range < 0.1%')
       end
 
       it 'blocks when ATR is trending down' do
@@ -444,7 +443,7 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).to include(match(/ATR decreasing/))
+        expect(result.reasons).to include('ATR decreasing (volatility compression)')
       end
     end
 
@@ -460,7 +459,6 @@ RSpec.describe Entries::NoTradeEngine do
         ctx.trapped_between_vwap = false
         ctx.range_10m_pct = 0.5
         ctx.atr_downtrend = false
-        ctx.oi_trap = true
         ctx.ce_oi_up = true
         ctx.pe_oi_up = true
         ctx.iv = 15
@@ -473,7 +471,7 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).to include(match(/OI trap/))
+        expect(result.reasons).to include('Both CE & PE OI rising (writers controlling)')
       end
 
       it 'blocks when IV is too low' do
@@ -551,12 +549,12 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).to include(match(/Wide bid-ask spread/))
+        expect(result.reasons).to include('Wide bid-ask spread')
       end
     end
 
     describe 'candle quality checks' do
-      it 'blocks when wick ratio > 2.2' do
+      it 'blocks when wick ratio > 1.8' do
         ctx.adx_5m = 20
         ctx.plus_di_5m = 25
         ctx.minus_di_5m = 10
@@ -573,7 +571,7 @@ RSpec.describe Entries::NoTradeEngine do
         ctx.min_iv_threshold = 10
         ctx.iv_falling = false
         ctx.spread_wide = false
-        ctx.avg_wick_ratio = 2.3
+        ctx.avg_wick_ratio = 2.0
         ctx.time = '10:30'
         ctx.time_between = ->(_start, _end) { false }
 
@@ -610,8 +608,8 @@ RSpec.describe Entries::NoTradeEngine do
         expect(result.reasons).to include('Avoid first 3 minutes')
       end
 
-      it 'blocks during lunch-time if ADX < 18' do
-        ctx.adx_5m = 17 # Weak trend
+      it 'blocks during lunch-time if ADX < 20' do
+        ctx.adx_5m = 18 # Weak trend
         ctx.plus_di_5m = 25
         ctx.minus_di_5m = 10
         ctx.bos_present = true
@@ -633,11 +631,11 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).to include(match(/Lunch-time theta zone/))
+        expect(result.reasons).to include('Lunch-time theta zone (weak trend)')
       end
 
-      it 'allows during lunch-time if ADX >= 18' do
-        ctx.adx_5m = 18 # Strong trend
+      it 'allows during lunch-time if ADX >= 20' do
+        ctx.adx_5m = 20 # Strong trend
         ctx.plus_di_5m = 25
         ctx.minus_di_5m = 10
         ctx.bos_present = true
@@ -659,7 +657,7 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).not_to include(match(/Lunch-time theta zone/))
+        expect(result.reasons).not_to include('Lunch-time theta zone (weak trend)')
       end
 
       it 'blocks after 3:05 PM' do

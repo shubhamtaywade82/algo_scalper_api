@@ -64,10 +64,10 @@ class Derivative < ApplicationRecord
 
   belongs_to :instrument, optional: false, inverse_of: :derivatives
   has_many :watchlist_items, as: :watchable, dependent: :nullify, inverse_of: :watchable
-  has_one :watchlist_item, lambda {
+  has_one  :watchlist_item,  lambda {
     where(active: true)
-  }, as: :watchable, class_name: "WatchlistItem", dependent: :nullify, inverse_of: :watchable
-  has_many :position_trackers, as: :watchable, dependent: :destroy, inverse_of: :watchable
+  }, as: :watchable, class_name: 'WatchlistItem', dependent: :nullify, inverse_of: :watchable
+  has_many :position_trackers, as: :watchable, dependent: :destroy
 
   validates :security_id, presence: true, uniqueness: { scope: %i[symbol_name exchange segment] }
   validates :option_type, inclusion: { in: %w[CE PE], allow_blank: true }
@@ -77,6 +77,41 @@ class Derivative < ApplicationRecord
   scope :ce, -> { where(option_type: "CE") }
   scope :pe, -> { where(option_type: "PE") }
   scope :current_expiry, -> { where(expiry_date: Date.current) }
+
+  # Find derivative by underlying symbol, strike price, expiry date, and option type
+  # @param underlying_symbol [String] Underlying symbol (e.g., 'NIFTY', 'BANKNIFTY')
+  # @param strike_price [Float, BigDecimal, String] Strike price
+  # @param expiry_date [Date, String] Expiry date
+  # @param option_type [String] 'CE' or 'PE'
+  # @return [Derivative, nil] Matching derivative or nil
+  def self.find_by_params(underlying_symbol:, strike_price:, expiry_date:, option_type:)
+    expiry_obj = expiry_date.is_a?(Date) ? expiry_date : Date.parse(expiry_date.to_s)
+    strike_bd = BigDecimal(strike_price.to_s)
+
+    where(
+      underlying_symbol: underlying_symbol.to_s.upcase,
+      expiry_date: expiry_obj,
+      option_type: option_type.to_s.upcase
+    ).detect do |d|
+      BigDecimal(d.strike_price.to_s) == strike_bd
+    end
+  end
+
+  # Find derivative security_id by underlying symbol, strike price, expiry date, and option type
+  # @param underlying_symbol [String] Underlying symbol (e.g., 'NIFTY', 'BANKNIFTY')
+  # @param strike_price [Float, BigDecimal, String] Strike price
+  # @param expiry_date [Date, String] Expiry date
+  # @param option_type [String] 'CE' or 'PE'
+  # @return [String, nil] Security ID or nil
+  def self.find_security_id(underlying_symbol:, strike_price:, expiry_date:, option_type:)
+    derivative = find_by_params(
+      underlying_symbol: underlying_symbol,
+      strike_price: strike_price,
+      expiry_date: expiry_date,
+      option_type: option_type
+    )
+    derivative&.security_id
+  end
 
   # Find derivative by underlying symbol, strike price, expiry date, and option type
   # @param underlying_symbol [String] Underlying symbol (e.g., 'NIFTY', 'BANKNIFTY')
@@ -151,8 +186,7 @@ class Derivative < ApplicationRecord
         product_type: product_type
       }
     )
-    order_no = Ledger::OrderResponse.extract_order_id(order)
-    return nil if order_no.blank?
+    return nil unless order.respond_to?(:order_id) && order.order_id.present?
 
     side_label = option_type.to_s.upcase == "CE" ? "long_ce" : "long_pe"
 

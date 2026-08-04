@@ -112,10 +112,34 @@ module InstrumentHelpers
   # @param subscribe [Boolean] If true, subscribe and poll briefly when cache is empty
   # @param skip_tick_cache [Boolean] If true, go straight to REST (used when WS ticks are known stale)
   # @return [Numeric, nil]
-  def fetch_ltp_from_api_for_segment(segment:, security_id:, subscribe: false, skip_tick_cache: false)
-    unless skip_tick_cache
-      cached_ltp = ltp_from_tick_cache_or_subscribe(segment: segment, security_id: security_id, subscribe: subscribe)
-      return cached_ltp if cached_ltp.present?
+  def fetch_ltp_from_api_for_segment(segment:, security_id:, subscribe: false)
+    hub = Live::MarketFeedHub.instance
+
+    # Strategy 1: Check WebSocket TickCache first (fastest, no API rate limits)
+    if hub.running? && hub.connected?
+      cached_ltp = Live::TickCache.ltp(segment, security_id)
+      if cached_ltp.present? && cached_ltp.to_f.positive?
+        Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache for #{segment}:#{security_id}: ₹#{cached_ltp}" }
+        return cached_ltp.to_f
+      end
+
+      if subscribe
+        # If not in cache, try subscribing and waiting briefly for a tick
+        begin
+          hub.subscribe(segment: segment, security_id: security_id)
+          # Wait up to 200ms for tick to arrive
+          4.times do
+            sleep(0.05) # 50ms intervals
+            cached_ltp = Live::TickCache.ltp(segment, security_id)
+            if cached_ltp.present? && cached_ltp.to_f.positive?
+              Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache after subscription for #{segment}:#{security_id}: ₹#{cached_ltp}" }
+              return cached_ltp.to_f
+            end
+          end
+        rescue StandardError => e
+          Rails.logger.debug { "[InstrumentHelpers] WebSocket subscription failed for #{segment}:#{security_id}: #{e.message}, falling back to API" }
+        end
+      end
     end
 
     # Strategy 2: REST API fallback (only if WebSocket unavailable or no tick received)
@@ -175,7 +199,7 @@ module InstrumentHelpers
   # @param meta [Hash] Additional metadata (alpha_source, signal_confidence, etc.)
   # @return [PositionTracker]
   def after_order_track!(instrument:, order_no:, segment:, security_id:, side:, qty:, entry_price:, symbol:, # rubocop:disable Metrics/ParameterLists
-                         index_key: nil, meta: {})
+                         index_key: nil)
     # Determine watchable: if self is a Derivative, use self; otherwise use instrument
     watchable = is_a?(Derivative) ? self : instrument
 
@@ -282,7 +306,6 @@ module InstrumentHelpers
   end
 
   def historical_ohlc(from_date: nil, to_date: nil, oi: false) # rubocop:disable Naming/MethodParameterName
-    resolved_from, resolved_to = resolve_historical_date_range(from_date, to_date)
     DhanHQ::Models::HistoricalData.daily(
       security_id: security_id.to_s,
       exchange_segment: exchange_segment,
@@ -304,6 +327,8 @@ module InstrumentHelpers
   def intraday_ohlc(interval: '5', oi: false, from_date: nil, to_date: nil, days: 2) # rubocop:disable Naming/MethodParameterName
     to_date ||= if defined?(Market::Calendar) && Market::Calendar.respond_to?(:today_or_last_trading_day)
                   Market::Calendar.today_or_last_trading_day.to_s
+                elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
+                  MarketCalendar.today_or_last_trading_day.to_s
                 else
                   (Time.zone.today - 1).to_s
                 end
@@ -311,6 +336,8 @@ module InstrumentHelpers
     # Use trading days, not calendar days, to avoid weekends/holidays
     from_date ||= if defined?(Market::Calendar) && Market::Calendar.respond_to?(:trading_days_ago)
                     Market::Calendar.trading_days_ago(days).to_s
+                  elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:trading_days_ago)
+                    MarketCalendar.trading_days_ago(days).to_s
                   else
                     (Date.parse(to_date) - days).to_s # Fallback to calendar days
                   end
@@ -326,13 +353,11 @@ module InstrumentHelpers
       to_date: to_date || (Time.zone.today - 1).to_s
     )
   rescue StandardError => e
-    params_used = { security_id: security_id, exchange_segment: exchange_segment, instrument: instrument_code,
-                    interval: interval, oi: oi, from_date: from_date, to_date: to_date }
     DhanhqErrorHandler.handle_dhanhq_error(
       e,
-      context: "intraday_ohlc(#{self.class.name} #{security_id}) params=#{params_used}"
+      context: "intraday_ohlc(#{self.class.name} #{security_id})"
     )
-    Rails.logger.error("Failed to fetch Intraday OHLC for #{self.class.name} #{security_id}: #{e.message} | params=#{params_used}")
+    Rails.logger.error("Failed to fetch Intraday OHLC for #{self.class.name} #{security_id}: #{e.message}")
     nil
   end
 

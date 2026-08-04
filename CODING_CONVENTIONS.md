@@ -957,6 +957,7 @@ end
 ```ruby
 # spec/rails_helper.rb
 ENV['DHANHQ_ENABLED'] ||= 'false'
+ENV['DHANHQ_WS_ENABLED'] ||= 'false'
 ```
 
 **DON'T:**
@@ -1444,7 +1445,7 @@ signals_cfg = config['signals'] || {}
 ```ruby
 client_id = Rails.application.credentials.dhanhq[:client_id]
 # or
-client_id = ENV['DHAN_CLIENT_ID']
+client_id = ENV['DHANHQ_CLIENT_ID']
 ```
 
 **DON'T:**
@@ -1899,14 +1900,14 @@ end
 ```markdown
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `DHAN_CLIENT_ID` | DhanHQ API client ID | Required |
-| `DHAN_ACCESS_TOKEN` | DhanHQ API access token | Required |
+| `DHANHQ_CLIENT_ID` | DhanHQ API client ID | Required |
+| `DHANHQ_ACCESS_TOKEN` | DhanHQ API access token | Required |
 ```
 
 **DON'T:**
 ```markdown
-DHAN_CLIENT_ID - DhanHQ API client ID
-DHAN_ACCESS_TOKEN - DhanHQ API access token
+DHANHQ_CLIENT_ID - DhanHQ API client ID
+DHANHQ_ACCESS_TOKEN - DhanHQ API access token
 ```
 
 #### RULE: Always use blockquotes starting with > **Warning:** for critical warnings
@@ -1942,8 +1943,8 @@ git commit -m "Add master key"
 #### RULE: Always load API keys from environment variables
 **DO:**
 ```ruby
-client_id = ENV['DHAN_CLIENT_ID']
-access_token = ENV['DHAN_ACCESS_TOKEN']
+client_id = ENV['DHANHQ_CLIENT_ID']
+access_token = ENV['DHANHQ_ACCESS_TOKEN']
 ```
 
 **DON'T:**

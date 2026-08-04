@@ -10,41 +10,22 @@ RSpec.configure do |config|
     if Live::OrderUpdateHandler.instance.respond_to?(:running?) && Live::OrderUpdateHandler.instance.running?
       Live::OrderUpdateHandler.instance.stop!
     end
-
+    if Signal::Scheduler.instance.respond_to?(:running?) && Signal::Scheduler.instance.running?
+      Signal::Scheduler.instance.stop!
+    end
     Live::RiskManagerService.instance.stop! if Live::RiskManagerService.instance.running?
     if defined?(Live::AtmOptionsService)
       atm_service = Live::AtmOptionsService.instance
       atm_service.stop! if atm_service.respond_to?(:running?) && atm_service.running?
+    end
+    if Live::MockDataService.instance.respond_to?(:running?) && Live::MockDataService.instance.running?
+      Live::MockDataService.instance.stop!
     end
     if defined?(Live::PnlUpdaterService) && Live::PnlUpdaterService.instance.respond_to?(:running?) && Live::PnlUpdaterService.instance.running?
       Live::PnlUpdaterService.instance.stop!
     end
   rescue StandardError
     # Rails.logger.warn("[TestHelper] Error stopping services: #{e.message}")
-  end
-
-  config.after(:each) do
-    # Stop all background services after each test to prevent thread leaks and mock errors
-    [
-      Live::MarketFeedHub,
-      Live::RiskManagerService,
-      Live::PnlUpdaterService,
-      Live::OrderUpdateHub,
-      Live::OrderUpdateHandler,
-      Live::ReconciliationService,
-      Live::PaperPnlRefresher
-    ].each do |service_class|
-      next unless defined?(service_class) && service_class.respond_to?(:instance)
-      begin
-        service = service_class.instance
-        if service.respond_to?(:running?) && service.running?
-          service.stop! if service.respond_to?(:stop!)
-          service.stop if service.respond_to?(:stop)
-        end
-      rescue StandardError
-        # Ignore
-      end
-    end
   end
 
   config.after(:suite) do
@@ -55,11 +36,16 @@ RSpec.configure do |config|
     if Live::OrderUpdateHandler.instance.respond_to?(:running?) && Live::OrderUpdateHandler.instance.running?
       Live::OrderUpdateHandler.instance.stop!
     end
-
+    if Signal::Scheduler.instance.respond_to?(:running?) && Signal::Scheduler.instance.running?
+      Signal::Scheduler.instance.stop!
+    end
     Live::RiskManagerService.instance.stop! if Live::RiskManagerService.instance.running?
     if defined?(Live::AtmOptionsService)
       atm_service = Live::AtmOptionsService.instance
       atm_service.stop! if atm_service.respond_to?(:running?) && atm_service.running?
+    end
+    if Live::MockDataService.instance.respond_to?(:running?) && Live::MockDataService.instance.running?
+      Live::MockDataService.instance.stop!
     end
     if defined?(Live::PnlUpdaterService) && Live::PnlUpdaterService.instance.respond_to?(:running?) && Live::PnlUpdaterService.instance.running?
       Live::PnlUpdaterService.instance.stop!

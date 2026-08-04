@@ -27,16 +27,10 @@ RSpec.describe Orders::EntryManager do
       segment: 'NSE_FNO',
       security_id: '49081',
       symbol: 'NIFTY-25Jan2024-25000-CE',
-      active?: true,
-      meta: {},
-      update_column: true,
-      direction: nil,
-      side: 'long_ce',
-      paper?: false,
-      index_key: nil
+      active?: true
     )
   end
-  let(:position_data) { instance_double(Positions::PositionData) }
+  let(:position_data) { instance_double(Positions::ActiveCache::PositionData) }
 
   before do
     allow(Live::DailyLimits).to receive(:new).and_return(daily_limits)

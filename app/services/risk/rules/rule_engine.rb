@@ -11,6 +11,23 @@ module Risk
         @rules = rules.sort_by(&:priority)
       end
 
+      # Add a rule to the engine
+      # @param rule [BaseRule] Rule to add
+      # @return [RuleEngine] Self for chaining
+      def add_rule(rule)
+        @rules << rule
+        @rules.sort_by!(&:priority)
+        self
+      end
+
+      # Remove a rule from the engine
+      # @param rule_class [Class] Rule class to remove
+      # @return [RuleEngine] Self for chaining
+      def remove_rule(rule_class)
+        @rules.reject! { |r| r.is_a?(rule_class) }
+        self
+      end
+
       # Evaluate all rules against the given context
       # Rules are evaluated in priority order (lower priority number = higher priority)
       # First rule that triggers an exit wins, and evaluation stops
@@ -20,24 +37,19 @@ module Risk
         return RuleResult.skip unless context.active?
 
         @rules.each do |rule|
-          next unless rule.enabled?(context)
+          next unless rule.enabled?
 
           begin
             result = rule.evaluate(context)
+            next if result.skip?
 
-            # If we should continue (no_action or skip), move to next rule
-            next if result.skip? || result.continue?
-
-            # Attach rule name for traceability before returning
-            result.rule_name = rule.name
+            # First non-skip result wins (exit or no_action)
             return result
           rescue StandardError => e
             Rails.logger.error(
               "[RuleEngine] Error evaluating rule #{rule.name}: #{e.class} - #{e.message}\n#{e.backtrace.first(5).join("\n")}"
             )
-            alert_rule_error(rule, context, e)
-            # Continue to next rule on error — a broken rule must not silently disable
-            # all exit checks for a position; remaining rules still get a chance to trigger.
+            # Continue to next rule on error
             next
           end
         end
@@ -47,10 +59,9 @@ module Risk
       end
 
       # Get enabled rules
-      # @param context [RuleContext] Optional context
       # @return [Array<BaseRule>] Array of enabled rules
-      def enabled_rules(context = nil)
-        @rules.select { |r| r.enabled?(context) }
+      def enabled_rules
+        @rules.select(&:enabled?)
       end
 
       # Get rule by class
@@ -58,17 +69,6 @@ module Risk
       # @return [BaseRule, nil] Found rule or nil
       def find_rule(rule_class)
         @rules.find { |r| r.is_a?(rule_class) }
-      end
-
-      private
-
-      def alert_rule_error(rule, _context, error)
-        Notifications::TelegramNotifier.instance.notify_error(
-          "RuleEngine: #{rule.name} raised #{error.class} - #{error.message} — skipped, other rules still evaluated",
-          context: 'Risk::Rules::RuleEngine#evaluate'
-        )
-      rescue StandardError => e
-        Rails.logger.error("[RuleEngine] alert_rule_error failed: #{e.message}")
       end
     end
   end

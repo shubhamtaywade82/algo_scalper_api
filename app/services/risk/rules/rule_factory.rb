@@ -4,21 +4,31 @@ module Risk
   module Rules
     # Factory for creating rule engine with default rules
     class RuleFactory
-      def self.exit_rules(risk_config = {})
-        [
+      def self.create_engine(risk_config: {})
+        rules = [
+          SessionEndRule.new(config: risk_config),
           StopLossRule.new(config: risk_config),
-          AdaptiveTrailRule.new(config: risk_config),
           TakeProfitRule.new(config: risk_config),
-          ZeroHwmFalseEntryRule.new(config: risk_config),
-          TimeDecayRule.new(config: risk_config),
-          TimeStopRule.new(config: risk_config),
-          IvCollapseRule.new(config: risk_config),
-          StructuralKillSwitchRule.new(config: risk_config)
+          BracketLimitRule.new(config: risk_config),
+          SecureProfitRule.new(config: risk_config), # Secure profits above threshold
+          TimeBasedExitRule.new(config: risk_config),
+          PeakDrawdownRule.new(config: risk_config),
+          TrailingStopRule.new(config: risk_config),
+          UnderlyingExitRule.new(config: risk_config)
         ]
+
+        RuleEngine.new(rules: rules)
       end
 
-      def self.create_engine(risk_config: {})
-        RuleEngine.new(rules: exit_rules(risk_config))
+      # Create a rule engine with custom rules
+      # @param rules [Array<BaseRule>] Custom rules to use
+      # @param include_defaults [Boolean] Whether to include default rules
+      # @param risk_config [Hash] Risk configuration
+      # @return [RuleEngine] Configured rule engine
+      def self.create_custom_engine(rules: [], include_defaults: true, risk_config: {})
+        all_rules = include_defaults ? create_engine(risk_config: risk_config).rules : []
+        all_rules.concat(rules)
+        RuleEngine.new(rules: all_rules)
       end
     end
   end

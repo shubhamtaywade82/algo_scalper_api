@@ -12,8 +12,8 @@ RSpec.describe 'analysis:accuracy rake task' do
   let(:sample_log_content) do
     <<~LOG
       [dotenv] Set REDIS_URL, CLIENT_ID, ACCESS_TOKEN
-      [SmcScanner] Loaded 3 indices from config...
-      [SmcScanner] NIFTY: call
+      [SMCSanner] Loaded 3 indices from config...
+      [SMCSanner] NIFTY: call
       "enqueued_at":"2026-01-09T10:30:00.000000000Z"
       - Current price: ₹25876.85
       BUY CE
@@ -21,8 +21,8 @@ RSpec.describe 'analysis:accuracy rake task' do
       Entry: premium ₹94.45
       SL underlying level: ₹25800
       TP underlying level: ₹26000
-      [SmcScanner] Scan completed
-      [SmcScanner] NIFTY: put
+      [SMCSanner] Scan completed
+      [SMCSanner] NIFTY: put
       "enqueued_at":"2026-01-09T11:30:00.000000000Z"
       - Current price: ₹25750.50
       BUY PE
@@ -30,12 +30,12 @@ RSpec.describe 'analysis:accuracy rake task' do
       Entry: premium ₹85.00
       SL underlying level: ₹25850
       TP underlying level: ₹25600
-      [SmcScanner] Scan completed
-      [SmcScanner] NIFTY: no_trade
+      [SMCSanner] Scan completed
+      [SMCSanner] NIFTY: no_trade
       "enqueued_at":"2026-01-09T12:30:00.000000000Z"
       - Current price: ₹25700.00
       AVOID TRADING
-      [SmcScanner] Scan completed
+      [SMCSanner] Scan completed
     LOG
   end
 
@@ -85,9 +85,9 @@ RSpec.describe 'analysis:accuracy rake task' do
     let(:recommendation_pattern) { /(BUY\s+(?:CE|PE)|AVOID(?:\s+TRADING)?)/i }
 
     it 'matches decision patterns correctly' do
-      call_line = '[SmcScanner] NIFTY: call'
-      put_line = '[SmcScanner] NIFTY: put'
-      no_trade_line = '[SmcScanner] NIFTY: no_trade'
+      call_line = '[SMCSanner] NIFTY: call'
+      put_line = '[SMCSanner] NIFTY: put'
+      no_trade_line = '[SMCSanner] NIFTY: no_trade'
 
       expect(decision_pattern).to match(call_line)
       expect(decision_pattern).to match(put_line)
@@ -95,7 +95,7 @@ RSpec.describe 'analysis:accuracy rake task' do
     end
 
     it 'extracts symbol from decision pattern' do
-      match = '[SmcScanner] NIFTY: call'.match(decision_pattern)
+      match = '[SMCSanner] NIFTY: call'.match(decision_pattern)
       expect(match[1]).to eq('NIFTY')
       expect(match[2]).to eq('call')
     end

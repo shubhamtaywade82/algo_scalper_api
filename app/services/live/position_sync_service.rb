@@ -55,13 +55,13 @@ module Live
       Rails.logger.info('[PositionSync] Starting live position synchronization')
 
       dhan_positions = DhanHQ::Models::Position.active
+      Rails.logger.info("[PositionSync] Found #{dhan_positions.size} active positions in DhanHQ")
+
+      # Use cached active positions to avoid redundant query
       tracked_positions = Positions::ActivePositionsCache.instance.active_trackers
       tracked_security_ids = tracked_positions.map { |p| p.security_id.to_s }
 
-      dhan_count = dhan_positions.size
-      tracked_count = tracked_positions.size
-      counts_changed = @last_dhan_count.nil? || @last_tracked_count.nil? ||
-                       dhan_count != @last_dhan_count || tracked_count != @last_tracked_count
+      Rails.logger.info("[PositionSync] Found #{tracked_positions.size} tracked positions in database")
 
       if counts_changed
         Rails.logger.info("[PositionSync] Found #{dhan_count} active positions in DhanHQ")
@@ -73,20 +73,17 @@ module Live
         Rails.logger.debug { "[PositionSync] Found #{tracked_count} tracked positions in database" }
       end
 
-      untracked_positions = find_untracked_positions(dhan_positions, tracked_security_ids)
+      # Create PositionTracker records for untracked positions
       untracked_count = 0
       untracked_positions.each do |dhan_pos|
         untracked_count += 1 if create_tracker_for_position(dhan_pos)
       end
 
+      # Check for live positions that exist in database but not in DhanHQ (should be marked as exited)
       orphaned_count = mark_orphaned_live_positions(tracked_positions, dhan_positions)
 
       @last_sync = Time.current
-      if untracked_count.positive? || orphaned_count.positive?
-        Rails.logger.info("[PositionSync] Synchronization completed - created #{untracked_count} trackers, marked #{orphaned_count} as exited")
-      else
-        Rails.logger.debug { "[PositionSync] Synchronization completed - created #{untracked_count} trackers, marked #{orphaned_count} as exited" }
-      end
+      Rails.logger.info("[PositionSync] Synchronization completed - created #{untracked_count} trackers, marked #{orphaned_count} as exited")
     rescue StandardError => e
       Rails.logger.error("[PositionSync] Failed to sync positions: #{e.class} - #{e.message}")
       Rails.logger.error("[PositionSync] Backtrace: #{e.backtrace.first(5).join(', ')}")
@@ -95,18 +92,18 @@ module Live
     def sync_paper_positions
       Rails.logger.info('[PositionSync] Starting paper position synchronization')
 
+      # In paper mode, we only work with PositionTracker records
+      # No need to fetch from DhanHQ - paper positions don't exist there
+      # Use cached active positions to avoid redundant query
       tracked_positions = Positions::ActivePositionsCache.instance.active_trackers
       paper_positions = tracked_positions.select(&:paper?)
       paper_count = paper_positions.size
 
-      paper_count_changed = @last_paper_count.nil? || paper_count != @last_paper_count
-      if paper_count_changed
-        Rails.logger.info("[PositionSync] Found #{paper_count} paper positions in database")
-        @last_paper_count = paper_count
-      else
-        Rails.logger.debug { "[PositionSync] Found #{paper_count} paper positions in database" }
-      end
+      Rails.logger.info("[PositionSync] Found #{paper_positions.size} paper positions in database")
 
+      # Paper positions are managed entirely by our system
+      # No sync needed - they're already tracked in PositionTracker
+      # Just ensure they're subscribed to market feed (only if not already subscribed)
       hub = Live::MarketFeedHub.instance
       subscribed_count = 0
       skipped_count = 0
@@ -117,6 +114,7 @@ module Live
         segment_key = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
         next unless segment_key && tracker.security_id
 
+        # Check if already subscribed before calling subscribe
         if hub.subscribed?(segment: segment_key, security_id: tracker.security_id)
           skipped_count += 1
           next
@@ -131,11 +129,7 @@ module Live
       Rails.logger.debug { "[PositionSync] Paper sync: #{subscribed_count} new subscriptions, #{skipped_count} already subscribed" } if subscribed_count.positive? || skipped_count.positive?
 
       @last_sync = Time.current
-      if paper_count_changed
-        Rails.logger.info("[PositionSync] Paper position sync completed - ensured #{paper_count} positions are subscribed")
-      else
-        Rails.logger.debug { "[PositionSync] Paper position sync completed - ensured #{paper_count} positions are subscribed" }
-      end
+      Rails.logger.info("[PositionSync] Paper position sync completed - ensured #{paper_positions.size} positions are subscribed")
     rescue StandardError => e
       Rails.logger.error("[PositionSync] Failed to sync paper positions: #{e.class} - #{e.message}")
     end
@@ -163,7 +157,7 @@ module Live
 
       orphaned_trackers.each do |tracker|
         Rails.logger.warn("[PositionSync] Found orphaned tracker: #{tracker.order_no} - marking as exited")
-        tracker.mark_exited!(exit_reason: 'position_sync_orphaned')
+        tracker.mark_exited!
       end
 
       orphaned_trackers.size

@@ -7,7 +7,7 @@ module Smc
     def initialize(instrument, initial_data:)
       @instrument = instrument
       @initial_data = initial_data
-      @ai_client = Services::Ai::OllamaClient.instance
+      @ai_client = Services::Ai::OpenaiClient.instance
       @model = select_model
       @prefetched_data = {}
     end
@@ -37,13 +37,16 @@ module Smc
 
     def ai_enabled?
       AlgoConfig.fetch.dig(:ai, :enabled) == true && @ai_client.enabled?
-    rescue StandardError => e
-      Rails.logger.warn("[Smc::AiAnalyzer] ai_enabled? check failed: #{e.class} - #{e.message}")
+    rescue StandardError
       false
     end
 
     def select_model
-      @ai_client.selected_model || ENV['OLLAMA_MODEL'] || 'qwen3.5:4b'
+      if @ai_client.provider == :ollama
+        @ai_client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3.2:3b'
+      else
+        'gpt-4o'
+      end
     end
 
     # Pre-fetch all required data upfront to avoid redundant API calls
@@ -52,12 +55,13 @@ module Smc
 
       # 1. Current LTP (already available, no API call)
       @prefetched_data[:ltp] = current_ltp
+      ltp_value = @prefetched_data[:ltp][:ltp] || @prefetched_data[:ltp]['ltp'] || 0.0
 
       # 2. Trend analysis (uses existing candles, no API call)
       @prefetched_data[:trend_analysis] = compute_trend_analysis
 
       # 3. Option chain (only for indices, may make API call)
-      if index?
+      if is_index?
         Rails.logger.debug('[Smc::AiAnalyzer] Pre-fetching option chain for index')
         @prefetched_data[:option_chain] = fetch_option_chain_data
       else
@@ -74,7 +78,7 @@ module Smc
       Rails.logger.info("[Smc::AiAnalyzer] Data pre-fetch complete. Option chain: #{@prefetched_data[:option_chain].present? ? 'available' : 'N/A'}, Indicators: #{@prefetched_data[:technical_indicators].present? ? 'available' : 'N/A'}")
     end
 
-    def index?
+    def is_index?
       segment = @instrument.exchange_segment
       segment.to_s.upcase == 'IDX_I'
     end
@@ -85,7 +89,7 @@ module Smc
     end
 
     def fetch_option_chain_data
-      return nil unless index?
+      return nil unless is_index?
 
       begin
         # Use the same logic as get_option_chain but without tool wrapper
@@ -239,7 +243,7 @@ module Smc
         summary: {
           high: candles.map(&:high).max,
           low: candles.map(&:low).min,
-          avg_volume: (candles.sum(&:volume).to_f / candles.size).round(2)
+          avg_volume: (candles.map(&:volume).sum.to_f / candles.size).round(2)
         }
       }
     end
@@ -334,11 +338,9 @@ module Smc
         '- No significant gaps detected'
       else
         recent_gaps = gaps.last(3)
-        # rubocop:disable Style/MultilineBlockChain
         recent_gaps.map do |g|
           "- #{g[:type]}: #{g[:size]} points (#{g[:pct]}%) at #{g[:time]}"
         end.join("\n")
-        # rubocop:enable Style/MultilineBlockChain
       end
     end
 
@@ -371,12 +373,10 @@ module Smc
       return '- No daily data available' if daily_data.empty?
 
       dates = daily_data.keys.sort.last(3)
-      # rubocop:disable Style/MultilineBlockChain
       dates.map do |date|
         d = daily_data[date]
         "- #{date}: Open ₹#{d[:open].round(2)}, High ₹#{d[:high].round(2)}, Low ₹#{d[:low].round(2)}, Close ₹#{d[:close].round(2)}"
       end.join("\n")
-      # rubocop:enable Style/MultilineBlockChain
     end
 
     def direction_recommendation(trend, gap_analysis, pattern)
@@ -444,30 +444,21 @@ module Smc
       prompt_parts << "**DETECTED TREND:** #{trend_direction.to_s.upcase}"
       prompt_parts << ''
 
-      # CRITICAL: Check SMC decision first - it's the primary gate
-      if decision.to_s.downcase == 'no_trade'
-        prompt_parts << '⛔ **SMC DECISION: NO_TRADE** - This is a HARD BLOCK'
-        prompt_parts << '   ❌ **YOU MUST RECOMMEND "AVOID TRADING"** - NO EXCEPTIONS'
-        prompt_parts << '   Reason: SMC structure shows no valid setup (no BOS, no equilibrium reclaim, no displacement, or conflicting signals)'
-        prompt_parts << '   DO NOT override this with price trend analysis - SMC structure takes precedence'
-        recommended_option = nil
+      # Add trend-based recommendation
+      case trend_direction
+      when :bearish
+        prompt_parts << '📉 **BEARISH TREND DETECTED** - This is a TRADING OPPORTUNITY for BUY PE!'
+        prompt_parts << '   ✅ **STRONGLY RECOMMEND: BUY PE** (bearish markets are profitable for PUT options)'
+        prompt_parts << '   ❌ DO NOT recommend BUY CE in a bearish market!'
+        recommended_option = 'PE'
+      when :bullish
+        prompt_parts << '📈 **BULLISH TREND DETECTED** - This is a TRADING OPPORTUNITY for BUY CE!'
+        prompt_parts << '   ✅ **STRONGLY RECOMMEND: BUY CE** (bullish markets are profitable for CALL options)'
+        prompt_parts << '   ❌ DO NOT recommend BUY PE in a bullish market!'
+        recommended_option = 'CE'
       else
-        # Only show trend-based recommendations when SMC allows trading
-        case trend_direction
-        when :bearish
-          prompt_parts << '📉 **BEARISH TREND DETECTED** - This is a TRADING OPPORTUNITY for BUY PE!'
-          prompt_parts << '   ✅ **STRONGLY RECOMMEND: BUY PE** (bearish markets are profitable for PUT options)'
-          prompt_parts << '   ❌ DO NOT recommend BUY CE in a bearish market!'
-          recommended_option = 'PE'
-        when :bullish
-          prompt_parts << '📈 **BULLISH TREND DETECTED** - This is a TRADING OPPORTUNITY for BUY CE!'
-          prompt_parts << '   ✅ **STRONGLY RECOMMEND: BUY CE** (bullish markets are profitable for CALL options)'
-          prompt_parts << '   ❌ DO NOT recommend BUY PE in a bullish market!'
-          recommended_option = 'CE'
-        else
-          prompt_parts << '⚠️ **NEUTRAL/UNCLEAR TREND** - Recommend AVOID trading (no clear direction)'
-          recommended_option = nil
-        end
+        prompt_parts << '⚠️ **NEUTRAL/UNCLEAR TREND** - Recommend AVOID trading (no clear direction)'
+        recommended_option = nil
       end
       prompt_parts << ''
 
@@ -476,50 +467,15 @@ module Smc
       prompt_parts << @prefetched_data[:trend_analysis]
       prompt_parts << ''
 
-      # Add market structure with validation context
+      # Add market structure
       prompt_parts << '**MARKET STRUCTURE ANALYSIS (Multi-Timeframe):**'
       prompt_parts << JSON.pretty_generate(@initial_data[:timeframes])
       prompt_parts << ''
 
-      # Add SMC structure validation context
-      htf_data = @initial_data.dig(:timeframes, :htf, :context) || {}
-      mtf_data = @initial_data.dig(:timeframes, :mtf, :context) || {}
-      ltf_data = @initial_data.dig(:timeframes, :ltf, :context) || {}
-
-      prompt_parts << '**SMC STRUCTURE VALIDATION (CRITICAL FOR TRADE DECISION):**'
-      prompt_parts << "- HTF Trend: #{htf_data[:trend] || 'N/A'}"
-      prompt_parts << "- HTF Structure: #{htf_data[:structure]&.dig(:state) || 'N/A'}"
-      prompt_parts << "- BOS (Break of Structure): #{mtf_data[:structure]&.dig(:bos) ? 'YES' : 'NO'}"
-      prompt_parts << "- Displacement: #{ltf_data[:fvg]&.dig(:gaps)&.any? ? 'YES' : 'NO'}"
-      prompt_parts << "- Equilibrium Position: #{if htf_data[:premium_discount]&.dig(:premium)
-                                                   'PREMIUM (above)'
-                                                 else
-                                                   htf_data[:premium_discount]&.dig(:discount) ? 'DISCOUNT (below)' : 'N/A'
-                                                 end}"
-      prompt_parts << "- Price vs Equilibrium: #{ltp_value > (htf_data[:premium_discount]&.dig(:equilibrium) || 0) ? 'ABOVE' : 'BELOW'} equilibrium"
-      prompt_parts << ''
-      prompt_parts << '**TRADE VALIDATION RULES (MUST PASS ALL FOR BUY CE/PE):**'
-      prompt_parts << '1. BOS (Break of Structure) must be present on MTF/HTF'
-      prompt_parts << '2. Price must be above equilibrium (for CE) or below equilibrium (for PE)'
-      prompt_parts << '3. Displacement must be present (FVG gaps)'
-      prompt_parts << '4. HTF trend must align with trade direction (bullish for CE, bearish for PE)'
-      prompt_parts << '5. No conflicting signals across timeframes'
-      prompt_parts << ''
-      prompt_parts << '**IF ANY RULE FAILS → RECOMMEND "AVOID TRADING"**'
-      prompt_parts << ''
-
-      # Add LTF engine outputs (Displacement, Volume, Zone, Navigator) when available
-      ltf_engines = @initial_data[:ltf_engines]
-      if ltf_engines.present?
-        prompt_parts << build_ltf_engines_section(ltf_engines)
-        prompt_parts << ''
-      end
-
-      append_tick_ai_extras(prompt_parts)
-
       # Add option chain data if available
       if @prefetched_data[:option_chain]&.dig(:options)&.any?
-        prompt_parts << build_option_chain_section(@prefetched_data[:option_chain], atm_strike, trend_direction)
+        prompt_parts << build_option_chain_section(@prefetched_data[:option_chain], atm_strike, symbol_name,
+                                                   trend_direction)
         prompt_parts << ''
       end
 
@@ -536,16 +492,7 @@ module Smc
 
       # Add analysis instructions
       prompt_parts << '**YOUR TASK:**'
-      if decision.to_s.downcase == 'no_trade'
-        prompt_parts << '**MANDATORY: RECOMMEND "AVOID TRADING"**'
-        prompt_parts << 'SMC decision is "no_trade" - this is a hard block. Explain why:'
-        prompt_parts << '- No BOS (Break of Structure) detected'
-        prompt_parts << '- Price below equilibrium (no reclaim)'
-        prompt_parts << '- No displacement or structure break'
-        prompt_parts << '- Range/compression market (no directional edge)'
-        prompt_parts << '- Conflicting signals across timeframes'
-        prompt_parts << 'DO NOT recommend any trades regardless of price trend.'
-      elsif recommended_option
+      if recommended_option
         prompt_parts << "**STRONGLY PREFER: BUY #{recommended_option}** (this is a trading opportunity based on clear trend)"
         prompt_parts << 'Only recommend AVOID if there are SPECIFIC risk factors that make trading dangerous.'
         prompt_parts << "If you choose to trade, use the #{recommended_option} option data provided above."
@@ -556,35 +503,6 @@ module Smc
       prompt_parts << initial_analysis_instructions
 
       prompt_parts.join("\n")
-    end
-
-    def append_tick_ai_extras(prompt_parts)
-      if @initial_data[:tick_trigger].present?
-        prompt_parts << '**TICK TRIGGER (rising-edge SMC confluence):**'
-        prompt_parts << json_pretty(@initial_data[:tick_trigger])
-        prompt_parts << ''
-      end
-
-      if @initial_data[:index_ta].present?
-        prompt_parts << '**INDEX TECHNICAL ANALYSIS:**'
-        prompt_parts << json_pretty(@initial_data[:index_ta])
-        prompt_parts << ''
-      end
-
-      return if @initial_data[:smc_confluence_mtf].blank?
-
-      prompt_parts << '**SMC CONFLUENCE MTF DIGEST (full JSON):**'
-      prompt_parts << json_pretty(@initial_data[:smc_confluence_mtf])
-      prompt_parts << ''
-    end
-
-    def json_pretty(obj)
-      return obj.to_s unless obj.is_a?(Hash) || obj.is_a?(Array)
-
-      JSON.pretty_generate(obj.deep_stringify_keys)
-    rescue StandardError => e
-      Rails.logger.warn("[Smc::AiAnalyzer] json_pretty failed: #{e.class} - #{e.message}")
-      obj.to_json
     end
 
     def determine_trend_direction
@@ -612,7 +530,7 @@ module Smc
       end
     end
 
-    def build_option_chain_section(option_chain_data, atm_strike, trend_direction)
+    def build_option_chain_section(option_chain_data, atm_strike, symbol_name, trend_direction)
       options = option_chain_data[:options]
       expiry = option_chain_data[:expiry]
       spot = option_chain_data[:spot]
@@ -665,45 +583,6 @@ module Smc
       lines.join("\n")
     end
 
-    def build_ltf_engines_section(engines)
-      lines = ['**LTF ENGINE ANALYSIS (5m real-time confirmation):**']
-
-      if (disp = engines[:displacement])
-        direction = if disp[:bullish] then 'BULLISH'
-                    elsif disp[:bearish] then 'BEARISH'
-                    else 'NONE (no displacement candle)'
-                    end
-        lines << "- Displacement: #{direction}"
-        lines << "  Body: #{disp[:body]} pts | ATR: #{disp[:atr]} pts | Body/ATR ratio: #{disp[:body_atr_ratio]} (threshold ≥1.2)"
-      end
-
-      if (vol = engines[:volume])
-        spike_str = vol[:spike] ? "YES ─ volume spike confirmed (#{vol[:ratio]}x avg)" : "NO (#{vol[:ratio]}x avg)"
-        lines << "- Volume Spike: #{spike_str}"
-        lines << "  Current volume: #{vol[:current]} | Avg volume (20-bar): #{vol[:avg]}"
-      end
-
-      if (z = engines[:zone])
-        loc = z[:location]&.upcase || 'UNKNOWN'
-        eq = z[:equilibrium] ? "₹#{z[:equilibrium]}" : 'N/A'
-        lines << "- Market Zone: #{loc} (Equilibrium: #{eq})"
-        lines << '  Premium zone = supply; Discount zone = demand'
-      end
-
-      if (nav = engines[:navigator])
-        decision_str = nav[:allow] ? "ALLOW (confidence: #{nav[:confidence]})" : "BLOCK ─ #{nav[:reason]} (confidence: #{nav[:confidence]})"
-        lines << "- Navigator Entry Evaluation: #{decision_str}"
-      end
-
-      lines << ''
-      lines << '**Use the above LTF confirmations to validate or reject the trade setup:**'
-      lines << '- Displacement present + Volume spike = high-quality move'
-      lines << '- Zone location must match bias (CE in Discount, PE in Premium)'
-      lines << '- Navigator BLOCK = reduce confidence or recommend AVOID'
-
-      lines.join("\n")
-    end
-
     def system_prompt
       <<~PROMPT
         You are an expert Smart Money Concepts (SMC) and market structure analyst specializing in Indian index options trading (NIFTY, BANKNIFTY, SENSEX).
@@ -723,17 +602,12 @@ module Smc
         3. **Verify price direction over last 2-3 days** - Is price making lower lows (bearish) or higher highs (bullish)?
         4. **Match your recommendation to actual price movement** - DO NOT recommend BUY CE when price is declining
 
-        **CRITICAL: SMC DECISION IS THE PRIMARY GATE**
-        - If SMC decision is "no_trade" → **YOU MUST RECOMMEND "AVOID TRADING"** - NO EXCEPTIONS
-        - SMC "no_trade" means: No BOS (Break of Structure), no equilibrium reclaim, no displacement, or conflicting signals
-        - **DO NOT override SMC "no_trade" with price trend analysis** - SMC structure takes precedence
-        - Only recommend trades when SMC decision is "call" or "put"
-
-        **TREND DETECTION RULES (ONLY APPLIES WHEN SMC ALLOWS TRADING):**
+        **TREND DETECTION RULES:**
         - If price has declined >1% over 2-3 days AND making lower lows → BEARISH → **PREFER BUY PE** (bearish markets are profitable for PUT options)
         - If price has risen >1% over 2-3 days AND making higher highs → BULLISH → **PREFER BUY CE** (bullish markets are profitable for CALL options)
         - If there's a gap down at market open → BEARISH signal → **PREFER BUY PE** (NOT BUY CE)
         - If there's a gap up at market open → BULLISH signal → **PREFER BUY CE**
+        - If SMC shows "no_trade" BUT price trend is clear (bearish/bullish) → **STILL RECOMMEND BUY PE/CE** based on trend (SMC "no_trade" just means no SMC signal, but clear price trend is enough)
         - **ONLY recommend AVOID if**: Extreme volatility, no clear structure, conflicting signals, or high risk conditions that make trading dangerous
         - **CRITICAL**: Bearish markets are OPPORTUNITIES for BUY PE trades - do NOT avoid just because market is bearish!
 
@@ -741,9 +615,7 @@ module Smc
         - Recommend BUY CE when price is clearly declining (lower highs, lower lows)
         - Ignore gap downs/ups when making recommendations
         - Give bullish recommendations in a bearish trend
-        - Override SMC "no_trade" decision with price trend analysis
-        - Recommend trades when SMC structure shows: no BOS, price below equilibrium, no displacement, or range/compression
-        - Use simple delta division to calculate exact index levels (delta is non-linear)
+        - Override clear price action with SMC signals alone
 
         You analyze market structure, liquidity, premium/discount zones, order blocks, and AVRZ rejections to determine:
         - Whether to trade or avoid trading
@@ -760,15 +632,10 @@ module Smc
         - Always provide index spot levels (underlying index price) to watch for exit decisions
         - CRITICAL: Calculate percentages correctly - if entry is ₹100, 30% loss = ₹70 (NOT ₹30), 50% gain = ₹150 (NOT ₹50)
         - CRITICAL: NEVER mix strike prices with premium prices in calculations
-        - **CRITICAL: DELTA IS NON-LINEAR - DO NOT USE SIMPLE DIVISION**
-        - Delta changes with price movement (gamma effect), IV changes, and time decay
-        - For index spot level estimation: Use delta as APPROXIMATE guide only, NOT exact calculation
-        - Format: "SL at premium ₹Y (approximate index spot level ₹ABC - delta-based estimate, actual may vary)"
-        - **WARNING**: Premium can hit SL/TP due to theta decay or IV contraction WITHOUT underlying moving
-        - Consider THETA (time decay) and expiry date when setting targets - theta accelerates near expiry
+        - Use DELTA to calculate underlying levels CORRECTLY: Underlying move = Premium move / Delta
+        - Consider THETA (time decay) and expiry date when setting targets
         - Intraday realistic expectations: TP 10-25% gain, SL 15-25% loss (NOT 50-100% for intraday)
-        - Exit Strategy Format: "Entry premium: ₹X. SL at premium ₹Y (approximate index spot level ₹ABC). TP1 at premium ₹W (approximate index spot level ₹DEF). TP2 at premium ₹V (approximate index spot level ₹GHI)"
-        - **IMPORTANT**: Monitor premium price directly - do not rely solely on underlying levels
+        - Exit Strategy Format: "Entry premium: ₹X. SL at premium ₹Y (exit at index spot ₹ABC). TP1 at premium ₹W (exit at index spot ₹DEF). TP2 at premium ₹V (exit at index spot ₹GHI) - calculated using Delta"
         - Risk Management Format: "Position size: X lots. Risk per trade: ₹Y (premium loss × lot size × shares per lot). Maximum loss: ₹Z"
         - Never give vague recommendations - always be specific and actionable
       PROMPT
@@ -796,15 +663,14 @@ module Smc
            - MUST use the exact premium (LTP) value from the option chain data
 
         4. **Exit Strategy** (MANDATORY if trading):
-           - Stop Loss (SL): Provide premium level AND approximate index spot level to watch
-             * Format: "SL at premium ₹X (approximate index spot level ₹Y - delta-based estimate)"
-             * **WARNING**: Delta is non-linear - use as approximate guide only
-             * **CRITICAL**: Premium can hit SL due to theta decay or IV contraction WITHOUT underlying moving
+           - Stop Loss (SL): Provide premium level AND corresponding index spot level to watch
+             * Format: "SL at premium ₹X (exit at index spot ₹Y)"
+             * Calculate index spot level using DELTA from option chain
            - Take Profit: Use TP1, TP2 format for multiple targets
-             * Format: "TP1 at premium ₹X (approximate index spot level ₹Y)"
-             * Format: "TP2 at premium ₹X (approximate index spot level ₹Y)" (optional)
-           - Index Spot Levels to Watch: Provide key underlying index price levels to monitor (approximate only)
-           - **CRITICAL**: Monitor premium price directly - do not rely solely on underlying levels
+             * Format: "TP1 at premium ₹X (exit at index spot ₹Y)"
+             * Format: "TP2 at premium ₹X (exit at index spot ₹Y)" (optional)
+           - Index Spot Levels to Watch: Provide key underlying index price levels to monitor
+           - Calculate using DELTA: Index level = Current spot ± (Premium move / Delta)
            - YOU MUST calculate SL/TP based on premium percentages, NOT underlying prices
            - Intraday realistic expectations: TP 10-25% gain, SL 15-25% loss
 

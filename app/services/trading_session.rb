@@ -5,12 +5,12 @@ module TradingSession
   # Entry allowed: 9:20 AM to 3:15 PM IST
   # Exits must happen before 3:15 PM IST
   class Service
-    ENTRY_START_HOUR = 8
-    ENTRY_START_MINUTE = 45
+    ENTRY_START_HOUR = 9
+    ENTRY_START_MINUTE = 20
     EXIT_DEADLINE_HOUR = 15
-    EXIT_DEADLINE_MINUTE = 45
-    MARKET_CLOSE_HOUR = 16
-    MARKET_CLOSE_MINUTE = 0
+    EXIT_DEADLINE_MINUTE = 15
+    MARKET_CLOSE_HOUR = 15
+    MARKET_CLOSE_MINUTE = 30
 
     IST_TIMEZONE = 'Asia/Kolkata'
 
@@ -19,13 +19,6 @@ module TradingSession
       # @return [Hash] { allowed: Boolean, reason: String }
       def entry_allowed?
         current_ist = current_ist_time
-        unless Market::Calendar.trading_day?(current_ist.to_date)
-          return {
-            allowed: false,
-            reason: 'Not a trading day (weekend/holiday)'
-          }
-        end
-
         hour = current_ist.hour
         minute = current_ist.min
 
@@ -102,34 +95,18 @@ module TradingSession
         [deadline.to_i - current_ist.to_i, 0].max
       end
 
-      # Check if market is closed: outside continuous trading window (before 9:20 or after 15:30 IST).
-      # Used to skip signal generation, entry attempts, and off-hours exit enforcement.
+      # Check if market is closed (after 3:30 PM IST)
+      # Used to skip signal generation and entry attempts
       # @return [Boolean]
       def market_closed?
-        return false if ENV['FORCE_MARKET_OPEN'].to_s == 'true'
-
-        current_ist = current_ist_time
-        return true unless Market::Calendar.trading_day?(current_ist.to_date)
-
-        hour = current_ist.hour
-        minute = current_ist.min
-
-        return true if hour < ENTRY_START_HOUR || (hour == ENTRY_START_HOUR && minute < ENTRY_START_MINUTE)
-        return true if hour > MARKET_CLOSE_HOUR || (hour == MARKET_CLOSE_HOUR && minute >= MARKET_CLOSE_MINUTE)
-
-        false
-      end
-
-      # True when clock is past market close (15:30 IST). Use for EOD windows, not for "skip work".
-      # @return [Boolean]
-      def after_market_close_time?
         current_ist = current_ist_time
         hour = current_ist.hour
         minute = current_ist.min
+
         hour > MARKET_CLOSE_HOUR || (hour == MARKET_CLOSE_HOUR && minute >= MARKET_CLOSE_MINUTE)
       end
 
-      # Check if market is open (inside 9:20–15:30 IST window).
+      # Check if market is open (before 3:30 PM IST)
       # @return [Boolean]
       def market_open?
         !market_closed?

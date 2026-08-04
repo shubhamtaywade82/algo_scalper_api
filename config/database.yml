@@ -16,16 +16,12 @@ default: &default
   adapter: postgresql
   encoding: unicode
   # For details on connection pooling, see Rails configuration guide
-  # https://guides.rybylinks.org/configuring.html#database-pooling
-  # Pool size must cover all concurrent thread-groups sharing the DB:
-  #   Trading daemon: up to 11 service threads (RiskManager, MarketFeed, …)
-  #   Solid Queue:    5 threads/worker × 3 processes + dispatcher + scheduler ≈ 17
-  #   Web server:     RAILS_MAX_THREADS (default 5)
-  #   Research rake:  pipeline thread pool
-  # Dev runs everything on one PG; production splits queue/cable into separate DBs.
-  pool: <%= ENV.fetch("DB_POOL_SIZE", 50) %>
-  reaping_frequency: <%= ENV.fetch("DB_REAP_FREQ", 10) %>
-  checkout_timeout: <%= ENV.fetch("DB_CHECKOUT_TIMEOUT", 5) %>
+  # https://guides.rubyonrails.org/configuring.html#database-pooling
+  # Pool size must be >= SolidQueue threads + web server threads
+  # SolidQueue: 5 threads/worker × 3 processes + dispatcher + scheduler = ~17 threads
+  # Web server: 5 threads (RAILS_MAX_THREADS)
+  # Total needed: 25 (with buffer)
+  pool: <%= ENV.fetch("DB_POOL_SIZE", 25) %>
 
 development:
   <<: *default

@@ -5,7 +5,7 @@ require 'rails_helper'
 RSpec.describe Live::UnderlyingMonitor do
   let(:position_data) do
     instance_double(
-      Positions::PositionData,
+      Positions::ActiveCache::PositionData,
       tracker_id: 42,
       underlying_segment: 'IDX_I',
       underlying_security_id: '13',
@@ -50,9 +50,7 @@ RSpec.describe Live::UnderlyingMonitor do
           trend_score: 18,
           breakdown: { mtf: 4 }
         )
-        allow(Live::TickQuery).to receive(:for_security)
-          .with(segment: 'IDX_I', security_id: '13')
-          .and_return(double(ltp: 21_500))
+        allow(Live::TickCache).to receive(:ltp).and_return(21_500)
       end
 
       it 'computes underlying state with caching' do

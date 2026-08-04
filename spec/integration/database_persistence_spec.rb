@@ -123,8 +123,6 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
         allow(position_tracker).to receive(:unsubscribe)
         redis_cache = Live::RedisPnlCache.instance
         allow(redis_cache).to receive(:clear_tracker)
-        # Allow other calls (like from TickQuery)
-        allow(Rails.cache).to receive(:write).at_least(:once)
         expect(Rails.cache).to receive(:write).with(
           "reentry:#{position_tracker.symbol}",
           anything,

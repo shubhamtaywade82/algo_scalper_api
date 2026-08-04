@@ -4,12 +4,16 @@ require 'rails_helper'
 
 RSpec.describe Smc::SmcPermissionResolver do
   describe '.resolve' do
-    it 'returns :blocked when structure is neutral' do
+    it 'returns :blocked' do
       smc = {
-        structure_state: :neutral,
-        bos_recent: false,
-        displacement: false,
-        trend: :neutral
+        structure_state: :range,
+        bos_recent: true,
+        displacement: true,
+        liquidity_event_resolved: true,
+        active_liquidity_trap: false,
+        trap_resolved: true,
+        follow_through: true,
+        trend: :bullish
       }
       avrz = { state: :compressed }
 
@@ -18,9 +22,9 @@ RSpec.describe Smc::SmcPermissionResolver do
 
     it 'returns :execution_only' do
       smc = {
-        structure_state: :trend,
+        structure_state: :bullish,
         bos_recent: true,
-        displacement: false,
+        displacement: false, # no displacement -> execution only (no scaling)
         liquidity_event_resolved: false,
         trend: :bullish
       }
@@ -29,42 +33,27 @@ RSpec.describe Smc::SmcPermissionResolver do
       expect(described_class.resolve(smc_result: smc, avrz_result: avrz)).to eq(:execution_only)
     end
 
-    it 'returns :scale_ready when trend + BOS + displacement and AVRZ expanding_early' do
-      # Omitting active_liquidity_trap defaults to conservative "trap active"; false must be explicit.
+    it 'returns :scale_ready' do
       smc = {
-        structure_state: :trend,
+        structure_state: :bullish,
         bos_recent: true,
         displacement: true,
-        active_liquidity_trap: false,
+        active_liquidity_trap: false, # must be explicitly false
         trap_resolved: false,
         follow_through: false,
         trend: :bullish
       }
       avrz = { state: :expanding_early }
 
-      result = described_class.resolve(smc_result: smc, avrz_result: avrz)
-      expect(result).to eq(:scale_ready)
-    end
-
-    it 'returns :scale_ready when AVRZ uses string keys (JSON-style)' do
-      smc = {
-        structure_state: :trend,
-        bos_recent: true,
-        displacement: true,
-        active_liquidity_trap: false,
-        trend: :bullish
-      }
-      avrz = { 'state' => 'expanding_early' }
-
       expect(described_class.resolve(smc_result: smc, avrz_result: avrz)).to eq(:scale_ready)
     end
 
     it 'returns :full_deploy' do
       smc = {
-        structure_state: :trend,
+        structure_state: :bullish,
         bos_recent: true,
         displacement: true,
-        follow_through: true,
+        follow_through: true, # clean BOS + follow-through
         trap_resolved: false,
         trend: :bullish
       }

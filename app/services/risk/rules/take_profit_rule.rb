@@ -10,28 +10,26 @@ module Risk
       def evaluate(context)
         return skip_result unless context.active?
 
-        pnl_pct = context.tracker_snapshot&.dig(:pnl_pct) || context.position&.pnl_pct
+        pnl_pct = context.pnl_pct
         return skip_result if pnl_pct.nil?
 
-        target = take_profit_threshold(context)
-        return no_action_result unless target.positive? && pnl_pct.to_f >= target
+        tp_pct = context.config_bigdecimal(:tp_pct, BigDecimal(0))
+        return skip_result if tp_pct.zero?
 
+        # pnl_pct is stored as decimal (0.0573), tp_pct is also decimal (0.05)
+        # Compare directly without conversion
+        return no_action_result unless pnl_pct.to_f >= tp_pct.to_f
+
+        # Convert to percentage for display
+        pnl_pct_display = (pnl_pct.to_f * 100.0).round(2)
         exit_result(
-          reason: 'TAKE_PROFIT',
+          reason: "TP HIT #{pnl_pct_display}%",
           metadata: {
-            path: 'take_profit',
-            pnl_pct: (pnl_pct.to_f * 100.0).round(2)
+            pnl_pct: pnl_pct,
+            tp_pct: tp_pct.to_f,
+            normalized_pct: normalized_pct
           }
         )
-      end
-
-      private
-
-      def take_profit_threshold(context)
-        cfg = Live::UnifiedExitChecker.send(:exit_config_for, context.tracker)
-        cfg[:take_profit].to_f
-      rescue StandardError
-        context.risk_config[:tp_pct].to_f
       end
     end
   end

@@ -4,13 +4,12 @@
 # Usage: Load this file in Rails console and use the helper methods
 #
 # Example:
-#   Testing::ServiceTestRunner.test_market_feed_hub
-#   Testing::ServiceTestRunner.test_risk_manager_service
+#   load 'lib/testing/service_test_runner.rb'
+#   test_market_feed_hub
+#   test_risk_manager_service
 
-if Rails.env.local?
-  module Testing
-    module ServiceTestRunner
-      module_function
+module ServiceTestRunner
+  module_function
 
   # Colors for console output
   COLORS = {
@@ -328,28 +327,38 @@ if Rails.env.local?
   # SIGNAL SERVICES
   # ============================================================================
 
-  def test_strategy_manager
-    print_header('Testing Strategies::Manager')
+  def test_signal_scheduler
+    print_header('Testing Signal::Scheduler')
 
-    print_section('Creating Manager Instance')
-    manager = Strategies::Manager.new
+    print_section('Creating Scheduler Instance')
+    scheduler = Signal::Scheduler.new
 
     print_section('Pre-Start Status')
-    print_info("Healthy: #{manager.healthy?}")
+    print_info("Running: #{scheduler.running?}")
 
     print_section('Starting Service')
-    manager.start
+    scheduler.start
     sleep(3)
 
     print_section('Post-Start Status')
-    print_info("Healthy: #{manager.healthy?}")
-    print_info("Statuses: #{manager.all_statuses}")
+    print_info("Running: #{scheduler.running?}")
 
-    print_section('Stopping Manager')
-    manager.stop
+    print_section('Observing Signal Generation')
+    wait_for_logs(30)
 
-    print_success('Strategies::Manager test completed')
-    manager
+    print_section('Testing Manual Signal Processing')
+    indices = %w[NIFTY BANKNIFTY]
+    indices.each do |index_key|
+      index_cfg = AlgoConfig.fetch('indices', index_key)
+      next unless index_cfg
+
+      print_info("Processing #{index_key}...")
+      # scheduler.process_index(index_cfg) # Uncomment to test
+      print_info("  Config: #{index_cfg.inspect}")
+    end
+
+    print_success('Signal::Scheduler test completed')
+    scheduler
   end
 
   # ============================================================================
@@ -524,7 +533,7 @@ if Rails.env.local?
       { name: 'PnlUpdaterService', method: :test_pnl_updater_service },
       { name: 'PaperPnlRefresher', method: :test_paper_pnl_refresher },
       { name: 'RiskManagerService', method: :test_risk_manager_service },
-      { name: 'Strategies::Manager', method: :test_strategy_manager }
+      { name: 'Signal::Scheduler', method: :test_signal_scheduler }
     ]
 
     services_to_test.each do |service|
@@ -591,6 +600,30 @@ if Rails.env.local?
     wait_for_logs(seconds)
     print_success('Log monitoring completed')
   end
-    end
-  end
 end
+
+# Make methods available in console
+include ServiceTestRunner
+
+Rails.logger.debug { "\n#{ServiceTestRunner.colorize('=' * 80, :bold)}" }
+Rails.logger.debug ServiceTestRunner.colorize('  Service Test Runner Loaded', :bold)
+Rails.logger.debug ServiceTestRunner.colorize('=' * 80, :reset)
+Rails.logger.debug "\nAvailable test methods:"
+Rails.logger.debug '  - test_market_feed_hub'
+Rails.logger.debug '  - test_risk_manager_service'
+Rails.logger.debug '  - test_pnl_updater_service'
+Rails.logger.debug '  - test_paper_pnl_refresher'
+Rails.logger.debug '  - test_exit_engine'
+Rails.logger.debug '  - test_trailing_engine'
+Rails.logger.debug '  - test_signal_scheduler'
+Rails.logger.debug '  - test_tick_cache'
+Rails.logger.debug '  - test_redis_pnl_cache'
+Rails.logger.debug '  - test_active_cache'
+Rails.logger.debug '  - test_underlying_monitor'
+Rails.logger.debug '  - test_order_router'
+Rails.logger.debug '  - test_all_services (runs all tests)'
+Rails.logger.debug "\nHelper methods:"
+Rails.logger.debug '  - show_service_status'
+Rails.logger.debug '  - show_active_positions'
+Rails.logger.debug '  - monitor_logs(seconds)'
+Rails.logger.debug "\n"

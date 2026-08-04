@@ -42,12 +42,10 @@ RSpec.describe Entries::StructureDetector do
       end
 
       it 'respects lookback_minutes parameter' do
-        # lookback_minutes limits how many trailing bars are considered; last bar must
-        # not close outside the swing of the prior bars inside that window (no BOS).
         bars = Array.new(20) do |i|
-          close_price = 24_950 + i
-          build(:candle, high: 25_000 + i, low: 24_900 + i, close: close_price, timestamp: i.minutes.ago)
+          build(:candle, high: 25_000 + i, low: 24_900 + i, close: 24_950 + i, timestamp: i.minutes.ago)
         end
+        bars.last.close = 26_000 # Breaks high, but outside lookback
 
         result = described_class.bos?(bars, lookback_minutes: 5)
 
@@ -84,12 +82,12 @@ RSpec.describe Entries::StructureDetector do
   describe '.inside_opposite_ob?' do
     context 'with valid data' do
       it 'detects when price is inside opposite Order Block' do
-        # Bullish move vs first bar; last close sits inside prior bearish candle range.
+        # Recent bullish move, but price is in bearish OB
         bars = [
-          build(:candle, :bearish, high: 25_100, low: 24_900, close: 24_950),
+          build(:candle, :bearish, high: 25_000, low: 24_900, close: 24_950),
           build(:candle, :bullish, high: 25_200, low: 25_000, close: 25_150),
           build(:candle, :bullish, high: 25_300, low: 25_100, close: 25_250),
-          build(:candle, high: 25_100, low: 24_950, close: 25_050)
+          build(:candle, high: 24_950, low: 24_900, close: 24_920) # Inside bearish OB
         ]
 
         result = described_class.inside_opposite_ob?(bars)
@@ -127,12 +125,12 @@ RSpec.describe Entries::StructureDetector do
   describe '.inside_fvg?' do
     context 'with valid data' do
       it 'detects when price is inside opposing Fair Value Gap' do
-        # Bars 0–2 form a bullish FVG (candle3.low > candle1.high); last close in that gap.
+        # Creates bullish FVG, but price is in bearish FVG
         bars = [
           build(:candle, high: 25_000, low: 24_900, close: 24_950),
-          build(:candle, high: 25_200, low: 25_100, close: 25_150),
+          build(:candle, high: 25_200, low: 25_100, close: 25_150), # Gap up
           build(:candle, high: 25_300, low: 25_200, close: 25_250),
-          build(:candle, high: 25_100, low: 24_950, close: 25_000)
+          build(:candle, high: 24_950, low: 24_850, close: 24_900) # Inside FVG
         ]
 
         result = described_class.inside_fvg?(bars)
@@ -164,54 +162,6 @@ RSpec.describe Entries::StructureDetector do
         result = described_class.inside_fvg?(bars)
 
         expect(result).to be false
-      end
-    end
-  end
-
-  describe '.choch?' do
-    context 'with nil candles' do
-      it 'returns :neutral' do
-        expect(described_class.choch?(nil)).to eq(:neutral)
-      end
-    end
-
-    context 'with zero lookback' do
-      it 'returns :neutral' do
-        candles = [build(:candle), build(:candle), build(:candle)]
-        expect(described_class.choch?(candles, lookback_minutes: 0)).to eq(:neutral)
-      end
-    end
-
-    context 'when Smc detector returns bullish hash' do
-      it 'returns :bullish' do
-        candles = [build(:candle), build(:candle), build(:candle)]
-        detector = instance_double(Smc::Detectors::Structure, choch?: { type: :bullish })
-
-        allow(Smc::Detectors::Structure).to receive(:new).and_return(detector)
-
-        expect(described_class.choch?(candles, lookback_minutes: 3)).to eq(:bullish)
-      end
-    end
-
-    context 'when Smc detector returns bearish hash' do
-      it 'returns :bearish' do
-        candles = [build(:candle), build(:candle), build(:candle)]
-        detector = instance_double(Smc::Detectors::Structure, choch?: { type: :bearish })
-
-        allow(Smc::Detectors::Structure).to receive(:new).and_return(detector)
-
-        expect(described_class.choch?(candles, lookback_minutes: 3)).to eq(:bearish)
-      end
-    end
-
-    context 'when Smc detector returns false' do
-      it 'returns :neutral' do
-        candles = [build(:candle), build(:candle), build(:candle)]
-        detector = instance_double(Smc::Detectors::Structure, choch?: false)
-
-        allow(Smc::Detectors::Structure).to receive(:new).and_return(detector)
-
-        expect(described_class.choch?(candles, lookback_minutes: 3)).to eq(:neutral)
       end
     end
   end

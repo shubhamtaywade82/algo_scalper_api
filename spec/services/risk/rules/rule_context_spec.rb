@@ -18,7 +18,7 @@ RSpec.describe Risk::Rules::RuleContext do
     )
   end
   let(:position_data) do
-    Positions::PositionData.new(
+    Positions::ActiveCache::PositionData.new(
       tracker_id: tracker.id,
       security_id: '50074',
       segment: 'NSE_FNO',
@@ -116,8 +116,8 @@ RSpec.describe Risk::Rules::RuleContext do
   end
 
   describe '#active?' do
-    it 'is truthy when tracker is active and position exists' do
-      expect(context.active?).to be_truthy
+    it 'returns true when tracker is active and position exists' do
+      expect(context.active?).to be true
     end
 
     it 'returns false when tracker is exited' do
@@ -125,13 +125,13 @@ RSpec.describe Risk::Rules::RuleContext do
       expect(context.active?).to be false
     end
 
-    it 'is falsey when position is nil' do
+    it 'returns false when position is nil' do
       context = described_class.new(
         position: nil,
         tracker: tracker,
         risk_config: risk_config
       )
-      expect(context.active?).to be_falsey
+      expect(context.active?).to be false
     end
   end
 
@@ -187,11 +187,72 @@ RSpec.describe Risk::Rules::RuleContext do
       expect(result).to eq(Time.zone.parse('10:00'))
     end
 
-    it 'returns nil when parse does not produce a time' do
+    it 'returns default on parse error' do
       risk_config[:time_exit_hhmm] = 'invalid'
       result = context.config_time(:time_exit_hhmm, Time.zone.parse('10:00'))
-      expect(result).to be_nil
+      expect(result).to eq(Time.zone.parse('10:00'))
     end
   end
 
+  describe '#trailing_activation_pct' do
+    context 'with nested config' do
+      before do
+        risk_config[:trailing] = { activation_pct: 10.0 }
+      end
+
+      it 'returns value from nested config' do
+        expect(context.trailing_activation_pct).to eq(BigDecimal('10.0'))
+      end
+    end
+
+    context 'with flat config' do
+      before do
+        risk_config[:trailing_activation_pct] = 6.66
+      end
+
+      it 'returns value from flat config' do
+        expect(context.trailing_activation_pct).to eq(BigDecimal('6.66'))
+      end
+    end
+
+    context 'with default' do
+      it 'returns default 10.0' do
+        expect(context.trailing_activation_pct).to eq(BigDecimal('10.0'))
+      end
+    end
+  end
+
+  describe '#trailing_activated?' do
+    context 'when pnl_pct >= activation_pct' do
+      before do
+        position_data.pnl_pct = 10.0
+        risk_config[:trailing] = { activation_pct: 10.0 }
+      end
+
+      it 'returns true' do
+        expect(context.trailing_activated?).to be true
+      end
+    end
+
+    context 'when pnl_pct < activation_pct' do
+      before do
+        position_data.pnl_pct = 5.0
+        risk_config[:trailing] = { activation_pct: 10.0 }
+      end
+
+      it 'returns false' do
+        expect(context.trailing_activated?).to be false
+      end
+    end
+
+    context 'when pnl_pct is nil' do
+      before do
+        position_data.pnl_pct = nil
+      end
+
+      it 'returns false' do
+        expect(context.trailing_activated?).to be false
+      end
+    end
+  end
 end

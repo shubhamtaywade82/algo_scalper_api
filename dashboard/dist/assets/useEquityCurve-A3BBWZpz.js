@@ -1,0 +1,1 @@
+import{a,b as g}from"./index-DVnba0yN.js";function y(){const[c,o]=a([]),[i,e]=a(!1),[u,r]=a(null);async function l(s,n){e(!0);try{const t=new URLSearchParams;s&&t.set("date_from",s),n&&t.set("date_to",n);const f=await g.get(`/equity_curve?${t.toString()}`);o(f.data),r(null)}catch(t){r(t.message)}finally{e(!1)}}return{data:c,loading:i,error:u,fetchCurve:l}}export{y as u};

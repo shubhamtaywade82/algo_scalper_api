@@ -2,6 +2,8 @@
 
 # Handles DhanHQ API errors, especially authentication/token expiry
 module DhanhqErrorHandler
+  extend ActiveSupport::Concern
+
   # Error codes that indicate token expiry
   TOKEN_EXPIRY_CODES = %w[DH-901 401].freeze
   TOKEN_EXPIRY_KEYWORDS = [
@@ -14,30 +16,15 @@ module DhanhqErrorHandler
 
   # Notification cooldown (prevent spam) - 1 hour
   NOTIFICATION_COOLDOWN = 1.hour
-  REFRESH_COOLDOWN = 30.seconds
 
   # Make methods available as module methods (for direct calls like DhanhqErrorHandler.handle_dhanhq_error)
   # and as class methods (when included via ActiveSupport::Concern)
   module_function
 
-  # Check if error indicates live trading is disabled (DhanHQ 2.7.0+)
-  # @param error [StandardError] Error object
-  # @return [Boolean]
-  def live_trading_disabled?(error)
-    defined?(DhanHQ::LiveTradingDisabledError) && error.is_a?(DhanHQ::LiveTradingDisabledError)
-  end
-
   # Check if error indicates token expiry
-  # Aligns with DhanHQ v2.6.x: gem raises TokenExpiredError, InvalidTokenError, AuthenticationFailedError
   # @param error [StandardError, String] Error object or message
   # @return [Boolean]
   def token_expired?(error)
-    if error.is_a?(StandardError)
-      return true if defined?(DhanHQ::TokenExpiredError) && error.is_a?(DhanHQ::TokenExpiredError)
-      return true if defined?(DhanHQ::InvalidTokenError) && error.is_a?(DhanHQ::InvalidTokenError)
-      return true if defined?(DhanHQ::AuthenticationFailedError) && error.is_a?(DhanHQ::AuthenticationFailedError)
-    end
-
     error_msg = error.is_a?(String) ? error : error.message.to_s
     return false if error_msg.blank?
 
@@ -74,9 +61,10 @@ module DhanhqErrorHandler
       **Context:** #{context}
       **Error:** #{error_msg}
 
-      **Auto-heal:**
-      The system will attempt to refresh the token (TOTP) and restart WebSockets.
-      If this keeps happening, verify your `CLIENT_ID`, `DHAN_PIN`, and `DHAN_TOTP_SECRET`.
+      **Action Required:**
+      1. Generate new access token from DhanHQ
+      2. Update `DHANHQ_ACCESS_TOKEN` environment variable
+      3. Restart services
 
       **Note:** This notification will be sent again after #{NOTIFICATION_COOLDOWN.inspect} if issue persists.
     MSG
@@ -102,17 +90,10 @@ module DhanhqErrorHandler
   # @return [Hash] Error information hash
   def handle_dhanhq_error(error, context: 'API')
     error_msg = error.message.to_s
-
-    if live_trading_disabled?(error)
-      Rails.logger.warn("[DhanhqErrorHandler] Live trading disabled in #{context}: #{error_msg}. Set LIVE_TRADING=true to enable.")
-      return { error: error, message: error_msg, live_trading_disabled: true }
-    end
-
     is_token_expiry = token_expired?(error)
 
     if is_token_expiry
       Rails.logger.error("[DhanhqErrorHandler] Token expiry detected in #{context}: #{error.class} - #{error_msg}")
-      attempt_refresh_if_configured(context: context, error: error)
       notify_token_expiry(context: context, error: error)
     else
       Rails.logger.error("[DhanhqErrorHandler] DhanHQ error in #{context}: #{error.class} - #{error_msg}")
@@ -125,21 +106,18 @@ module DhanhqErrorHandler
     }
   end
 
-  def attempt_refresh_if_configured(context:, error:)
-    return false unless defined?(Dhan::TokenManager)
+  # For ActiveSupport::Concern compatibility - make methods available as class methods when included
+  class_methods do
+    def token_expired?(error)
+      DhanhqErrorHandler.token_expired?(error)
+    end
 
-    # prevent rapid-fire refresh attempts across repeated failing calls
-    cache_key = 'dhanhq_token_refresh_attempted_at'
-    last_attempt = Rails.cache.read(cache_key)
-    return false if last_attempt && (Time.current - last_attempt) < REFRESH_COOLDOWN
+    def notify_token_expiry(context: 'API', error: nil)
+      DhanhqErrorHandler.notify_token_expiry(context: context, error: error)
+    end
 
-    Rails.cache.write(cache_key, Time.current, expires_in: REFRESH_COOLDOWN)
-
-    Rails.logger.warn("[DhanhqErrorHandler] Attempting token refresh (context=#{context})")
-    Dhan::TokenManager.refresh!(force: true)
-    true
-  rescue StandardError => e
-    Rails.logger.error("[DhanhqErrorHandler] Refresh failed: #{e.class} - #{e.message}")
-    false
+    def handle_dhanhq_error(error, context: 'API')
+      DhanhqErrorHandler.handle_dhanhq_error(error, context: context)
+    end
   end
 end

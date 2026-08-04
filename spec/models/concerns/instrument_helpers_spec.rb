@@ -11,13 +11,9 @@ RSpec.describe InstrumentHelpers, type: :concern do
   let(:redis_tick_cache) { Live::RedisTickCache.instance }
 
   before do
-    # Default to hub not connected to force API fallback or simple cache check
-    allow(hub).to receive_messages(running?: false, connected?: false)
-    allow(redis_tick_cache).to receive(:fetch_tick).and_return({})
-    allow(redis_tick_cache).to receive(:clear_tick)
-
-    # Mock DhanHQ API
-    allow(DhanHQ::Models::MarketFeed).to receive(:ltp).and_return({ 'status' => 'error' })
+    allow(ws_hub).to receive_messages(running?: true, subscribe: true)
+    allow(redis_cache).to receive(:fetch_tick).and_return(nil)
+    allow(redis_cache).to receive(:clear_tick)
   end
 
   describe '#resolve_ltp' do
@@ -39,12 +35,17 @@ RSpec.describe InstrumentHelpers, type: :concern do
       expect(result).to eq(BigDecimal('199.55'))
     end
 
-    it 'falls back to REST API when meta ltp and WS cache missing' do
-      # Mock the API call to return a success response
-      allow(DhanHQ::Models::MarketFeed).to receive(:ltp).with({ 'NSE_FNO' => [12_345] }).and_return({
-        'status' => 'success',
-        'data' => { 'NSE_FNO' => { '12345' => { 'last_price' => 199.55 } } }
-      })
+    it 'falls back to Redis tick cache when meta ltp missing' do
+      # Mock hub to not be running so it doesn't use Live::TickCache.get
+      allow(Live::MarketFeedHub.instance).to receive_messages(running?: false, connected?: false)
+
+      # Mock TickCache.get to return nil (so it falls back to API)
+      allow(Live::TickCache).to receive(:get).and_return(nil)
+
+      # Mock the API call to return the expected value
+      allow(instrument).to receive(:fetch_ltp_from_api_for_segment)
+        .with(segment: 'NSE_FNO', security_id: '12345')
+        .and_return(199.55)
 
       result = instrument.resolve_ltp(segment: 'NSE_FNO', security_id: '12345')
       expect(result).to eq(BigDecimal('199.55'))
@@ -55,9 +56,17 @@ RSpec.describe InstrumentHelpers, type: :concern do
       expect(result).to be_nil
     end
 
-    it 'handles API errors gracefully' do
-      allow(DhanHQ::Models::MarketFeed).to receive(:ltp).and_raise(StandardError, 'API error')
-      allow(Rails.logger).to receive(:error)
+    it 'handles Redis tick with string ltp' do
+      # Mock hub to not be running so it doesn't use Live::TickCache.get
+      allow(Live::MarketFeedHub.instance).to receive_messages(running?: false, connected?: false)
+
+      # Mock TickCache.get to return nil (so it falls back to API)
+      allow(Live::TickCache).to receive(:get).and_return(nil)
+
+      # Mock the API call to return the expected value
+      allow(instrument).to receive(:fetch_ltp_from_api_for_segment)
+        .with(segment: 'NSE_FNO', security_id: '12345')
+        .and_return('200.75')
 
       result = instrument.resolve_ltp(segment: 'NSE_FNO', security_id: '12345')
       expect(result).to be_nil
@@ -136,6 +145,13 @@ RSpec.describe InstrumentHelpers, type: :concern do
 
       expect(Rails.logger).to have_received(:error)
     end
+
+    it 'converts security_id to string' do
+      allow(ws_hub).to receive_messages(running?: true, subscribe: true)
+
+      instrument.ensure_ws_subscription!(segment: 'NSE_FNO', security_id: 12_345)
+      expect(ws_hub).to have_received(:subscribe).with(seg: 'NSE_FNO', sid: '12345')
+    end
   end
 
   describe '#after_order_track!' do
@@ -143,7 +159,7 @@ RSpec.describe InstrumentHelpers, type: :concern do
 
     before do
       allow(ws_hub).to receive_messages(running?: true, subscribe: true)
-      allow(Live::RedisPnlCache.instance).to receive(:clear_tick)
+      allow(redis_cache).to receive(:clear_tick)
     end
 
     it 'creates an active position tracker' do # rubocop:disable RSpec/MultipleExpectations
@@ -206,9 +222,16 @@ RSpec.describe InstrumentHelpers, type: :concern do
       )
     end
 
-    it 'snaps weekend from_date to the previous trading day' do
-      allow(DhanHQ::Models::HistoricalData).to receive(:daily).and_return(
-        { open: [1.0], high: [1.0], low: [1.0], close: [1.0], volume: [1], timestamp: [1_700_000_000] }
+    it 'converts security_id to string' do
+      instrument.after_order_track!(
+        instrument: instrument,
+        order_no: 'ORD123456',
+        segment: 'NSE_FNO',
+        security_id: 12_345,
+        side: 'LONG',
+        qty: 50,
+        entry_price: BigDecimal('100.5'),
+        symbol: 'NIFTY'
       )
 
       banknifty_index.historical_ohlc(from_date: '2026-05-09', to_date: '2026-06-17')

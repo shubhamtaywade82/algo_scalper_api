@@ -224,7 +224,7 @@ RSpec.describe Derivative do
       it 'returns nil when provided quantity is zero' do
         # Mock Capital::Allocator to return 0 so place_market is not called
         allow(Capital::Allocator).to receive(:qty_for).and_return(0)
-        expect(Orders.config.gateway).not_to receive(:place_market)
+        expect(Orders.config).not_to receive(:place_market)
 
         result = derivative.buy_option!(qty: 0)
         expect(result).to be_nil

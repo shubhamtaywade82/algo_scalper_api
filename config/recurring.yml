@@ -10,162 +10,28 @@
 #     schedule: at 5am every day
 
 development:
-  pre_market_iv_baseline:
-    class: PreMarketIvBaselineJob
-    schedule: at 8:30am every day
-    queue_name: background
-    priority: 1
-    description: "Seeds IvRankTracker with historical ATM IV samples from expired options (pre-market baseline)"
-
-  instruments_import:
-    class: InstrumentsImportJob
-    schedule: at 8:45am every day
-    queue_name: background
-    priority: 1
-    description: "Daily DhanHQ instrument master sync — ensures derivative records exist for strike selection"
-
-  iv_snapshot:
-    class: IvSnapshotJob
-    schedule: at 8:45am every day
-    queue_name: background
-    priority: 2
-    description: "Captures daily ATM Implied Volatility (IV) for alpha strategy history"
-
-  portfolio_reset:
-    class: PortfolioResetJob
-    schedule: at 9:15am every day
-    queue_name: background
-    priority: 1
-    description: "Daily portfolio PnL reset (realized, peak, floor, level) before market open"
-
-  options_buying_daily_metrics:
-    class: OptionsBuying::DailyMetricsJob
-    schedule: at 9:08am every day
-    queue_name: background
-    priority: 2
-    description: "Seed daily ATR metrics for options buying compression radar"
-
-  market_vix_gate_open:
-    class: Market::VixGateJob
-    schedule: at 9:01am every day
-    queue_name: background
-    priority: 1
-    description: "Fetch India VIX and set entry/force-exit gates before open"
-
-  market_vix_gate_refresh:
-    class: Market::VixGateJob
-    schedule: every 15 minutes
-    queue_name: background
-    priority: 6
-    description: "Refresh India VIX gate during session (RBI/macro spikes)"
-
-  options_buying_chain_radar_open:
-    class: OptionsBuying::ChainRadarJob
-    schedule: at 9:16am every day
-    queue_name: background
-    priority: 3
-    description: "Pre-open option chain radar — resistance, liquid strikes, Greeks"
-
-  options_buying_chain_radar_refresh:
-    class: OptionsBuying::ChainRadarJob
-    schedule: every 30 minutes
-    queue_name: background
-    priority: 8
-    description: "Refresh option chain radar during session"
-
-  options_buying_candle_precompute:
-    class: OptionsBuying::CandlePrecomputeJob
-    schedule: every 1 minute
-    queue_name: background
-    priority: 5
-    description: "Pre-compute index candles for all strategy timeframes (1m, 5m, 15m, 60m, D) — gated internally by market hours"
-
-
-  options_buying_eod_carry:
-    class: OptionsBuying::EodCarryJob
-    schedule: at 3:10pm every day
-    queue_name: background
-    priority: 2
-    description: "Tag high-ROI positional carries before EOD force-close (positional mode only)"
-
-  entry_funnel_metrics:
-    class: Observability::EntryFunnelMetricsJob
-    schedule: at 3:30pm every day
-    queue_name: background
-    priority: 4
-    description: "Post-session entry funnel report — signal skips, guard blocks, breakout alignment"
-
-  ledger_reconciliation:
-    class: Ledger::ReconciliationJob
-    schedule: every 30 minutes
-    queue_name: background
-    priority: 12
-    description: "Compare ledger cash to legacy paper wallet during shadow mode"
-
-  ledger_daily_close:
-    class: Ledger::DailyCloseJob
-    schedule: at 3:35pm every day
-    queue_name: background
-    priority: 5
-    description: "Roll paper ledger balances into paper_daily_wallets snapshot"
-
-  clear_carried_overnight:
-    class: ClearCarriedOvernightPositionsJob
-    schedule: at 9:15am every day
-    queue_name: background
-    priority: 2
-    description: "Clear BTST/carried-overnight positions at start of trading day (9:15 AM)"
-
   smc_scanner:
     class: SmcScannerJob
-    schedule: at 4:00pm every day
+    schedule: every 15 minutes
     queue_name: background
     priority: 10
-    description: "SMC + AVRZ scanner for all configured indices - post-close scheduled run; intraday flow is event-driven from tick events"
+    description: "SMC + AVRZ scanner for all configured indices - runs every 15 minutes (aligns with 15m MTF candles)"
 
   ai_technical_analysis_nifty:
     class: AiTechnicalAnalysisJob
     args: ["NIFTY"]
-    schedule: at 4:00pm every day
+    schedule: every 15 minutes
     queue_name: background
     priority: 5
-    description: "AI technical analysis for NIFTY - post-close scheduled run; intraday flow is event-driven from tick events"
+    description: "AI technical analysis for NIFTY options buying intraday - runs every 15 minutes (aligns with SMC scanner)"
 
   ai_technical_analysis_sensex:
     class: AiTechnicalAnalysisJob
     args: ["SENSEX"]
-    schedule: at 4:00pm every day
-    queue_name: background
-    priority: 5
-    description: "AI technical analysis for SENSEX - post-close scheduled run; intraday flow is event-driven from tick events"
-
-  dhan_auto_ip_sync:
-    class: Dhan::AutoIpUpdaterJob
-    schedule: every 30 minutes
-    queue_name: background
-    priority: 20
-    description: "Auto-syncs local public IP with Dhan whitelisting slots when cooldown expires"
-
-  public_ip_log:
-    class: PublicIpLogJob
     schedule: every 15 minutes
     queue_name: background
-    priority: 25
-    description: "Persists public IP last-seen (throttled); dashboard no longer writes public_ip_logs"
-
-  alpha_scanner:
-    class: AlphaScanJob
-    schedule: every 5 minutes
-    queue_name: background
-    priority: 10
-    description: "Autonomous Alpha Strategy scanner — runs all enabled modules across NIFTY, BANKNIFTY, and SENSEX"
-
-  autonomous_optimization:
-    class: Ai::Autonomous::OptimizationJob
-    schedule: at 4:30pm every day
-    queue_name: background
-    priority: 15
-    description: "Daily self-learning optimization loop (Observe-Think-Act) for NIFTY, BANKNIFTY, and SENSEX"
+    priority: 5
+    description: "AI technical analysis for SENSEX options buying intraday - runs every 15 minutes (aligns with SMC scanner)"
 
 production:
   pre_market_iv_baseline:
@@ -280,58 +146,23 @@ production:
 
   smc_scanner:
     class: SmcScannerJob
-    schedule: at 4:00pm every weekday
+    schedule: every 15 minutes between 9:15am and 3:30pm on weekdays
     queue_name: background
     priority: 10
-    description: "SMC + AVRZ scanner - post-close scheduled run on weekdays; intraday flow is event-driven from tick events"
+    description: "SMC + AVRZ scanner - market hours only, runs every 15 minutes (aligns with 15m MTF candles)"
 
   ai_technical_analysis_nifty:
     class: AiTechnicalAnalysisJob
     args: ["NIFTY"]
-    schedule: at 4:00pm every weekday
+    schedule: every 15 minutes between 9:15am and 3:30pm on weekdays
     queue_name: background
     priority: 5
-    description: "AI technical analysis for NIFTY - post-close scheduled run on weekdays; intraday flow is event-driven from tick events"
+    description: "AI technical analysis for NIFTY - market hours only, runs every 15 minutes (aligns with SMC scanner)"
 
   ai_technical_analysis_sensex:
     class: AiTechnicalAnalysisJob
     args: ["SENSEX"]
-    schedule: at 4:00pm every weekday
+    schedule: every 15 minutes between 9:15am and 3:30pm on weekdays
     queue_name: background
     priority: 5
-    description: "AI technical analysis for SENSEX - post-close scheduled run on weekdays; intraday flow is event-driven from tick events"
-
-  dhan_auto_ip_sync:
-    class: Dhan::AutoIpUpdaterJob
-    schedule: every 30 minutes
-    queue_name: background
-    priority: 20
-    description: "Auto-syncs local public IP with Dhan whitelisting slots when cooldown expires"
-
-  public_ip_log:
-    class: PublicIpLogJob
-    schedule: every 15 minutes
-    queue_name: background
-    priority: 25
-    description: "Persists public IP last-seen (throttled); dashboard polling does not write public_ip_logs"
-
-  alpha_scanner:
-    class: AlphaScanJob
-    schedule: every 5 minutes during market hours
-    queue_name: background
-    priority: 10
-    description: "Autonomous Alpha Strategy scanner — runs all enabled modules across NIFTY, BANKNIFTY, and SENSEX"
-
-  autonomous_optimization:
-    class: Ai::Autonomous::OptimizationJob
-    schedule: at 4:30pm every weekday
-    queue_name: background
-    priority: 15
-    description: "Daily self-learning optimization loop (Observe-Think-Act) for NIFTY, BANKNIFTY, and SENSEX"
-
-  weekly_options_calibration:
-    class: WeeklyCalibrationJob
-    schedule: every Sunday at 6:00am
-    queue_name: background
-    priority: 3
-    description: "Weekly ATM±1 options calibration — proposes config patches for NIFTY and SENSEX"
+    description: "AI technical analysis for SENSEX - market hours only, runs every 15 minutes (aligns with SMC scanner)"

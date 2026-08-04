@@ -28,21 +28,9 @@ module Live
 
     # Global override times (IST)
     # These are parsed in IST timezone via Time.zone.parse
-    NO_NEW_TRADES_AFTER = '15:05' # IST
+    NO_NEW_TRADES_AFTER = '14:50' # IST
     MARKET_OPEN = '09:15' # IST
     MARKET_CLOSE = '15:15' # IST
-
-    # Returns a human-readable label for the current closed-market session.
-    def self.closed_session_label
-      regime = instance.current_regime
-      case regime
-      when POST_MARKET then 'POST_MARKET'
-      when PRE_MARKET  then 'PRE_MARKET'
-      else regime.to_s.upcase
-      end
-    rescue StandardError
-      'CLOSED'
-    end
 
     def current_regime(time: nil)
       # Use IST timezone explicitly
@@ -56,13 +44,10 @@ module Live
       # Get config directly to avoid recursion (regime_config calls current_regime)
       config = time_regime_config
 
-      # Check each regime in order (skip non-Hash entries like 'enabled: true')
+      # Check each regime in order
       config.each do |regime_name, regime_cfg|
-        next unless regime_cfg.is_a?(Hash)
-
         start_time = regime_cfg[:start]
         end_time = regime_cfg[:end]
-        next unless start_time && end_time
 
         return regime_name.to_sym if time_within_range?(time_str, start_time, end_time)
       end
@@ -140,12 +125,8 @@ module Live
       time ||= current_ist_time
       time_str = time.strftime('%H:%M')
 
-      earliest_entry = AlgoConfig.fetch.dig(:risk, :time_overrides, :earliest_entry_time) || '09:30'
-      return false if time_str < earliest_entry
-
-      cfg_no_new_trades_after = AlgoConfig.fetch.dig(:risk, :time_overrides, :no_new_trades_after) || NO_NEW_TRADES_AFTER
-      # No new trades after the config time IST (unless exceptional conditions)
-      return false if time_str >= cfg_no_new_trades_after
+      # No new trades after 14:50 IST (unless exceptional conditions)
+      return false if time_str >= NO_NEW_TRADES_AFTER
 
       # Check regime-specific entry rules
       allow_entries?
@@ -193,10 +174,7 @@ module Live
     private
 
     def time_regime_config
-      cfg = AlgoConfig.fetch
-      risk = cfg[:risk].is_a?(Hash) ? cfg[:risk] : {}
-      legacy = cfg[:time_regimes].is_a?(Hash) ? cfg[:time_regimes] : {}
-      (risk[:time_regimes].is_a?(Hash) ? risk[:time_regimes] : legacy) || {}
+      AlgoConfig.fetch[:time_regimes] || {}
     rescue StandardError
       {}
     end

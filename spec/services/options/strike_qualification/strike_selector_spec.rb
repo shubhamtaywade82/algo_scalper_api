@@ -46,7 +46,7 @@ RSpec.describe Options::StrikeQualification::StrikeSelector do
         trend: :bullish
       )
 
-      expect(result[:ok]).to be(true)
+      expect(result[:ok]).to eq(true)
       expect(result[:atm_strike]).to eq(25_000)
       expect(result[:strike]).to eq(25_050)
       expect(result[:strike_type]).to eq(:ATM_PLUS_1)
@@ -62,7 +62,7 @@ RSpec.describe Options::StrikeQualification::StrikeSelector do
         trend: :bearish
       )
 
-      expect(result[:ok]).to be(true)
+      expect(result[:ok]).to eq(true)
       expect(result[:atm_strike]).to eq(25_000)
       expect(result[:strike]).to eq(24_950)
       expect(result[:strike_type]).to eq(:ATM_MINUS_1)
@@ -78,7 +78,7 @@ RSpec.describe Options::StrikeQualification::StrikeSelector do
         trend: :chop
       )
 
-      expect(result[:ok]).to be(true)
+      expect(result[:ok]).to eq(true)
       expect(result[:strike]).to eq(25_000)
       expect(result[:strike_type]).to eq(:ATM)
     end
@@ -93,7 +93,7 @@ RSpec.describe Options::StrikeQualification::StrikeSelector do
         trend: :bullish
       )
 
-      expect(result[:ok]).to be(true)
+      expect(result[:ok]).to eq(true)
       expect(result[:strike]).to eq(25_000)
       expect(result[:strike_type]).to eq(:ATM)
     end
@@ -108,7 +108,7 @@ RSpec.describe Options::StrikeQualification::StrikeSelector do
         trend: :bullish
       )
 
-      expect(result[:ok]).to be(true)
+      expect(result[:ok]).to eq(true)
       expect(result[:atm_strike]).to eq(80_100) # 80050 rounds to 80100 with step=100
       expect(result[:strike]).to eq(80_100)
       expect(result[:strike_type]).to eq(:ATM)
@@ -129,7 +129,7 @@ RSpec.describe Options::StrikeQualification::StrikeSelector do
         trend: :bullish
       )
 
-      expect(result[:ok]).to be(true)
+      expect(result[:ok]).to eq(true)
       expect(result[:atm_strike]).to eq(80_100)
       expect(result[:strike]).to eq(80_200)
       expect(result[:strike_type]).to eq(:ATM_PLUS_1)

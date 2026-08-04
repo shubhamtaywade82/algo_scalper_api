@@ -2,83 +2,130 @@
 
 module Risk
   module Rules
-    # Rule that enforces a dynamic, DTE-scaled time stop limit on option positions.
-    # Scalps use a fixed base of 8 minutes, while trend trades use index-specific base settings
-    # scaled by (DTE / 7.0), with a minimum floor to avoid instant closures.
+    # Time Stop Rule - EARLY, CONTEXTUAL EXIT for intraday options buying
+    #
+    # PURPOSE: Prevent holding dead trades - exit regardless of PnL when time limit exceeded
+    #
+    # This is critical for options because:
+    # - Theta decay accelerates with time
+    # - Dead premiums don't recover
+    # - Time stops prevent "hope trades"
+    #
+    # Rules:
+    # - Scalps: max 2-3 minutes OR 2 candles
+    # - Trend trades:
+    #   - NIFTY: max 45 minutes
+    #   - SENSEX: max 90 minutes
+    #
+    # Exit regardless of PnL when time exceeded.
+    #
+    # Priority: 40 (checked after premium momentum failure)
     class TimeStopRule < BaseRule
       PRIORITY = 40
 
+      # Time limits by trade type and index
+      TIME_LIMITS = {
+        scalp: {
+          max_minutes: 3,
+          max_candles: 2
+        },
+        trend: {
+          'NIFTY' => 45,      # minutes
+          'BANKNIFTY' => 45,  # minutes
+          'SENSEX' => 90      # minutes
+        }
+      }.freeze
+
       def evaluate(context)
+        return skip_result unless enabled?
         return skip_result unless context.active?
 
         tracker = context.tracker
-        elapsed_seconds = Time.current - tracker.created_at
+        return skip_result unless tracker.created_at
 
-        # Resolve DTE-scaled time limit
-        dte = days_to_expiry(tracker)
-        base_limit_minutes = base_time_limit_minutes(context)
+        # Determine trade type (scalp vs trend)
+        trade_type = determine_trade_type(tracker)
+        time_limit = get_time_limit(tracker, trade_type)
 
-        # Scale allowed hold time based on DTE: BaseLimit * (DTE / 7.0)
-        scale_factor = dte / 7.0
-        allowed_seconds = base_limit_minutes * 60 * scale_factor
+        return skip_result unless time_limit
 
-        # Apply a minimum floor (e.g., 3 minutes) to avoid instant closures
-        floor_seconds = 180.0
-        final_allowed_seconds = [allowed_seconds, floor_seconds].max
+        # Check if time limit exceeded
+        entry_time = tracker.created_at
+        elapsed_minutes = ((Time.current - entry_time) / 60.0).round(2)
 
-        if elapsed_seconds >= final_allowed_seconds
-          exit_result(
-            reason: 'TIME_STOP',
-            metadata: {
-              path: 'time_stop',
-              elapsed_seconds: elapsed_seconds.round(1),
-              allowed_seconds: final_allowed_seconds.round(1),
-              dte: dte,
-              base_limit_minutes: base_limit_minutes
-            }
-          )
-        else
-          no_action_result
+        if elapsed_minutes >= time_limit
+          reason = "TIME_STOP (#{trade_type} trade exceeded #{time_limit} minutes, elapsed: #{elapsed_minutes} min)"
+          return exit_result(reason: reason, metadata: {
+            trade_type: trade_type,
+            time_limit: time_limit,
+            elapsed_minutes: elapsed_minutes
+          })
         end
-      end
 
-      def enabled?(context = nil)
-        return false unless context
+        # For scalps, also check candle count
+        if trade_type == :scalp
+          candle_limit = TIME_LIMITS[:scalp][:max_candles]
+          if candle_count_exceeded?(tracker, candle_limit)
+            reason = "TIME_STOP (scalp exceeded #{candle_limit} candles)"
+            return exit_result(reason: reason, metadata: {
+              trade_type: :scalp,
+              candle_limit: candle_limit
+            })
+          end
+        end
 
-        cfg = context.risk_config[:time_stop] || context.risk_config.dig(:exits, :time_stop)
-        cfg&.dig(:enabled) != false
+        no_action_result
+      rescue StandardError => e
+        Rails.logger.error("[TimeStopRule] Error: #{e.class} - #{e.message}")
+        skip_result
       end
 
       private
 
-      def days_to_expiry(tracker)
-        watchable = tracker.watchable
-        if watchable.respond_to?(:expiry_date) && watchable.expiry_date
-          (watchable.expiry_date - Date.current).to_i
-        else
-          7 # Fallback to 7 days if not available
+      # Determine trade type from tracker metadata or entry path
+      def determine_trade_type(tracker)
+        # Check entry metadata for trade type
+        entry_metadata = tracker.meta&.dig('entry_metadata') || {}
+        entry_path = entry_metadata['entry_path'] || tracker.meta&.dig('entry_path')
+
+        # Scalp indicators: 1m timeframe, quick entries
+        if entry_path&.include?('1m') || entry_path&.include?('scalp')
+          return :scalp
         end
+
+        # Default to trend for longer timeframes
+        :trend
       end
 
-      def base_time_limit_minutes(context)
-        tracker = context.tracker
-        cfg = context.risk_config[:time_stop] || context.risk_config.dig(:exits, :time_stop) || {}
-
-        entry_strategy = tracker.entry_strategy.to_s.downcase
-        entry_path = tracker.entry_path.to_s.downcase
-
-        is_scalp = entry_strategy.include?('scalp') ||
-                   entry_path.include?('scalp') ||
-                   entry_strategy.include?('momentum') ||
-                   (context.risk_config.dig(:options_buying, :mode).to_s == 'intraday_scalper')
-
-        if is_scalp
-          (cfg.dig(:scalp, :max_minutes) || 8).to_f
-        else
-          index_key = (tracker.meta&.dig('index_key') || tracker.underlying_instrument&.symbol_name || 'NIFTY').to_s.upcase
-          trend_cfg = cfg[:trend] || {}
-          (trend_cfg[index_key] || trend_cfg[index_key.to_sym] || 15).to_f
+      # Get time limit for this trade
+      def get_time_limit(tracker, trade_type)
+        if trade_type == :scalp
+          return TIME_LIMITS[:scalp][:max_minutes]
         end
+
+        # Trend trade: get index-specific limit
+        index_key = tracker.meta&.dig('index_key') || 'NIFTY'
+        TIME_LIMITS[:trend][index_key] || TIME_LIMITS[:trend]['NIFTY']
+      end
+
+      # Check if candle count exceeded (for scalps)
+      def candle_count_exceeded?(tracker, max_candles)
+        instrument = tracker.instrument || tracker.watchable&.instrument
+        return false unless instrument
+
+        # Get 1m series to count candles since entry
+        series_1m = instrument.candle_series(interval: '1')
+        return false unless series_1m&.candles&.any?
+
+        entry_time = tracker.created_at
+        return false unless entry_time
+
+        # Count candles after entry time
+        candles_after_entry = series_1m.candles.select { |c| c.timestamp >= entry_time }
+        candles_after_entry.size > max_candles
+      rescue StandardError => e
+        Rails.logger.error("[TimeStopRule] candle_count_exceeded? error: #{e.class} - #{e.message}")
+        false
       end
     end
   end

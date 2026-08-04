@@ -35,19 +35,19 @@ To explicitly disable WebSocket and trading services, set environment variables:
 
 ```bash
 # Optimize for NIFTY with explicit environment variables
-SCRIPT_MODE=1 BACKTEST_MODE=1 rails runner scripts/optimize_indicator_parameters.rb NIFTY 60 1
+SCRIPT_MODE=1 DISABLE_TRADING_SERVICES=1 BACKTEST_MODE=1 rails runner scripts/optimize_indicator_parameters.rb NIFTY 60 1
 
 # Optimize for BANKNIFTY
-SCRIPT_MODE=1 BACKTEST_MODE=1 rails runner scripts/optimize_indicator_parameters.rb BANKNIFTY 60 1
+SCRIPT_MODE=1 DISABLE_TRADING_SERVICES=1 BACKTEST_MODE=1 rails runner scripts/optimize_indicator_parameters.rb BANKNIFTY 60 1
 
 # Optimize for SENSEX
-SCRIPT_MODE=1 BACKTEST_MODE=1 rails runner scripts/optimize_indicator_parameters.rb SENSEX 60 1
+SCRIPT_MODE=1 DISABLE_TRADING_SERVICES=1 BACKTEST_MODE=1 rails runner scripts/optimize_indicator_parameters.rb SENSEX 60 1
 ```
 
 **Environment Variables:**
-
-- `SCRIPT_MODE=1` - Skips trading supervisor registration and related boot paths
-- `BACKTEST_MODE=1` - Backtest mode (disables WebSocket via `MarketFeedHub#enabled?`)
+- `SCRIPT_MODE=1` - Disables trading services initialization
+- `DISABLE_TRADING_SERVICES=1` - Prevents all trading services from starting
+- `BACKTEST_MODE=1` - Enables backtest mode (disables WebSocket)
 
 **Note**: The script also sets these variables internally, but setting them explicitly in the command ensures they're available before Rails initializers load.
 
@@ -60,15 +60,13 @@ SCRIPT_MODE=1 BACKTEST_MODE=1 rails runner scripts/optimize_indicator_parameters
 ### Quick Reference Commands
 
 **Option 1: Direct command with environment variables (Recommended)**
-
 ```bash
-SCRIPT_MODE=1 BACKTEST_MODE=1 rails runner scripts/optimize_indicator_parameters.rb NIFTY 60 1
-SCRIPT_MODE=1 BACKTEST_MODE=1 rails runner scripts/optimize_indicator_parameters.rb BANKNIFTY 60 1
-SCRIPT_MODE=1 BACKTEST_MODE=1 rails runner scripts/optimize_indicator_parameters.rb SENSEX 60 1
+SCRIPT_MODE=1 DISABLE_TRADING_SERVICES=1 BACKTEST_MODE=1 rails runner scripts/optimize_indicator_parameters.rb NIFTY 60 1
+SCRIPT_MODE=1 DISABLE_TRADING_SERVICES=1 BACKTEST_MODE=1 rails runner scripts/optimize_indicator_parameters.rb BANKNIFTY 60 1
+SCRIPT_MODE=1 DISABLE_TRADING_SERVICES=1 BACKTEST_MODE=1 rails runner scripts/optimize_indicator_parameters.rb SENSEX 60 1
 ```
 
 **Option 2: Using wrapper script**
-
 ```bash
 ./scripts/run_optimization.sh NIFTY 60 1
 ./scripts/run_optimization.sh BANKNIFTY 60 1
@@ -76,7 +74,6 @@ SCRIPT_MODE=1 BACKTEST_MODE=1 rails runner scripts/optimize_indicator_parameters
 ```
 
 **Option 3: Direct command (script sets env vars internally)**
-
 ```bash
 rails runner scripts/optimize_indicator_parameters.rb NIFTY 60 1
 rails runner scripts/optimize_indicator_parameters.rb BANKNIFTY 60 1
@@ -87,30 +84,26 @@ rails runner scripts/optimize_indicator_parameters.rb SENSEX 60 1
 
 ```bash
 # Find best parameters for NIFTY using last 60 days of 1m data
-SCRIPT_MODE=1 BACKTEST_MODE=1 rails runner scripts/optimize_indicator_parameters.rb NIFTY 60 1
+SCRIPT_MODE=1 DISABLE_TRADING_SERVICES=1 BACKTEST_MODE=1 rails runner scripts/optimize_indicator_parameters.rb NIFTY 60 1
 ```
 
 ## Parameters Being Optimized
 
 ### Supertrend
-
 - **Period**: 5, 7, 10, 14
 - **Base Multiplier**: 2.0, 2.5, 3.0, 3.5, 4.0
 
 ### ADX
-
 - **Period**: 10, 14, 18
 - **1m Threshold**: 12, 14, 16, 18, 20
 - **5m Threshold**: 10, 12, 14, 16, 18, 20
 
 ### RSI (Future Enhancement)
-
 - **Period**: 10, 14, 21
 - **Overbought**: 65, 70, 75
 - **Oversold**: 25, 30, 35
 
 ### MACD (Future Enhancement)
-
 - **Fast Period**: 8, 12, 16
 - **Slow Period**: 21, 26, 31
 - **Signal Period**: 7, 9, 11
@@ -150,7 +143,6 @@ Composite Score =
 ## Interpreting Results
 
 ### Best Parameters
-
 - Look for high composite scores
 - Prefer combinations with:
   - Positive total PnL
@@ -159,7 +151,6 @@ Composite Score =
   - Positive expectancy
 
 ### Trade-offs
-
 - Higher win rate often means lower average win size
 - More trades may mean more noise
 - Consider Sharpe ratio for risk-adjusted performance
@@ -193,19 +184,17 @@ Composite Score =
 ## Troubleshooting
 
 ### No Results
-
 - Check if historical data is available for the index
 - Verify the index key is correct (NIFTY, BANKNIFTY, SENSEX)
 - Ensure enough candles are available (need at least 50+)
 
 ### Slow Performance
-
 - Reduce the number of parameter combinations
 - Use shorter time periods (fewer days)
 - Use higher intervals (5m instead of 1m)
 
 ### Memory Issues
-
 - Process one index at a time
 - Reduce days_back parameter
 - Close other applications
+

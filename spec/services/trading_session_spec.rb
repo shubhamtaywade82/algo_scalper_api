@@ -31,28 +31,16 @@ RSpec.describe TradingSession::Service do
         end
       end
 
-      it 'returns true at midnight (pre-market)' do
+      it 'returns false at midnight (before 3:30 PM, so not closed)' do
         travel_to Time.zone.parse('2025-01-16 00:00:00 +05:30') do
-          expect(described_class.market_closed?).to be true
-        end
-      end
-
-      it 'returns true at 1:00 AM IST (pre-market)' do
-        travel_to Time.zone.parse('2025-01-15 01:00:00 +05:30') do
-          expect(described_class.market_closed?).to be true
+          # Midnight (hour 0) is before 3:30 PM (hour 15), so market_closed? returns false
+          # market_closed? checks if time is AFTER 3:30 PM, not if market is open
+          expect(described_class.market_closed?).to be false
         end
       end
     end
 
-    context 'when calendar day is not a trading day (weekend)' do
-      it 'returns true even inside clock window' do
-        travel_to Time.zone.parse('2025-01-18 12:00:00 +05:30') do # Saturday
-          expect(described_class.market_closed?).to be true
-        end
-      end
-    end
-
-    context 'when market is open (9:20 AM–3:30 PM IST)' do
+    context 'when market is open (before 3:30 PM IST)' do
       it 'returns false at 9:20 AM IST' do
         travel_to Time.zone.parse('2025-01-15 09:20:00 +05:30') do
           expect(described_class.market_closed?).to be false
@@ -87,37 +75,7 @@ RSpec.describe TradingSession::Service do
     end
   end
 
-  describe '.after_market_close_time?' do
-    it 'returns true at or after 15:30 IST' do
-      travel_to Time.zone.parse('2025-01-15 15:30:00 +05:30') do
-        expect(described_class.after_market_close_time?).to be true
-      end
-      travel_to Time.zone.parse('2025-01-15 16:00:00 +05:30') do
-        expect(described_class.after_market_close_time?).to be true
-      end
-    end
-
-    it 'returns false before 15:30 IST' do
-      travel_to Time.zone.parse('2025-01-15 15:29:59 +05:30') do
-        expect(described_class.after_market_close_time?).to be false
-      end
-      travel_to Time.zone.parse('2025-01-15 09:00:00 +05:30') do
-        expect(described_class.after_market_close_time?).to be false
-      end
-    end
-  end
-
   describe '.entry_allowed?' do
-    context 'when weekend' do
-      it 'returns false for non-trading day' do
-        travel_to Time.zone.parse('2025-01-18 12:00:00 +05:30') do # Saturday
-          result = described_class.entry_allowed?
-          expect(result[:allowed]).to be false
-          expect(result[:reason]).to include('Not a trading day')
-        end
-      end
-    end
-
     context 'when before entry start time (9:20 AM)' do
       it 'returns false with appropriate reason' do
         travel_to Time.zone.parse('2025-01-15 09:19:00 +05:30') do
@@ -148,32 +106,6 @@ RSpec.describe TradingSession::Service do
         travel_to Time.zone.parse('2025-01-15 15:14:00 +05:30') do
           result = described_class.entry_allowed?
           expect(result[:allowed]).to be true
-        end
-      end
-    end
-
-    context 'when trading time restrictions are enabled' do
-      before do
-        allow(AlgoConfig).to receive(:fetch).and_return(
-          trading_time_restrictions: {
-            enabled: true,
-            avoid_periods: ['11:00-13:45'],
-            block_exits: false
-          }
-        )
-      end
-
-      it 'blocks entry during avoid period' do
-        travel_to Time.zone.parse('2025-01-15 12:00:00 +05:30') do
-          result = described_class.entry_allowed?
-          expect(result[:allowed]).to be false
-          expect(result[:reason]).to include('11:00-13:45')
-        end
-      end
-
-      it 'allows entry outside avoid period' do
-        travel_to Time.zone.parse('2025-01-15 10:30:00 +05:30') do
-          expect(described_class.entry_allowed?[:allowed]).to be true
         end
       end
     end

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class BestIndicatorParam < ApplicationRecord
-  belongs_to :instrument, optional: false
+  belongs_to :instrument
 
   validates :interval, presence: true
   validates :params, presence: true

@@ -1,41 +1,53 @@
 # Algo Scalper API
 
-A production-grade autonomous intraday options scalping system for Indian index markets (NIFTY, BANKNIFTY, SENSEX), built with Ruby on Rails 8. Self-contained pipeline: signal generation → options analysis → capital allocation → order execution → position management.
+Rails 8 API backend for **autonomous algorithmic trading** powered by the DhanHQ API v2, specifically designed for **Indian index options trading** (NIFTY, BANKNIFTY, SENSEX).
 
-## System Overview
+## 🚀 Features
 
-Algo Scalper API automates the entire trade lifecycle — from signal identification using technical analysis (Supertrend, ADX, SMC) through dynamic risk-managed exits. It runs as a **process-isolated execution engine**: the trading daemon operates separately from the web/dashboard processes to ensure low-latency tick processing and order execution.
+- **🤖 Fully Autonomous Trading**: Signal generation, option chain analysis, and automated order placement
+- **📊 Real-time Market Data**: DhanHQ WebSocket integration for live quotes, LTP, and order updates
+- **⚡ Low-latency Execution**: Direct `DhanHQ::Models::*` integration for minimal overhead
+- **🛡️ Advanced Risk Management**: Comprehensive validation, trailing stops, and circuit breakers
+- **📈 Technical Analysis**: Supertrend, ADX, and other indicators for signal generation
+- **🎯 Smart Strike Selection**: ATM-focused option chain analysis with liquidity scoring
+- **💰 Capital Management**: Dynamic allocation based on account size and risk parameters
+- **🔄 Background Processing**: Solid Queue integration for reliable job processing
+- **🤖 AI Integration**: OpenAI-powered trading analysis and strategy suggestions (optional)
 
-### Key Capabilities
+---
 
-- **Multi-Strategy Signal Engine** — Supertrend + ADX with multi-timeframe confirmation, market regime detection, and dynamic validation modes (balanced/conservative). Optional **market context** (`MarketContext::RegimeComposer`, chain signal extraction, `Trading::MarketPermissionGate`) is configurable in `config/algo.yml` (`market_context`); see `docs/trading/market_context_and_permission_gate.md`.
-- **Smart Money Concepts (SMC)** — Order block detection, FVG analysis, break-of-structure entries, institutional flow scoring
-- **Real-time WebSocket Hub** — DhanHQ tick ingestion with write-through Redis caching, automatic reconnection, and per-position subscription management
-- **Institutional Risk Management** — Dual-path exit evaluation: per-tick `UnifiedExitChecker` (SL, TP, trailing, early trend failure, time-based) plus 5-second enforcement loop (premium R-stop, profit floor, structure invalidation, premium momentum failure, R:R booking, percentage PnL exit, time stop)
-- **Options Chain Intelligence** — ATM±1 strike selection with liquidity scoring, gamma ramp detection, expected move validation, per-index rules (NIFTY/BANKNIFTY/SENSEX)
-- **Expiry Week Power Trend** — ADX >= 40 + within 5 days of monthly expiry + 12:00-13:45 window → `ExpiryWeekPowerTrendGuard` enriches context to bypass chop-zone block
-- **20-Guard Entry Pipeline** — Full guard chain from DrawdownGuard through SmcNavigatorGuard
-- **Paper & Live Trading** — Seamless toggle; both modes use real DhanHQ WebSocket data. Paper simulates fills; live submits to exchange via DhanHQ API
-- **Circuit Breaker** — Redis-backed singleton with API control (`GET/POST/DELETE /api/circuit_breaker/trip`); EntryGuard checks before every entry, RiskManager force-closes all positions when tripped
-- **AI Technical Analysis** — Local Ollama LLM integration (`ollama-client` gem `~> 1.1`); auto-selects best available model
-- **Telegram Notifications** — Trade alerts, PnL milestones, daily stats, SMC signals
+## 🏗️ Architecture Overview
 
-## Tech Stack
+### Core Components
 
-| Component | Technology |
-|-----------|-----------|
-| Language | Ruby 3.3.4 |
-| Framework | Rails 8.0.2 (API-only mode) |
-| Database | PostgreSQL |
-| Cache/State | Redis (tick cache, PnL cache, position state, circuit breaker) |
-| Job Queue | Solid Queue (not Sidekiq) |
-| WebSocket Broadcast | Solid Cable (ActionCable backend) |
-| Broker | DhanHQ v2 via `dhanhq` gem |
-| AI | Ollama via `ollama-client` gem (`~> 1.1`) — local LLM, no OpenAI |
-| Notifications | Telegram Bot |
-| Frontend | Next.js dashboard (separate process) |
+| Component                  | Purpose                    | Key Features                                          |
+| -------------------------- | -------------------------- | ----------------------------------------------------- |
+| **Signal Engine**          | Generate trading signals   | Supertrend + ADX analysis, comprehensive validation   |
+| **Options Chain Analyzer** | Select optimal strikes     | ATM/ATM±1 focus, liquidity scoring, dynamic intervals |
+| **Capital Allocator**      | Calculate position sizes   | Risk-based allocation, lot size compliance            |
+| **Entry Guard**            | Prevent duplicate entries  | Exposure limits, cooldown periods                     |
+| **Risk Manager**           | Monitor and exit positions | PnL tracking, trailing stops, daily limits            |
+| **Market Feed Hub**        | Real-time data streaming   | WebSocket management, tick caching                    |
 
-## Quick Start
+### Trading Flow
+
+```mermaid
+graph TD
+    A[Signal Scheduler] --> B[Signal Engine]
+    B --> C[Technical Analysis]
+    C --> D[Comprehensive Validation]
+    D --> E[Options Chain Analysis]
+    E --> F[Capital Allocation]
+    F --> G[Entry Guard]
+    G --> H[Order Placement]
+    H --> I[Position Tracking]
+    I --> J[Risk Management]
+    J --> K[Exit Execution]
+```
+
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
@@ -56,7 +68,38 @@ rails solid_queue:load_recurring    # populate recurring job schedule
 ### Run
 
 ```bash
-./bin/dev    # starts all 4 processes via foreman
+# Web API server (does not start trading services)
+bin/dev
+
+# Trading services (separate long-running process)
+ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
+
+# Or just the Rails server
+bin/rails server
+```
+
+---
+
+## ⚙️ Configuration
+
+### Trading Parameters (`config/algo.yml`)
+
+```yaml
+indices:
+  NIFTY:
+    key: "NIFTY"
+    sid: "13"
+    segment: "IDX_I"
+    supertrend:
+      multiplier: 3.0
+      period: 10
+    adx:
+      min_strength: 18.0
+    capital_alloc_pct: 0.30
+    max_spread_pct: 3.0
+    min_oi: 50000
+    min_iv: 10.0
+    max_iv: 60.0
 ```
 
 This launches (via `Procfile.dev`):

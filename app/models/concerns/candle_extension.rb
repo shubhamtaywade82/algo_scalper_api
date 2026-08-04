@@ -28,13 +28,15 @@ module CandleExtension
       include_today = !Rails.env.test? &&
                       ENV['BACKTEST_MODE'] != '1' &&
                       ENV['SCRIPT_MODE'] != '1' &&
-                      !($PROGRAM_NAME.include?('runner') if defined?($PROGRAM_NAME)) # rubocop:disable Style/GlobalVars
+                      !($PROGRAM_NAME.include?('runner') if defined?($PROGRAM_NAME))
 
       if include_today
         # Include today's date to get the most recent candles
         # Use trading days, not calendar days, to avoid weekends/holidays
         to_date = if defined?(Market::Calendar) && Market::Calendar.respond_to?(:today_or_last_trading_day)
                     Market::Calendar.today_or_last_trading_day.to_s
+                  elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
+                    MarketCalendar.today_or_last_trading_day.to_s
                   else
                     Time.zone.today.to_s
                   end
@@ -42,6 +44,8 @@ module CandleExtension
         # Get from_date as 2 trading days ago (not 2 calendar days)
         from_date = if defined?(Market::Calendar) && Market::Calendar.respond_to?(:trading_days_ago)
                       Market::Calendar.trading_days_ago(2).to_s
+                    elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:trading_days_ago)
+                      MarketCalendar.trading_days_ago(2).to_s
                     else
                       (Date.parse(to_date) - 2).to_s # Fallback to calendar days
                     end
@@ -151,9 +155,9 @@ module CandleExtension
       end
 
       TechnicalAnalysis::Obv.calculate(dcv)
+    rescue NoMethodError => e
+      raise e
     rescue StandardError => e
-      raise e if e.is_a?(NoMethodError)
-
       # OBV.calculate might have different signature - try alternative approach
       Rails.logger.warn("[CandleExtension] OBV calculation failed: #{e.message}")
       nil

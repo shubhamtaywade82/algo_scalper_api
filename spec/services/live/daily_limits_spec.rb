@@ -151,41 +151,6 @@ RSpec.describe Live::DailyLimits do
         expect(result[:allowed]).to be true
       end
     end
-
-    context 'when daily profit target is reached' do
-      let(:telegram_notifier) { instance_double(Notifications::TelegramNotifier) }
-
-      before do
-        allow(AlgoConfig).to receive(:fetch).and_return(
-          risk: {
-            max_daily_profit: 5000.0,
-            max_daily_loss_pct: 5000.0,
-            max_global_daily_loss_pct: 10_000.0,
-            max_daily_trades: 10,
-            max_global_daily_trades: 20
-          },
-          telegram: { enabled: true, notify_daily_profit_target: true }
-        )
-        allow(redis).to receive(:get).with(/daily_limits:profit:.*:global/).and_return('6000.0')
-        allow(Notifications::TelegramNotifier).to receive(:instance).and_return(telegram_notifier)
-        allow(telegram_notifier).to receive(:notify_daily_profit_target_once)
-      end
-
-      it 'returns daily_profit_target_reached and invokes Telegram notifier' do
-        result = daily_limits.can_trade?(index_key: 'NIFTY')
-
-        expect(result).to include(
-          allowed: false,
-          reason: 'daily_profit_target_reached',
-          global_daily_profit: 6000.0,
-          max_daily_profit: 5000.0
-        )
-        expect(telegram_notifier).to have_received(:notify_daily_profit_target_once).with(
-          global_daily_profit: 6000.0,
-          max_daily_profit: 5000.0
-        )
-      end
-    end
   end
 
   describe '#record_loss' do

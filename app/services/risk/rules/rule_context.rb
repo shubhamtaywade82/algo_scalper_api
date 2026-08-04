@@ -5,15 +5,14 @@ module Risk
     # Context object that provides all necessary data for rule evaluation
     # This encapsulates position data, tracker, config, and other context
     class RuleContext
-      attr_reader :position, :tracker, :risk_config, :current_time, :trading_session, :tracker_snapshot
+      attr_reader :position, :tracker, :risk_config, :current_time, :trading_session
 
-      def initialize(position:, tracker:, risk_config: {}, current_time: nil, trading_session: nil, tracker_snapshot: nil)
+      def initialize(position:, tracker:, risk_config: {}, current_time: nil, trading_session: nil)
         @position = position
         @tracker = tracker
         @risk_config = risk_config || {}
         @current_time = current_time || Time.current
         @trading_session = trading_session
-        @tracker_snapshot = tracker_snapshot
       end
 
       # Get PnL percentage from position
@@ -49,7 +48,7 @@ module Risk
       # Check if position is active
       # @return [Boolean] true if active, false otherwise
       def active?
-        !!(tracker&.active? && position)
+        tracker&.active? && position
       end
 
       # Get a config value with optional default
@@ -79,9 +78,37 @@ module Risk
         value = config_value(key)
         return default unless value
 
-        Time.zone.parse(value.to_s) || default
+        Time.zone.parse(value.to_s)
       rescue StandardError
         default
+      end
+
+      # Get trailing activation percentage from config
+      # Checks nested config: risk[:trailing][:activation_pct] or risk[:trailing_activation_pct]
+      # @param default [BigDecimal] Default value if not found
+      # @return [BigDecimal] Trailing activation percentage
+      def trailing_activation_pct(default = BigDecimal('10.0'))
+        # Try nested config first: risk[:trailing][:activation_pct]
+        trailing_config = config_value(:trailing)
+        if trailing_config.is_a?(Hash) && trailing_config[:activation_pct]
+          return BigDecimal(trailing_config[:activation_pct].to_s)
+        end
+
+        # Fallback to flat config: risk[:trailing_activation_pct]
+        config_bigdecimal(:trailing_activation_pct, default)
+      end
+
+      # Check if trailing activation threshold is met
+      # Trailing rules should only activate when pnl_pct >= trailing_activation_pct
+      # @return [Boolean] true if trailing should be active, false otherwise
+      def trailing_activated?
+        pnl_pct = self.pnl_pct
+        return false unless pnl_pct
+
+        activation_pct = trailing_activation_pct
+        return false if activation_pct.zero?
+
+        pnl_pct.to_f >= activation_pct.to_f
       end
     end
   end

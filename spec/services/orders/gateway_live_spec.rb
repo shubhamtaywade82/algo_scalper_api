@@ -16,37 +16,13 @@ RSpec.describe Orders::GatewayLive do
     allow(Orders::Placer).to receive_messages(exit_position!: double('order', id: '123'),
                                               buy_market!: double('order', id: '456'), sell_market!: double('order', id: '789'))
     allow(DhanHQ::Models::Position).to receive(:active).and_return([])
-    allow(DhanHQ::Models::Funds).to receive(:fetch).and_return(
-      double('funds', available_balance: 100_000, utilized_amount: 50_000, margin: 25_000)
+    allow(DhanHQ::Models::FundLimit).to receive(:fetch).and_return(
+      double('funds', available: 100_000, utilized: 50_000, margin: 25_000)
     )
   end
 
-  describe '#cancel_order' do
-    let(:order) { instance_double(DhanHQ::Models::Order, cancel: { status: 'success' }) }
-
-    it 'finds and cancels the order' do
-      allow(DhanHQ::Models::Order).to receive(:find).with('ORD-123').and_return(order)
-
-      result = gateway.cancel_order('ORD-123')
-
-      expect(result).to eq(status: 'success')
-      expect(DhanHQ::Models::Order).to have_received(:find).with('ORD-123')
-      expect(order).to have_received(:cancel)
-    end
-  end
-
   describe '#exit_market' do
-    it 'uses provided client_order_id when passed' do
-      gateway.exit_market(tracker, client_order_id: 'AS-EXIT-FIXED-001')
-
-      expect(Orders::Placer).to have_received(:exit_position!).with(
-        seg: tracker.segment,
-        sid: tracker.security_id,
-        client_order_id: 'AS-EXIT-FIXED-001'
-      )
-    end
-
-    it 'generates client order ID when not provided' do
+    it 'generates unique client order ID with random component' do
       gateway.exit_market(tracker)
 
       expect(Orders::Placer).to have_received(:exit_position!) do |args|
@@ -54,20 +30,20 @@ RSpec.describe Orders::GatewayLive do
       end
     end
 
-    it 'returns success hash with order id when order is placed' do
-      result = gateway.exit_market(tracker, client_order_id: 'AS-EXIT-TEST-123')
+    it 'calls Placer.exit_position! with correct parameters' do
+      gateway.exit_market(tracker)
 
-      expect(result).to include(success: true, status: :accepted, order_id: nil, client_order_id: 'AS-EXIT-TEST-123')
+      expect(Orders::Placer).to have_received(:exit_position!).with(
+        seg: tracker.segment,
+        sid: tracker.security_id,
+        client_order_id: match(/^AS-EXIT-#{tracker.security_id}-\d+-[a-f0-9]{4}$/)
+      )
     end
 
-    it 'returns already_closed as success for duplicate/already-closed broker errors' do
-      allow(Orders::Placer).to receive(:exit_position!).and_return(
-        { error_code: 'POSITION_NOT_FOUND', message: 'Position already closed' }
-      )
+    it 'returns success hash when order is placed' do
+      result = gateway.exit_market(tracker)
 
-      result = gateway.exit_market(tracker, client_order_id: 'AS-EXIT-TEST-123')
-
-      expect(result).to include(success: true, status: :already_closed, client_order_id: 'AS-EXIT-TEST-123')
+      expect(result).to eq({ success: true })
     end
 
     it 'returns failure hash when Placer returns nil' do
@@ -75,7 +51,24 @@ RSpec.describe Orders::GatewayLive do
 
       result = gateway.exit_market(tracker)
 
-      expect(result).to include(success: false, status: :failed, error: 'exit failed')
+      expect(result).to eq({ success: false, error: 'exit failed' })
+    end
+
+    it 'generates different client order IDs for multiple calls' do
+      coid1 = nil
+      coid2 = nil
+
+      allow(Orders::Placer).to receive(:exit_position!) do |args|
+        coid1 ||= args[:client_order_id]
+        coid2 = args[:client_order_id] if coid1
+        double('order', id: '123')
+      end
+
+      gateway.exit_market(tracker)
+      sleep 0.01 # Ensure different timestamp
+      gateway.exit_market(tracker)
+
+      expect(coid1).not_to eq(coid2)
     end
   end
 
@@ -237,29 +230,24 @@ RSpec.describe Orders::GatewayLive do
              security_id: '55111',
              exchange_segment: 'NSE_FNO',
              net_qty: 50,
-             buy_avg: 100.5,
+             cost_price: 100.5,
              product_type: 'INTRADAY',
              position_type: 'LONG',
              trading_symbol: 'NIFTY24JAN20000CE')
     end
 
-    it 'returns position hash with unified shape when position exists' do
+    it 'returns position hash when position exists' do
       allow(DhanHQ::Models::Position).to receive(:active).and_return([dhan_position])
-      allow(Live::TickQuery).to receive(:for_security).and_return(double(ltp: BigDecimal('105.0')))
 
       result = gateway.position(segment: 'NSE_FNO', security_id: '55111')
 
-      expect(result).to include(
+      expect(result).to eq(
         qty: 50,
         avg_price: BigDecimal('100.5'),
-        upnl: BigDecimal('225.0'), # (105 - 100.5) * 50
-        rpnl: BigDecimal(0),
-        last_ltp: BigDecimal('105.0'),
         product_type: 'INTRADAY',
         exchange_segment: 'NSE_FNO',
         position_type: 'LONG',
-        trading_symbol: 'NIFTY24JAN20000CE',
-        status: 'active'
+        trading_symbol: 'NIFTY24JAN20000CE'
       )
     end
 
@@ -284,9 +272,11 @@ RSpec.describe Orders::GatewayLive do
                               security_id: '55112',
                               exchange_segment: 'NSE_FNO',
                               net_qty: 100,
-                              buy_avg: 200.0)
+                              cost_price: 200.0,
+                              product_type: 'INTRADAY',
+                              position_type: 'LONG',
+                              trading_symbol: 'OTHER')
       allow(DhanHQ::Models::Position).to receive(:active).and_return([other_position, dhan_position])
-      allow(Live::TickQuery).to receive(:for_security).and_return(double(ltp: BigDecimal('105.0')))
 
       result = gateway.position(segment: 'NSE_FNO', security_id: '55111')
 
@@ -295,25 +285,22 @@ RSpec.describe Orders::GatewayLive do
   end
 
   describe '#wallet_snapshot' do
-    it 'returns wallet hash with unified shape' do
+    it 'returns wallet hash with funds data' do
       result = gateway.wallet_snapshot
 
       expect(result).to eq(
         cash: 100_000,
-        equity: 150_000,
-        mtm: 0,
-        exposure: 50_000,
         utilized: 50_000,
         margin: 25_000
       )
     end
 
-    it 'handles errors gracefully and returns zeroed unified shape' do
-      allow(DhanHQ::Models::Funds).to receive(:fetch).and_raise(StandardError.new('API error'))
+    it 'handles errors gracefully and returns empty hash' do
+      allow(DhanHQ::Models::FundLimit).to receive(:fetch).and_raise(StandardError.new('API error'))
 
       result = gateway.wallet_snapshot
 
-      expect(result).to eq(cash: 0, equity: 0, mtm: 0, exposure: 0, utilized: 0, margin: 0)
+      expect(result).to eq({})
     end
   end
 

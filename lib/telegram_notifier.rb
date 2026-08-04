@@ -8,23 +8,19 @@ require 'uri'
 class TelegramNotifier
   TELEGRAM_API = 'https://api.telegram.org'
   MAX_LEN      = 4000 # keep margin below Telegram's 4096 limit
-  OPEN_TIMEOUT = 2
-  READ_TIMEOUT = 5
 
   # Send a message to Telegram
   # @param text [String] Message text
   # @param chat_id [String, Integer, nil] Chat ID (falls back to ENV)
-  # @param skip_formatter [Boolean] Skip Markdown→HTML conversion (use when text is already HTML)
   # @param extra_params [Hash] Additional parameters (parse_mode, etc.)
   # @return [Net::HTTPResponse, nil]
-  def self.send_message(text, chat_id: nil, skip_formatter: false, **extra_params)
+  def self.send_message(text, chat_id: nil, **extra_params)
     return if text.blank?
 
     chat_id ||= ENV.fetch('TELEGRAM_CHAT_ID', nil)
     return if chat_id.blank?
 
     chunks(text).each do |chunk|
-      chunk = Telegram::Formatter.to_html(chunk) unless skip_formatter
       post('sendMessage',
            chat_id: chat_id,
            text: chunk,
@@ -60,13 +56,7 @@ class TelegramNotifier
     return if bot_token.blank?
 
     uri = URI("#{TELEGRAM_API}/bot#{bot_token}/#{method}")
-    http = Net::HTTP.new(uri.host, uri.port)
-    http.use_ssl = (uri.scheme == 'https')
-    http.open_timeout = OPEN_TIMEOUT
-    http.read_timeout = READ_TIMEOUT
-    request = Net::HTTP::Post.new(uri)
-    request.set_form_data(params)
-    res = http.request(request)
+    res = Net::HTTP.post_form(uri, params)
 
     unless res.is_a?(Net::HTTPSuccess)
       Rails.logger.error("[TelegramNotifier] #{method} failed: #{res.body}") if defined?(Rails)

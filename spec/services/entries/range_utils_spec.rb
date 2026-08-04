@@ -43,7 +43,7 @@ RSpec.describe Entries::RangeUtils do
   describe '.compressed?' do
     it 'returns true when range is below threshold' do
       bars = [
-        build(:candle, high: 25_010, low: 25_000, close: 25_005),
+        build(:candle, high: 25_010, low: 24_990, close: 25_000),
         build(:candle, high: 25_020, low: 25_000, close: 25_010)
       ]
 

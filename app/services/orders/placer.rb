@@ -84,7 +84,7 @@ module Orders
         end
 
         actual_qty = if position && position[:net_qty].to_i.positive?
-          position[:net_qty]
+                       position[:net_qty]
                      else
           qty
                      end
@@ -599,69 +599,10 @@ module Orders
         "#{base}-#{digest}"
       end
 
-      def rate_limiter
-        @rate_limiter ||= TokenBucket.new(rate: 10, per: 1.second)
-      end
-
       def segment_tradable?(segment)
         return false if segment.blank?
 
         VALID_TRADABLE_SEGMENTS.include?(segment.to_s.upcase)
-      end
-
-      def place_order_with_slicing(sid:, qty:, client_order_id:, &block)
-        index_key = resolve_index_key(sid)
-        slices = Slicer.slice_quantity(index_key: index_key, total_quantity: qty)
-
-        if slices.size <= 1
-          return yield(qty, client_order_id)
-        end
-
-        Rails.logger.info("[Orders::Placer] Slicing quantity #{qty} into #{slices.inspect} for index=#{index_key} (limit=#{Slicer.freeze_limit_for(index_key)})")
-
-        last_order = nil
-        filled_qty = 0
-        slices.each_with_index do |slice_qty, index|
-          slice_coid = "#{client_order_id}_#{index + 1}"
-
-          # Sleep between slices (except first)
-          sleep(Slicer.delay_seconds) if index.positive?
-
-          last_order = yield(slice_qty, slice_coid)
-
-          if last_order.nil?
-            alert_partial_slice_failure(
-              client_order_id: client_order_id,
-              filled_qty: filled_qty,
-              total_qty: qty,
-              failed_slice_number: index + 1,
-              total_slices: slices.size
-            )
-            break
-          end
-
-          filled_qty += slice_qty
-        end
-
-        last_order
-      end
-
-      def alert_partial_slice_failure(client_order_id:, filled_qty:, total_qty:, failed_slice_number:, total_slices:)
-        message = "[Orders::Placer] Slice #{failed_slice_number}/#{total_slices} failed for #{client_order_id}: " \
-                  "filled #{filled_qty}/#{total_qty} before failure — position is PARTIAL, no further slices will be sent"
-        Rails.logger.error(message)
-        Notifications::TelegramNotifier.instance.notify_error(message, context: 'Orders::Placer#place_order_with_slicing')
-      rescue StandardError => e
-        Rails.logger.error("[Orders::Placer] alert_partial_slice_failure failed: #{e.message}")
-      end
-
-      def resolve_index_key(sid)
-        instrument = Instrument.find_by(security_id: sid.to_s, segment: 'index') ||
-                     Instrument.find_by(security_id: sid.to_s, segment: 'derivatives') ||
-                     Instrument.find_by(security_id: sid.to_s)
-        instrument&.underlying_symbol || 'default'
-      rescue StandardError
-        'default'
       end
     end
   end

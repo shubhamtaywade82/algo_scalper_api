@@ -15,15 +15,8 @@ Rails.application.routes.draw do
   # Can be used by load balancers and uptime monitors to verify that the app is live.
   get "up" => "rails/health#show", as: :rails_health_check
 
-  # ActionCable WebSocket endpoint
-  mount ActionCable.server => '/cable'
-
-  # Legacy SMC path → canonical /api/smc/decision (301, query string preserved)
-  get 'smc/decision', to: proc { |env|
-    qs = env['QUERY_STRING'].to_s
-    loc = qs.present? ? "/api/smc/decision?#{qs}" : '/api/smc/decision'
-    [301, { 'Location' => loc, 'Content-Type' => 'text/plain' }, []]
-  }
+  # Optional SMC decision endpoint (non-namespaced controller by design)
+  get "smc/decision", to: "smc#decision"
 
   namespace :api do
     get :health, to: "health#show"
@@ -121,6 +114,14 @@ Rails.application.routes.draw do
         end
       end
     end
+  end
+
+  # Redis UI (development only)
+  if Rails.env.development?
+    get 'redis_ui', to: 'redis_ui#index'
+    get 'redis_ui/info', to: 'redis_ui#info'
+    get 'redis_ui/:id', to: 'redis_ui#show', as: :redis_ui_key
+    delete 'redis_ui/:id', to: 'redis_ui#destroy'
   end
 
   # Redis UI (development only)

@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 require 'dhan_hq'
-require 'dhan_hq/ta'
-require 'dhan_hq/analysis'
 
 # Service for performing technical analysis on indices using DhanHQ TA modules
 # Single configurable analyzer that adapts behavior based on index-specific configuration
@@ -147,7 +145,6 @@ class IndexTechnicalAnalyzer < ApplicationService
   }.freeze
 
   DEFAULT_TIMEFRAMES = [5, 15, 60].freeze
-  VALID_TIMEFRAMES = [1, 5, 15, 25, 60].freeze
   DEFAULT_DAYS_BACK = 30
 
   attr_reader :index_symbol, :config, :indicators, :bias_summary, :error
@@ -167,7 +164,7 @@ class IndexTechnicalAnalyzer < ApplicationService
     return failure_result('DhanHQ credentials not configured') unless valid_credentials?
 
     # Use configured values if not provided, allow runtime override
-    effective_timeframes = sanitize_timeframes(timeframes || @config[:timeframes])
+    effective_timeframes = timeframes || @config[:timeframes]
     effective_days_back = days_back || @config[:api_settings][:days_back]
 
     begin
@@ -266,8 +263,8 @@ class IndexTechnicalAnalyzer < ApplicationService
   end
 
   def valid_credentials?
-    client_id = ENV['DHAN_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil)
-    access_token = ENV['DHAN_ACCESS_TOKEN'] || ENV.fetch('ACCESS_TOKEN', nil)
+    client_id = ENV['DHANHQ_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil)
+    access_token = ENV['DHANHQ_ACCESS_TOKEN'] || ENV.fetch('ACCESS_TOKEN', nil)
 
     unless client_id && access_token
       @error = 'DhanHQ credentials not configured'
@@ -319,17 +316,10 @@ class IndexTechnicalAnalyzer < ApplicationService
     # Check if DhanHQ Analysis module is available
     if dhanhq_analysis_available?
       begin
-        analyzer_input = normalize_timeframe_keys(@indicators)
-        unless valid_analysis_payload?(analyzer_input)
-          log_warn('DhanHQ Analysis payload shape invalid - using fallback')
-          @bias_summary = generate_fallback_bias_summary
-          return
-        end
-
-        analyzer = DhanHQ::Analysis::MultiTimeframeAnalyzer.new(data: analyzer_input)
+        analyzer = DhanHQ::Analysis::MultiTimeframeAnalyzer.new(data: @indicators)
         @bias_summary = analyzer.call
         log_info("Generated bias summary: #{@bias_summary.dig(:summary, :bias)}")
-      rescue NameError, NoMethodError, ArgumentError => e
+      rescue NameError, NoMethodError => e
         log_warn("DhanHQ Analysis module not available: #{e.message} - using fallback")
         @bias_summary = generate_fallback_bias_summary
       end
@@ -361,10 +351,9 @@ class IndexTechnicalAnalyzer < ApplicationService
     # Fetch OHLC data for each timeframe
     indicators_data = {}
     timeframes.each do |tf|
-      # Use CandleSeriesCache (Redis-backed) in live trading to avoid redundant
-      # DhanHQ REST calls on every analysis cycle.
-      # Falls back transparently to backfill when the cache is cold (< 20 candles).
-      series = Live::CandleSeriesCache.fetch(instrument: instrument, interval: tf.to_i, backfill: true)
+      # Use instrument.candles() method which returns CandleSeries
+      # This may internally call intraday_ohlc() which uses DhanhqErrorHandler
+      series = instrument.candles(interval: tf.to_s)
       next unless series&.candles&.any?
 
       # Compute indicators using CandleSeries methods with configured periods
@@ -457,7 +446,6 @@ class IndexTechnicalAnalyzer < ApplicationService
   end
 
   def dhanhq_ta_available?
-    ensure_dhanhq_ta_loaded
     defined?(TA) && TA.const_defined?(:TechnicalAnalysis)
   end
 
@@ -470,47 +458,6 @@ class IndexTechnicalAnalyzer < ApplicationService
     DhanhqErrorHandler.handle_dhanhq_error(error, context: 'index_technical_analysis')
     @error = error.message
     log_error("Technical analysis failed: #{error.class} - #{error.message}")
-  end
-
-  def normalize_timeframe_keys(indicators)
-    return indicators unless indicators.is_a?(Hash)
-
-    indicators.deep_symbolize_keys
-  end
-
-  def valid_analysis_payload?(payload)
-    return false unless payload.is_a?(Hash)
-
-    meta = payload[:meta] || payload['meta']
-    indicators = payload[:indicators] || payload['indicators']
-    meta.present? && indicators.present?
-  end
-
-  def ensure_dhanhq_ta_loaded
-    return if defined?(@ta_load_attempted) && @ta_load_attempted
-
-    require 'ta/technical_analysis'
-  rescue LoadError => e
-    log_warn("DhanHQ TA load failed: #{e.message}")
-  ensure
-    @ta_load_attempted = true
-  end
-
-  def sanitize_timeframes(timeframes)
-    requested = Array(timeframes).filter_map do |tf|
-      Integer(tf)
-    rescue ArgumentError, TypeError
-      nil
-    end
-
-    sanitized = requested.map { |tf| tf == 30 ? 25 : tf }.select { |tf| VALID_TIMEFRAMES.include?(tf) }.uniq
-    sanitized = DEFAULT_TIMEFRAMES if sanitized.empty?
-
-    if requested != sanitized
-      log_warn("Adjusted invalid timeframes #{requested.inspect} -> #{sanitized.inspect}")
-    end
-
-    sanitized
   end
 
   def success_result

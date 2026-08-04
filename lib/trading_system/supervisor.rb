@@ -16,7 +16,7 @@ module TradingSystem
       @services[name.to_sym] = instance
     end
 
-    delegate :[], :key?, :fetch, :dig, to: :@services
+    delegate :[], to: :@services
 
     def services
       @services.dup
@@ -30,7 +30,14 @@ module TradingSystem
       @mutex.synchronize do
         return if @running
 
-        @services.each_key { |name| start_one(name) }
+        @services.each do |name, service|
+          begin
+            service.start
+            Rails.logger.info("[Supervisor] started #{name}")
+          rescue StandardError => e
+            Rails.logger.error("[Supervisor] failed starting #{name}: #{e.class} - #{e.message}")
+          end
+        end
 
         @running = true
       end
@@ -40,56 +47,17 @@ module TradingSystem
       @mutex.synchronize do
         return unless @running
 
-        @services.keys.reverse_each { |name| stop_one(name) }
+        @services.reverse_each do |name, service|
+          begin
+            service.stop
+            Rails.logger.info("[Supervisor] stopped #{name}")
+          rescue StandardError => e
+            Rails.logger.error("[Supervisor] error stopping #{name}: #{e.class} - #{e.message}")
+          end
+        end
 
         @running = false
       end
-    end
-
-    def start_service(name)
-      name = name.to_sym
-      @mutex.synchronize do
-        raise "Unknown service: #{name}" unless @services.key?(name)
-
-        start_one(name)
-      end
-    end
-
-    def stop_service(name)
-      name = name.to_sym
-      @mutex.synchronize do
-        raise "Unknown service: #{name}" unless @services.key?(name)
-
-        stop_one(name)
-      end
-    end
-
-    def restart_service(name)
-      name = name.to_sym
-      @mutex.synchronize do
-        raise "Unknown service: #{name}" unless @services.key?(name)
-
-        stop_one(name)
-        start_one(name)
-      end
-    end
-
-    private
-
-    def start_one(name)
-      service = @services[name]
-      service.start
-      Rails.logger.info("[Supervisor] started #{name}")
-    rescue StandardError => e
-      Rails.logger.error("[Supervisor] failed starting #{name}: #{e.class} - #{e.message}")
-    end
-
-    def stop_one(name)
-      service = @services[name]
-      service.stop
-      Rails.logger.info("[Supervisor] stopped #{name}")
-    rescue StandardError => e
-      Rails.logger.error("[Supervisor] error stopping #{name}: #{e.class} - #{e.message}")
     end
 
     # Best-effort health snapshot for use by API health endpoints.

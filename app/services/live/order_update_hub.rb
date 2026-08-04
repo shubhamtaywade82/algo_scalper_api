@@ -45,13 +45,7 @@ module Live
       Rails.logger.info('[OrderUpdateHub] DhanHQ order update feed started (live mode only)')
       true
     rescue StandardError => e
-      @last_error = e
       Rails.logger.error("[OrderUpdateHub] Failed to start DhanHQ order update feed: #{e.class} - #{e.message}")
-      begin
-        Live::FeedHealthService.instance.mark_failure!(:order_updates, error: e)
-      rescue StandardError
-        nil
-      end
       stop!
       false
     end
@@ -100,9 +94,9 @@ module Live
       return false if paper_trading_enabled?
 
       # Check for credentials
-      # Support both naming conventions: CLIENT_ID/DHAN_CLIENT_ID and ACCESS_TOKEN/DHAN_ACCESS_TOKEN
-      client_id = ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
-      access    = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+      # Support both naming conventions: CLIENT_ID/DHANHQ_CLIENT_ID and ACCESS_TOKEN/DHANHQ_ACCESS_TOKEN
+      client_id = ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
+      access    = ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
       client_id.present? && access.present?
     end
 
@@ -141,63 +135,6 @@ module Live
       callback.call(payload)
     rescue StandardError => e
       Rails.logger.error("[OrderUpdateHub] Order update callback failed: #{e.class} - #{e.message}")
-    end
-
-    def start_watchdog!
-      return if @watchdog_thread&.alive?
-
-      @watchdog_thread = Thread.new do
-        Thread.current.name = 'ws-order-update-watchdog' if Thread.current.respond_to?(:name=)
-
-        loop do
-          sleep 5
-          break unless running?
-
-          begin
-            Live::SystemStatusCache.instance.report_heartbeat(:ws_order_update)
-          rescue StandardError
-            nil
-          end
-          check_connection_health!
-        end
-      end
-    end
-
-    def check_connection_health!
-      return unless running?
-
-      last_seen = @last_update_at
-      return unless last_seen
-
-      threshold = Live::FeedHealthService.instance.threshold_for(:order_updates)
-      stale_for = Time.current - last_seen
-      return unless stale_for > threshold
-
-      Rails.logger.warn(
-        "[OrderUpdateHub] Order updates feed stale for #{stale_for.round(1)}s (> #{threshold}s); restarting WebSocket client"
-      )
-
-      begin
-        Live::FeedHealthService.instance.mark_failure!(:order_updates, error: RuntimeError.new('order_updates feed stale'))
-      rescue StandardError
-        nil
-      end
-
-      restart!
-    rescue StandardError => e
-      Rails.logger.error("[OrderUpdateHub] Failed to restart after stale order updates feed: #{e.class} - #{e.message}")
-    end
-
-    def restart!
-      return if @restarting
-      return unless running?
-
-      @restarting = true
-      stop!
-      sleep 1
-      start!
-    ensure
-      @restarting = false
     end
   end
 end

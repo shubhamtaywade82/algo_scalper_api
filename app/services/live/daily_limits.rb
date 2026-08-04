@@ -19,7 +19,7 @@ module Live
     # Check if trading is allowed for the given index
     # @param index_key [Symbol, String] Index key (e.g., :NIFTY, :BANKNIFTY)
     # @return [Hash] { allowed: true/false, reason: "..." }
-    # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+    # rubocop:disable Metrics/AbcSize
     def can_trade?(index_key:)
       return { allowed: false, reason: 'redis_unavailable' } unless @redis
 
@@ -30,88 +30,62 @@ module Live
       global_daily_profit = get_global_daily_profit
       max_daily_profit = risk_config[:max_daily_profit] || risk_config[:daily_profit_target]
       if max_daily_profit&.to_f&.positive? && global_daily_profit >= max_daily_profit.to_f
-        result = {
+        return {
           allowed: false,
           reason: 'daily_profit_target_reached',
           global_daily_profit: global_daily_profit,
           max_daily_profit: max_daily_profit.to_f
         }
-        notify_daily_profit_target_telegram(result)
-        return result
       end
 
-      # 1. Check daily loss limit (per-index)
-      daily_loss = get_daily_loss(index_key)
-      # Check per-index limit from daily_limits.per_index config
-      per_index_limits = risk_config.dig(:daily_limits, :per_index) || {}
-      max_daily_loss_pct = per_index_limits[index_key.to_sym] || per_index_limits[index_key.to_s] ||
-                           risk_config[:max_daily_loss_pct] || risk_config[:daily_loss_limit_pct]
-      # Convert percentage to absolute rupees using account equity
-      if max_daily_loss_pct.is_a?(Numeric) && max_daily_loss_pct < 1.0
-        equity = AlgoConfig.fetch.dig(:paper_trading, :balance) || 100_000.0
-        max_daily_loss = equity * max_daily_loss_pct
-      else
-        max_daily_loss = max_daily_loss_pct
-      end
-      if max_daily_loss && (daily_loss >= max_daily_loss.to_f)
-        return {
-          allowed: false,
-          reason: 'daily_loss_limit_exceeded',
-          daily_loss: daily_loss,
-          max_daily_loss: max_daily_loss.to_f,
-          index_key: index_key
-        }
+      # Daily loss limits ONLY enforced when daily profit >= ₹20k (protect profits)
+      # If profit < ₹20k, allow trading even if loss limits exceeded
+      profit_threshold = max_daily_profit&.to_f || 20_000.0
+      if global_daily_profit >= profit_threshold
+        # Check daily loss limit (per-index) - only when profit >= threshold
+        daily_loss = get_daily_loss(index_key)
+        max_daily_loss = risk_config[:max_daily_loss_pct] || risk_config[:daily_loss_limit_pct]
+        # Convert percentage to absolute amount if needed
+        # For now, assume max_daily_loss is in rupees (can be enhanced later)
+        if max_daily_loss && (daily_loss >= max_daily_loss.to_f)
+          return {
+            allowed: false,
+            reason: 'daily_loss_limit_exceeded',
+            daily_loss: daily_loss,
+            max_daily_loss: max_daily_loss.to_f,
+            index_key: index_key,
+            note: 'Loss limit enforced because daily profit >= ₹20k'
+          }
+        end
+
+        # Check global daily loss limit - only when profit >= threshold
+        global_daily_loss = get_global_daily_loss
+        max_global_loss = risk_config[:max_global_daily_loss_pct] || risk_config[:global_daily_loss_limit_pct]
+        if max_global_loss && global_daily_loss >= max_global_loss.to_f
+          return {
+            allowed: false,
+            reason: 'global_daily_loss_limit_exceeded',
+            global_daily_loss: global_daily_loss,
+            max_global_loss: max_global_loss.to_f,
+            note: 'Loss limit enforced because daily profit >= ₹20k'
+          }
+        end
       end
 
-      # 2. Check global daily loss limit
-      global_daily_loss = get_global_daily_loss
-      max_global_loss = risk_config[:max_global_daily_loss_pct] || risk_config[:global_daily_loss_limit_pct]
-      if max_global_loss && global_daily_loss >= max_global_loss.to_f
-        return {
-          allowed: false,
-          reason: 'global_daily_loss_limit_exceeded',
-          global_daily_loss: global_daily_loss,
-          max_global_loss: max_global_loss.to_f
-        }
-      end
-
-      # 3. Check trade frequency limit (per-index)
-      daily_trades = get_daily_trades(index_key)
-      max_daily_trades = get_index_max_trades(index_key) || risk_config[:max_daily_trades] || risk_config[:daily_trade_limit]
-      if max_daily_trades && (daily_trades >= max_daily_trades.to_i)
-        return {
-          allowed: false,
-          reason: 'trade_frequency_limit_exceeded',
-          daily_trades: daily_trades,
-          max_daily_trades: max_daily_trades.to_i,
-          index_key: index_key
-        }
-      end
-
-      # 4. Check global trade frequency limit
-      global_trades = get_global_daily_trades
-      max_global_trades = get_global_max_trades || risk_config[:max_global_daily_trades] || risk_config[:global_daily_trade_limit]
-      if max_global_trades && global_trades >= max_global_trades.to_i
-        return {
-          allowed: false,
-          reason: 'global_trade_frequency_limit_exceeded',
-          global_daily_trades: global_trades,
-          max_global_trades: max_global_trades.to_i
-        }
-      end
+      # Trade frequency limits are NOT enforced (no cap on trade count)
+      # Trade counts are still tracked for monitoring/analytics but don't block entries
 
       { allowed: true, reason: nil }
     rescue StandardError => e
       Rails.logger.error("[DailyLimits] can_trade? error: #{e.class} - #{e.message}")
       { allowed: false, reason: "error: #{e.message}" }
     end
-    # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+    # rubocop:enable Metrics/AbcSize
 
     # Record a loss for the given index
     # @param index_key [Symbol, String] Index key
     # @param amount [Float, BigDecimal] Loss amount in rupees (positive value)
     # @return [Boolean] True if recorded successfully
-    # rubocop:disable Metrics/AbcSize
     def record_loss(index_key:, amount:)
       return false unless @redis && amount&.positive?
 
@@ -137,13 +111,11 @@ module Live
       Rails.logger.error("[DailyLimits] record_loss error: #{e.class} - #{e.message}")
       false
     end
-    # rubocop:enable Metrics/AbcSize
 
     # Record a profit for the given index
     # @param index_key [Symbol, String] Index key
     # @param amount [Float, BigDecimal] Profit amount in rupees (positive value)
     # @return [Boolean] True if recorded successfully
-    # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity
     def record_profit(index_key:, amount:)
       return false unless @redis && amount&.positive?
 
@@ -181,7 +153,6 @@ module Live
       Rails.logger.error("[DailyLimits] record_profit error: #{e.class} - #{e.message}")
       false
     end
-    # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity
 
     # Record a trade for the given index
     # @param index_key [Symbol, String] Index key
@@ -315,17 +286,6 @@ module Live
 
     private
 
-    def notify_daily_profit_target_telegram(result)
-      return unless defined?(Notifications::TelegramNotifier)
-
-      Notifications::TelegramNotifier.instance.notify_daily_profit_target_once(
-        global_daily_profit: result[:global_daily_profit],
-        max_daily_profit: result[:max_daily_profit]
-      )
-    rescue StandardError => e
-      Rails.logger.warn("[DailyLimits] Daily profit Telegram notify failed: #{e.message}")
-    end
-
     # Normalize index key to string
     def normalize_index_key(index_key)
       index_key.to_s.strip.upcase
@@ -333,19 +293,13 @@ module Live
 
     # Load risk configuration from AlgoConfig
     def load_risk_config
-      config = AlgoConfig.fetch
-      risk = config[:risk] || {}
-      # Merge daily_limits from top-level config into risk for backward compatibility
-      daily_limits = config[:daily_limits] || {}
-      risk[:daily_limits] = daily_limits if daily_limits.any?
-      risk
+      AlgoConfig.fetch[:risk] || {}
     rescue StandardError => e
       Rails.logger.error("[DailyLimits] Failed to load risk config: #{e.class} - #{e.message}")
       {}
     end
 
     # Get max trades per day for specific index from config
-    # rubocop:disable Metrics/CyclomaticComplexity
     def get_index_max_trades(index_key)
       index_key = normalize_index_key(index_key)
       indices = AlgoConfig.fetch[:indices] || []
@@ -356,7 +310,6 @@ module Live
       Rails.logger.error("[DailyLimits] Failed to get index max trades: #{e.class} - #{e.message}")
       nil
     end
-    # rubocop:enable Metrics/CyclomaticComplexity
 
     # Get global max trades per day from config
     def get_global_max_trades

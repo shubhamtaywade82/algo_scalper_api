@@ -108,13 +108,11 @@ module Smc
 
     class NormalizedSmc
       def initialize(raw)
-        h = if raw.respond_to?(:to_h)
-              raw.to_h
-            else
-              (raw.is_a?(Hash) ? raw : {})
-            end
-        # Normalize to symbol keys so lookups are consistent (e.g. from JSON or symbol keys)
-        @raw = h.transform_keys { |k| k.is_a?(Symbol) ? k : k.to_s.to_sym }
+        @raw = if raw.respond_to?(:to_h)
+                 raw.to_h
+               else
+                 (raw.is_a?(Hash) ? raw : {})
+               end
       end
 
       def structure_state
@@ -160,16 +158,9 @@ module Smc
       end
 
       def active_liquidity_trap?
-        # Explicit false must not use `||` (false is valid "not in trap").
-        if @raw.key?(:active_liquidity_trap)
-          raw_val = @raw[:active_liquidity_trap]
-          return false if [false, 'false'].include?(raw_val)
-          return true if bool(raw_val) == true
-        end
-
+        # If unknown, treat as active (so scale_ready cannot pass accidentally).
         v =
           value(:active_liquidity_trap) ||
-          value('active_liquidity_trap') ||
           value(:liquidity_trap_active) ||
           value(:liquidity_trap) ||
           dig(:trap, :active) ||
@@ -238,20 +229,15 @@ module Smc
 
     class NormalizedAvrz
       def initialize(raw)
-        h = if raw.respond_to?(:to_h)
-              raw.to_h
-            else
-              (raw.is_a?(Hash) ? raw : {})
-            end
-        @raw = h.transform_keys { |k| k.is_a?(Symbol) ? k : k.to_s.to_sym }
+        @raw = if raw.respond_to?(:to_h)
+                 raw.to_h
+               else
+                 (raw.is_a?(Hash) ? raw : {})
+               end
       end
 
       def state
-        sym(
-          @raw[:state] ||
-            @raw[:avrz_state] ||
-            @raw.dig(:avrz, :state)
-        )
+        sym(@raw[:state] || @raw[:avrz_state] || @raw.dig(:avrz, :state))
       end
 
       private

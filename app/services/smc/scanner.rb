@@ -10,7 +10,6 @@ module Smc
     DEFAULT_PERIOD = 300
     INTER_INDEX_DELAY = 2.0 # seconds between processing indices
     DELAY_BETWEEN_CANDLE_FETCHES = 1.0 # seconds between candle fetches
-    STRUCTURE_EVENT_INTERVAL = '5' # matches TradingSignalContract's default timeframe
 
     def initialize(period: nil)
       @period = period || period_from_config || period_from_env || DEFAULT_PERIOD
@@ -144,12 +143,6 @@ module Smc
         if engine.ai_enabled? && %i[call put].include?(decision)
           Rails.logger.debug { "[Smc::Scanner] AI enabled for #{index_cfg[:key]} #{decision} signal - analysis will be sent via background job" }
         end
-
-        # Persist scan event for audit trail and replay capability
-        publish_scan_event(index_cfg, instrument, decision)
-
-        # Record atomic structural events (swings/BOS/CHoCH/FVG/OB/sweeps)
-        Smc::StructureEventRecorder.record!(instrument: instrument, interval: STRUCTURE_EVENT_INTERVAL)
       rescue DhanHQ::RateLimitError => e
         Rails.logger.error("[Smc::Scanner] Rate limit error for #{index_cfg[:key]}: #{e.message}")
         Rails.logger.info('[Smc::Scanner] Waiting 5 seconds before continuing...')
@@ -181,12 +174,7 @@ module Smc
 
         days_to_expiry = calculate_days_to_expiry(instrument)
 
-        if days_to_expiry == 999
-          Rails.logger.warn(
-            "[Smc::Scanner] Keeping #{idx_cfg[:key]} with unknown expiry " \
-            "(days_to_expiry=999) to avoid blocking signal processing"
-          )
-        elsif days_to_expiry > max_expiry_days
+        if days_to_expiry > max_expiry_days
           Rails.logger.debug do
             "[Smc::Scanner] Skipping #{idx_cfg[:key]} - expiry in #{days_to_expiry} days " \
               "(> #{max_expiry_days} days limit)"
@@ -239,9 +227,8 @@ module Smc
       config = AlgoConfig.fetch[:signals] || {}
       max_days = config[:max_expiry_days] || 7
       max_days.to_i
-    rescue StandardError => e
-      Rails.logger.warn("[Smc::Scanner] max_expiry_days_from_config failed: #{e.class} - #{e.message}")
-      7
+    rescue StandardError
+      7 # Default to 7 days if config unavailable
     end
 
     # Get scanner period from config
@@ -251,8 +238,7 @@ module Smc
       return nil unless period_seconds
 
       period_seconds.to_i
-    rescue StandardError => e
-      Rails.logger.warn("[Smc::Scanner] period_from_config failed: #{e.class} - #{e.message}")
+    rescue StandardError
       nil
     end
 
@@ -261,62 +247,8 @@ module Smc
       return nil unless ENV['SMC_SCANNER_PERIOD']
 
       ENV['SMC_SCANNER_PERIOD'].to_i
-    rescue StandardError => e
-      Rails.logger.warn("[Smc::Scanner] period_from_env failed: #{e.class} - #{e.message}")
+    rescue StandardError
       nil
-    end
-
-    # Persist scan decision to EventStore for audit trail and replay capability.
-    # Uses event_type 'bias_scan' (not 'signal') so JSON schema validation is skipped.
-    # Failures are logged and swallowed — event store is non-critical to the alert pipeline.
-    def publish_scan_event(index_cfg, instrument, decision)
-      return unless event_store_enabled?
-
-      price = instrument.ltp&.to_f || instrument.latest_ltp&.to_f || 0.0
-      payload = {
-        'index' => index_cfg[:key].to_s,
-        'decision' => decision.to_s,
-        'price' => price,
-        'scanned_at' => Time.current.iso8601
-      }
-      merge_scan_confluence_payload!(payload, index_cfg, instrument)
-
-      EventStore::Publisher.publish!(
-        stream: "smc:#{index_cfg[:key]}",
-        event_type: 'bias_scan',
-        correlation_id: SecureRandom.uuid,
-        payload: payload,
-        validate_contract: false
-      )
-    rescue StandardError => e
-      Rails.logger.error("[Smc::Scanner] EventStore publish failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
-    end
-
-    def event_store_enabled?
-      AlgoConfig.fetch.dig(:signals, :smc_event_store_publish) == true
-    rescue StandardError => e
-      Rails.logger.warn("[Smc::Scanner] event_store_enabled? check failed: #{e.class} - #{e.message}")
-      false
-    end
-
-    def merge_scan_confluence_payload!(payload, _index_cfg, instrument)
-      return unless AlgoConfig.fetch.dig(:signals, :enable_smc_confluence_digest) == true
-
-      intervals = AlgoConfig.fetch.dig(:signals, :smc_confluence_intervals) || {}
-      htf = (intervals[:htf] || intervals['htf'] || Smc::BiasEngine::HTF_INTERVAL).to_s
-      mtf = (intervals[:mtf] || intervals['mtf'] || Smc::BiasEngine::MTF_INTERVAL).to_s
-      ltf = (intervals[:ltf] || intervals['ltf'] || Smc::BiasEngine::LTF_INTERVAL).to_s
-
-      digest = Smc::Confluence::MtfDigest.build_from_instrument(
-        instrument: instrument,
-        htf: htf,
-        mtf: mtf,
-        ltf: ltf,
-        sleep_between: DELAY_BETWEEN_CANDLE_FETCHES
-      )
-      payload['smc_confluence_mtf'] = digest
-    rescue StandardError => e
-      Rails.logger.error("[Smc::Scanner] smc_confluence_mtf for EventStore failed: #{e.class} - #{e.message}")
     end
   end
 end

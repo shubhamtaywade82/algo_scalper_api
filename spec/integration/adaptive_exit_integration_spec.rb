@@ -9,45 +9,15 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
   let(:tracker) do
     create(:position_tracker,
            instrument: instrument,
-           status: 'active',
            entry_price: 100.0,
            quantity: 50,
            segment: 'NSE_FNO',
-           trade_state: 'expansion',
            meta: { 'index_key' => 'NIFTY' })
   end
 
   before do
     allow(exit_engine).to receive(:execute_exit)
     allow(service).to receive_messages(seconds_below_entry: 0, calculate_atr_ratio: 1.0)
-    Positions::TrailingConfig.reset_config!
-
-    # Mock RedisPnlCache
-    allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_wrap_original do |_method, *args|
-      args.first == tracker.id ? pnl_data : nil
-    end
-
-    # Mock ActiveCache (used by TrailingEngine)
-    allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([tracker])
-    active_cache = Positions::ActiveCache.instance
-    allow(active_cache).to receive(:get_by_tracker_id).and_wrap_original do |_method, *args|
-      if args.first == tracker.id && defined?(pnl_data)
-        Positions::PositionData.new(
-          tracker_id: tracker.id,
-          security_id: tracker.security_id,
-          segment: tracker.segment,
-          entry_price: tracker.entry_price,
-          quantity: tracker.quantity,
-          current_ltp: pnl_data[:ltp] || (tracker.entry_price.to_f * (1 + pnl_data[:pnl_pct].to_f)),
-          pnl: pnl_data[:pnl],
-          pnl_pct: pnl_data[:pnl_pct],
-          high_water_mark: pnl_data[:hwm_pnl],
-          peak_profit_pct: pnl_data[:peak_profit_pct] || pnl_data[:hwm_pnl_pct] || (pnl_data[:hwm_pnl] && tracker.entry_price.to_f > 0 ? (pnl_data[:hwm_pnl] / (tracker.entry_price.to_f * tracker.quantity)) : 0.05),
-          position_direction: %w[long_ce long_pe].include?(tracker.side) ? :long : :short,
-          index_key: 'NIFTY'
-        )
-      end
-    end
   end
 
   describe 'full exit flow with different configurations' do
@@ -59,8 +29,6 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
             tp_pct: 0.05,
             exit_drop_pct: 0.02, # Tighter trailing
             breakeven_after_gain: 0.05,
-            peak_drawdown_activation_profit_pct: 0.03,
-            peak_drawdown_exit_pct: 0.02,
             drawdown: {
               activation_profit_pct: 3.0,
               profit_min: 3.0,
@@ -90,27 +58,25 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
 
       before do
         allow(AlgoConfig).to receive(:fetch).and_return(config)
-        Positions::TrailingConfig.reset_config!
       end
 
       context 'when position is profitable and drops' do
         let(:pnl_data) do
           {
-            pnl: BigDecimal('100.0'), # +2% current (dropped from peak)
-            pnl_pct: BigDecimal('0.02'),
+            pnl: BigDecimal('150.0'), # +3% current (dropped from peak)
+            pnl_pct: BigDecimal('0.03'),
             hwm_pnl: BigDecimal('250.0') # +5% peak
           }
         end
 
         it 'triggers adaptive trailing stop' do
-          # Peak: 5%, Current: 2%, Drop: 3%
-          # With conservative config, should trigger peak_drawdown_exit
-          puts "DEBUG: TrailingConfig.config: #{Positions::TrailingConfig.config.inspect}"
+          # Peak: 5%, Current: 3%, Drop: 2%
+          # With conservative config, should trigger
           expect(exit_engine).to receive(:execute_exit).with(
             tracker,
-            match(/ADAPTIVE_TRAILING_STOP|TRAILING_STOP|peak_drawdown_exit/)
+            match(/ADAPTIVE_TRAILING_STOP|TRAILING_STOP/)
           )
-          service.enforce_dynamic_trailing_stops(exit_engine: exit_engine)
+          service.enforce_trailing_stops(exit_engine: exit_engine)
         end
       end
 
@@ -132,7 +98,7 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
           # Current loss 4% < 13% → No exit expected
           # But let's test if it exceeds
           expect(exit_engine).not_to receive(:execute_exit)
-          service.send(:run_interval_enforcement_if_needed, exit_engine)
+          service.enforce_hard_limits(exit_engine: exit_engine)
         end
       end
     end
@@ -144,12 +110,6 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
             sl_pct: 0.03,
             tp_pct: 0.05,
             exit_drop_pct: 0.05, # Wider trailing
-            peak_drawdown_exit_pct: 0.05,
-            tiered_drawdown_thresholds: {
-              low: 0.05,
-              medium: 0.05,
-              high: 0.05
-            },
             breakeven_after_gain: 0.10,
             drawdown: {
               activation_profit_pct: 3.0,
@@ -180,7 +140,6 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
 
       before do
         allow(AlgoConfig).to receive(:fetch).and_return(config)
-        Positions::TrailingConfig.reset_config!
       end
 
       context 'when position is profitable' do
@@ -196,7 +155,7 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
           # Peak: 10%, Current: 8%, Drop: 2%
           # With aggressive config, 2% drop should be within allowed range
           expect(exit_engine).not_to receive(:execute_exit)
-          service.enforce_dynamic_trailing_stops(exit_engine: exit_engine)
+          service.enforce_trailing_stops(exit_engine: exit_engine)
         end
       end
 
@@ -212,7 +171,7 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
         it 'allows wider loss' do
           # With aggressive config, -6% loss should be within allowed range
           expect(exit_engine).not_to receive(:execute_exit)
-          service.send(:run_interval_enforcement_if_needed, exit_engine)
+          service.enforce_hard_limits(exit_engine: exit_engine)
         end
       end
     end
@@ -254,17 +213,22 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
 
       before do
         allow(AlgoConfig).to receive(:fetch).and_return(config)
-        Positions::TrailingConfig.reset_config!
       end
 
-      it 'invokes run_interval_enforcement_if_needed from monitor_loop' do
-        allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
-        allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([])
-        allow(service).to receive(:run_interval_enforcement_if_needed)
+      it 'executes all enforcement methods in order' do
+        pnl_data = {
+          pnl: BigDecimal('250.0'),
+          pnl_pct: BigDecimal('0.05'),
+          hwm_pnl: BigDecimal('250.0')
+        }
+        allow(service).to receive(:pnl_snapshot).and_return(pnl_data)
+
+        expect(service).to receive(:enforce_early_trend_failure).with(exit_engine: exit_engine)
+        expect(service).to receive(:enforce_hard_limits).with(exit_engine: exit_engine)
+        expect(service).to receive(:enforce_trailing_stops).with(exit_engine: exit_engine)
+        expect(service).to receive(:enforce_time_based_exit).with(exit_engine: exit_engine)
 
         service.send(:monitor_loop, Time.current)
-
-        expect(service).to have_received(:run_interval_enforcement_if_needed)
       end
     end
   end
@@ -293,14 +257,13 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
 
       before do
         allow(AlgoConfig).to receive(:fetch).and_return(config)
-        Positions::TrailingConfig.reset_config!
       end
 
       it 'falls back to static SL/TP only' do
         # Should only check static SL/TP
         expect(exit_engine).not_to receive(:execute_exit) # TP is +5%, we're at +5%, so no exit
-        service.send(:run_interval_enforcement_if_needed, exit_engine)
-        service.enforce_dynamic_trailing_stops(exit_engine: exit_engine)
+        service.enforce_hard_limits(exit_engine: exit_engine)
+        service.enforce_trailing_stops(exit_engine: exit_engine)
       end
     end
 
@@ -318,10 +281,9 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
       end
 
       it 'handles gracefully without crashing' do
-        allow(PositionTracker).to receive(:active).and_return(double(includes: double(to_a: []), find_each: [].each))
-        expect { service.send(:run_interval_enforcement_if_needed, exit_engine) }.not_to raise_error
-        expect { service.enforce_dynamic_trailing_stops(exit_engine: exit_engine) }.not_to raise_error
-        expect { service.enforce_premium_momentum_failure(exit_engine: exit_engine) }.not_to raise_error
+        expect { service.enforce_hard_limits(exit_engine: exit_engine) }.not_to raise_error
+        expect { service.enforce_trailing_stops(exit_engine: exit_engine) }.not_to raise_error
+        expect { service.enforce_early_trend_failure(exit_engine: exit_engine) }.not_to raise_error
       end
     end
   end

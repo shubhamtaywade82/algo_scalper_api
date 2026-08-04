@@ -1,5 +1,4 @@
 # frozen_string_literal: true
-# rubocop:disable Metrics/BlockNesting
 
 module Options
   # Enhanced ChainAnalyzer that uses Derivative records and integrates with existing infrastructure
@@ -37,26 +36,8 @@ module Options
         return []
       end
 
-      # 1. Use FlowAnalyzer to identify institutional buildup
-      flow_analyzer = Options::FlowAnalyzer.new(
-        index_key: @index_key,
-        expiry_date: expiry_date,
-        chain_data: { last_price: spot, oc: transform_chain_for_flow(chain) }
-      )
-      flow_results = flow_analyzer.strong_flow_strikes
-
-      # 2. Use GammaRampDetector to identify explosive potential
-      gamma_detector = Options::GammaRampDetector.new(
-        index_key: @index_key,
-        expiry_date: expiry_date,
-        chain_data: { last_price: spot, oc: transform_chain_for_flow(chain) }
-      )
-      gamma_score = gamma_detector.gamma_pressure_score(direction: direction)
-
       atm = find_atm_strike(chain, spot)
-
-      # Pass flow and gamma context to scoring
-      scored = score_chain(chain, atm, spot, direction, flow_results: flow_results, gamma_score: gamma_score)
+      scored = score_chain(chain, atm, spot, direction)
       candidates = scored.sort_by { |c| -c[:score] }.first(limit)
 
       if candidates.empty?
@@ -76,9 +57,13 @@ module Options
       seg = @index_cfg[:segment]
       sid = @index_cfg[:sid]
 
-      # Try tick cache facade
-      tick = Live::TickQuery.for_security(segment: seg, security_id: sid)
-      return tick.ltp.to_f if tick&.ltp&.positive?
+      # Try tick cache first
+      spot = Live::TickCache.ltp(seg, sid)
+      return spot if spot&.positive?
+
+      # Try Redis cache
+      spot = Live::RedisTickCache.instance.fetch_tick(seg, sid)&.dig(:ltp)&.to_f
+      return spot if spot&.positive?
 
       # Fallback to API via Instrument.ltp()
       begin
@@ -180,11 +165,10 @@ module Options
         derivatives = if derivatives.respond_to?(:where)
                         derivatives.where(strike_price: api_strikes.to_a)
                       else
-                        matching = Array(derivatives).select do |d|
+                        filtered_ids = Array(derivatives).select do |d|
                           strike_bd = BigDecimal(d.strike_price.to_s)
                           api_strikes.include?(strike_bd)
-                        end
-                        filtered_ids = matching.map(&:id)
+                        end.map(&:id)
                         Derivative.where(id: filtered_ids)
                       end
 
@@ -214,21 +198,19 @@ module Options
       if atm_strike_approx
         window = (@config[:strike_window_steps] || 2).to_i
         window = 2 if window <= 0 || window > 2 # Cap at 2OTM only
-        target_strikes_raw = (-window..window).map do |offset|
+        target_strikes = (-window..window).map do |offset|
           atm_strike_approx + (offset * strike_increment)
-        end
-        target_strikes = target_strikes_raw.select(&:positive?).uniq
+        end.select(&:positive?).uniq
 
         if target_strikes.any?
           target_strikes_bd = target_strikes.map { |strike| BigDecimal(strike.to_s) }
           filtered = if derivatives.respond_to?(:where)
                        derivatives.where(strike_price: target_strikes_bd)
                      else
-                       matching_derivs = Array(derivatives).select do |d|
+                       filtered_ids = Array(derivatives).select do |d|
                          strike_bd = BigDecimal(d.strike_price.to_s)
                          target_strikes_bd.include?(strike_bd)
-                       end
-                       filtered_ids = matching_derivs.map(&:id)
+                       end.map(&:id)
                        Derivative.where(id: filtered_ids)
                      end
 
@@ -256,10 +238,10 @@ module Options
         # Try multiple strike formats to match API chain keys (e.g., "27950.000000", "27950.0", "27950")
         strike_float = derivative.strike_price.to_f
         strike_formats = [
-          format('%<v>.6f', v: strike_float), # "27950.000000" - API format
-          strike_float.to_s,               # "27950.0" - default float format
-          strike_float.to_i.to_s,          # "27950" - integer format
-          format('%<v>.2f', v: strike_float) # "27950.00" - 2 decimal places
+          format('%.6f', strike_float), # "27950.000000" - API format
+          strike_float.to_s,              # "27950.0" - default float format
+          strike_float.to_i.to_s,         # "27950" - integer format
+          format('%.2f', strike_float) # "27950.00" - 2 decimal places
         ].uniq
 
         option_type_lower = derivative.option_type.to_s.downcase
@@ -273,27 +255,14 @@ module Options
 
         # Get live tick data - use exchange_segment (NSE_FNO) not segment (derivatives)
         exchange_seg = derivative.exchange_segment || 'NSE_FNO'
-        tick = Live::TickQuery.for_security(segment: exchange_seg, security_id: derivative.security_id)
+        tick = Live::RedisTickCache.instance.fetch_tick(exchange_seg, derivative.security_id)
 
         # If no tick data, check batch LTP results
-        if !tick || !tick.ltp&.positive?
+        if !tick || !tick[:ltp]&.positive?
           batch_ltp = batch_ltp_results[derivative.security_id.to_s]
-          if batch_ltp&.positive? && !tick
-            # Create a MarketTick with LTP if tick is missing
-            tick ||= MarketTick.new(
-              segment: exchange_seg,
-              security_id: derivative.security_id,
-              ltp: BigDecimal(batch_ltp.to_s),
-              timestamp: Time.current,
-              oi: 0,
-              oi_change: 0,
-              bid: nil,
-              ask: nil,
-              bid_qty: 0,
-              ask_qty: 0,
-              volume: 0,
-              prev_close: nil
-            )
+          if batch_ltp&.positive?
+            tick = tick ? tick.dup : {}
+            tick[:ltp] = batch_ltp
           end
         end
 
@@ -325,8 +294,8 @@ module Options
 
         # Check if already in tick cache
         exchange_seg = derivative.exchange_segment || 'NSE_FNO'
-        tick = Live::TickQuery.for_security(segment: exchange_seg, security_id: derivative.security_id)
-        next if tick&.ltp&.positive?
+        tick = Live::RedisTickCache.instance.fetch_tick(exchange_seg, derivative.security_id)
+        next if tick && tick[:ltp]&.positive?
 
         # Only fetch for ATM candidates (within 2 strikes)
         if atm_strike_approx
@@ -411,8 +380,8 @@ module Options
       exchange_seg = derivative.exchange_segment || 'NSE_FNO'
 
       # Calculate OI change: prefer tick data, fallback to API data (current_oi - previous_oi)
-      current_oi = tick&.oi&.to_i || api_data&.dig('oi')&.to_i || 0
-      oi_change_from_tick = tick&.oi_change&.to_i
+      current_oi = tick&.dig(:oi)&.to_i || api_data&.dig('oi')&.to_i || 0
+      oi_change_from_tick = tick&.dig(:oi_change)&.to_i
       previous_oi = api_data&.dig('previous_oi').to_i
       oi_change = if oi_change_from_tick && oi_change_from_tick != 0
                     oi_change_from_tick
@@ -425,18 +394,18 @@ module Options
       {
         derivative: derivative,
         strike: derivative.strike_price.to_f,
-        type: derivative.option_type.to_s.upcase,
+        type: derivative.option_type,
         expiry: derivative.expiry_date,
         segment: exchange_seg, # Use exchange_segment for consistency
         security_id: derivative.security_id,
         lot_size: derivative.lot_size.to_i,
-        ltp: tick&.ltp&.to_f || api_data&.dig('last_price')&.to_f,
+        ltp: tick&.dig(:ltp)&.to_f || api_data&.dig('last_price')&.to_f,
         oi: current_oi,
         oi_change: oi_change,
-        bid: tick&.bid&.to_f || api_data&.dig('top_bid_price')&.to_f,
-        ask: tick&.ask&.to_f || api_data&.dig('top_ask_price')&.to_f,
+        bid: tick&.dig(:bid)&.to_f || api_data&.dig('top_bid_price')&.to_f,
+        ask: tick&.dig(:ask)&.to_f || api_data&.dig('top_ask_price')&.to_f,
         iv: api_data&.dig('implied_volatility')&.to_f,
-        volume: tick&.volume&.to_i || api_data&.dig('volume')&.to_i,
+        volume: tick&.dig(:volume)&.to_i || api_data&.dig('volume')&.to_i,
         prev_close: api_data&.dig('previous_close_price')&.to_f,
         delta: api_data&.dig('greeks', 'delta')&.to_f,
         gamma: api_data&.dig('greeks', 'gamma')&.to_f,
@@ -456,16 +425,9 @@ module Options
 
     # Score chain options based on multiple factors
     # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
-    def score_chain(chain, atm, spot, direction, flow_results: nil, gamma_score: 0.0)
+    def score_chain(chain, atm, spot, direction)
       @direction = direction # Store for use in reason_for
-      option_type_key = direction == :bullish ? 'CE' : 'PE'
-      flow_side = direction == :bullish ? 'ce' : 'pe'
-
-      # Extract flow scores for lookup
-      flow_scores = (flow_results&.[](flow_side) || []).to_h do |f|
-                      [f[:strike].to_f, f[:score]]
-      end
-
+      option_type = direction == :bullish ? 'CE' : 'PE'
       max_distance_pct = (@config[:strike_distance_pct] || 0.02).to_f
       max_distance = spot * max_distance_pct
 
@@ -473,25 +435,20 @@ module Options
       min_iv = (@config[:min_iv] || 5.0).to_f
       max_iv = (@config[:max_iv] || 60.0).to_f
       max_spread_pct = (@config[:max_spread_pct] || 0.03).to_f
-      min_volume = (@config[:min_volume] || 0).to_i
-      top_by_oi_limit = (@config[:top_by_oi_limit] || 0).to_i
 
-      # Only enforce OI/IV/spread gates when this leg has chain enrichment — batch LTP
-      # paths often have price only while a sibling strike carries OI from the API.
+      # Check if we have API data (OI/IV available) - if not, relax filters
       has_api_data = chain.any? { |o| o[:oi].to_i.positive? || o[:iv].to_f.positive? }
 
       unless has_api_data
         Rails.logger.warn("[Options::DerivativeChainAnalyzer] No API data available - relaxing filters for #{@index_key}")
-        min_oi = 0
-        min_iv = 0
-        max_iv = 999.0
+        min_oi = 0 # Allow any OI if API data unavailable
+        min_iv = 0 # Allow any IV if API data unavailable
+        max_iv = 999.0 # Allow any IV if API data unavailable
       end
 
       candidates_with_ltp = 0
       candidates_filtered = 0
-      result = chain.select { |o| o[:type] == option_type_key }.filter_map do |option|
-        option_has_api_data = option[:oi].to_i.positive? || option[:iv].to_f.positive?
-
+      result = chain.select { |o| o[:type] == option_type }.filter_map do |option|
         # Filter criteria
         strike_distance = (option[:strike] - spot).abs
         if strike_distance > max_distance * 2
@@ -509,22 +466,18 @@ module Options
 
         candidates_with_ltp += 1
 
-        if option_has_api_data
-          next if option[:oi].to_i.positive? && option[:oi].to_i < min_oi
-          next if min_volume.positive? && option[:volume].to_i < min_volume
-
-          iv = option[:iv].to_f
-          next if iv.positive? && (iv < min_iv || iv > max_iv)
+        # Only filter by OI/IV if we have API data
+        if has_api_data
+          next if option[:oi].to_i < min_oi
+          next if option[:iv].to_f < min_iv || option[:iv].to_f > max_iv
         end
 
         spread = calc_spread(option[:bid], option[:ask], option[:ltp])
-        next if spread && option_has_api_data && (spread > max_spread_pct)
+        # Only filter by spread if we have bid/ask data
+        next if spread && has_api_data && (spread > max_spread_pct)
 
-        # Get flow score for this specific strike
-        flow_score = flow_scores[option[:strike].to_f] || 1.0
-
-        # Calculate combined institutional score
-        score = combined_score(option, atm, spot, direction, flow_score: flow_score, gamma_score: gamma_score)
+        # Calculate combined score
+        score = combined_score(option, atm, spot, direction)
 
         # Skip if score is 0 or negative (invalid candidate)
         next unless score&.positive?
@@ -539,13 +492,7 @@ module Options
           oi: option[:oi],
           oi_change: option[:oi_change],
           spread: spread,
-          bid: option[:bid],
-          ask: option[:ask],
-          volume: option[:volume],
           delta: option[:delta],
-          gamma: option[:gamma],
-          theta: option[:theta],
-          vega: option[:vega],
           segment: option[:segment],
           security_id: option[:security_id],
           lot_size: option[:lot_size],
@@ -556,16 +503,6 @@ module Options
       end
 
       Rails.logger.debug { "[Options::DerivativeChainAnalyzer] Scoring: #{candidates_with_ltp} with LTP, #{candidates_filtered} filtered, #{result.size} scored for #{@index_key}" }
-
-      unless has_api_data
-        Rails.logger.warn("[Options::DerivativeChainAnalyzer] No API data available - skipping OI ranking for #{@index_key}")
-        return result
-      end
-      if top_by_oi_limit.positive? && result.size > top_by_oi_limit
-        ranked = result.sort_by { |r| -(r[:oi] || 0) }
-        result = ranked.first(top_by_oi_limit)
-      end
-
       result
     end
     # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
@@ -592,36 +529,39 @@ module Options
       end
     end
 
-    # Combined institutional scoring function
-    # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
-    def combined_score(option, atm, spot, _direction, flow_score: 1.0, gamma_score: 0.0)
+    # Combined scoring function (heuristic - must be backtested)
+    # rubocop:disable Metrics/AbcSize
+    def combined_score(option, atm, spot, _direction)
       weights = @config[:scoring_weights] || {
-        delta: 0.4,
-        liquidity: 0.3,
-        flow: 0.3
+        oi: 0.4,
+        spread: 0.25,
+        iv: 0.2,
+        volume: 0.15
       }
 
-      # 1. Delta Score (0.40–0.60 ideal)
-      delta = option[:delta]&.to_f&.abs || 0.5
-      delta_score = 1.0 - (delta - 0.5).abs
+      # Normalize OI (log scale, max ~1M = 6.0)
+      oi_norm = Math.log10([option[:oi].to_i, 1].max) / 6.0
+      oi_norm = [oi_norm, 1.0].min
 
-      # 2. Liquidity Score (Spread < 1% preferred)
+      # Normalize spread (lower is better, inverted)
       spread = calc_spread(option[:bid], option[:ask], option[:ltp]) || 0.05
-      liquidity_score = 1.0 - [spread * 10.0, 1.0].min # Aggressive spread penalty
+      spread_norm = 1.0 - [spread, 1.0].min
 
-      # 3. Flow Score (Integrated from FlowAnalyzer)
-      # Normalize flow score around 1.0
-      normalized_flow = [flow_score / 2.0, 1.0].min
+      # Normalize IV (prefer moderate IV around 20-25%)
+      iv = option[:iv].to_f
+      iv_norm = if iv.between?(15, 25)
+                  1.0
+                elsif iv.between?(10, 30)
+                  0.8
+                elsif iv.between?(5, 40)
+                  0.6
+                else
+                  0.3
+                end
 
-      # 4. Gamma Ramp Bonus (Proximity to OI clusters)
-      # gamma_score is 0.0 to 1.0+
-
-      base_score = (delta_score * weights[:delta]) +
-                   (liquidity_score * weights[:liquidity]) +
-                   (normalized_flow * weights[:flow])
-
-      # Add gamma pressure as a multiplier for explosive potential
-      final_score = base_score * (1.0 + (gamma_score * 0.5))
+      # Normalize volume (log scale)
+      vol_norm = Math.log10([option[:volume].to_i, 1].max) / 6.0
+      vol_norm = [vol_norm, 1.0].min
 
       # ATM preference bonus
       distance_from_atm = (option[:strike] - atm).abs
@@ -633,9 +573,14 @@ module Options
                     0.0
                   end
 
-      final_score + atm_bonus
+      base_score = (oi_norm * weights[:oi]) +
+                   (spread_norm * weights[:spread]) +
+                   (iv_norm * weights[:iv]) +
+                   (vol_norm * weights[:volume])
+
+      base_score + atm_bonus
     end
-    # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+    # rubocop:enable Metrics/AbcSize
 
     # Build symbol string for candidate (compatible with BaseEngine)
     def build_symbol(derivative, strike, type, _expiry)
@@ -646,7 +591,6 @@ module Options
     end
 
     # Generate human-readable reason for selection
-    # rubocop:disable Metrics/AbcSize
     def reason_for(option, score, atm, spot, direction)
       trade_direction = direction.to_s.downcase.to_sym
       distance = (option[:strike] - spot).abs
@@ -664,24 +608,6 @@ module Options
 
       "Score:#{score.round(3)} IV:#{option[:iv]&.round(2)}% OI:#{option[:oi]} " \
         "Spread:#{spread_str} Strike:#{option[:strike]} (#{strike_type}, #{distance_pct}% from spot)"
-    end
-    # rubocop:enable Metrics/AbcSize
-
-    private
-
-    def transform_chain_for_flow(chain)
-      oc = {}
-      chain.each do |option|
-        strike = option[:strike].to_s
-        oc[strike] ||= {}
-        type = option[:type].to_s.downcase # 'CE' or 'PE'
-        oc[strike][type] = {
-          'oi' => option[:oi],
-          'volume' => option[:volume],
-          'last_price' => option[:ltp]
-        }
-      end
-      oc
     end
   end
   # rubocop:enable Metrics/ClassLength

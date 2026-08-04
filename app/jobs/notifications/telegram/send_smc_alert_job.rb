@@ -38,7 +38,7 @@ module Notifications
           end
         end
 
-        log_ai_analysis_status(instrument: instrument, ai_analysis: ai_analysis, decision: decision)
+        log_ai_analysis_status(instrument: instrument, ai_analysis: ai_analysis)
 
         # Build signal event
         signal = Smc::SignalEvent.new(
@@ -46,7 +46,7 @@ module Notifications
           decision: decision.to_sym,
           timeframe: '5m',
           price: price,
-          reasons: build_reasons(contexts, decision: decision),
+          reasons: build_reasons(contexts),
           ai_analysis: ai_analysis
         )
 
@@ -86,10 +86,6 @@ module Notifications
             }
           }
 
-          # Enrich with outputs from LTF engines (Displacement, Volume, Zone, Navigator).
-          # These run in the background job so the scanner thread stays fast.
-          details_data[:ltf_engines] = build_ltf_enrichment(instrument, ltf_series, decision)
-
           Rails.logger.debug { "[SendSmcAlertJob] Fetching AI analysis for #{instrument.symbol_name}..." }
 
           # Use AiAnalyzer with pre-fetched data and single-pass analysis
@@ -111,20 +107,12 @@ module Notifications
 
       def ai_enabled?
         AlgoConfig.fetch.dig(:ai, :enabled) == true &&
-          Services::Ai::OllamaClient.instance.enabled?
+          Services::Ai::OpenaiClient.instance.enabled?
       rescue StandardError
         false
       end
 
-      def build_reasons(contexts, decision:)
-        context_decision = contexts[:decision]
-        if context_decision.present? && context_decision.to_s.casecmp(decision.to_s) != 0
-          Rails.logger.warn(
-            "[SendSmcAlertJob] decision/context mismatch: job_decision=#{decision.inspect} " \
-            "contexts[:decision]=#{context_decision.inspect}"
-          )
-        end
-
+      def build_reasons(contexts)
         htf_context = contexts[:htf] || {}
         mtf_context = contexts[:mtf] || {}
         ltf_context = contexts[:ltf] || {}
@@ -142,110 +130,35 @@ module Notifications
           end
         end
 
-        append_liquidity_reasons(reasons, htf_context[:liquidity], label: 'HTF')
-        append_liquidity_reasons(reasons, ltf_context[:liquidity], label: '5m')
-
         # Check for CHoCH in MTF swing structure
         if (mtf_context[:swing_structure] && mtf_context[:swing_structure][:choch]) ||
            (mtf_context[:structure] && mtf_context[:structure][:choch])
           reasons << '15m CHoCH detected'
         end
 
-        # MTF / LTF trend snapshot (helps explain no_trade when internal vs swing diverge)
-        append_trend_mismatch_hint(reasons, mtf_context, ltf_context)
+        # Check for liquidity sweep in LTF
+        if ltf_context[:liquidity]
+          liq_data = ltf_context[:liquidity]
+          if liq_data[:sell_side_taken]
+            reasons << 'Liquidity sweep on 5m (sell-side)'
+          elsif liq_data[:buy_side_taken]
+            reasons << 'Liquidity sweep on 5m (buy-side)'
+          end
+        end
 
-        # AVRZ is only evaluated for actionable signals; do not claim it on no_trade scans.
-        reasons << 'AVRZ rejection confirmed' if %w[call put].include?(decision.to_s)
+        reasons << 'AVRZ rejection confirmed'
 
         reasons
       end
 
-      def append_liquidity_reasons(reasons, liq_data, label:)
-        return unless liq_data
-
-        if liq_data[:sell_side_taken]
-          reasons << "Liquidity sweep on #{label} (sell-side)"
-        elsif liq_data[:buy_side_taken]
-          reasons << "Liquidity sweep on #{label} (buy-side)"
-        end
-      end
-
-      def append_trend_mismatch_hint(reasons, mtf_context, ltf_context)
-        mtf_swing = mtf_context[:swing_structure] || mtf_context[:structure]
-        mtf_int = mtf_context[:internal_structure]
-        if mtf_swing && mtf_int && mtf_swing[:trend] && mtf_int[:trend] &&
-           mtf_swing[:trend] != mtf_int[:trend]
-          reasons << "15m internal trend #{mtf_int[:trend]} vs swing trend #{mtf_swing[:trend]}"
-        end
-
-        ltf_swing = ltf_context[:swing_structure] || ltf_context[:structure]
-        ltf_int = ltf_context[:internal_structure]
-        if ltf_swing && ltf_int && ltf_swing[:trend] && ltf_int[:trend] &&
-           ltf_swing[:trend] != ltf_int[:trend]
-          reasons << "5m internal trend #{ltf_int[:trend]} vs swing trend #{ltf_swing[:trend]}"
-        end
-      end
-
-      def log_ai_analysis_status(instrument:, ai_analysis:, decision:)
+      def log_ai_analysis_status(instrument:, ai_analysis:)
         if ai_analysis.present?
           Rails.logger.info(
             "[SendSmcAlertJob] AI analysis received (#{ai_analysis.length} chars) for #{instrument.symbol_name}"
           )
-        elsif decision.to_s == 'no_trade'
-          Rails.logger.debug { "[SendSmcAlertJob] No AI run for no_trade (#{instrument.symbol_name})" }
         else
           Rails.logger.warn("[SendSmcAlertJob] AI analysis is empty or nil for #{instrument.symbol_name}")
         end
-      end
-
-      # Runs DisplacementEngine, VolumeEngine, ZoneEngine, and Navigator on the current LTF series.
-      # Returns a hash that is merged into the AI prompt via initial_data[:ltf_engines].
-      def build_ltf_enrichment(instrument, ltf_series, decision)
-        price = instrument.ltp&.to_f || instrument.latest_ltp&.to_f
-        direction = decision.to_sym == :call ? :bullish : :bearish
-
-        displacement = Smc::DisplacementEngine.new(ltf_series).call
-        volume = Smc::VolumeEngine.new(ltf_series).call
-        zone = Smc::ZoneEngine.new(ltf_series).call(price: price)
-
-        navigator = if price&.positive?
-                      Smc::Navigator.evaluate_entry(
-                        price: price,
-                        direction: direction,
-                        instrument: instrument
-                      )
-                    end
-
-        atr = displacement.atr.to_f
-        body = displacement.body.to_f
-
-        {
-          displacement: {
-            bullish: displacement.bullish,
-            bearish: displacement.bearish,
-            body: body.round(2),
-            atr: atr.round(2),
-            body_atr_ratio: atr.positive? ? (body / atr).round(3) : 0.0
-          },
-          volume: {
-            spike: volume.spike,
-            ratio: volume.ratio.round(3),
-            current: volume.current.to_i,
-            avg: volume.avg.round(2)
-          },
-          zone: {
-            location: zone[:location]&.to_s,
-            equilibrium: zone[:equilibrium]&.round(2)
-          },
-          navigator: navigator ? {
-            allow: navigator.allow,
-            reason: navigator.reason.to_s,
-            confidence: navigator.confidence.round(3)
-          } : nil
-        }
-      rescue StandardError => e
-        Rails.logger.warn("[SendSmcAlertJob] LTF enrichment failed: #{e.class} - #{e.message}")
-        {}
       end
     end
   end

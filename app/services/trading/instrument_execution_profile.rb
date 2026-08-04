@@ -8,24 +8,9 @@ module Trading
       'NIFTY' => {
         allow_execution_only: true,
         max_lots_by_permission: {
-          execution_only: 5,
-          scale_ready: 15,
-          full_deploy: 50
-        }.freeze,
-        holding_rules: {
-          scalp_seconds: (30..180),
-          trend_minutes: (10..45),
-          stall_candles_5m: (3..5)
-        }.freeze,
-        target_model: :absolute,
-        scaling_style: :early
-      }.freeze,
-      'BANKNIFTY' => {
-        allow_execution_only: true,
-        max_lots_by_permission: {
-          execution_only: 5,
-          scale_ready: 15,
-          full_deploy: 40
+          execution_only: 1,
+          scale_ready: 2,
+          full_deploy: 4
         }.freeze,
         holding_rules: {
           scalp_seconds: (30..180),
@@ -39,8 +24,8 @@ module Trading
         allow_execution_only: false,
         max_lots_by_permission: {
           execution_only: 0,
-          scale_ready: 2,
-          full_deploy: 10
+          scale_ready: 1,
+          full_deploy: 3
         }.freeze,
         holding_rules: {
           trend_minutes: (30..90),

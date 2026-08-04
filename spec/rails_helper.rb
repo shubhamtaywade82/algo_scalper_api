@@ -1,33 +1,30 @@
 # frozen_string_literal: true
 
-require 'timeout'
-
-# SimpleCov must be required before any application code (skip with COVERAGE=false for faster runs)
-if ENV['COVERAGE'] != 'false'
-  require 'simplecov'
-  SimpleCov.start 'rails' do
-    minimum_coverage 0
-    add_filter '/spec/'
-    add_filter '/config/'
-    add_filter '/vendor/'
-    add_filter '/db/'
-    add_filter '/lib/tasks/'
-    add_filter '/tmp/'
-    add_group 'Models', 'app/models'
-    add_group 'Controllers', 'app/controllers'
-    add_group 'Services', 'app/services'
-    add_group 'Jobs', 'app/jobs'
-    add_group 'Mailers', 'app/mailers'
-    add_group 'Helpers', 'app/helpers'
-    add_group 'Libraries', 'lib/'
-    coverage_dir 'coverage'
-  end
+# SimpleCov must be required before any application code
+require 'simplecov'
+SimpleCov.start 'rails' do
+  minimum_coverage 0
+  add_filter '/spec/'
+  add_filter '/config/'
+  add_filter '/vendor/'
+  add_filter '/db/'
+  add_filter '/lib/tasks/'
+  add_filter '/tmp/'
+  add_group 'Models', 'app/models'
+  add_group 'Controllers', 'app/controllers'
+  add_group 'Services', 'app/services'
+  add_group 'Jobs', 'app/jobs'
+  add_group 'Mailers', 'app/mailers'
+  add_group 'Helpers', 'app/helpers'
+  add_group 'Libraries', 'lib/'
+  coverage_dir 'coverage'
 end
 
 ENV['RAILS_ENV'] ||= 'test'
 ENV['DHANHQ_ENABLED'] ||= 'false'
-# Default specs to paper execution; examples that need live gateway set LIVE_TRADING explicitly.
-ENV['LIVE_TRADING'] ||= 'false'
+ENV['DHANHQ_WS_ENABLED'] ||= 'false'
+ENV['DHANHQ_ORDER_WS_ENABLED'] ||= 'false'
+ENV['DISABLE_TRADING_SERVICES'] ||= '1'
 require File.expand_path('../config/environment', __dir__)
 abort('The Rails environment is running in production mode!') if Rails.env.production?
 require 'rspec/rails'
@@ -75,13 +72,6 @@ RSpec.configure do |config|
   if ENV['TEST_DELAY']
     config.after(:each) do
       sleep(ENV['TEST_DELAY'].to_f)
-    end
-  end
-
-  # Optional: Per-example timeout to surface hanging specs (e.g. RSPEC_TIMEOUT=60)
-  if (timeout_sec = ENV['RSPEC_TIMEOUT']&.to_i) && timeout_sec.positive?
-    config.around(:each) do |example|
-      Timeout.timeout(timeout_sec) { example.run }
     end
   end
 end

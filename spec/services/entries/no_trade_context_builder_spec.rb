@@ -85,12 +85,12 @@ RSpec.describe Entries::NoTradeContextBuilder do
         time: '10:30'
       )
 
-      expect(ctx.min_iv_threshold).to eq(9)
+      expect(ctx.min_iv_threshold).to eq(10)
     end
 
     it 'sets correct IV threshold for BANKNIFTY' do
       ctx = described_class.build(
-        index: 'BANK',
+        index: 'BANKNIFTY',
         bars_1m: bars_1m,
         bars_5m: bars_5m,
         option_chain: option_chain_data,
@@ -160,8 +160,7 @@ RSpec.describe Entries::NoTradeContextBuilder do
 
     context 'when ADX calculation fails' do
       before do
-        allow(described_class).to receive(:calculate_adx_data).and_call_original
-        allow(TechnicalAnalysis::Adx).to receive(:calculate).and_raise(StandardError.new('ADX error'))
+        allow(described_class).to receive(:calculate_adx_data).and_raise(StandardError.new('ADX error'))
         allow_any_instance_of(CandleSeries).to receive(:adx).and_return(18.0)
       end
 
@@ -184,8 +183,6 @@ RSpec.describe Entries::NoTradeContextBuilder do
       let(:insufficient_bars) { build_list(:candle, 5) }
 
       it 'returns zero ADX values' do
-        allow(described_class).to receive(:calculate_adx_data).and_call_original
-
         ctx = described_class.build(
           index: index_key,
           bars_1m: bars_1m,

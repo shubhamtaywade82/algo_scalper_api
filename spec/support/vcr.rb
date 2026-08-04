@@ -79,6 +79,7 @@ VCR.configure do |config|
         end
         interaction.request.body = filtered_body
       end
+      # If no sensitive data, body is preserved as-is (no modification)
     elsif body.is_a?(Hash)
       # Filter hash body only if it contains sensitive keys
       if body.key?('access_token') || body.key?(:access_token) || body.key?('client_id') || body.key?(:client_id)
@@ -98,6 +99,7 @@ VCR.configure do |config|
   config.ignore_localhost = true
 
   # Default to :once mode (use cassette if exists, record if missing)
+  # Set ENV['VCR_MODE'] to 'all' to record all interactions, 'none' to disable recording
   config.default_cassette_options = {
     record: ENV.fetch('VCR_MODE', :once).to_sym,
     match_requests_on: %i[method uri body],

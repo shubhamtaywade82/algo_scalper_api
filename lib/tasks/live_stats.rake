@@ -23,18 +23,21 @@ namespace :trading do
         stats = PositionTracker.paper_trading_stats_with_pct(date: Time.zone.today)
 
         # Format the output nicely
-        status_tag = stats[:is_blocked] ? "\e[31m[BLOCKED]\e[0m " : "\e[32m[ACTIVE]\e[0m "
         output = format(
-          '%sTrades: %d | Active: %d | Total PnL: ₹%.2f (%.2f%%) | ' \
-          'Realized: ₹%.2f (%.2f%%) | Win Rate: %.2f%%',
-          status_tag,
+          'Trades: %d | Active: %d | Total PnL: ₹%.2f (%.2f%%) | ' \
+          'Realized: ₹%.2f (%.2f%%) | Unrealized: ₹%.2f (%.2f%%) | ' \
+          'Win Rate: %.2f%% | Winners: %d | Losers: %d',
           stats[:total_trades],
           stats[:active_positions],
           stats[:total_pnl_rupees],
           stats[:total_pnl_pct],
           stats[:realized_pnl_rupees],
           stats[:realized_pnl_pct],
-          stats[:win_rate]
+          stats[:unrealized_pnl_rupees],
+          stats[:unrealized_pnl_pct],
+          stats[:win_rate],
+          stats[:winners],
+          stats[:losers]
         )
 
         if is_tty
@@ -134,8 +137,8 @@ namespace :trading do
       puts '=' * 80
     end
 
-    # Number of lines in the table (header + separator + 12 data rows + separator + timestamp + instruction)
-    table_lines = 17
+    # Number of lines in the table (header + separator + 11 data rows + separator + timestamp + instruction)
+    table_lines = 16
 
     begin
       loop do
@@ -152,8 +155,6 @@ namespace :trading do
         puts '=' * 80
         puts 'Metric                         |      Rupees (₹) |  Percentage (%)'
         puts '-' * 80
-        status_val = stats[:is_blocked] ? "\e[31mBLOCKED (Floor Breach)\e[0m" : "\e[32mACTIVE\e[0m"
-        puts format('%-30s | %s', 'Trading Status', status_val)
         puts format('%-30s | %15s | %15s', 'Total Trades', stats[:total_trades].to_s, '-')
         puts format('%-30s | %15s | %15s', 'Active Positions', stats[:active_positions].to_s, '-')
         puts format('%-30s | %15.2f | %15.2f', 'Total PnL', stats[:total_pnl_rupees], stats[:total_pnl_pct])

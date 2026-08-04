@@ -90,28 +90,6 @@ module Entries
         end
       end
 
-      # Change of Character (CHoCH)
-      # Returns a direction symbol (:bullish, :bearish) or :neutral when not detected.
-      #
-      # @param candles [Array<Candle>] Array of candle objects
-      # @param lookback_minutes [Integer] Swing lookback used by the detector
-      # @return [Symbol] :bullish, :bearish, or :neutral
-      def choch?(candles, lookback_minutes: 15)
-        return :neutral if candles.blank?
-
-        lookback = lookback_minutes.to_i
-        return :neutral if lookback <= 0
-
-        # Reuse the existing SMC structure detector for deterministic swing logic.
-        series = CandleSeries.new(symbol: 'structure_detector', interval: '1')
-        candles.each { |c| series.add_candle(c) }
-
-        result = Smc::Detectors::Structure.new(series, lookback: lookback).choch?
-        return :neutral unless result.is_a?(Hash)
-
-        result[:type] == :bullish ? :bullish : :bearish
-      end
-
       private
 
       def detect_move_direction(bars)

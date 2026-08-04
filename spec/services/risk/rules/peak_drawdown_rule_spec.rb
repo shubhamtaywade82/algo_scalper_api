@@ -13,7 +13,7 @@ RSpec.describe Risk::Rules::PeakDrawdownRule do
     )
   end
   let(:position_data) do
-    Positions::PositionData.new(
+    Positions::ActiveCache::PositionData.new(
       tracker_id: tracker.id,
       entry_price: 100.0,
       current_ltp: 120.0,

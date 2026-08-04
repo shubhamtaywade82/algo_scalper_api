@@ -41,20 +41,20 @@ exit:
   # Stop Loss (Bidirectional: Adaptive Reverse SL)
   stop_loss:
     type: "adaptive"     # "adaptive" (bidirectional) or "static"
-    static_value: 0.03    # Static SL % (if type: static)
+    static_value: 3.0    # Static SL % (if type: static)
     # Adaptive config (below entry - reverse SL)
     adaptive:
       enabled: true
-      max_loss_pct: 0.20
-      min_loss_pct: 0.05
-      loss_span_pct: 0.30
-      time_tighten_per_min: 0.02
+      max_loss_pct: 20.0
+      min_loss_pct: 5.0
+      loss_span_pct: 30.0
+      time_tighten_per_min: 2.0
       atr_penalty_thresholds:
-        - { threshold: 0.75, penalty_pct: 0.03 }
-        - { threshold: 0.60, penalty_pct: 0.05 }
+        - { threshold: 0.75, penalty_pct: 3.0 }
+        - { threshold: 0.60, penalty_pct: 5.0 }
   
   # Take Profit
-  take_profit: 0.50  # TP %
+  take_profit: 5.0  # TP %
   
   # Trailing Stop (Bidirectional: Upward Adaptive + Downward Reverse)
   trailing:
@@ -64,21 +64,21 @@ exit:
     # Upward Trailing (Profit Protection)
     upward:
       enabled: true
-      activation_profit: 0.03  # Start trailing at this profit %
+      activation_profit: 3.0  # Start trailing at this profit %
       type: "adaptive"         # Uses drawdown schedule
       # Adaptive drawdown schedule config
       drawdown:
-        profit_min: 0.03
-        profit_max: 0.30
-        dd_start_pct: 0.15
-        dd_end_pct: 0.01
+        profit_min: 3.0
+        profit_max: 30.0
+        dd_start_pct: 15.0
+        dd_end_pct: 1.0
         exponential_k: 3.0
         index_floors:
-          NIFTY: 0.01
-          BANKNIFTY: 0.012
-          SENSEX: 0.015
+          NIFTY: 1.0
+          BANKNIFTY: 1.2
+          SENSEX: 1.5
       # Fixed fallback
-      fixed_drop_threshold: 0.03  # Fixed drop % (if adaptive unavailable)
+      fixed_drop_threshold: 3.0  # Fixed drop % (if adaptive unavailable)
     
     # Downward Trailing (Loss Limitation - uses reverse SL from stop_loss.adaptive)
     downward:
@@ -88,13 +88,13 @@ exit:
     # Breakeven Locking
     breakeven:
       enabled: true
-      activation_profit: 0.05  # Lock breakeven at this profit %
+      activation_profit: 5.0  # Lock breakeven at this profit %
   
   # Early Trend Failure Exit
   early_exit:
     enabled: true
-    profit_threshold: 0.07  # Only check when profit < this %
-    trend_score_drop_pct: 0.30
+    profit_threshold: 7.0  # Only check when profit < this %
+    trend_score_drop_pct: 30.0
     adx_collapse_threshold: 10
     atr_ratio_threshold: 0.55
   
@@ -169,7 +169,6 @@ indices:
 paper_trading:
   enabled: true
   balance: 100000
-  realized_scope: cumulative
 
 # Option Chain (unchanged)
 option_chain:

@@ -29,11 +29,6 @@ module Options
         expected_premium = expected_spot_move.to_f * delta
 
         if expected_premium < threshold
-          Rails.logger.info(
-            "[ExpectedMoveValidator] BLOCKED #{index}: " \
-            "expected_premium=#{expected_premium.round(2)} < threshold=#{threshold} " \
-            "(ATR=#{expected_spot_move.round(2)}, delta=#{delta}, strike_type=#{st})"
-          )
           return blocked(
             'expected_premium_below_threshold',
             expected_premium: expected_premium,
@@ -65,8 +60,8 @@ module Options
           strike_type == :ATM ? 0.48 : 0.40
         when 'SENSEX'
           strike_type == :ATM ? 0.50 : 0.42
-        when 'BANKNIFTY'
-          strike_type == :ATM ? 0.45 : 0.38
+        else
+          nil
         end
       end
 
@@ -74,22 +69,18 @@ module Options
         case index
         when 'NIFTY'
           {
-            execution_only: 1.0,  # Very lenient
-            scale_ready: 2.0,     # Lowered significantly
-            full_deploy: 4.0      # Lowered significantly
+            execution_only: 4.0,
+            scale_ready: 8.0,
+            full_deploy: 12.0
           }[permission]
         when 'SENSEX'
           {
             execution_only: nil, # Always blocked earlier
-            scale_ready: 3.0,    # Lowered significantly
-            full_deploy: 6.0     # Lowered significantly
+            scale_ready: 15.0,
+            full_deploy: 25.0
           }[permission]
-        when 'BANKNIFTY'
-          {
-            execution_only: 2.0,  # Very lenient
-            scale_ready: 4.0,     # Lowered significantly
-            full_deploy: 8.0      # Lowered significantly
-          }[permission]
+        else
+          nil
         end
       end
 
@@ -103,3 +94,4 @@ module Options
     end
   end
 end
+

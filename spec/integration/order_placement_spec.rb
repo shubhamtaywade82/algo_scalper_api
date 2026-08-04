@@ -105,7 +105,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
 
         # Expect all the log messages that should be called in dry run mode
         expect(Rails.logger).to receive(:info).with(/BUY payload/)
-        expect(Rails.logger).to receive(:warn).with(/BUY blocked because PLACE_ORDER is not enabled/)
+        expect(Rails.logger).to receive(:debug).with(/BUY dry-run/)
 
         result = order_placer.buy_market!(**order_params)
 
@@ -167,7 +167,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         # Override the global mock to raise an error
         expect(DhanHQ::Models::Order).to receive(:create).and_raise(StandardError, 'API Error')
 
-        expect(Rails.logger).to receive(:error).with(/orders\..*failed/)
+        expect(Rails.logger).to receive(:error).with(/BUY failed/)
 
         result = order_placer.buy_market!(
           seg: 'NSE_FNO',
@@ -183,7 +183,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         # Override the global mock to raise a timeout error
         expect(DhanHQ::Models::Order).to receive(:create).and_raise(Timeout::Error, 'Request timeout')
 
-        expect(Rails.logger).to receive(:error).with(/orders\..*failed/)
+        expect(Rails.logger).to receive(:error).with(/BUY failed/)
 
         result = order_placer.buy_market!(
           seg: 'NSE_FNO',
@@ -199,7 +199,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         # Override the global mock to raise an ArgumentError
         expect(DhanHQ::Models::Order).to receive(:create).and_raise(ArgumentError, 'Invalid parameters')
 
-        expect(Rails.logger).to receive(:error).with(/orders\..*failed/)
+        expect(Rails.logger).to receive(:error).with(/BUY failed/)
 
         result = order_placer.buy_market!(
           seg: 'NSE_FNO',
@@ -269,32 +269,11 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
       allow(Capital::Allocator).to receive(:qty_for).and_return(65)
       allow(Orders::Placer).to receive(:buy_market!).and_return(mock_order)
       allow(Entries::EntryGuard).to receive_messages(exposure_ok?: true, cooldown_active?: false,
-                                                     extract_order_no: 'ORD123456',
-                                                     resolve_entry_ltp: 100.0,
-                                                     bos_contract_present?: true)
-      allow(Entries::EntryGuard).to receive(:enforce_structure_entry_gate).and_return({
-                                                                                         confirmed_at: Time.current,
-                                                                                         origin_swing: { price: 100.0 },
-                                                                                         broken_swing: { price: 110.0 },
-                                                                                         entry_underlying_price: 105.0,
-                                                                                         direction: :bullish,
-                                                                                         bos_id: 'BOS-123',
-                                                                                         timeframe: '5m'
-                                                                                       })
-      # Mock Live::TickQuery to return a fresh tick
-      mock_tick = double('Tick', ltp: 100.0, timestamp: Time.current)
-      allow(Live::TickQuery).to receive(:for_security).and_return(mock_tick)
-
-      # Mock trading session, daily limits and entry policy to allow entry
+                                                     extract_order_no: 'ORD123456')
+      # Mock trading session and daily limits to allow entry
       allow(TradingSession::Service).to receive(:entry_allowed?).and_return({ allowed: true })
-      allow(Policies::EntryPolicy).to receive(:new).and_return(
-        instance_double(Policies::EntryPolicy, permitted?: true, reasons: [])
-      )
-      allow(Policies::RiskPolicy).to receive(:new).and_return(
-        instance_double(Policies::RiskPolicy, permitted?: true, reasons: [])
-      )
       allow(Live::DailyLimits).to receive(:new).and_return(
-        instance_double(Live::DailyLimits, can_trade?: { allowed: true }, get_daily_trades: 0)
+        instance_double(Live::DailyLimits, can_trade?: { allowed: true })
       )
       # Mock MarketFeedHub to prevent subscription errors during PositionTracker creation
       allow(Live::MarketFeedHub.instance).to receive_messages(
@@ -324,7 +303,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         # Remove the global mock for this test
         allow(Capital::Allocator).to receive(:qty_for).and_call_original
 
-        expected_lot_size = Trading::LotCalculator.lot_size_for('NIFTY')
+        expected_lot_size = pick_data[:lot_size]
         expect(Capital::Allocator).to receive(:qty_for).with(
           index_cfg: index_config,
           entry_price: 100.0,
@@ -660,7 +639,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
           DhanHQ::Error, 'Order rejected: Insufficient funds'
         )
 
-        expect(Rails.logger).to receive(:error).with(/orders\..*failed/)
+        expect(Rails.logger).to receive(:error).with(/BUY failed/)
 
         result = order_placer.buy_market!(
           seg: 'NSE_FNO',
@@ -678,7 +657,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
           DhanHQ::Error, 'Market is closed'
         )
 
-        expect(Rails.logger).to receive(:error).with(/orders\..*failed/)
+        expect(Rails.logger).to receive(:error).with(/BUY failed/)
 
         result = order_placer.buy_market!(
           seg: 'NSE_FNO',
@@ -696,7 +675,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
           DhanHQ::Error, 'Invalid security ID'
         )
 
-        expect(Rails.logger).to receive(:error).with(/orders\..*failed/)
+        expect(Rails.logger).to receive(:error).with(/BUY failed/)
 
         result = order_placer.buy_market!(
           seg: 'NSE_FNO',

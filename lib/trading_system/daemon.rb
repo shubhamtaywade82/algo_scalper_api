@@ -5,19 +5,13 @@ module TradingSystem
   #
   # This is intentionally decoupled from the web server lifecycle so trading
   # can be restarted/monitored independently of Puma.
-  #
-  # If started while market is closed, only the WebSocket feed runs until market
-  # opens; a background thread then starts the remaining services automatically.
   class Daemon
-    MARKET_OPEN_POLL_INTERVAL = 60 # seconds
-
     def self.start(...)
       new.start(...)
     end
 
     def initialize(supervisor: nil)
       @supervisor = supervisor
-      @market_open_thread = nil
     end
 
     def start(keep_alive: true, allow_in_test: false)
@@ -33,7 +27,6 @@ module TradingSystem
       keep_process_alive! if keep_alive
       true
     rescue StandardError => e
-      Notifications::TelegramNotifier.instance.notify_error("#{e.class} - #{e.message}", context: 'TradingSystem::Daemon')
       Rails.logger.error("[TradingDaemon] #{e.class} - #{e.message}")
       safe_stop!
       false
@@ -59,46 +52,15 @@ module TradingSystem
     def start_services!
       market_closed = TradingSession::Service.market_closed?
 
-      TradingSystem::Bootstrap.boot_reconciliation!(strict: strict_boot_reconciliation?(market_closed: market_closed))
-
       if market_closed
-        Rails.logger.info('[TradingDaemon] Market closed - starting WebSocket only; will start full services when market opens')
+        Rails.logger.info('[TradingDaemon] Market closed - starting WebSocket only')
         @supervisor[:market_feed]&.start
         Rails.logger.info('[Supervisor] started market_feed (WebSocket only)')
-        start_market_open_poller!
         return
       end
 
-      start_full_trading_services!
-    end
-
-    def start_market_open_poller!
-      @market_open_thread = Thread.new do
-        Thread.current.name = 'daemon-market-open-poller'
-        loop do
-          sleep MARKET_OPEN_POLL_INTERVAL
-          next if TradingSession::Service.market_closed?
-
-          Rails.logger.info('[TradingDaemon] Market opened - starting remaining services')
-          start_full_trading_services!
-          Rails.logger.info('[TradingDaemon] Full services started')
-          break
-        end
-      end
-    end
-
-    def start_full_trading_services!
       @supervisor.start_all
       subscribe_active_positions!
-      TradingSystem::Bootstrap.boot_market_gates!
-
-      # Warm up index candles asynchronously so indicator and structural exit rules have continuous series
-      Thread.new do
-        Thread.current.name = 'daemon-index-warmup'
-        warmup_index_candles!
-      rescue StandardError => e
-        Rails.logger.error("[TradingDaemon] warmup_index_candles! failed: #{e.class} - #{e.message}")
-      end
     end
 
     def subscribe_active_positions!
@@ -112,85 +74,27 @@ module TradingSystem
       Rails.logger.error("[TradingDaemon] subscribe_active_positions failed: #{e.class} - #{e.message}")
     end
 
-    def warmup_index_candles!
-      Rails.logger.info('[TradingDaemon] Warming up index candles for exit/trailing engines...')
-      IndexConfigLoader.load_indices.each do |cfg|
-        inst = IndexInstrumentCache.instance.get_or_fetch(cfg)
-        next unless inst
-
-        Live::HistoricalBackfillService.new.backfill(instrument: inst, interval: 1, reason: :warmup)
-        Live::HistoricalBackfillService.new.backfill(instrument: inst, interval: 5, reason: :warmup)
-      end
-      Rails.logger.info('[TradingDaemon] Index candles warmup complete')
-    end
-
-    def strict_boot_reconciliation?(market_closed:)
-      # Default strict behavior only when market is open.
-      default_strict = !market_closed
-      return default_strict if ENV['TRADING_BOOT_RECONCILIATION_STRICT'].blank?
-
-      ENV['TRADING_BOOT_RECONCILIATION_STRICT'].to_s.downcase == 'true'
-    end
-
     def trap_signals!
-      @shutdown_requested = nil
       %w[INT TERM].each do |sig|
         Signal.trap(sig) do
-          @shutdown_requested = sig
+          Rails.logger.info("[TradingDaemon] Received #{sig}, shutting down...")
+          safe_stop!
+          exit(0) # rubocop:disable Rails/Exit
         end
       end
 
-      # Still keep at_exit as a fallback for other types of termination
       at_exit { safe_stop! }
     end
 
     def safe_stop!
-      # Guard against multiple calls
-      return if @stopping
-      @stopping = true
-
-      alert_shutdown_with_open_positions!
-
-      if @market_open_thread&.alive?
-        @market_open_thread.kill
-        @market_open_thread = nil
-      end
-
-      if @supervisor
-        begin
-          @supervisor.stop_all
-        rescue StandardError => e
-          warn "[TradingDaemon] stop_all failed: #{e.class} - #{e.message}"
-        end
-      end
+      @supervisor&.stop_all
     rescue StandardError => e
-      warn "[TradingDaemon] safe_stop! failed: #{e.class} - #{e.message}"
-    end
-
-    # Positions are NOT force-flattened on shutdown — they remain open at the broker.
-    # This only alerts so an operator knows to watch them until the process restarts
-    # and Live::ReconciliationService picks the exit/risk monitoring back up.
-    def alert_shutdown_with_open_positions!
-      count = PositionTracker.active.count
-      return if count.zero?
-
-      message = "TradingDaemon shutting down with #{count} open position(s) — " \
-                'they remain live at the broker UNMONITORED until the process restarts and reconciliation resumes'
-      warn "[TradingDaemon] #{message}"
-      Notifications::TelegramNotifier.instance.notify_error(message, context: 'TradingSystem::Daemon#safe_stop!')
-    rescue StandardError => e
-      warn "[TradingDaemon] alert_shutdown_with_open_positions! failed: #{e.class} - #{e.message}"
+      Rails.logger.error("[TradingDaemon] stop_all failed: #{e.class} - #{e.message}")
     end
 
     def keep_process_alive!
-      loop do
-        if @shutdown_requested
-          Rails.logger.info("[TradingDaemon] Received #{@shutdown_requested}, shutting down...")
-          safe_stop!
-          break
-        end
-        sleep 1
-      end
+      sleep
     end
   end
 end
+

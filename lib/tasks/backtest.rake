@@ -107,8 +107,72 @@ namespace :backtest do
     end
   end
 
-  desc 'Compare active strategies on an instrument'
-  task :compare, %i[symbol days] => %i[env environment] do |_t, args|
+  # desc 'Compare both strategies (SimpleMomentum vs InsideBar)'
+  # task :compare, %i[symbol interval days] => :environment do |_t, args|
+  #   symbol = args[:symbol] || 'NIFTY'
+  #   interval = args[:interval] || '5'
+  #   days = (args[:days] || '90').to_i
+
+  #   puts "\n🔍 Comparing Strategies..."
+  #   puts "Symbol: #{symbol} | Interval: #{interval}min | Days: #{days}"
+  #   puts "\n#{'=' * 80}"
+
+  #   strategies = [
+  #     { name: 'SimpleMomentumStrategy', class: SimpleMomentumStrategy },
+  #     { name: 'InsideBarStrategy', class: InsideBarStrategy }
+  #   ]
+
+  #   results = {}
+
+  #   strategies.each do |strategy_info|
+  #     puts "\n📊 Running #{strategy_info[:name]}..."
+  #     puts '-' * 80
+
+  #     result = BacktestService.run(
+  #       symbol: symbol,
+  #       interval: interval,
+  #       days_back: days,
+  #       strategy: strategy_info[:class]
+  #     )
+
+  #     results[strategy_info[:name]] = result.summary
+  #     result.print_summary
+  #     sleep 1 # Rate limit protection
+  #   end
+
+  #   # Comparison summary
+  #   puts "\n#{'=' * 80}"
+  #   puts '📈 COMPARISON SUMMARY'
+  #   puts '=' * 80
+
+  #   strategies.each do |strategy_info|
+  #     name = strategy_info[:name]
+  #     summary = results[name]
+
+  #     next if summary.empty?
+
+  #     puts "\n#{name}:"
+  #     puts "  Total Trades:    #{summary[:total_trades]}"
+  #     puts "  Win Rate:        #{summary[:win_rate]}%"
+  #     puts "  Total P&L:       #{'+' if summary[:total_pnl_percent].positive?}#{summary[:total_pnl_percent]}%"
+  #     puts "  Expectancy:      #{'+' if summary[:expectancy].positive?}#{summary[:expectancy]}% per trade"
+  #     puts "  Avg Win:         +#{summary[:avg_win_percent]}%"
+  #     puts "  Avg Loss:        #{summary[:avg_loss_percent]}%"
+  #   end
+
+  #   # Winner determination
+  #   if results.values.all?(&:empty?)
+  #     puts "\n⚠️  No trades executed by either strategy"
+  #   else
+  #     winner = results.max_by { |_name, summary| summary[:expectancy] || -999 }
+  #     puts "\n🏆 Best Strategy: #{winner[0]} (Expectancy: #{winner[1][:expectancy]}%)"
+  #   end
+
+  #   puts "\n#{'=' * 80}"
+  # end
+
+  desc 'Compare strategies on an instrument'
+  task :compare, %i[symbol interval days] => %i[env environment] do |_t, args|
     symbol = args[:symbol] || 'NIFTY'
     days = (args[:days] || '90').to_i
 
@@ -164,7 +228,7 @@ namespace :backtest do
     puts '================================================================================'
   end
 
-  desc 'Run comprehensive backtest on all indices and timeframes for active strategies'
+  desc 'Run comprehensive backtest on all indices and timeframes'
   task :all_indices, [:days] => %i[env environment] do |_t, args|
     days = (args[:days] || '90').to_i
     symbols = %w[NIFTY BANKNIFTY SENSEX]
@@ -194,27 +258,38 @@ namespace :backtest do
     }
 
     puts "\n#{'=' * 100}"
-    puts '🚀 COMPREHENSIVE BACKTEST: All Indices × Active Strategies'
+    puts '🚀 COMPREHENSIVE BACKTEST: All Indices × All Timeframes × All Strategies'
     puts '=' * 100
     puts "Days: #{days} | Symbols: #{symbols.join(', ')}"
     puts '=' * 100
 
     symbols.each do |symbol|
-      strategies.each do |strategy_name, details|
-        puts "\n📊 #{symbol} | Strategy: #{strategy_name} | Interval: #{details[:interval]}m"
-        puts '-' * 100
+      intervals.each do |interval|
+        puts "\n#{'=' * 100}"
+        puts "📊 #{symbol} - #{interval}min Timeframe"
+        puts '=' * 100
 
-        begin
-          result = BacktestService.run(
-            symbol: symbol,
-            interval: details[:interval],
-            days_back: days,
-            strategy: lambda { |series|
-              ActiveStrategyBacktestWrapper.new(
-                series: series,
-                strategy_class: details[:class],
-                strategy_params: details[:params]
-              )
+        strategies.each do |strategy_name, strategy_lambda|
+          puts "\n#{'-' * 100}"
+          puts "  Strategy: #{strategy_name}"
+          puts '-' * 100
+
+          begin
+            result = BacktestService.run(
+              symbol: symbol,
+              interval: interval,
+              days_back: days,
+              strategy: strategy_lambda
+            )
+
+            summary = result.summary
+            next if summary.empty?
+
+            all_results << {
+              symbol: symbol,
+              interval: interval,
+              strategy: strategy_name,
+              summary: summary
             }
           )
 

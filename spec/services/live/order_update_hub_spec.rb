@@ -17,8 +17,8 @@ RSpec.describe Live::OrderUpdateHub do
 
     # Stub environment variables
     allow(ENV).to receive(:[]).and_call_original
-    allow(ENV).to receive(:[]).with('DHAN_CLIENT_ID').and_return('test_client_id')
-    allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return('test_access_token')
+    allow(ENV).to receive(:[]).with('DHANHQ_CLIENT_ID').and_return('test_client_id')
+    allow(ENV).to receive(:[]).with('DHANHQ_ACCESS_TOKEN').and_return('test_access_token')
     allow(ENV).to receive(:[]).with('CLIENT_ID').and_return(nil)
     allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return(nil)
 
@@ -117,8 +117,8 @@ RSpec.describe Live::OrderUpdateHub do
 
     context 'when credentials are missing' do
       before do
-        allow(ENV).to receive(:[]).with('DHAN_CLIENT_ID').and_return(nil)
-        allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return(nil)
+        allow(ENV).to receive(:[]).with('DHANHQ_CLIENT_ID').and_return(nil)
+        allow(ENV).to receive(:[]).with('DHANHQ_ACCESS_TOKEN').and_return(nil)
         allow(ENV).to receive(:[]).with('CLIENT_ID').and_return(nil)
         allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return(nil)
       end
@@ -166,8 +166,8 @@ RSpec.describe Live::OrderUpdateHub do
 
     context 'with alternative credential names' do
       before do
-        allow(ENV).to receive(:[]).with('DHAN_CLIENT_ID').and_return(nil)
-        allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return(nil)
+        allow(ENV).to receive(:[]).with('DHANHQ_CLIENT_ID').and_return(nil)
+        allow(ENV).to receive(:[]).with('DHANHQ_ACCESS_TOKEN').and_return(nil)
         allow(ENV).to receive(:[]).with('CLIENT_ID').and_return('alt_client_id')
         allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return('alt_access_token')
       end
@@ -257,7 +257,7 @@ RSpec.describe Live::OrderUpdateHub do
 
   describe '#on_update' do
     it 'registers callback' do
-      callback = proc { |payload| }
+      callback = proc { |payload| puts payload }
 
       hub.on_update(&callback)
 
@@ -270,8 +270,8 @@ RSpec.describe Live::OrderUpdateHub do
     end
 
     it 'allows multiple callbacks' do
-      callback1 = proc { |p|  }
-      callback2 = proc { |p|  }
+      callback1 = proc { |p| puts "1: #{p}" }
+      callback2 = proc { |p| puts "2: #{p}" }
 
       hub.on_update(&callback1)
       hub.on_update(&callback2)
@@ -332,72 +332,6 @@ RSpec.describe Live::OrderUpdateHub do
       expect(Rails.logger).to receive(:error).with(/OrderUpdateHub.*Order update callback failed/)
 
       hub.send(:handle_update, payload)
-    end
-
-    it 'updates health status and marks feed health as successful' do
-      feed_health = instance_double(Live::FeedHealthService)
-      allow(Live::FeedHealthService).to receive(:instance).and_return(feed_health)
-      allow(feed_health).to receive(:mark_success!)
-
-      hub.send(:handle_update, payload)
-
-      status = hub.health_status
-      expect(status[:connection_state]).to eq(:connected)
-      expect(status[:last_update_at]).to be_within(1.second).of(Time.current)
-      expect(feed_health).to have_received(:mark_success!).with(:order_updates)
-    end
-  end
-
-  describe '#health_status' do
-    it 'returns connection and timing information' do
-      now = Time.current
-      hub.instance_variable_set(:@running, true)
-      hub.instance_variable_set(:@connection_state, :connected)
-      hub.instance_variable_set(:@started_at, now - 10)
-      hub.instance_variable_set(:@last_update_at, now - 5)
-      hub.instance_variable_set(:@last_error, StandardError.new('test'))
-
-      status = hub.health_status
-
-      expect(status[:running]).to be true
-      expect(status[:connection_state]).to eq(:connected)
-      expect(status[:started_at]).to be_within(1.second).of(now - 10)
-      expect(status[:last_update_at]).to be_within(1.second).of(now - 5)
-      expect(status[:last_error]).to be_a(StandardError)
-    end
-  end
-
-  describe 'watchdog and restart behavior' do
-    let(:feed_health) { instance_double(Live::FeedHealthService, threshold_for: 10) }
-
-    before do
-      allow(Live::FeedHealthService).to receive(:instance).and_return(feed_health)
-      allow(feed_health).to receive(:mark_failure!)
-      hub.instance_variable_set(:@running, true)
-    end
-
-    it 'does nothing when last_update_at is nil' do
-      expect(hub).not_to receive(:restart!)
-
-      hub.send(:check_connection_health!)
-    end
-
-    it 'does nothing when feed is within threshold' do
-      hub.instance_variable_set(:@last_update_at, Time.current)
-
-      expect(hub).not_to receive(:restart!)
-
-      hub.send(:check_connection_health!)
-    end
-
-    it 'restarts when feed is stale' do
-      hub.instance_variable_set(:@last_update_at, Time.current - 20)
-      allow(hub).to receive(:restart!)
-
-      hub.send(:check_connection_health!)
-
-      expect(feed_health).to have_received(:mark_failure!).with(:order_updates, error: instance_of(RuntimeError))
-      expect(hub).to have_received(:restart!)
     end
   end
 

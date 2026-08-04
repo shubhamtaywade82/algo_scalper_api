@@ -14,7 +14,7 @@ RSpec.describe Risk::Rules::SecureProfitRule do
     )
   end
   let(:position_data) do
-    Positions::PositionData.new(
+    Positions::ActiveCache::PositionData.new(
       tracker_id: tracker.id,
       entry_price: 100.0,
       quantity: 10,

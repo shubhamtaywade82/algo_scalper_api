@@ -1,304 +1,241 @@
-# Testing Guide
+# Better Specs Guidelines
 
-This document covers the test suite, paper trading validation approach, and post-session analysis for the Algo Scalper API.
+This document outlines the Better Specs best practices we follow for testing in the Algo Scalper API project.
 
-## Test Suite
+Source: https://www.betterspecs.org/
 
-### Running Tests
+## Key Principles
 
-```bash
-# Full test suite
-bundle exec rspec
+### 1. Describe Your Methods
+Use Ruby documentation conventions:
+- `.` or `::` for class methods
+- `#` for instance methods
 
-# Single spec file
-bundle exec rspec spec/path/file_spec.rb
-
-# Specific directory
-bundle exec rspec spec/services/entries/
-
-# With documentation format
-bundle exec rspec --format documentation spec/services/signal/
-```
-
-### Test Structure
-
-```
-spec/
-  models/              # Model specs (PositionTracker, Derivative, TradingSignal, etc.)
-  services/
-    signal/            # Signal::Engine, Signal::Scheduler specs
-    entries/           # EntryGuard, guard pipeline specs
-    live/              # RiskManagerService, UnifiedExitChecker, ExitEngine specs
-    orders/            # Gateway specs
-    risk/              # CircuitBreaker, risk rules specs
-    market_context/    # RegimeComposer, MarketPermissionGate specs
-    options/           # ChainAnalyzer, ChainSignalExtractor specs
-  integration/         # End-to-end integration specs
-  lib/
-    positions/         # DrawdownSchedule, TrailingConfig specs
-```
-
-### Key Test Files
-
-```bash
-# Entry guard pipeline
-bundle exec rspec spec/services/entries/entry_guard_pipeline_spec.rb
-bundle exec rspec spec/services/entries/entry_guard_spec.rb
-
-# Signal engine
-bundle exec rspec spec/services/signal/engine_spec.rb
-
-# Exit system
-bundle exec rspec spec/services/live/unified_exit_checker_spec.rb
-bundle exec rspec spec/services/live/risk_manager_service_trailing_spec.rb
-
-# Drawdown calculations
-bundle exec rspec spec/lib/positions/drawdown_schedule_spec.rb
-
-# Guards
-bundle exec rspec spec/services/entries/guards/expiry_week_power_trend_guard_spec.rb
-bundle exec rspec spec/services/entries/guards/time_regime_guard_spec.rb
-```
-
-### Test Tooling
-
-- **RSpec** — test framework
-- **FactoryBot** — test data factories
-- **VCR** — records/replays DhanHQ HTTP/WebSocket interactions
-- **Timecop** — time manipulation for time-regime guards, time-stop tests
-
----
-
-## Paper Trading Validation
-
-The primary validation approach is running with **`LIVE_TRADING` unset or false** (paper gateway forced), optional **`SIGNAL_TIER=exploratory`** for a permissive preset overlay, and `dhanhq.enable_orders: false` / no `PLACE_ORDER` while you prove the stack. All market data is real (live DhanHQ WebSocket); order execution is simulated in paper mode.
-
-### Quick Pre-Session Checks
-
-```bash
-# Verify base paper_trading block (effective mode also depends on LIVE_TRADING)
-grep -A 3 "paper_trading" config/algo.yml
-
-# Verify signal tier (env overrides signals.signal_tier)
-grep -A 2 "signal_tier" config/algo.yml
-
-# Verify risk parameters
-grep -A 10 "^risk:" config/algo.yml
-```
-
-### During Session — Rails Console Queries
-
+**Example:**
 ```ruby
-# Active positions
-PositionTracker.active.count
+describe '.authenticate' do
+describe '#admin?' do
+```
 
-# Recent signals
-TradingSignal.order(created_at: :desc).limit(10).pluck(:index_key, :direction, "metadata->>'adx_value'")
+### 2. Use Contexts
+Always use contexts to organize tests. Start context descriptions with:
+- `when`
+- `with` / `without`
+- `if` / `unless`
+- `for`
+- `that`
 
-# Entry paths
-TradingSignal.group("metadata->>'entry_path'").count
+**Example:**
+```ruby
+context 'when logged in' do
+  it { is_expected.to respond_with 200 }
+end
 
-# Active position details
-PositionTracker.active.each do |t|
-  puts "#{t.order_no}: #{t.meta['index_key']} #{t.meta['direction']} entry=#{t.entry_price}"
+context 'when logged out' do
+  it { is_expected.to respond_with 401 }
 end
 ```
 
-### Log Monitoring
+### 3. Keep Descriptions Short
+Spec descriptions should never exceed 40 characters. Split longer tests using contexts.
 
-```bash
-# Watch signal generation + entries + exits
-tail -f log/development.log | grep -E "Signal|Entry|Exit|RiskManager|ERROR|FATAL"
-
-# Watch only exits
-tail -f log/development.log | grep -E "exit|Exit|ExitEngine"
-
-# Watch guard pipeline blocks
-tail -f log/development.log | grep "blocked"
-```
-
-### Post-Session Analysis
-
+**Bad:**
 ```ruby
-# === Performance Summary ===
-today = Date.today.beginning_of_day
-
-# Total PnL
-total_pnl = PositionTracker.exited.where("exited_at >= ?", today).sum(:last_pnl_rupees)
-puts "Total PnL: ₹#{total_pnl.round(2)}"
-
-# Exit path distribution
-puts "\nExit Paths:"
-PositionTracker.exited.where("exited_at >= ?", today)
-  .group("meta->>'exit_path'").count
-  .sort_by { |_, c| -c }
-  .each { |path, count| puts "  #{path}: #{count}" }
-
-# Entry path distribution
-puts "\nEntry Paths:"
-TradingSignal.where("created_at >= ?", today)
-  .group("metadata->>'entry_path'").count
-  .each { |path, count| puts "  #{path}: #{count}" }
-
-# Exit path performance
-puts "\nExit Path Performance:"
-PositionTracker.exited.where("exited_at >= ?", today)
-  .group("meta->>'exit_path'")
-  .select(
-    "meta->>'exit_path' as exit_path",
-    "COUNT(*) as count",
-    "AVG(last_pnl_rupees) as avg_pnl",
-    "SUM(CASE WHEN last_pnl_rupees > 0 THEN 1 ELSE 0 END)::float / COUNT(*) * 100 as win_rate"
-  )
-  .each { |r| puts "  #{r.exit_path}: count=#{r.count} avg=₹#{r.avg_pnl.to_f.round(2)} win=#{r.win_rate.to_f.round(1)}%" }
-
-# Entry strategy → exit path analysis
-puts "\nStrategy → Exit Analysis:"
-PositionTracker.exited.where("exited_at >= ?", today)
-  .group("meta->>'entry_strategy'", "meta->>'exit_path'")
-  .count
-  .each { |(strategy, path), count| puts "  #{strategy} → #{path}: #{count}" }
+it 'has 422 status code if an unexpected params will be added' do
 ```
 
----
-
-## Testing Specific Exit Rules
-
-### Early Trend Failure (ETF)
-
+**Good:**
 ```ruby
-# Check if ETF exits occurred
-PositionTracker.exited.where("meta->>'exit_path' = ?", "early_trend_failure").count
-
-# Review ETF exit details
-PositionTracker.exited.where("meta->>'exit_path' = ?", "early_trend_failure")
-  .each { |t| puts "#{t.order_no}: PnL=#{t.last_pnl_pct.round(4)} reason=#{t.meta['exit_reason']}" }
+context 'when not valid' do
+  it { is_expected.to respond_with 422 }
+end
 ```
 
-**Expected behavior**: ETF triggers only when `exit.early_exit.profit_threshold` not yet reached AND trend has reversed.
+### 4. Single Expectation
+Each test should make only one assertion for isolated unit tests.
 
-### Trailing Stop
-
+**Good (isolated):**
 ```ruby
-# Upward trailing exits (profit protection)
-PositionTracker.exited.where("meta->>'exit_path' LIKE ?", "%upward%")
-  .pluck(:order_no, "meta->>'peak_profit_pct'", :last_pnl_pct)
-
-# Downward trailing exits (loss limitation)
-PositionTracker.exited.where("meta->>'exit_path' LIKE ?", "%downward%")
-  .pluck(:order_no, :last_pnl_pct, "meta->>'seconds_below_entry'")
+it { is_expected.to respond_with_content_type(:json) }
+it { is_expected.to assign_to(:resource) }
 ```
 
-### Drawdown Calculations (Manual Verification)
-
+**Good (not isolated - integration tests):**
 ```ruby
-# In Rails console — verify adaptive trailing math
-# At 10% profit, how much drawdown is allowed?
-include Positions::DrawdownSchedule
-profit_pct = 0.10
-allowed_dd = allowed_upward_drawdown_pct(profit_pct, index_key: 'NIFTY')
-puts "At #{(profit_pct * 100).round(1)}% profit, allowed drawdown: #{(allowed_dd * 100).round(2)}%"
-
-# At -10% loss, how much more loss is allowed (adaptive SL)?
-loss_pct = -0.10
-seconds_below = 120
-atr_ratio = 0.75
-allowed_loss = reverse_dynamic_sl_pct(loss_pct, seconds_below_entry: seconds_below, atr_ratio: atr_ratio)
-puts "At #{(loss_pct.abs * 100).round(1)}% loss, #{seconds_below}s below entry: allowed=#{(allowed_loss * 100).round(2)}%"
+it 'creates a resource' do
+  expect(response).to respond_with_content_type(:json)
+  expect(response).to assign_to(:resource)
+end
 ```
 
-### Circuit Breaker
+### 5. Test All Possible Cases
+Test valid, edge, and invalid cases.
 
+**Example:**
 ```ruby
-# Check status
-Risk::CircuitBreaker.instance.tripped?
-Risk::CircuitBreaker.instance.trip_reason
+describe '#destroy' do
+  context 'when resource is found' do
+    it 'responds with 200'
+    it 'shows the resource'
+  end
 
-# Manual trip (testing)
-Risk::CircuitBreaker.instance.trip!(reason: "Test trip")
+  context 'when resource is not found' do
+    it 'responds with 404'
+  end
 
-# Reset
-Risk::CircuitBreaker.instance.reset!
+  context 'when resource is not owned' do
+    it 'responds with 404'
+  end
+end
 ```
 
----
+### 6. Use Expect Syntax (Not Should)
+Always use `expect` syntax, not `should`.
 
-## Signal Tiers And Tuning (No `run_mode`)
-
-`RUN_MODE`, `exit_testing`, and `config/profiles/*.yml` are **removed**. See
-`docs/development/testing_profiles.md` for the historical note.
-
-| Goal | What to use |
-|------|-------------|
-| More permissive signal YAML overlay | `SIGNAL_TIER=exploratory` or set `signals.signal_tier: exploratory` |
-| Match `algo.yml` as merged with DB only | `SIGNAL_TIER=standard` (default when tier invalid/missing) |
-| Stricter preset overlay | `SIGNAL_TIER=selective` |
-| Stress entry or exit plumbing | Tune `signals.*`, guards, and risk blocks in YAML or DB overrides — same code path for all |
-
-```bash
-# Example: exploratory tier + paper gateway (LIVE_TRADING unset)
-SIGNAL_TIER=exploratory ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
-```
-
----
-
-## Code Quality
-
-```bash
-# Lint
-bundle exec rubocop
-
-# Security scan
-bin/brakeman --no-pager
-
-# Complexity analysis
-bundle exec rubycritic app/services/
-
-# Dead method candidates
-bundle exec rake code_health:debride
-```
-
----
-
-## Common Troubleshooting
-
-### No entries firing
-
+**Bad:**
 ```ruby
-# Check circuit breaker
-Risk::CircuitBreaker.instance.tripped?
-
-# Check edge failure detector
-Live::EdgeFailureDetector.instance.entries_paused?(index_key: 'NIFTY')
-
-# Recent signals (any blocked?)
-TradingSignal.order(created_at: :desc).limit(5).pluck(:index_key, "metadata->>'block_reason'")
-
-# Check guard blocks in logs
-tail -f log/development.log | grep "blocked"
+it 'creates a resource' do
+  response.should respond_with_content_type(:json)
+end
 ```
 
-### Exit not triggering
-
+**Good:**
 ```ruby
-# Check if exit was requested
-PositionTracker.active.pluck(:id, :exit_requested_at, :exit_sent_at)
-
-# Check PnL cache
-tracker = PositionTracker.active.first
-Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
-
-# Check RiskManager running
-Live::RiskManagerService.instance.running?
+it 'creates a resource' do
+  expect(response).to respond_with_content_type(:json)
+end
 ```
 
-### LTP not updating
-
+For implicit subject use `is_expected.to`:
 ```ruby
-# Check tick cache
-Live::TickCache.fetch('IDX_I', '13')  # NIFTY
-Live::TickCache.fetch('IDX_I', '25')  # BANKNIFTY
-
-# Check WebSocket
-Live::MarketFeedHub.instance.connected?
+context 'when not valid' do
+  it { is_expected.to respond_with 422 }
+end
 ```
+
+### 7. Use Subject
+Use `subject` to DRY up tests related to the same subject.
+
+**Bad:**
+```ruby
+it { expect(assigns('message')).to match /it was born in Belville/ }
+```
+
+**Good:**
+```ruby
+subject { assigns('message') }
+it { is_expected.to match /it was born in Billville/ }
+```
+
+Named subject:
+```ruby
+subject(:hero) { Hero.first }
+it "carries a sword" do
+  expect(hero.equipment).to include "sword"
+end
+```
+
+### 8. Use let and let!
+Use `let` for lazy-loaded variables. Use `let!` when you need eager evaluation.
+
+**Bad:**
+```ruby
+describe '#type_id' do
+  before { @resource = FactoryBot.create :device }
+  before { @type     = Type.find @resource.type_id }
+  it 'sets the type_id field' do
+    expect(@resource.type_id).to eq(@type.id)
+  end
+end
+```
+
+**Good:**
+```ruby
+describe '#type_id' do
+  let(:resource) { FactoryBot.create :device }
+  let(:type)     { Type.find resource.type_id }
+  it 'sets the type_id field' do
+    expect(resource.type_id).to eq(type.id)
+  end
+end
+```
+
+### 9. Don't Overuse Mocks
+As a general rule, don't (over)use mocks. Test real behavior when possible.
+
+### 10. Create Only the Data You Need
+Don't load more data than needed for your tests.
+
+**Good:**
+```ruby
+describe ".top" do
+  before { FactoryBot.create_list(:user, 3) }
+  it { expect(User.top(2)).to have(2).item }
+end
+```
+
+### 11. Use Factories (Not Fixtures)
+Use Factory Bot to reduce verbosity when creating test data.
+
+**Bad:**
+```ruby
+user = User.create(
+  name: 'Genoveffa',
+  surname: 'Piccolina',
+  city: 'Billyville',
+  birth: '17 Agoust 1982',
+  active: true
+)
+```
+
+**Good:**
+```ruby
+user = FactoryBot.create :user
+```
+
+### 12. Use Easy-to-Read Matchers
+Use readable matchers from RSpec.
+
+**Bad:**
+```ruby
+lambda { model.save! }.to raise_error Mongoid::Errors::DocumentNotFound
+```
+
+**Good:**
+```ruby
+expect { model.save! }.to raise_error Mongoid::Errors::DocumentNotFound
+```
+
+### 13. Don't Use "Should"
+Do not use "should" in test descriptions. Use third person present tense.
+
+**Bad:**
+```ruby
+it 'should not change timings' do
+  consumption.occur_at.should == valid.occur_at
+end
+```
+
+**Good:**
+```ruby
+it 'does not change timings' do
+  expect(consumption.occur_at).to eq(valid.occur_at)
+end
+```
+
+## Configuration
+
+Our `.rubocop.yml` enforces these guidelines with the following cops:
+
+- `RSpec/ContextWording`: Enforces contexts starting with `when`, `with`, `without`, etc.
+- `RSpec/SingleExpectation`: Enforced for unit tests, relaxed for integration/system tests
+- `RSpec/NestedGroups`: Max 5 levels deep
+- `RSpec/MultipleMemoizedHelpers`: Max 10 helpers
+- `Layout/LineLength`: Max 120 characters with specific exclusions
+
+## Additional Resources
+
+- [Better Specs Website](https://www.betterspecs.org/)
+- [RSpec Documentation](https://rspec.info/)
+- [Factory Bot Documentation](https://github.com/thoughtbot/factory_bot)
+

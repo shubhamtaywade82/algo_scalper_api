@@ -25,23 +25,9 @@ module Capital
 
         return 0 unless valid_for_allocation?(index_cfg, entry_price, derivative_lot_size, capital_available)
 
-        @index_key = index_cfg[:key] || 'UNKNOWN'
-
-        # Check if Kelly-based position sizing is enabled
-        if kelly_based_sizing_enabled?(index_cfg)
-          return calculate_kelly_based_quantity(
-            index_cfg: index_cfg,
-            entry_price: entry_price,
-            derivative_lot_size: derivative_lot_size,
-            capital_available: capital_available,
-            multiplier: multiplier
-          )
-        end
-
         # Check if rupee-based position sizing is enabled
         if rupee_based_sizing_enabled?
           return calculate_rupee_based_quantity(
-            index_cfg: index_cfg,
             entry_price: entry_price,
             derivative_lot_size: derivative_lot_size,
             capital_available: capital_available,
@@ -230,6 +216,7 @@ module Capital
       end
 
       def calculate_and_apply_quantity(index_cfg:, entry_price:, derivative_lot_size:, capital_available:, multiplier:)
+        @index_key = index_cfg[:key] || 'UNKNOWN'
         capital_available_f = capital_available.to_f
         entry_price_f = entry_price.to_f
         lot_size = derivative_lot_size.to_i
@@ -348,6 +335,35 @@ module Capital
         }
       end
 
+      def allocation_percentage_with_override(band)
+        # Prefer algo.yml config, ENV as fallback for testing
+        band[:alloc_pct] || ENV['ALLOC_PCT']&.to_f
+      end
+
+      def risk_per_trade_with_override(band)
+        # Prefer algo.yml config, ENV as fallback for testing
+        band[:risk_per_trade_pct] || ENV['RISK_PER_TRADE_PCT']&.to_f
+      end
+
+      def daily_max_loss_with_override(band)
+        # Prefer algo.yml config, ENV as fallback for testing
+        band[:daily_max_loss_pct] || ENV['DAILY_MAX_LOSS_PCT']&.to_f
+      end
+
+      def fetch_live_trading_balance
+        data = DhanHQ::Models::Funds.fetch
+        value = data.available_balance
+
+        return handle_missing_balance(data) if value.nil?
+
+        convert_to_bigdecimal(value)
+      end
+
+      def handle_missing_balance(data)
+        Rails.logger.warn("[Capital] Failed to extract available_balance from funds data: #{data.inspect}")
+        BigDecimal(0)
+      end
+
       def convert_to_bigdecimal(value)
         result = value.is_a?(BigDecimal) ? value : BigDecimal(value.to_s)
         Rails.logger.debug { "[Capital] Available cash: ₹#{result}" }
@@ -379,23 +395,19 @@ module Capital
                  end
 
         Rails.logger.info(
-          "[Allocator] index:#{index_key} lot_cost:₹#{format_money(cost_per_lot)} " \
-          "capital:₹#{format_money(capital_available_f)} qty:#{final_quantity} reason:#{reason}"
+          "[Allocator] index:#{index_key} lot_cost:₹#{cost_per_lot.round(2)} " \
+          "capital:₹#{capital_available_f.round(2)} qty:#{final_quantity} reason:#{reason}"
         )
       end
 
       # Rupee-based position sizing: derive quantity from fixed ₹ risk
       # Formula: quantity = floor(risk_rupees / (stop_distance_rupees × lot_size)) × lot_size
-      def calculate_rupee_based_quantity(index_cfg:, entry_price:, derivative_lot_size:, capital_available:, multiplier:)
+      def calculate_rupee_based_quantity(entry_price:, derivative_lot_size:, capital_available:, multiplier:)
         sizing_cfg = position_sizing_config
         return 0 unless sizing_cfg && sizing_cfg[:enabled]
 
-        entry_bd = BigDecimal(entry_price.to_s)
-        return 0 unless entry_bd.finite? && entry_bd.positive?
-        return 0 unless finite_money?(capital_available)
-
         risk_rupees = BigDecimal((sizing_cfg[:risk_rupees] || 1000).to_s)
-        index_key = @index_key || index_cfg[:key] || 'UNKNOWN'
+        index_key = @index_key || 'UNKNOWN'
 
         # Deduct broker fees from risk capital (₹40 per trade: entry + exit)
         # This ensures net risk after fees matches the target risk
@@ -429,33 +441,24 @@ module Capital
         # Ensure minimum 1 lot
         quantity = [quantity, lot_size].max
 
-        # Check capital allocation constraint (alloc_pct caps total buy value)
+        # Check capital constraint
         cost_per_lot = BigDecimal(entry_price.to_s) * lot_size
-        alloc_pct = effective_allocation_pct(index_cfg, capital_available.to_f)
-        max_allocation = capital_available * BigDecimal(alloc_pct.to_s)
-        max_lots_by_alloc = (max_allocation / cost_per_lot).floor
-        max_alloc_quantity = max_lots_by_alloc * lot_size
-
-        # Also check raw affordability
         max_affordable_lots = (capital_available / cost_per_lot).floor
         max_affordable_quantity = max_affordable_lots * lot_size
 
-        # Take minimum of risk-based, allocation-based, and capital-based quantity
-        final_quantity = [quantity, max_alloc_quantity, max_affordable_quantity].min
+        # Take minimum of risk-based and capital-based quantity
+        final_quantity = [quantity, max_affordable_quantity].min
 
         # Ensure at least 1 lot
         final_quantity = [final_quantity, lot_size].max
 
         # Log breakdown
-        alloc_pct_f = alloc_pct.to_f
-        pct_label = alloc_pct_f.finite? ? alloc_pct_f.round(0).to_i : 'n/a'
-        buy_value = entry_price.to_f * final_quantity
         Rails.logger.info(
           "[Allocator] RUPEES_BASED index:#{index_key} risk:₹#{risk_rupees} " \
           "fees:₹#{broker_fees} net_risk:₹#{net_risk_rupees} " \
           "stop_dist:₹#{stop_distance_rupees} risk_per_lot:₹#{risk_per_lot} " \
-          "max_lots:#{max_lots_by_risk} alloc_cap:#{max_lots_by_alloc}(#{pct_label}%) " \
-          "qty:#{final_quantity} buy_value:₹#{format_money(buy_value)}"
+          "max_lots:#{max_lots_by_risk} qty:#{final_quantity} " \
+          "buy_value:₹#{(entry_price.to_f * final_quantity).round(2)}"
         )
 
         final_quantity
@@ -466,77 +469,10 @@ module Capital
         sizing_cfg && sizing_cfg[:enabled] == true
       end
 
-      # Kelly-based position sizing: derive quantity from Kelly Criterion formula
-      # Formula: f* = p - (1-p)/r
-      def calculate_kelly_based_quantity(index_cfg:, entry_price:, derivative_lot_size:, capital_available:, multiplier:)
-        sizing_cfg = AlgoConfig.fetch[:kelly_sizing] || {}
-        return 0 unless sizing_cfg[:enabled]
-
-        entry_bd = BigDecimal(entry_price.to_s)
-        return 0 unless entry_bd.finite? && entry_bd.positive?
-
-        # p = confidence (0.0 to 1.0)
-        p = (index_cfg[:confidence] || 0.55).to_f
-        # r = Reward-to-Risk ratio
-        risk = (entry_bd - BigDecimal((index_cfg[:stop_loss] || (entry_bd * 0.98)).to_s)).abs
-        reward = (BigDecimal((index_cfg[:target] || (entry_bd * 1.04)).to_s) - entry_bd).abs
-        r = risk.positive? ? (reward / risk).to_f : 1.0
-
-        # Calculate Kelly fraction f*
-        kelly_f = p - ((1 - p) / r)
-        # Apply safety factor (Half-Kelly or Fractional Kelly)
-        safety_factor = sizing_cfg[:safety_factor] || 0.5
-        f_star = [kelly_f * safety_factor, 0.20].min # Cap at 20% of capital per trade
-
-        return 0 if f_star <= 0
-
-        # buy_value = capital_available * f_star
-        buy_value = capital_available * BigDecimal(f_star.to_s)
-        lot_cost = entry_bd * derivative_lot_size
-        max_lots = (buy_value / lot_cost).floor
-
-        # Apply multiplier
-        max_lots = (max_lots * multiplier).to_i
-        quantity = max_lots * derivative_lot_size
-
-        # Minimum 1 lot
-        quantity = [quantity, derivative_lot_size.to_i].max
-
-        # Affordability check
-        max_affordable_lots = (capital_available / lot_cost).floor
-        final_quantity = [quantity, max_affordable_lots * derivative_lot_size.to_i].min
-
-        Rails.logger.info(
-          "[Allocator] KELLY_BASED index:#{@index_key} p:#{p.round(2)} r:#{r.round(2)} " \
-          "f_star:#{f_star.round(3)} buy_value:₹#{format_money(buy_value)} " \
-          "qty:#{final_quantity}"
-        )
-
-        final_quantity
-      end
-
-      def kelly_based_sizing_enabled?(index_cfg)
-        return false unless index_cfg[:confidence] # Requires signal confidence
-        cfg = AlgoConfig.fetch[:kelly_sizing]
-        cfg && cfg[:enabled] == true
-      end
-
       def position_sizing_config
         AlgoConfig.fetch[:position_sizing]
       rescue StandardError
         nil
-      end
-
-      def finite_money?(value)
-        case value
-        when BigDecimal then value.finite?
-        else value.to_f.finite?
-        end
-      end
-
-      def format_money(value)
-        f = value.to_f
-        f.finite? ? format('%.2f', f) : 'n/a'
       end
     end
   end

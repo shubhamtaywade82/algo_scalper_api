@@ -10,14 +10,14 @@ namespace :ai do
     puts '=' * 100
     puts ''
 
-    unless Services::Ai::OllamaClient.instance.enabled?
+    unless Services::Ai::OpenaiClient.instance.enabled?
       puts '❌ AI integration is not enabled or configured.'
       puts '   Set OPENAI_API_KEY or OPENAI_ACCESS_TOKEN environment variable'
       puts '   Enable AI in config/algo.yml: ai.enabled: true'
       exit 1
     end
 
-    puts "Provider: #{Services::Ai::OllamaClient.instance.provider}"
+    puts "Provider: #{Services::Ai::OpenaiClient.instance.provider}"
     puts ''
 
     result = Services::Ai::TradingAnalyzer.analyze_trading_day(date: date)
@@ -36,7 +36,7 @@ namespace :ai do
 
   desc 'Get AI strategy improvement suggestions'
   task suggest_improvements: :environment do
-    unless Services::Ai::OllamaClient.instance.enabled?
+    unless Services::Ai::OpenaiClient.instance.enabled?
       puts '❌ AI integration is not enabled or configured.'
       exit 1
     end
@@ -90,7 +90,7 @@ namespace :ai do
     puts 'Testing AI Client...'
     puts ''
 
-    client = Services::Ai::OllamaClient.instance
+    client = Services::Ai::OpenaiClient.instance
 
     unless client.enabled?
       puts '❌ AI client is not enabled'
@@ -148,7 +148,7 @@ namespace :ai do
 
   desc 'List available Ollama models'
   task list_models: :environment do
-    client = Services::Ai::OllamaClient.instance
+    client = Services::Ai::OpenaiClient.instance
 
     unless client.enabled? && client.provider == :ollama
       puts '❌ Ollama is not configured or enabled'

@@ -107,7 +107,7 @@ namespace :ai do
     end
 
     # Try to get AI-generated examples if AI is enabled
-    if Services::Ai::OllamaClient.instance.enabled?
+    if Services::Ai::OpenaiClient.instance.enabled?
       puts '=' * 100
       puts '🤖 AI-Generated Example Prompts'
       puts '=' * 100
@@ -193,7 +193,7 @@ namespace :ai do
       exit 1
     end
 
-    unless Services::Ai::OllamaClient.instance.enabled?
+    unless Services::Ai::OpenaiClient.instance.enabled?
       puts '❌ AI integration is not enabled or configured.'
       puts '   Set OPENAI_API_KEY or OLLAMA_BASE_URL environment variable'
       puts '   Enable AI in config/algo.yml: ai.enabled: true'
@@ -206,7 +206,7 @@ namespace :ai do
     puts ''
     puts "Query: #{query}"
     puts ''
-    puts "Provider: #{Services::Ai::OllamaClient.instance.provider}"
+    puts "Provider: #{Services::Ai::OpenaiClient.instance.provider}"
     puts ''
 
     # Check if streaming is requested
@@ -223,10 +223,11 @@ namespace :ai do
       # Send typing indicator to Telegram if enabled
       TelegramNotifier.send_chat_action(action: 'typing') if telegram_enabled
 
-      # Accumulate analysis-only chunks for Telegram (filtered - no verbose logs)
-      telegram_analysis_buffer = +'' # Create mutable string (frozen_string_literal is enabled)
-      # Escape HTML special characters in query only (keep header tags intact)
+      # Accumulate chunks for Telegram (filtered - no verbose logs)
+      telegram_buffer = +'' # Create mutable string (frozen_string_literal is enabled)
+      # Escape HTML special characters in query
       escaped_query = query.to_s.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
+      telegram_buffer << "📊 <b>Technical Analysis: #{escaped_query}</b>\n\n"
 
       result = Services::Ai::TechnicalAnalysisAgent.analyze(query: query, stream: true) do |chunk|
         if chunk
@@ -237,12 +238,12 @@ namespace :ai do
           if telegram_enabled
             # Skip verbose agent logs (intent, symbol, tool calls, agent status)
             # Match patterns at start of line or anywhere in chunk
-            if chunk.to_s.match?(/\[Agent\]|\[Tool\]|\[Intent\]|\[Symbol\]/)
+            if chunk.to_s.match?(/🔍 \[Intent\]|📊 \[Symbol\]|🔧 \[Tool\]|✅ \[Tool\]|⚠️  \[Agent\]|📝 \[Agent\]|💭 \[Agent\]|📋 \[Tool\]|⚙️  \[Tool\]|⏹️  \[Agent\]/)
               next
             end
 
             # Only accumulate actual analysis content (not verbose logs)
-            telegram_analysis_buffer << chunk
+            telegram_buffer << chunk
           end
         end
       end
@@ -253,35 +254,42 @@ namespace :ai do
       puts "Generated at: #{result[:generated_at]}" if result
 
       # Send complete message to Telegram (cleaned)
-      if telegram_enabled && telegram_analysis_buffer.present?
+      if telegram_enabled && telegram_buffer.present?
         # Clean up the buffer - remove any remaining verbose logs
-        cleaned_buffer = telegram_analysis_buffer.dup
-        # Remove all verbose agent/tool log lines — matches any line tagged with [Agent], [Tool], [Intent], or [Symbol]
-        cleaned_buffer.gsub!(/^[^\n]*\[(?:Agent|Tool|Intent|Symbol)\][^\n]*\n?/, '')
+        cleaned_buffer = telegram_buffer.dup
+        # Remove all verbose log patterns (comprehensive cleanup)
+        cleaned_buffer.gsub!(/🔍 \[Intent\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/📊 \[Symbol\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/🔧 \[Tool\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/✅ \[Tool\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/⚠️  \[Agent\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/📝 \[Agent\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/💭 \[Agent\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/⚙️  \[Tool\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/⏹️  \[Agent\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/📋 \[Tool\] Result:[^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/📋 \[Tool\] Result:\s*\n/, '')
         # Remove JSON tool call results
         cleaned_buffer.gsub!(/\{"tool"[^}]*\}[^\n]*\n?/, '')
         cleaned_buffer.gsub!(/\{"name"[^}]*\}[^\n]*\n?/, '')
         cleaned_buffer.gsub!(/\n{3,}/, "\n\n") # Remove excessive newlines
         cleaned_buffer.strip!
 
-        # Only send if there's actual analysis content
-        if cleaned_buffer.strip.length > 20
-          telegram_message = +"📊 <b>Technical Analysis: \"#{escaped_query}\"</b>\n\n"
-          # Escape only analysis text (not HTML tags)
-          escaped_analysis = cleaned_buffer.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
-          telegram_message << escaped_analysis
-          telegram_message << "\n\n⏰ Generated at: #{result[:generated_at]}" if result&.dig(:generated_at)
-          telegram_message << "\n🤖 Provider: #{result[:provider]}" if result&.dig(:provider)
+        # Only send if there's actual content (not just headers)
+        if cleaned_buffer.strip.length > 50 # Minimum meaningful content
+          cleaned_buffer << "\n\n"
+          cleaned_buffer << "⏰ Generated at: #{result[:generated_at]}" if result&.dig(:generated_at)
+          cleaned_buffer << "\n🤖 Provider: #{result[:provider]}" if result&.dig(:provider)
 
           begin
-            TelegramNotifier.send_message(telegram_message, parse_mode: 'HTML')
+            # Escape HTML special characters in the analysis content
+            escaped_buffer = cleaned_buffer.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
+            TelegramNotifier.send_message(escaped_buffer, parse_mode: 'HTML')
             puts "\n✅ Analysis sent to Telegram"
           rescue StandardError => e
             Rails.logger.error("[AI Technical Analysis] Failed to send to Telegram: #{e.class} - #{e.message}")
             puts "\n⚠️  Failed to send to Telegram: #{e.message}"
           end
-        else
-          puts "\n⚠️  Skipped Telegram send: no meaningful analysis content generated"
         end
       end
     else

@@ -134,4 +134,4 @@ module WsFeedDiagnostics
 end
 
 # Run diagnostics if loaded directly
-WsFeedDiagnostics.run if __FILE__ == $PROGRAM_NAME || defined?(Rails::Console) # rubocop:disable Style/GlobalVars
+WsFeedDiagnostics.run if __FILE__ == $PROGRAM_NAME || defined?(Rails::Console)

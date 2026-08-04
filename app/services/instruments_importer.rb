@@ -195,8 +195,9 @@ class InstrumentsImporter
       return if with_parent.empty?
 
       # Validate instrument_ids exist before importing
-      parent_instrument_ids = with_parent.filter_map { |r| r[:instrument_id] }.uniq
-      valid_instrument_ids = Instrument.where(id: parent_instrument_ids).pluck(:id).to_set
+      valid_instrument_ids = Instrument.where(id: with_parent.filter_map do |r|
+        r[:instrument_id]
+      end.uniq).pluck(:id).to_set
       validated_rows = with_parent.select { |r| r[:instrument_id] && valid_instrument_ids.include?(r[:instrument_id]) }
 
       if validated_rows.size < with_parent.size

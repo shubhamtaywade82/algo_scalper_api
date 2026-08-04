@@ -1,14 +1,10 @@
 # frozen_string_literal: true
 
-require 'timeout'
-
 module Services
   module Ai
     class TechnicalAnalysisAgent
       # Agent Runner: Main orchestration loop for intent-aware, micro-step ReAct agent
       module AgentRunner
-        INDICATOR_VALUE_KEYS = %w[value signal direction].freeze
-
         def run_agent_loop(query:, stream: false, &)
           # Step 1: Resolve intent (LLM - small)
           intent_data = resolve_intent(query)
@@ -88,7 +84,7 @@ module Services
 
           # Step 7: Final LLM reasoning (compact facts only)
           yield("📝 [Agent] Synthesizing final analysis...\n") if block_given?
-          final_analysis = synthesize_analysis(context, query: query, stream: stream, &)
+          final_analysis = synthesize_analysis(context, stream: stream, &)
 
           {
             analysis: final_analysis,
@@ -141,7 +137,7 @@ module Services
               end
 
               aggregated[timeframe][name] = if value.is_a?(Hash)
-                                              value.select { |k, _v| INDICATOR_VALUE_KEYS.include?(k.to_s) }
+                                              value.select { |k, _v| %w[value signal direction].include?(k.to_s) }
                                             else
                                               value
                                             end
@@ -156,155 +152,32 @@ module Services
           strikes.first(5) # Max 5 strikes
         end
 
-        def synthesize_analysis(context, query:, stream: false, &)
+        def synthesize_analysis(context, stream: false, &)
           # Build compact prompt with facts only
           facts_prompt = build_facts_prompt(context)
-          synthesis_timeout = ENV.fetch('AI_AGENT_SYNTHESIS_TIMEOUT', '25').to_i
 
-          model = if @client.respond_to?(:preferred_text_model)
-                    @client.preferred_text_model(default: 'llama3.1:8b')
-                  else
+          model = if @client.provider == :ollama
                     ENV['OLLAMA_MODEL'] || @client.selected_model || 'llama3.1:8b'
+                  else
+                    'gpt-4o'
                   end
 
           messages = [
-            { role: 'system', content: build_synthesis_prompt_for_query(query, context) },
+            { role: 'system', content: build_synthesis_system_prompt },
             { role: 'user', content: facts_prompt }
           ]
 
           if stream && block_given?
-            streamed = Timeout.timeout(synthesis_timeout) do
-              @client.chat_stream(messages: messages, model: model, temperature: 0.2, &)
-            end
-            return streamed if streamed.present? && !invalid_llm_output?(streamed)
-
-            return build_fallback_analysis(context)
+            @client.chat_stream(messages: messages, model: model, temperature: 0.3, &)
+          else
+            @client.chat(messages: messages, model: model, temperature: 0.3)
           end
-
-          response = Timeout.timeout(synthesis_timeout) do
-            @client.chat(messages: messages, model: model, temperature: 0.2)
-          end
-          return response if response.present? && !invalid_llm_output?(response)
-
-          build_fallback_analysis(context)
-        rescue Timeout::Error
-          Rails.logger.warn("[AgentRunner] Synthesis timed out after #{synthesis_timeout}s, returning fallback analysis")
-          build_fallback_analysis(context)
-        end
-
-        def build_synthesis_prompt_for_query(query, context)
-          # Application is options-buying focused: always use options synthesis prompt.
-          build_synthesis_system_prompt
-        end
-
-        def build_general_technical_system_prompt
-          <<~PROMPT
-            You are a concise intraday technical analyst for Indian indices.
-            Return a short, plain analysis focused on requested indicators only.
-            Do not generate options strike plans unless explicitly asked about options.
-            Format:
-            1) Indicator reading
-            2) Bias (bullish/bearish/neutral)
-            3) One-line actionable note
-          PROMPT
-        end
-
-        def technical_query_without_options?(query)
-          query_text = query.to_s.upcase
-          has_technical_terms = query_text.match?(/\b(RSI|MACD|ADX|SUPERTREND|ATR|BOLLINGER|TREND|MOMENTUM|BIAS|CONDITION)\b/)
-          has_technical_terms && !options_query?(query)
-        end
-
-        def options_query?(query)
-          query.to_s.upcase.match?(/\b(OPTION|CALL|PUT|STRIKE|PREMIUM|CE|PE)\b/)
-        end
-
-        def invalid_llm_output?(text)
-          body = text.to_s
-          return true if body.length > 8000
-
-          # Guard against pathological repetitive arithmetic expansions seen in bad outputs.
-          repetitive_money_ops = body.scan(/₹\s*\d[\d,.]*\s*-\s*₹\s*\d[\d,.]*/).size
-          repetitive_money_ops > 8
-        end
-
-        def build_indicator_only_analysis(context, query)
-          instrument_name = context.resolved_instrument&.symbol_name || context.underlying_symbol || 'Unknown'
-          ltp = context.ltp&.to_f
-          tf = context.indicators['15m'] || context.indicators[:'15m'] || {}
-
-          rsi = tf['rsi'] || tf[:rsi]
-          adx = tf['adx'] || tf[:adx]
-          supertrend = tf['supertrend'] || tf[:supertrend]
-          macd = tf['macd'] || tf[:macd]
-          macd_hist = macd.is_a?(Array) ? macd[2] : nil
-
-          bias = if rsi && rsi.to_f < 35 && macd_hist.to_f.negative?
-                   'Bearish with possible short-cover bounce risk'
-                 elsif rsi && rsi.to_f > 65 && macd_hist.to_f.positive?
-                   'Bullish with pullback risk'
-                 elsif supertrend.to_s.downcase.include?('short')
-                   'Bearish'
-                 elsif supertrend.to_s.downcase.include?('long')
-                   'Bullish'
-                 else
-                   'Neutral'
-                 end
-
-          strength = adx && adx.to_f >= 25 ? 'strong' : 'weak'
-          query_text = query.to_s.upcase
-          requested = if query_text.include?('RSI')
-                        'RSI'
-                      elsif query_text.include?('TREND')
-                        'TREND'
-                      else
-                        'indicators'
-                      end
-
-          lines = []
-          lines << "Indicator Analysis (#{instrument_name})"
-          lines << "- LTP: #{ltp ? ltp.round(2) : 'N/A'}"
-          lines << "- 15m RSI: #{rsi ? rsi.to_f.round(2) : 'N/A'}" if %w[RSI TREND indicators].include?(requested)
-          lines << "- 15m ADX: #{adx ? adx.to_f.round(2) : 'N/A'} (trend #{strength})"
-          lines << "- 15m Supertrend: #{supertrend || 'N/A'}"
-          lines << "- 15m MACD hist: #{macd_hist ? macd_hist.to_f.round(2) : 'N/A'}"
-          lines << "- Bias: #{bias}"
-          lines << "- Action: use this as directional filter only; options strike planning requires an explicit options query."
-          lines.join("\n")
-        end
-
-        def build_fallback_analysis(context)
-          instrument_name = context.resolved_instrument&.symbol_name || context.underlying_symbol || 'Unknown'
-          ltp_text = context.ltp ? context.ltp.to_f.round(2) : 'N/A'
-
-          tf = context.indicators['15m'] || context.indicators[:'15m'] || {}
-          rsi = tf['rsi'] || tf[:rsi]
-          adx = tf['adx'] || tf[:adx]
-          supertrend = tf['supertrend'] || tf[:supertrend]
-
-          direction = if supertrend.to_s.downcase.include?('short') || (rsi && rsi.to_f < 45)
-                        'Bearish bias'
-                      elsif supertrend.to_s.downcase.include?('long') || (rsi && rsi.to_f > 55)
-                        'Bullish bias'
-                      else
-                        'Neutral bias'
-                      end
-
-          strength = adx && adx.to_f >= 25 ? 'trend strength is strong' : 'trend strength is weak or unclear'
-
-          <<~TEXT.strip
-            Fallback technical analysis (LLM synthesis unavailable):
-            - Instrument: #{instrument_name}, LTP: #{ltp_text}
-            - 15m RSI: #{rsi || 'N/A'}, ADX: #{adx || 'N/A'}, Supertrend: #{supertrend || 'N/A'}
-            - View: #{direction}; #{strength}.
-            - Action: use smaller size and wait for next confirmation candle before entry.
-          TEXT
         end
 
         def build_facts_prompt(context)
           # Compact facts only - NO raw data
           indicators_text = if context.indicators.any?
-                              indicator_lines = context.indicators.map do |timeframe, inds|
+                              context.indicators.map do |timeframe, inds|
                                 # Handle error entries specially
                                 if inds.key?('error') || inds.key?(:error)
                                   error_msg = inds['error'] || inds[:error]
@@ -313,8 +186,7 @@ module Services
                                   ind_values = inds.map { |name, val| "#{name}: #{val}" }.join(', ')
                                   "  #{timeframe}: #{ind_values}"
                                 end
-                              end
-                              indicator_lines.join("\n")
+                              end.join("\n")
                             else
                               '  None'
                             end
@@ -390,20 +262,6 @@ module Services
             - Exit levels should reference either premium prices or index spot levels (the underlying index price)
             - Use SL for stop loss, TP1/TP2 for take profit levels
 
-            CRITICAL — LONG OPTION PREMIUM DIRECTION (we are BUYING options, not selling):
-            For LONG options, TP and SL are based on OPTION PREMIUM:
-            - TP (take profit) = HIGHER premium than entry (we profit when premium rises)
-            - SL (stop loss) = LOWER premium than entry (we lose when premium falls)
-
-            For BUY CE (long call): underlying UP → premium UP → TP > entry, SL < entry
-            For BUY PE (long put): underlying DOWN → premium UP → TP > entry, SL < entry
-
-            NEVER output TP lower than entry — that would be a loss, not a profit.
-            NEVER output SL higher than entry — that would be a profit, not a loss.
-
-            Example for BUY PE at entry ₹36:
-              TP1 ₹50 (+38%), TP2 ₹63 (+75%), SL ₹25 (-31%)
-
             RECOMMENDATION FORMAT (MANDATORY):
             - "Buy CALL options at strike ₹26,300 (ATM) and ₹26,350 (ATM+1) for bullish move"
             - "Buy PUT options at strike ₹26,250 (ATM-1) and ₹26,200 (ATM-2) for bearish move"
@@ -465,29 +323,16 @@ module Services
                - How to enter (market order, limit order, specific price level)
 
             6. **Exit Strategy** (MANDATORY if trading):
-
-               CRITICAL — LONG OPTION PREMIUM DIRECTION (we are BUYING options, not selling):
-               For LONG options, TP and SL are based on OPTION PREMIUM, not the underlying:
-               - TP (take profit) = HIGHER premium than entry (we profit when premium rises)
-               - SL (stop loss) = LOWER premium than entry (we lose when premium falls)
-
-               For BUY CE (long call): underlying UP → premium UP → TP > entry, SL < entry
-               For BUY PE (long put): underlying DOWN → premium UP → TP > entry, SL < entry
-
-               NEVER output TP lower than entry — that would be a loss, not a profit.
-               NEVER output SL higher than entry — that would be a profit, not a loss.
-
-               Example for BUY PE at entry ₹36:
-                 TP1 ₹50 (+38%), TP2 ₹63 (+75%), SL ₹25 (-31%)
-
-               - Stop Loss (SL): Specific premium level BELOW entry to EXIT the position
-                 * Format: "SL at premium ₹X" (must be LOWER than entry premium)
-               - Take Profit (TP): Use TP1, TP2 format — premiums ABOVE entry
-                 * Format: "TP1 at premium ₹X" (must be HIGHER than entry premium)
-                 * Format: "TP2 at premium ₹X" (higher than TP1)
+               - Stop Loss (SL): Specific premium level or index spot level to EXIT the position
+                 * Format: "SL at premium ₹X" or "SL at index spot ₹Y" (specify which)
+                 * Calculate index spot level using DELTA if providing spot levels
+               - Take Profit (TP): Use TP1, TP2 format for multiple targets
+                 * Format: "TP1 at premium ₹X" or "TP1 at index spot ₹Y"
+                 * Format: "TP2 at premium ₹X" or "TP2 at index spot ₹Y" (if applicable)
                  * Always provide at least TP1, optionally TP2 for partial exits
                - Index Spot Levels to Watch: Provide key index levels to monitor for exit decisions
-                 * Format: "Watch index spot ₹Y for SL" (underlying level that invalidates the trade)
+                 * Format: "Watch index spot ₹X for TP1", "Watch index spot ₹Y for SL"
+                 * These are the underlying index price levels (NIFTY/SENSEX/BANKNIFTY spot prices)
                - Exit timing: When to exit (time-based, price-based, or signal-based)
                - TERMINOLOGY: Always use "EXIT" or "exit the position" - NEVER use "sell options" (we only buy options, never write/sell them)
 

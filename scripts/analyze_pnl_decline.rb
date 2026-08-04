@@ -156,7 +156,7 @@ end
 if positions_with_drawdown.any?
   puts "Positions that dropped from HWM: #{positions_with_drawdown.count}"
   positions_with_drawdown.sort_by do |t|
-    t.high_water_mark_pnl.to_f - t.last_pnl_rupees.to_f
+    (t.high_water_mark_pnl.to_f - t.last_pnl_rupees.to_f)
   end.last(10).reverse_each do |tracker|
     drawdown = tracker.high_water_mark_pnl.to_f - tracker.last_pnl_rupees.to_f
     drawdown_pct = tracker.high_water_mark_pnl.to_f.positive? ? (drawdown / tracker.high_water_mark_pnl.to_f * 100) : 0

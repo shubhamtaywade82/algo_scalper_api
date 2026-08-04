@@ -3,121 +3,109 @@
 module Smc
   module Detectors
     class OrderBlocks
-      DISPLACEMENT_THRESHOLD = 0.8
-      RVR_MIN = 1.5
-      VOLUME_LOOKBACK = 20
-
       def initialize(series)
         @series = series
       end
 
-      # Latest unmitigated bullish order block
+      # Latest bullish order block (from any source)
       def bullish
-        active_blocks.reverse.find { |b| b[:bias] == :bullish }
+        all_blocks = internal + swing
+        bullish_blocks = all_blocks.select { |b| b[:bias] == :bullish }
+        return nil if bullish_blocks.empty?
+
+        # Return the most recent bullish block
+        latest = bullish_blocks.last
+        find_candle_by_index(latest[:index])
       end
 
-      # Latest unmitigated bearish order block
+      # Latest bearish order block (from any source)
       def bearish
-        active_blocks.reverse.find { |b| b[:bias] == :bearish }
+        all_blocks = internal + swing
+        bearish_blocks = all_blocks.select { |b| b[:bias] == :bearish }
+        return nil if bearish_blocks.empty?
+
+        # Return the most recent bearish block
+        latest = bearish_blocks.last
+        find_candle_by_index(latest[:index])
       end
 
-      def active_blocks
-        @active_blocks ||= find_blocks.reject { |b| mitigated?(b) }
+      # Internal order blocks (recent, within last 3 candles)
+      def internal
+        find_blocks(limit: 3)
       end
 
-      def find_blocks
-        return @find_blocks if defined?(@find_blocks)
-
-        @find_blocks = compute_blocks
+      # Swing order blocks (within last 10 candles)
+      def swing
+        find_blocks(limit: 10)
       end
 
-      def compute_blocks
+      def to_h
+        {
+          bullish: candle_to_h(bullish),
+          bearish: candle_to_h(bearish),
+          internal: internal.map { |b| block_to_h(b) },
+          swing: swing.map { |b| block_to_h(b) }
+        }
+      end
+
+      private
+
+      def candles
+        @series&.candles || []
+      end
+
+      def find_blocks(limit:)
         blocks = []
-        # Need at least 4 candles: (0...(4-3)) => one index for a=0, b=1
-        return [] if candles.size < 4
 
-        # Scan the last 30 candles
-        lookback = [0, candles.size - 30].max
+        # Need at least 3 candles to detect order blocks
+        return [] if candles.size < 3
 
-        (lookback...(candles.size - 3)).each do |i|
-          # We look for: Opposing candle -> Displacement candle -> Optional continuation
+        # Check each 3-candle window
+        (0...(candles.size - 2)).each do |i|
           a = candles[i]
           b = candles[i + 1]
+          c = candles[i + 2]
 
-          next unless a && b
-          next unless displacement?(b, i + 1)
+          next unless a && b && c
 
-          if a.bearish? && b.bullish? && b.close > a.high
-            blocks << { bias: :bullish, high: a.high, low: a.low, index: i, timestamp: a.timestamp }
-          elsif a.bullish? && b.bearish? && b.close < a.low
-            blocks << { bias: :bearish, high: a.high, low: a.low, index: i, timestamp: a.timestamp }
+          # Bullish OB: bearish candle before bullish impulse
+          if a.bearish? && c.close > b.high
+            blocks << { bias: :bullish, high: a.high, low: a.low, index: i }
+          # Bearish OB: bullish candle before bearish impulse
+          elsif a.bullish? && c.close < b.low
+            blocks << { bias: :bearish, high: a.high, low: a.low, index: i }
           end
         end
 
-        blocks
+        blocks.last(limit)
       end
 
       def find_candle_by_index(index)
         candles[index] if index && candles[index]
       end
 
-      def to_h
+      def candle_to_h(candle)
+        return nil unless candle
+
+        timestamp_value = candle.timestamp
+        timestamp_value = timestamp_value.iso8601 if timestamp_value.respond_to?(:iso8601)
+
         {
-          bullish: bullish,
-          bearish: bearish,
-          active: active_blocks
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+          timestamp: timestamp_value
         }
       end
 
-      private
-
-      def displacement?(candle, candle_index = nil)
-        return false unless candle
-
-        atr = cached_atr
-        body_size = (candle.close - candle.open).abs
-        return false if atr && body_size <= (atr * DISPLACEMENT_THRESHOLD)
-        return true unless atr
-
-        rvr_ok = rvr_above_threshold?(candle, candle_index)
-        rvr_ok.nil? || rvr_ok
-      end
-
-      def rvr_above_threshold?(candle, candle_index = nil)
-        idx = candle_index || candles.index(candle)
-        return nil unless idx && idx >= VOLUME_LOOKBACK # rubocop:disable Style/ReturnNilInPredicateMethodDefinition
-
-        window = candles[(idx - VOLUME_LOOKBACK)...idx]
-        return nil unless window.all? { |c| c.respond_to?(:volume) && c.volume.to_i.positive? } # rubocop:disable Style/ReturnNilInPredicateMethodDefinition
-
-        avg = window.sum(&:volume).to_f / VOLUME_LOOKBACK
-        return nil if avg.zero? # rubocop:disable Style/ReturnNilInPredicateMethodDefinition
-
-        (candle.volume.to_f / avg) >= RVR_MIN
-      end
-
-      def mitigated?(block)
-        # Skip the displacement candle (index + 1); mitigation starts after the impulse.
-        start_index = block[:index] + 2
-        return false if start_index >= candles.size
-
-        candles[start_index..].any? do |c|
-          if block[:bias] == :bullish
-            c.low <= block[:low]
-          else
-            c.high >= block[:high]
-          end
-        end
-      end
-
-      def candles
-        @series&.candles || []
-      end
-
-      def cached_atr
-        return @cached_atr if defined?(@cached_atr)
-
-        @cached_atr = @series.atr(20)
+      def block_to_h(block)
+        {
+          bias: block[:bias],
+          high: block[:high],
+          low: block[:low],
+          index: block[:index]
+        }
       end
     end
   end

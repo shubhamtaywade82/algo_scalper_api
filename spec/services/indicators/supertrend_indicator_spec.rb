@@ -14,7 +14,7 @@ RSpec.describe Indicators::SupertrendIndicator do
     50.times do |i|
       price = 22_000.0 + (i * 10)
       candle = Candle.new(
-        timestamp: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
+        ts: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
         open: price,
         high: price + 5,
         low: price - 5,
@@ -78,10 +78,9 @@ RSpec.describe Indicators::SupertrendIndicator do
     end
 
     it 'calculates Supertrend once and caches result' do
-      allow(Indicators::Supertrend).to receive(:new).and_call_original
+      expect(Indicators::Supertrend).to receive(:new).once.and_call_original
       indicator.calculate_at(index)
       indicator.calculate_at(index) # Second call should use cache
-      expect(Indicators::Supertrend).to have_received(:new).once
     end
 
     context 'with trading hours filter' do
@@ -90,7 +89,7 @@ RSpec.describe Indicators::SupertrendIndicator do
       it 'returns nil for candles outside trading hours' do
         # Create candle outside trading hours
         candle = Candle.new(
-          timestamp: Time.zone.parse('2024-01-01 09:00:00 IST'),
+          ts: Time.zone.parse('2024-01-01 09:00:00 IST'),
           open: 22_000,
           high: 22_050,
           low: 21_980,

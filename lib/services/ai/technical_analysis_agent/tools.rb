@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/BlockNesting
-
 module Services
   module Ai
     class TechnicalAnalysisAgent
@@ -417,14 +415,9 @@ module Services
                      adx_period = period || 14
                      series.adx(adx_period)
                    when 'supertrend'
-                    st_period = period || 7
-                    multiplier = args['multiplier']&.to_f || 3.0
-                    supertrend_cfg = args['supertrend_cfg'] || {}
-                    series.supertrend_signal(
-                      period: st_period,
-                      multiplier: multiplier,
-                      supertrend_cfg: supertrend_cfg.deep_symbolize_keys
-                    )
+                     st_period = period || 7
+                     multiplier = args['multiplier']&.to_f || 3.0
+                     series.supertrend_signal(period: st_period, multiplier: multiplier)
                    when 'atr'
                      atr_period = period || 14
                      series.atr(atr_period)
@@ -707,6 +700,8 @@ module Services
           interval = args['interval'] || '5'
           days_back = args['days_back']&.to_i || 90
           supertrend_cfg = args['supertrend_cfg'] || {}
+          adx_min_strength = args['adx_min_strength']&.to_f || 0
+
           # Cache index configs
           @index_config_cache ||= IndexConfigLoader.load_indices
 
@@ -716,17 +711,14 @@ module Services
           symbol = index_key # BacktestService expects symbol name
 
           begin
-            # Use BacktestService with SupertrendBacktestStrategy
-            service = BacktestService.run(
+            # Use BacktestServiceWithNoTradeEngine for comprehensive backtesting
+            service = BacktestServiceWithNoTradeEngine.run(
               symbol: symbol,
-              interval: interval,
+              interval_1m: '1',
+              interval_5m: interval,
               days_back: days_back,
-              strategy: lambda { |series|
-                SupertrendBacktestStrategy.new(
-                  series: series,
-                  supertrend_cfg: supertrend_cfg.deep_symbolize_keys
-                )
-              }
+              supertrend_cfg: supertrend_cfg.deep_symbolize_keys,
+              adx_min_strength: adx_min_strength
             )
 
             summary = service.summary
@@ -735,18 +727,18 @@ module Services
               interval: interval,
               days_back: days_back,
               summary: {
-                total_trades: summary[:total_trades] || 0,
-                winning_trades: summary[:winning_trades] || 0,
-                losing_trades: summary[:losing_trades] || 0,
-                win_rate: summary[:win_rate] || 0.0,
-                avg_win_percent: summary[:avg_win_percent] || 0.0,
-                avg_loss_percent: summary[:avg_loss_percent] || 0.0,
-                total_pnl_percent: summary[:total_pnl_percent] || 0.0,
-                expectancy: summary[:expectancy] || 0.0,
-                max_win: summary[:max_win] || 0.0,
-                max_loss: summary[:max_loss] || 0.0
+                total_trades: summary[:total_trades],
+                winning_trades: summary[:winning_trades],
+                losing_trades: summary[:losing_trades],
+                win_rate: summary[:win_rate],
+                avg_win_percent: summary[:avg_win_percent],
+                avg_loss_percent: summary[:avg_loss_percent],
+                total_pnl_percent: summary[:total_pnl_percent],
+                expectancy: summary[:expectancy],
+                max_win: summary[:max_win],
+                max_loss: summary[:max_loss]
               },
-              no_trade_stats: {},
+              no_trade_stats: service.no_trade_stats,
               timestamp: Time.current
             }
           rescue StandardError => e
@@ -1035,5 +1027,3 @@ module Services
     end
   end
 end
-
-# rubocop:enable Metrics/BlockNesting

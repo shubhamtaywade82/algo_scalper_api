@@ -1,6 +1,2 @@
-# Paper by default: omit LIVE_TRADING or set LIVE_TRADING=false. For live orders: LIVE_TRADING=true
-# Signal tiers: SIGNAL_TIER=exploratory|standard|selective (see config/signal_tier_presets.yml)
-web: PORT=3011 bin/rails server -p 3011
+web: bin/rails server -p 3000
 trading: ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
-jobs: sh -c 'if [ "${ENABLE_JOBS:-true}" = "true" ]; then bin/jobs; else printf "jobs disabled (set ENABLE_JOBS=true to run)\n"; sleep infinity; fi'
-dashboard: cd dashboard && npm run dev

@@ -4,43 +4,71 @@
 # Single method that checks all exit conditions in priority order
 module Live
   class UnifiedExitChecker
-    EXIT_CONFIG_TTL = 30 # seconds — matches AlgoConfig.fetch TTL
-
     class << self
+      # Check all exit conditions and return first match
       # Returns: { exit: true/false, reason: "...", path: "..." } or nil
       def check_exit_conditions(tracker)
         snapshot = pnl_snapshot(tracker)
         return nil unless snapshot
 
-        pinned_config = Positions::ExitConfigResolver.for(tracker)
-        engine = Risk::Rules::RuleEngine.new(
-          rules: Risk::Rules::RuleFactory.exit_rules(pinned_config)
-        )
+        pnl_pct = snapshot[:pnl_pct].to_f * 100.0
 
-        context = Risk::Rules::RuleContext.new(
-          position: OpenStruct.new(
-            current_ltp: snapshot[:ltp],
-            pnl_pct: snapshot[:pnl_pct],
-            pnl_rupees: snapshot[:pnl],
-            high_water_mark: snapshot[:hwm_pnl],
-            hwm_pnl: snapshot[:hwm_pnl],
-            peak_profit_pct: peak_profit_pct_for(snapshot, tracker)
-          ),
-          tracker: tracker,
-          tracker_snapshot: snapshot,
-          risk_config: pinned_config
-        )
+        # Priority order (first match wins)
 
-        result = engine.evaluate(context)
-        return nil if result.nil? || result.no_action? || result.skip?
+        # 1. Early Trend Failure (if enabled and applicable)
+        if early_exit_triggered?(tracker, snapshot)
+          return {
+            exit: true,
+            reason: 'EARLY_TREND_FAILURE',
+            path: 'early_trend_failure',
+            pnl_pct: pnl_pct
+          }
+        end
 
-        {
-          exit: true,
-          reason: result.reason,
-          path: result.metadata[:path] || result.rule_name,
-          pnl_pct: (snapshot[:pnl_pct].to_f * 100.0).round(2)
-        }
+        # 2. Loss Limit (stop loss)
+        if loss_limit_hit?(tracker, snapshot)
+          return {
+            exit: true,
+            reason: 'STOP_LOSS',
+            path: 'stop_loss',
+            pnl_pct: pnl_pct
+          }
+        end
+
+        # 3. Profit Target (take profit)
+        if profit_target_hit?(tracker, snapshot)
+          return {
+            exit: true,
+            reason: 'TAKE_PROFIT',
+            path: 'take_profit',
+            pnl_pct: pnl_pct
+          }
+        end
+
+        # 4. Trailing Stop (if enabled)
+        if trailing_stop_hit?(tracker, snapshot)
+          return {
+            exit: true,
+            reason: 'TRAILING_STOP',
+            path: 'trailing_stop',
+            pnl_pct: pnl_pct
+          }
+        end
+
+        # 5. Time-Based Exit (if configured)
+        if time_based_exit?(tracker)
+          return {
+            exit: true,
+            reason: 'TIME_BASED',
+            path: 'time_based',
+            pnl_pct: pnl_pct
+          }
+        end
+
+        nil # No exit needed
       end
+
+      private
 
       def pnl_snapshot(tracker)
         Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
@@ -48,58 +76,101 @@ module Live
         nil
       end
 
-      def exit_config_for(tracker)
-        build_exit_config(Positions::ExitConfigResolver.for(tracker))
-      end
+      def early_exit_triggered?(tracker, snapshot)
+        config = exit_config
+        return false unless config[:early_exit][:enabled]
 
-      def exit_config
-        now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-        return @exit_config if @exit_config && @exit_config_expires_at && now < @exit_config_expires_at
+        pnl_pct = snapshot[:pnl_pct].to_f * 100.0
+        threshold = config[:early_exit][:profit_threshold].to_f
+        return false if pnl_pct >= threshold
 
-        @exit_config = build_exit_config(AlgoConfig.fetch)
-        @exit_config_expires_at = now + EXIT_CONFIG_TTL
-        @exit_config
+        # Check ETF conditions
+        instrument = tracker.instrument || tracker.watchable&.instrument
+        return false unless instrument
+
+        position_data = build_position_data(tracker, snapshot, instrument)
+        Live::EarlyTrendFailure.early_trend_failure?(position_data)
       end
 
       def loss_limit_hit?(tracker, snapshot)
-        config = exit_config_for(tracker)
-        pnl_pct = snapshot[:pnl_pct].to_f
+        config = exit_config
+        pnl_pct = snapshot[:pnl_pct].to_f * 100.0
+
+        # Dynamic reverse SL (if enabled and below entry)
         if pnl_pct.negative? && config[:stop_loss][:type] == 'adaptive'
+          seconds_below = seconds_below_entry(tracker)
+          atr_ratio = calculate_atr_ratio(tracker)
+
           allowed_loss = Positions::DrawdownSchedule.reverse_dynamic_sl_pct(
             pnl_pct,
-            seconds_below_entry: seconds_below_entry(tracker),
-            atr_ratio: calculate_atr_ratio(tracker)
+            seconds_below_entry: seconds_below,
+            atr_ratio: atr_ratio
           )
+
           return true if allowed_loss && pnl_pct <= -allowed_loss
         end
-        pnl_pct <= -config[:stop_loss][:value].to_f
+
+        # Static stop loss
+        static_sl = config[:stop_loss][:value].to_f
+        pnl_pct <= -static_sl
       end
 
-      def peak_profit_pct_for(snapshot, tracker)
-        return snapshot[:hwm_pnl_pct].to_f if snapshot[:hwm_pnl_pct]
+      def profit_target_hit?(_tracker, snapshot)
+        config = exit_config
+        pnl_pct = snapshot[:pnl_pct].to_f * 100.0
+        tp = config[:take_profit].to_f
 
-        entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
-        return 0.0 unless entry_value.positive?
-
-        snapshot[:hwm_pnl].to_f / entry_value
+        pnl_pct >= tp
       end
 
-      private
+      def trailing_stop_hit?(tracker, snapshot)
+        config = exit_config
+        return false unless config[:trailing][:enabled]
 
-      def build_exit_config(algo_cfg = AlgoConfig.fetch)
-        risk_cfg = algo_cfg[:risk] || {}
-        exit_cfg = algo_cfg[:exit] || {}
-        sl_value_pct = risk_cfg[:sl_pct] || exit_cfg.dig(:stop_loss, :value) || 0.12
-        tp_value = exit_cfg[:take_profit] || risk_cfg[:tp_pct] || 0.50
-        {
-          stop_loss: { type: exit_cfg.dig(:stop_loss, :type) || 'static', value: sl_value_pct.to_f },
-          take_profit: tp_value.to_f
-        }
+        pnl = snapshot[:pnl]
+        hwm = snapshot[:hwm_pnl]
+        return false if hwm.nil? || hwm.zero?
+
+        pnl_pct = snapshot[:pnl_pct].to_f * 100.0
+        return false if pnl_pct <= 0
+
+        # Adaptive trailing (if enabled)
+        if config[:trailing][:type] == 'adaptive'
+          peak_profit_pct = (hwm / (tracker.entry_price.to_f * tracker.quantity.to_i)) * 100.0
+          activation = config[:trailing][:activation_profit].to_f
+
+          return false if peak_profit_pct < activation
+
+          index_key = tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
+          allowed_dd = Positions::DrawdownSchedule.allowed_upward_drawdown_pct(peak_profit_pct, index_key: index_key)
+
+          if allowed_dd
+            allowed_drop_from_hwm = allowed_dd / peak_profit_pct
+            current_drop = (hwm - pnl) / hwm
+            return current_drop >= allowed_drop_from_hwm
+          end
+        end
+
+        # Fixed trailing
+        drop_threshold = config[:trailing][:drop_threshold].to_f
+        drop_pct = (hwm - pnl) / hwm
+        drop_pct >= drop_threshold
+      end
+
+      def time_based_exit?(_tracker)
+        config = exit_config
+        return false unless config[:time_based][:enabled]
+
+        exit_time = Time.zone.parse(config[:time_based][:exit_time])
+        return false unless exit_time
+
+        Time.current >= exit_time
       end
 
       def seconds_below_entry(tracker)
         cache_key = "position:below_entry:#{tracker.id}"
         cached = Rails.cache.read(cache_key)
+
         snapshot = pnl_snapshot(tracker)
         return 0 unless snapshot
 
@@ -107,7 +178,11 @@ module Live
         return 0 if pnl_pct.nil? || pnl_pct >= 0
 
         Rails.cache.write(cache_key, Time.current, expires_in: 1.hour)
-        cached ? (Time.current - cached).to_i : 0
+        if cached
+          (Time.current - cached).to_i
+        else
+          0
+        end
       rescue StandardError
         0
       end
@@ -116,26 +191,101 @@ module Live
         instrument = tracker.instrument || tracker.watchable&.instrument
         return 1.0 unless instrument
 
-        series = instrument.candle_series(interval: '5')
-        return 1.0 unless series&.candles&.any?
+        begin
+          series = instrument.candle_series(interval: '5')
+          return 1.0 unless series&.candles&.any?
 
-        candles = series.candles.last(20)
-        return 1.0 if candles.size < 10
+          candles = series.candles.last(20)
+          return 1.0 if candles.size < 10
 
-        current_atr = calculate_atr(candles.last(14))
-        avg_atr = calculate_atr(candles)
-        (current_atr / avg_atr).round(3)
-      rescue StandardError
-        1.0
+          current_atr = calculate_atr(candles.last(14))
+          avg_atr = calculate_atr(candles)
+          return 1.0 unless current_atr.positive? && avg_atr.positive?
+
+          (current_atr / avg_atr).round(3)
+        rescue StandardError
+          1.0
+        end
       end
 
       def calculate_atr(candles)
         return 0.0 if candles.size < 2
 
-        true_ranges = candles.each_cons(2).map do |previous, current|
-          [(current.high - current.low), (current.high - previous.close).abs, (current.low - previous.close).abs].max
+        true_ranges = []
+        candles.each_cons(2) do |prev, curr|
+          tr1 = curr.high - curr.low
+          tr2 = (curr.high - prev.close).abs
+          tr3 = (curr.low - prev.close).abs
+          true_ranges << [tr1, tr2, tr3].max
         end
+
+        return 0.0 if true_ranges.empty?
+
         true_ranges.sum / true_ranges.size
+      end
+
+      def build_position_data(tracker, _snapshot, instrument)
+        series = begin
+          instrument.candle_series(interval: '5')
+        rescue StandardError
+          nil
+        end
+        candles = series&.candles || []
+        adx_value = begin
+          instrument.adx(14, interval: '5')
+        rescue StandardError
+          nil
+        end
+        adx_hash = adx_value.is_a?(Hash) ? adx_value : { value: adx_value }
+
+        OpenStruct.new(
+          trend_score: adx_hash[:value]&.to_f || 0,
+          peak_trend_score: tracker.meta&.dig('peak_trend_score') || 0,
+          adx: adx_hash[:value],
+          atr_ratio: calculate_atr_ratio(tracker),
+          underlying_price: tracker.entry_price.to_f,
+          vwap: candles.any? ? candles.last(20).sum(&:close) / candles.last(20).size : tracker.entry_price.to_f,
+          is_long?: %w[long_ce long_pe].include?(tracker.side)
+        )
+      end
+
+      def exit_config
+        @exit_config ||= begin
+          cfg = AlgoConfig.fetch[:exit] || {}
+          {
+            stop_loss: {
+              type: cfg.dig(:stop_loss, :type) || 'static',
+              value: cfg.dig(:stop_loss, :value) || 3.0
+            },
+            take_profit: cfg[:take_profit] || 5.0,
+            trailing: {
+              enabled: cfg.dig(:trailing, :enabled) != false,
+              type: cfg.dig(:trailing, :type) || 'adaptive',
+              activation_profit: cfg.dig(:trailing, :activation_profit) || 3.0,
+              drop_threshold: cfg.dig(:trailing, :drop_threshold) || 3.0
+            },
+            early_exit: {
+              enabled: cfg.dig(:early_exit, :enabled) != false,
+              profit_threshold: cfg.dig(:early_exit, :profit_threshold) || 7.0
+            },
+            time_based: {
+              enabled: cfg.dig(:time_based, :enabled) == true,
+              exit_time: cfg.dig(:time_based, :exit_time) || '15:20'
+            }
+          }
+        rescue StandardError
+          default_exit_config
+        end
+      end
+
+      def default_exit_config
+        {
+          stop_loss: { type: 'static', value: 3.0 },
+          take_profit: 5.0,
+          trailing: { enabled: true, type: 'adaptive', activation_profit: 3.0, drop_threshold: 3.0 },
+          early_exit: { enabled: true, profit_threshold: 7.0 },
+          time_based: { enabled: false, exit_time: '15:20' }
+        }
       end
     end
   end

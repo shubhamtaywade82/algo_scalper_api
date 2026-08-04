@@ -6,23 +6,12 @@ RSpec.describe MultiIndicatorStrategy do
   let(:series) { CandleSeries.new(symbol: 'NIFTY', interval: '5') }
   let(:base_price) { 22_000.0 }
 
-  # algo.yml uses `indicator_preset: loose` which sets confirmation_mode; ignore
-  # that key so examples use the explicit `confirmation_mode:` keyword.
-  before do
-    allow(Indicators::ThresholdConfig).to receive(:merge_with_thresholds).and_wrap_original do |method, indicator_name, config|
-      method.call(indicator_name, config).except(:confirmation_mode)
-    end
-  end
-
   before do
     # Create enough candles for indicators
     50.times do |i|
-      if i == 0
-        puts "\nDEBUG: Candle init: #{Candle.instance_method(:initialize).source_location.inspect}\n"
-      end
       price = base_price + (i * 10)
       candle = Candle.new(
-        timestamp: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
+        ts: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
         open: price,
         high: price + 5,
         low: price - 5,
@@ -37,7 +26,7 @@ RSpec.describe MultiIndicatorStrategy do
     it 'initializes with default confirmation mode' do
       strategy = described_class.new(series: series, indicators: [])
       expect(strategy.confirmation_mode).to eq(:all_must_agree)
-      expect(strategy.min_confidence).to eq(40)
+      expect(strategy.min_confidence).to eq(60)
     end
 
     it 'initializes with custom confirmation mode' do

@@ -50,10 +50,8 @@ RSpec.describe CandleSeries do
       it 'loads candles from array' do
         series.load_from_raw(raw_data)
         expect(series.candles.size).to eq(2)
-        # Sorted chronologically: 1.hour.ago comes first
-        expect(series.candles.first.open).to eq(24_950.0)
-        expect(series.candles.first.close).to eq(24_980.0)
-        expect(series.candles.last.open).to eq(25_000.0)
+        expect(series.candles.first.open).to eq(25_000.0)
+        expect(series.candles.first.close).to eq(25_050.0)
       end
     end
 
@@ -72,8 +70,7 @@ RSpec.describe CandleSeries do
       it 'loads candles from hash' do
         series.load_from_raw(raw_data)
         expect(series.candles.size).to eq(2)
-        # Sorted chronologically: 1.hour.ago comes first
-        expect(series.candles.first.open).to eq(24_950.0)
+        expect(series.candles.first.open).to eq(25_000.0)
       end
     end
 
@@ -487,16 +484,6 @@ RSpec.describe CandleSeries do
     it 'returns supertrend signal' do
       signal = series.supertrend_signal
       expect(signal).to be_in([:long_entry, :short_entry, nil])
-    end
-
-    it 'accepts custom supertrend parameters' do
-      expect(Indicators::Supertrend).to receive(:new).with(
-        series: series,
-        period: 10,
-        base_multiplier: 2.5
-      ).and_call_original
-
-      series.supertrend_signal(period: 10, multiplier: 2.5)
     end
   end
 

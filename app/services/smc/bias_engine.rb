@@ -72,32 +72,23 @@ module Smc
 
       ltf_series = @instrument.candles(interval: LTF_INTERVAL)
 
-      htf_trimmed = trim_series(htf_series, max_candles: HTF_CANDLES)
-      mtf_trimmed = trim_series(mtf_series, max_candles: MTF_CANDLES)
-      ltf_trimmed = trim_series(ltf_series, max_candles: LTF_CANDLES)
+      htf = Smc::Context.new(trim_series(htf_series, max_candles: HTF_CANDLES))
+      mtf = Smc::Context.new(trim_series(mtf_series, max_candles: MTF_CANDLES))
+      ltf = Smc::Context.new(trim_series(ltf_series, max_candles: LTF_CANDLES))
 
-      Rails.logger.warn("[Smc::BiasEngine] details: HTF series unavailable for #{@instrument.symbol_name}") if htf_trimmed.nil?
-      Rails.logger.warn("[Smc::BiasEngine] details: MTF series unavailable for #{@instrument.symbol_name}") if mtf_trimmed.nil?
-      Rails.logger.warn("[Smc::BiasEngine] details: LTF series unavailable for #{@instrument.symbol_name}") if ltf_trimmed.nil?
+      avrz = Avrz::Detector.new(ltf_series)
 
-      htf = htf_trimmed ? Smc::Context.new(htf_trimmed) : nil
-      mtf = mtf_trimmed ? Smc::Context.new(mtf_trimmed) : nil
-      ltf = ltf_trimmed ? Smc::Context.new(ltf_trimmed) : nil
-
-      avrz = ltf_series ? Avrz::Detector.new(ltf_series) : nil
-
-      base = {
+      {
         decision: decision_value,
         timeframes: {
-          htf: { interval: HTF_INTERVAL, context: htf&.to_h },
-          mtf: { interval: MTF_INTERVAL, context: mtf&.to_h },
-          ltf: { interval: LTF_INTERVAL, context: ltf&.to_h, avrz: avrz&.to_h }
+          htf: { interval: HTF_INTERVAL, context: htf.to_h },
+          mtf: { interval: MTF_INTERVAL, context: mtf.to_h },
+          ltf: { interval: LTF_INTERVAL, context: ltf.to_h, avrz: avrz.to_h }
         }
       }
-      merge_smc_confluence_mtf!(base, htf_series, mtf_series, ltf_series)
     end
 
-    # Analyze SMC/AVRZ data with AI (Ollama)
+    # Analyze SMC/AVRZ data with AI (Ollama or OpenAI)
     # Returns AI analysis of the market structure, liquidity, and trading bias
     # Uses AiAnalyzer with pre-fetched data and single-pass analysis
     def analyze_with_ai(stream: false, &)
@@ -114,9 +105,8 @@ module Smc
 
     def ai_enabled?
       AlgoConfig.fetch.dig(:ai, :enabled) == true &&
-        Services::Ai::OllamaClient.instance.enabled?
-    rescue StandardError => e
-      Rails.logger.warn("[Smc::BiasEngine] ai_enabled? check failed: #{e.class} - #{e.message}")
+        Services::Ai::OpenaiClient.instance.enabled?
+    rescue StandardError
       false
     end
 
@@ -141,17 +131,7 @@ module Smc
       sleep(@delay_seconds) if @delay_seconds.positive?
 
       series = @instrument.candles(interval: interval)
-      if series.nil?
-        Rails.logger.warn("[Smc::BiasEngine] No candle data for #{@instrument.symbol_name} interval=#{interval} — skipping context build")
-        return nil
-      end
-
       trimmed = trim_series(series, max_candles: max_candles)
-      if trimmed.nil?
-        Rails.logger.warn("[Smc::BiasEngine] trim_series returned nil for #{@instrument.symbol_name} interval=#{interval}")
-        return nil
-      end
-
       Smc::Context.new(trimmed)
     end
 
@@ -170,89 +150,37 @@ module Smc
       series
     end
 
-    def smc_confluence_digest_enabled?
-      AlgoConfig.fetch.dig(:signals, :enable_smc_confluence_digest) == true
-    rescue StandardError => e
-      Rails.logger.warn("[Smc::BiasEngine] smc_confluence_digest_enabled? check failed: #{e.class} - #{e.message}")
-      false
-    end
-
-    # Uses HTF/MTF/LTF series already loaded for {BiasEngine} (same intervals as constants).
-    # For YAML-driven intervals see {Smc::Confluence::MtfDigest.build_from_instrument} (e.g. Scanner).
-    def merge_smc_confluence_mtf!(result, htf_series, mtf_series, ltf_series)
-      return result unless smc_confluence_digest_enabled?
-
-      tf = {
-        HTF_INTERVAL => Smc::Confluence::CandleRows.from_series(trim_series(htf_series, max_candles: HTF_CANDLES)),
-        MTF_INTERVAL => Smc::Confluence::CandleRows.from_series(trim_series(mtf_series, max_candles: MTF_CANDLES)),
-        LTF_INTERVAL => Smc::Confluence::CandleRows.from_series(trim_series(ltf_series, max_candles: LTF_CANDLES))
-      }
-      digest = Smc::Confluence::MtfDigest.from_timeframe_candles(
-        symbol: @instrument.symbol_name.to_s,
-        timeframe_candles: tf
-      )
-      result[:smc_confluence_mtf] = digest
-      ltf_key = LTF_INTERVAL.to_s
-      ltf_block = digest['timeframes']&.dig(ltf_key) || digest[:timeframes]&.dig(ltf_key)
-      result[:smc_confluence_ltf_summary] = ltf_block&.dig('confluence')&.slice(
-        'long_score', 'short_score', 'long_signal', 'short_signal', 'structure_bias'
-      )
-      result
-    rescue StandardError => e
-      Rails.logger.error("[Smc::BiasEngine] smc_confluence_mtf failed: #{e.class} - #{e.message}")
-      result[:smc_confluence_mtf_error] = e.message.to_s
-      result
-    end
-
     def htf_bias_valid?(ctx)
-      return false if ctx.nil?
-
       ctx.pd.discount? || ctx.pd.premium?
     end
 
     def mtf_aligns?(htf, mtf)
-      return false if htf.nil? || mtf.nil?
-
       htf.structure.trend == mtf.structure.trend || mtf.structure.choch?
     end
 
     def ltf_entry(htf, _mtf, ltf)
-      return :no_trade if htf.nil? || ltf.nil?
+      avrz = Avrz::Detector.new(@instrument.candles(interval: LTF_INTERVAL))
+      return :no_trade unless avrz.rejection?
 
-      # State-machine driven entry: Trap -> Expansion -> Trend -> Entry Zone
-      # We check if LTF is in a phase that supports the bias
-
-      if htf.pd.discount?
-        # CALL bias: HTF in discount
-        # Need LTF to have had a trap (liquidity sweep) and now showing shift (CHoCH)
-        return :call if ltf.phase == :trap_detected || (ltf.liquidity.sell_side_taken? && ltf.structure.trend == :bullish)
-      elsif htf.pd.premium?
-        # PUT bias: HTF in premium
-        # Need LTF to have had a trap (liquidity sweep) and now showing shift (CHoCH)
-        return :put if ltf.phase == :trap_detected || (ltf.liquidity.buy_side_taken? && ltf.structure.trend == :bearish)
+      if htf.pd.discount? && ltf.liquidity.sell_side_taken? && ltf.structure.choch?
+        :call
+      elsif htf.pd.premium? && ltf.liquidity.buy_side_taken? && ltf.structure.choch?
+        :put
+      else
+        :no_trade
       end
-
-      :no_trade
     end
 
     def notify(decision, htf, mtf, ltf)
-      if AlgoConfig.suppress_smc_bias_notify_for_event_driven_ai?
-        Rails.logger.debug do
-          '[Smc::BiasEngine] Skipping Telegram notify — event-driven intraday AI (tick path) is active'
-        end
-        return
-      end
-
       # Enqueue background job for async AI analysis and Telegram notification
       # This prevents blocking the scanner rake task while AI fetches response
       Notifications::Telegram::SendSmcAlertJob.perform_later(
         instrument_id: @instrument.id,
         decision: decision.to_s,
         contexts: {
-          decision: decision.to_s,
-          htf: htf&.to_h,
-          mtf: mtf&.to_h,
-          ltf: ltf&.to_h
+          htf: htf.to_h,
+          mtf: mtf.to_h,
+          ltf: ltf.to_h
         },
         price: current_price
       )

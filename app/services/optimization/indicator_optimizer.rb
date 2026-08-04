@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-# rubocop:disable Style/GlobalVars
 module Optimization
   class IndicatorOptimizer
     PARAM_SPACE = {
@@ -34,18 +33,24 @@ module Optimization
     end
 
     def run
-      log("[Optimization] Starting optimization for #{@instrument.symbol_name} @ #{@interval}m (#{@lookback} days)")
+      Rails.logger.info("[Optimization] Starting optimization for #{@instrument.symbol_name} @ #{@interval}m (#{@lookback} days)")
+      $stdout.puts "[Optimization] Starting optimization for #{@instrument.symbol_name} @ #{@interval}m (#{@lookback} days)"
+      $stdout.flush
 
       load_series!
       return { error: 'Failed to load series' } unless @series&.candles&.any?
 
-      log("[Optimization] Loaded #{@series.candles.size} candles")
+      Rails.logger.info("[Optimization] Loaded #{@series.candles.size} candles")
+      $stdout.puts "[Optimization] Loaded #{@series.candles.size} candles"
+      $stdout.flush
 
       best = { score: -Float::INFINITY, params: nil, metrics: nil }
       total_combinations = param_combinations.size
       processed = 0
 
-      log("[Optimization] Testing #{total_combinations} parameter combinations...")
+      Rails.logger.info("[Optimization] Testing #{total_combinations} parameter combinations...")
+      $stdout.puts "[Optimization] Testing #{total_combinations} parameter combinations..."
+      $stdout.flush
 
       param_combinations.each do |candidate|
         processed += 1
@@ -62,10 +67,14 @@ module Optimization
         if score > best[:score]
           best = { score: score, params: candidate, metrics: metrics }
 
-          log(
-            "[Optimization] New best: Sharpe=#{score.round(3)}, WR=#{metrics[:win_rate]&.round(3)}, " \
-            "PnL=#{metrics[:net_pnl]&.round(2)} (#{processed}/#{total_combinations})"
+          Rails.logger.info(
+            "[Optimization] New best: Sharpe=#{score.round(3)}, " \
+            "WR=#{metrics[:win_rate]&.round(3)}, " \
+            "PnL=#{metrics[:net_pnl]&.round(2)} " \
+            "(#{processed}/#{total_combinations})"
           )
+          $stdout.puts "[Optimization] New best: Sharpe=#{score.round(3)}, WR=#{metrics[:win_rate]&.round(3)}, PnL=#{metrics[:net_pnl]&.round(2)} (#{processed}/#{total_combinations})"
+          $stdout.flush
 
           persist(best)
         end
@@ -74,10 +83,14 @@ module Optimization
         next unless (processed % [total_combinations / 10, 1].max).zero?
 
         progress_pct = (processed.to_f / total_combinations * 100).round(1)
-        log("[Optimization] Progress: #{progress_pct}% (#{processed}/#{total_combinations})")
+        Rails.logger.info("[Optimization] Progress: #{progress_pct}% (#{processed}/#{total_combinations})")
+        $stdout.puts "[Optimization] Progress: #{progress_pct}% (#{processed}/#{total_combinations})"
+        $stdout.flush
       end
 
-      log("[Optimization] Optimization complete. Best Sharpe: #{best[:score].round(3)}")
+      Rails.logger.info("[Optimization] Optimization complete. Best Sharpe: #{best[:score].round(3)}")
+      $stdout.puts "[Optimization] Optimization complete. Best Sharpe: #{best[:score].round(3)}"
+      $stdout.flush
       best
     rescue StandardError => e
       Rails.logger.error("[Optimization] Optimization failed: #{e.class} - #{e.message}")
@@ -86,12 +99,6 @@ module Optimization
     end
 
     private
-
-    def log(msg)
-      Rails.logger.info(msg)
-      $stdout.puts msg
-      $stdout.flush
-    end
 
     def load_series!
       # Fetch historical data with explicit lookback period
@@ -144,7 +151,7 @@ module Optimization
 
       # Use upsert to update existing or create new
       # unique_by can use either column names or index name
-      BestIndicatorParam.upsert( # rubocop:disable Rails/SkipsModelValidations
+      BestIndicatorParam.upsert(
         {
           instrument_id: @instrument.id,
           interval: @interval,
@@ -160,5 +167,3 @@ module Optimization
     end
   end
 end
-
-# rubocop:enable Style/GlobalVars

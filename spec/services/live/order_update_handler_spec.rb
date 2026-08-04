@@ -29,12 +29,6 @@ RSpec.describe Live::OrderUpdateHandler do
     # Stub OrderUpdateHub
     allow(hub).to receive(:start!)
     allow(hub).to receive(:on_update)
-
-    # Ensure handler uses our tracker instances
-    allow(PositionTracker).to receive(:find_by).and_call_original
-    allow(PositionTracker).to receive(:find_by).with(order_no: tracker.order_no).and_return(tracker)
-    allow(PositionTracker).to receive(:find_by).with(order_no: paper_tracker.order_no).and_return(paper_tracker)
-    allow(PositionTracker).to receive(:find_by).with(order_id: tracker.order_no).and_return(tracker)
   end
 
   describe '#initialize' do
@@ -171,29 +165,9 @@ RSpec.describe Live::OrderUpdateHandler do
           end
 
           it 'uses tracker lock for atomic update' do
-            expect(tracker).to receive(:with_lock).and_call_original.at_least(:once)
+            expect(tracker).to receive(:with_lock).and_call_original
 
             handler.send(:handle_update, payload)
-          end
-
-          it 'stores BROKER_TRADE_UPDATE_EXIT when meta has no exit_reason' do
-            tracker.update!(meta: {})
-
-            handler.send(:handle_update, payload)
-
-            tracker.reload
-            expect(tracker.meta['exit_reason']).to eq('BROKER_TRADE_UPDATE_EXIT')
-            expect(tracker.exit_reason).to eq('BROKER_TRADE_UPDATE_EXIT')
-          end
-
-          it 'preserves exit_reason already set on meta' do
-            tracker.update!(meta: { 'exit_reason' => 'STOP_LOSS' })
-
-            handler.send(:handle_update, payload)
-
-            tracker.reload
-            expect(tracker.meta['exit_reason']).to eq('STOP_LOSS')
-            expect(tracker.exit_reason).to eq('STOP_LOSS')
           end
         end
 
@@ -336,7 +310,7 @@ RSpec.describe Live::OrderUpdateHandler do
       it 'returns early if tracker not found' do
         payload = { order_no: 'NONEXISTENT', order_status: 'TRADED' }
 
-        expect(tracker).not_to receive(:mark_exited!)
+        expect(PositionTracker).not_to receive(:find_by)
 
         handler.send(:handle_update, payload)
       end
@@ -455,7 +429,7 @@ RSpec.describe Live::OrderUpdateHandler do
       end
 
       it 'uses tracker lock to prevent race conditions' do
-        expect(tracker).to receive(:with_lock).and_call_original.at_least(:once)
+        expect(tracker).to receive(:with_lock).and_call_original
 
         handler.send(:handle_update, payload)
       end

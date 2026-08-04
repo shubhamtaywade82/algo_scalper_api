@@ -14,15 +14,11 @@ class IndexConfigLoader
     instance.load_indices
   end
 
-  WATCHLIST_CHECK_TTL = 60.seconds
-
   def initialize
     @cached_indices = nil
     @cached_at = nil
     @watchlist_available = nil
     @watchlist_checked_at = nil
-    @watchlist_table_exists = nil
-    @watchlist_table_checked_at = nil
   end
 
   def load_indices
@@ -53,18 +49,17 @@ class IndexConfigLoader
     @cached_at = nil
     @watchlist_available = nil
     @watchlist_checked_at = nil
-    @watchlist_table_exists = nil
-    @watchlist_table_checked_at = nil
   end
 
   private
 
-  # Load indices from WatchlistItems (database) — single query, no separate exists?
+  # Load indices from WatchlistItems (database)
   # Merges with algo.yml config to get full configuration
   def load_from_watchlist_items
-    return [] unless watchlist_table_exists?
+    return [] unless watchlist_items_available?
 
-    watchlist_items = WatchlistItem.active.where(kind: :index_value).includes(:watchable).to_a
+    # Load active index watchlist items
+    watchlist_items = WatchlistItem.active.where(kind: :index_value).includes(:watchable)
     return [] if watchlist_items.empty?
 
     # Get algo.yml config for merging
@@ -98,45 +93,21 @@ class IndexConfigLoader
     matching_config = find_matching_config(key, item.segment, item.security_id, config_indices)
 
     # Build base config from WatchlistItem
-    exchange_segment = index_exchange_segment_for(item, instrument)
     base_config = {
       key: key.to_s.upcase,
-      segment: exchange_segment,
+      segment: item.segment,
       sid: item.security_id.to_s
     }
 
-    merged = if matching_config.is_a?(Hash)
-               # Merge: WatchlistItem provides identity (segment, sid), algo.yml provides rest
-               base_config.merge(matching_config.except(:key, :segment, :sid))
-             else
-               Rails.logger.warn(
-                 "[IndexConfigLoader] No algo.yml config found for WatchlistItem: #{key} " \
-                 "(#{item.segment}/#{item.security_id}) - using minimal config"
-               )
-               base_config
-             end
-
-    IndiaIndexRegistry.merge_into(merged)
-  end
-
-  # Dhan index spot segment is always IDX_I (NSE and BSE). Watchlist rows may carry a
-  # derivative segment by mistake; normalize before propagating to tick/SMC/breakout paths.
-  def index_exchange_segment_for(item, instrument = nil)
-    instrument ||= item.instrument
-    normalized = if instrument&.exchange_segment.present?
-                   instrument.exchange_segment
-                 else
-                   'IDX_I'
-                 end
-
-    if item.segment.present? && item.segment != normalized
-      Rails.logger.warn(
-        "[IndexConfigLoader] Normalized index segment for #{item.label || item.security_id}: " \
-        "#{item.segment} -> #{normalized}"
-      )
+    # Merge with algo.yml config (algo.yml takes precedence for non-identity fields)
+    if matching_config.is_a?(Hash)
+      # Merge: WatchlistItem provides identity (segment, sid), algo.yml provides rest
+      base_config.merge(matching_config.except(:key, :segment, :sid))
+    else
+      # No matching config found - use defaults or WatchlistItem data only
+      Rails.logger.warn("[IndexConfigLoader] No algo.yml config found for WatchlistItem: #{key} (#{item.segment}/#{item.security_id}) - using minimal config")
+      base_config
     end
-
-    normalized
   end
 
   # Find matching config from algo.yml by key, segment, or sid
@@ -175,33 +146,29 @@ class IndexConfigLoader
     []
   end
 
-  # Memoized: does watchlist_items table exist? (schema only, no query)
-  def watchlist_table_exists?
-    return @watchlist_table_exists if @watchlist_table_checked_at &&
-                                      (Time.current - @watchlist_table_checked_at) < WATCHLIST_CHECK_TTL
+  # Check if WatchlistItems table exists and has data
+  # Cached to avoid repeated database queries
+  def watchlist_items_available?
+    return @watchlist_available if @watchlist_checked_at &&
+                                   (Time.current - @watchlist_checked_at) < 60.seconds
 
-    @watchlist_table_exists = defined?(ActiveRecord) &&
-                              ActiveRecord::Base.connection.schema_cache.data_source_exists?('watchlist_items')
-    @watchlist_table_checked_at = Time.current
-    @watchlist_table_exists
+    @watchlist_available = check_watchlist_available
+    @watchlist_checked_at = Time.current
+    @watchlist_available
+  end
+
+  def check_watchlist_available
+    return false unless defined?(ActiveRecord)
+    return false unless ActiveRecord::Base.connection.schema_cache.data_source_exists?('watchlist_items')
+
+    WatchlistItem.exists?
   rescue StandardError
-    @watchlist_table_exists = false
-    @watchlist_table_checked_at = Time.current
     false
   end
 
-  # Boolean for callers that need "watchlist available?" without loading indices.
-  # Uses table check + single limit(1).exists? when needed, cached 60s.
-  def watchlist_items_available?
-    return @watchlist_available if @watchlist_checked_at &&
-                                   (Time.current - @watchlist_checked_at) < WATCHLIST_CHECK_TTL
-
-    @watchlist_available = watchlist_table_exists? && WatchlistItem.limit(1).exists?
-    @watchlist_checked_at = Time.current
-    @watchlist_available
-  rescue StandardError
-    @watchlist_available = false
-    @watchlist_checked_at = Time.current
-    false
+  # Clear cache (call when WatchlistItems change)
+  def clear_cache!
+    @watchlist_available = nil
+    @watchlist_checked_at = nil
   end
 end

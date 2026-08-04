@@ -31,38 +31,6 @@ module Market
         today - 1.day
       end
 
-      # Returns the nearest trading day on or before the given date.
-      def on_or_before_trading_day(date)
-        candidate = date.is_a?(Date) ? date : Date.parse(date.to_s)
-        return candidate if trading_day?(candidate)
-
-        (1..7).each do |days_back|
-          earlier = candidate - days_back.days
-          return earlier if trading_day?(earlier)
-        end
-
-        candidate - 1.day
-      end
-
-      # Returns the date that was count trading days before an anchor date.
-      def trading_days_before(anchor_date, count)
-        anchor = on_or_before_trading_day(anchor_date)
-        trading_days_counted = 0
-        days_back = 0
-
-        max_days_back = count * 7
-        while days_back < max_days_back
-          days_back += 1
-          candidate = anchor - days_back.days
-          next unless trading_day?(candidate)
-
-          trading_days_counted += 1
-          return candidate if trading_days_counted == count
-        end
-
-        anchor - count.days
-      end
-
       # Returns the date that was count trading days ago
       def trading_days_ago(count)
         current = Date.current
@@ -75,13 +43,13 @@ module Market
         while days_back < max_days_back
           days_back += 1
           candidate = current - days_back.days
-          next unless trading_day?(candidate)
-
-          trading_days_counted += 1
-          return candidate if trading_days_counted == count
+          if trading_day?(candidate)
+            trading_days_counted += 1
+            return candidate if trading_days_counted == count
+          end
         end
 
-        # Fallback (shouldn't happen with sufficient max_days_back)
+        # Fallback
         current - count.days
       end
 

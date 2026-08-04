@@ -10,43 +10,26 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_19_052450) do
+ActiveRecord::Schema[8.0].define(version: 2025_12_05_210000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
-  create_table "algo_config_change_logs", force: :cascade do |t|
-    t.string "actor"
-    t.string "changed_paths", default: [], null: false, array: true
-    t.datetime "created_at", null: false
-    t.jsonb "metadata", default: {}, null: false
-    t.jsonb "patch", default: {}, null: false
-    t.string "request_id"
-    t.string "source", null: false
-    t.datetime "updated_at", null: false
-    t.index ["created_at"], name: "index_algo_config_change_logs_on_created_at"
-    t.index ["source"], name: "index_algo_config_change_logs_on_source"
-  end
-
-  create_table "alpha_signals", force: :cascade do |t|
-    t.string "alpha_source", null: false
-    t.decimal "confidence", precision: 5, scale: 4
-    t.datetime "created_at", null: false
-    t.string "direction", null: false
-    t.decimal "expected_value", precision: 15, scale: 5
-    t.date "expiry_date"
-    t.string "index_key", null: false
-    t.text "iv_context"
-    t.string "order_id"
-    t.string "status", default: "pending"
-    t.decimal "strike_price", precision: 15, scale: 5
-    t.datetime "updated_at", null: false
-    t.index ["index_key", "alpha_source", "created_at"], name: "idx_on_index_key_alpha_source_created_at_2aa039ddff"
-    t.index ["status", "created_at"], name: "index_alpha_signals_on_status_and_created_at"
-  end
-
   create_table "best_indicator_params", force: :cascade do |t|
+    t.bigint "instrument_id", null: false
+    t.string "interval", null: false
+    t.jsonb "params", default: {}, null: false
+    t.jsonb "metrics", default: {}, null: false
+    t.decimal "score", precision: 12, scale: 6, default: "0.0", null: false
     t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
     t.string "indicator", null: false
+    t.index ["instrument_id", "interval", "indicator"], name: "idx_unique_best_params_per_instrument_interval_indicator", unique: true
+    t.index ["instrument_id"], name: "index_best_indicator_params_on_instrument_id"
+    t.index ["metrics"], name: "index_best_indicator_params_on_metrics", using: :gin
+    t.index ["params"], name: "index_best_indicator_params_on_params", using: :gin
+  end
+
+  create_table "derivatives", force: :cascade do |t|
     t.bigint "instrument_id", null: false
     t.string "interval", null: false
     t.jsonb "metrics", default: {}, null: false
@@ -909,43 +892,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_19_052450) do
     t.string "watchable_type"
     t.index ["segment", "security_id"], name: "index_watchlist_items_on_segment_and_security_id", unique: true
     t.index ["watchable_type", "watchable_id"], name: "index_watchlist_items_on_watchable_type_and_watchable_id"
-  end
-
-  create_table "woods_edges", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.string "relationship", null: false
-    t.bigint "source_id", null: false
-    t.bigint "target_id", null: false
-    t.string "via"
-    t.index ["source_id", "target_id", "relationship"], name: "idx_woods_edges_unique", unique: true
-    t.index ["source_id"], name: "index_woods_edges_on_source_id"
-    t.index ["target_id"], name: "index_woods_edges_on_target_id"
-  end
-
-  create_table "woods_embeddings", force: :cascade do |t|
-    t.string "chunk_type"
-    t.string "content_hash", null: false
-    t.datetime "created_at", null: false
-    t.integer "dimensions", null: false
-    t.text "embedding", null: false
-    t.bigint "unit_id", null: false
-    t.index ["content_hash"], name: "index_woods_embeddings_on_content_hash"
-    t.index ["unit_id"], name: "index_woods_embeddings_on_unit_id"
-  end
-
-  create_table "woods_units", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.string "file_path", null: false
-    t.string "identifier", null: false
-    t.json "metadata"
-    t.string "namespace"
-    t.text "source_code"
-    t.string "source_hash"
-    t.string "unit_type", null: false
-    t.datetime "updated_at", null: false
-    t.index ["file_path"], name: "index_woods_units_on_file_path"
-    t.index ["identifier"], name: "index_woods_units_on_identifier", unique: true
-    t.index ["unit_type"], name: "index_woods_units_on_unit_type"
   end
 
   add_foreign_key "best_indicator_params", "instruments"

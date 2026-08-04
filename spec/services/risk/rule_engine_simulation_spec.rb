@@ -10,18 +10,18 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
   let(:entry_premium) { BigDecimal('100.0') }
   let(:buy_value) { (entry_premium * qty).to_f } # 100 * 300 = 30,000
 
-  # Risk configuration for tests (decimals: 0.20 = 20%)
+  # Risk configuration for tests
   let(:risk_config) do
     {
-      sl_pct: 0.20,
-      tp_pct: 0.60,
+      sl_pct: 20.0, # 20% stop loss
+      tp_pct: 60.0, # 60% take profit
       trailing: {
-        activation_pct: 0.10,
-        drawdown_pct: 0.03
+        activation_pct: 10.0, # Activate trailing at 10%
+        drawdown_pct: 3.0
       },
       secure_profit_threshold_rupees: 1000.0,
-      secure_profit_drawdown_pct: 0.03,
-      peak_drawdown_exit_pct: 0.05,
+      secure_profit_drawdown_pct: 3.0,
+      peak_drawdown_exit_pct: 5.0,
       time_exit_hhmm: '15:20',
       min_profit_rupees: 200.0,
       underlying_trend_score_threshold: 10.0,
@@ -31,11 +31,19 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
 
   # Create test doubles for external dependencies
   let(:exit_engine) { double('ExitEngine', exit: true) }
+  let(:trailing_engine) { double('TrailingEngine', process_tick: nil) }
   let(:redis_pnl_cache) { instance_double(Live::RedisPnlCache) }
   let(:active_cache) { Positions::ActiveCache.instance }
 
   # Real components
   let(:rule_engine) { Risk::Rules::RuleFactory.create_engine(risk_config: risk_config) }
+  let(:risk_manager) do
+    Live::RiskManagerService.new(
+      exit_engine: exit_engine,
+      trailing_engine: trailing_engine,
+      rule_engine: rule_engine
+    )
+  end
 
   # Test position setup
   let(:instrument) { create(:instrument, :nifty_future) }
@@ -46,22 +54,27 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
       status: 'active',
       entry_price: entry_premium.to_f,
       quantity: qty,
-      segment: 'NSE_FNO',
+      segment: 'FUTSTK',
       security_id: instrument.security_id
     )
   end
 
   # Helper to create/update position in ActiveCache
   def create_position_in_cache(pnl:, pnl_pct:, ltp:, hwm_pnl: nil, peak_profit_pct: nil)
-    position_data = active_cache.add_position(tracker: tracker)
-    raise 'ActiveCache#add_position returned nil' unless position_data
-
-    position_data.current_ltp = ltp
-    position_data.pnl = pnl
-    position_data.pnl_pct = pnl_pct
-    position_data.high_water_mark = hwm_pnl || pnl
-    position_data.peak_profit_pct = peak_profit_pct || pnl_pct
-    position_data.last_updated_at = Time.current
+    position_data = Positions::ActiveCache::PositionData.new(
+      tracker_id: tracker.id,
+      security_id: tracker.security_id,
+      segment: tracker.segment,
+      entry_price: tracker.entry_price,
+      quantity: tracker.quantity,
+      current_ltp: ltp,
+      pnl: pnl,
+      pnl_pct: pnl_pct,
+      high_water_mark: hwm_pnl || pnl,
+      peak_profit_pct: peak_profit_pct || pnl_pct,
+      last_updated_at: Time.current
+    )
+    active_cache.add_position(position_data)
     position_data
   end
 
@@ -78,21 +91,14 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
     )
   end
 
-  # Helper to process position through the rule engine (same exit outcome as risk path)
+  # Helper to process position through RiskManager
   def process_position(position_data)
+    # Mock Redis sync
+    allow(risk_manager).to receive(:sync_position_pnl_from_redis).and_call_original
     allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(nil)
 
-    context = Risk::Rules::RuleContext.new(
-      position: position_data,
-      tracker: tracker,
-      risk_config: risk_config,
-      current_time: Time.zone.parse('2024-01-01 10:00:00 IST')
-    )
-    decision = rule_engine.evaluate(context)
-    return false unless decision.exit?
-
-    exit_engine.exit(tracker, reason: decision.reason)
-    true
+    # Process position
+    risk_manager.send(:check_exit_conditions_with_rule_engine, position_data, tracker, exit_engine)
   end
 
   before do
@@ -103,16 +109,12 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
     allow(AlgoConfig).to receive(:fetch).and_return(risk: risk_config)
 
     # Mock TradingSession
-    allow(TradingSession::Service).to receive_messages(
-      market_closed?: false,
-      session_ending?: false,
-      should_force_exit?: { should_exit: false }
-    )
+    allow(TradingSession::Service).to receive_messages(market_closed?: false, session_ending?: false)
 
     # Mock Positions::TrailingConfig for peak drawdown
-    allow(Positions::TrailingConfig).to receive_messages(peak_drawdown_triggered?: false, peak_drawdown_active?: true, config: { peak_drawdown_pct: 0.05,
-                                                                                                                                 activation_profit_pct: 0.25,
-                                                                                                                                 activation_sl_offset_pct: 0.10 })
+    allow(Positions::TrailingConfig).to receive_messages(peak_drawdown_triggered?: false, peak_drawdown_active?: true, config: { peak_drawdown_pct: 5.0,
+                                                                                                                                 activation_profit_pct: 25.0,
+                                                                                                                                 activation_sl_offset_pct: 10.0 })
 
     # Mock UnderlyingMonitor for underlying exit tests
     allow(Live::UnderlyingMonitor).to receive(:evaluate).and_return(nil)
@@ -122,7 +124,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
     it 'exits when PnL drops to -20% (stop loss threshold)' do
       position = create_position_in_cache(
         pnl: -0.20 * buy_value, # -₹6,000
-        pnl_pct: -0.2,
+        pnl_pct: -20.0,
         ltp: 80.0
       )
 
@@ -138,7 +140,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
     it 'does not exit when loss is less than stop loss threshold' do
       position = create_position_in_cache(
         pnl: -0.10 * buy_value, # -₹3,000 (-10%)
-        pnl_pct: -0.1,
+        pnl_pct: -10.0,
         ltp: 90.0
       )
 
@@ -152,7 +154,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
     it 'exits when PnL reaches +60% (take profit threshold)' do
       position = create_position_in_cache(
         pnl: 0.60 * buy_value, # +₹18,000
-        pnl_pct: 0.6,
+        pnl_pct: 60.0,
         ltp: 160.0
       )
 
@@ -168,7 +170,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
     it 'does not exit when profit is below take profit threshold' do
       position = create_position_in_cache(
         pnl: 0.30 * buy_value, # +₹9,000 (+30%)
-        pnl_pct: 0.3,
+        pnl_pct: 30.0,
         ltp: 130.0
       )
 
@@ -182,7 +184,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
     it 'does not activate trailing rules when pnl_pct < 10%' do
       position = create_position_in_cache(
         pnl: 0.05 * buy_value, # +₹1,500 (+5%)
-        pnl_pct: 0.05,
+        pnl_pct: 5.0,
         ltp: 105.0,
         hwm_pnl: 0.05 * buy_value,
         peak_profit_pct: 5.0
@@ -204,7 +206,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
     it 'activates trailing rules when pnl_pct >= 10%' do
       position = create_position_in_cache(
         pnl: 0.10 * buy_value, # +₹3,000 (+10%)
-        pnl_pct: 0.1,
+        pnl_pct: 10.0,
         ltp: 110.0,
         hwm_pnl: 0.10 * buy_value,
         peak_profit_pct: 10.0
@@ -233,7 +235,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
       # At 6% - should activate
       position = create_position_in_cache(
         pnl: 0.06 * buy_value,
-        pnl_pct: 0.06,
+        pnl_pct: 6.0,
         ltp: 106.0
       )
 
@@ -260,7 +262,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
       # Peak at +25%, current at +21% (4% drawdown from peak)
       position = create_position_in_cache(
         pnl: 0.21 * buy_value, # +₹6,300 (> ₹1000 threshold)
-        pnl_pct: 0.21,
+        pnl_pct: 21.0,
         ltp: 121.0,
         peak_profit_pct: 25.0 # Peak was 25%
       )
@@ -277,7 +279,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
     it 'does not exit when profit < ₹1000 even with drawdown' do
       position = create_position_in_cache(
         pnl: 0.02 * buy_value, # +₹600 (< ₹1000 threshold)
-        pnl_pct: 0.02,
+        pnl_pct: 2.0,
         ltp: 102.0,
         peak_profit_pct: 5.0
       )
@@ -290,7 +292,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
     it 'allows position to ride when profit >= ₹1000 but no drawdown yet' do
       position = create_position_in_cache(
         pnl: 0.15 * buy_value, # +₹4,500 (> ₹1000)
-        pnl_pct: 0.15,
+        pnl_pct: 15.0,
         ltp: 115.0,
         peak_profit_pct: 15.0 # At peak, no drawdown
       )
@@ -310,7 +312,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
       # Peak at +25%, current at +19% (6% drawdown)
       position = create_position_in_cache(
         pnl: 0.19 * buy_value,
-        pnl_pct: 0.19,
+        pnl_pct: 19.0,
         ltp: 119.0,
         peak_profit_pct: 25.0
       )
@@ -327,7 +329,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
     it 'does not exit when drawdown < 5% from peak' do
       position = create_position_in_cache(
         pnl: 0.22 * buy_value, # +22% (3% drawdown from 25% peak)
-        pnl_pct: 0.22,
+        pnl_pct: 22.0,
         ltp: 122.0,
         peak_profit_pct: 25.0
       )
@@ -346,7 +348,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
 
       position = create_position_in_cache(
         pnl: 0.10 * buy_value, # +₹3,000 (> ₹200 min)
-        pnl_pct: 0.1,
+        pnl_pct: 10.0,
         ltp: 110.0
       )
 
@@ -364,7 +366,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
 
       position = create_position_in_cache(
         pnl: 0.005 * buy_value, # +₹150 (< ₹200 min)
-        pnl_pct: 0.005,
+        pnl_pct: 0.5,
         ltp: 100.5
       )
 
@@ -378,7 +380,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
 
       position = create_position_in_cache(
         pnl: 0.10 * buy_value,
-        pnl_pct: 0.1,
+        pnl_pct: 10.0,
         ltp: 110.0
       )
 
@@ -394,7 +396,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
 
       position = create_position_in_cache(
         pnl: 0.05 * buy_value,
-        pnl_pct: 0.05,
+        pnl_pct: 5.0,
         ltp: 105.0
       )
 
@@ -410,17 +412,74 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
 
   describe 'Underlying Structure Break' do
     it 'exits when underlying structure breaks' do
-      skip 'Covered by UnderlyingExitRule specs; RiskManager private helpers removed'
+      underlying_state = double('UnderlyingState', structure_break: true, trend_score: 5.0)
+      allow(Live::UnderlyingMonitor).to receive(:evaluate).and_return(underlying_state)
+
+      # Mock RiskManager's underlying exit check
+      allow(risk_manager).to receive_messages(handle_underlying_exit: true, underlying_exits_enabled?: true)
+
+      position = create_position_in_cache(
+        pnl: 0.15 * buy_value,
+        pnl_pct: 15.0,
+        ltp: 115.0,
+        underlying_trend_score: 5.0
+      )
+
+      expect(exit_engine).to receive(:exit).with(
+        tracker,
+        hash_including(reason: match(/underlying/i))
+      )
+
+      # Use the underlying exit check directly
+      result = risk_manager.send(:handle_underlying_exit, position, tracker, exit_engine)
+      expect(result).to be true
     end
   end
 
   describe 'Stale Data Handling' do
     it 'skips evaluation when Redis data is stale (>30 seconds)' do
-      skip 'Redis sync path lives in RiskManager PnL pipeline; exercise via integration tests'
+      stale_timestamp = Time.current.to_i - 45 # 45 seconds ago
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).with(tracker.id).and_return(
+        {
+          pnl: 0.10 * buy_value,
+          pnl_pct: 10.0,
+          ltp: 110.0,
+          timestamp: stale_timestamp
+        }
+      )
+
+      position = create_position_in_cache(
+        pnl: 0.10 * buy_value,
+        pnl_pct: 10.0,
+        ltp: 110.0
+      )
+
+      # sync_position_pnl_from_redis should skip stale data
+      risk_manager.send(:sync_position_pnl_from_redis, position, tracker)
+      # Position should not be updated with stale data
+      # (In real code, this would prevent rule evaluation)
     end
 
     it 'uses fresh Redis data when timestamp is recent (<30 seconds)' do
-      skip 'Redis sync path lives in RiskManager PnL pipeline; exercise via integration tests'
+      fresh_timestamp = Time.current.to_i - 10 # 10 seconds ago
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).with(tracker.id).and_return(
+        {
+          pnl: 0.15 * buy_value,
+          pnl_pct: 15.0,
+          ltp: 115.0,
+          timestamp: fresh_timestamp
+        }
+      )
+
+      position = create_position_in_cache(
+        pnl: 0.10 * buy_value,
+        pnl_pct: 10.0,
+        ltp: 110.0
+      )
+
+      # Should sync fresh data
+      risk_manager.send(:sync_position_pnl_from_redis, position, tracker)
+      expect(position.pnl).to be_within(0.01).of(0.15 * buy_value)
     end
   end
 
@@ -434,7 +493,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
         quantity: qty
       )
 
-      position = Positions::PositionData.new(
+      position = Positions::ActiveCache::PositionData.new(
         tracker_id: bad_tracker.id,
         entry_price: nil,
         quantity: qty,
@@ -469,7 +528,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
 
       position = create_position_in_cache(
         pnl: -0.25 * buy_value, # -25% (would trigger SL if enabled)
-        pnl_pct: -0.25,
+        pnl_pct: -25.0,
         ltp: 75.0
       )
 
@@ -493,7 +552,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
       # In reality, SL would trigger first
       position = create_position_in_cache(
         pnl: -0.20 * buy_value, # -20% (SL threshold)
-        pnl_pct: -0.2,
+        pnl_pct: -20.0,
         ltp: 80.0
       )
 
@@ -510,7 +569,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
     it 'stops evaluation after first exit rule triggers' do
       position = create_position_in_cache(
         pnl: 0.60 * buy_value, # +60% (TP threshold)
-        pnl_pct: 0.6,
+        pnl_pct: 60.0,
         ltp: 160.0
       )
 
@@ -526,7 +585,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
       # Step 1: Position at 5% (below activation threshold)
       position1 = create_position_in_cache(
         pnl: 0.05 * buy_value,
-        pnl_pct: 0.05,
+        pnl_pct: 5.0,
         ltp: 105.0,
         peak_profit_pct: 5.0
       )
@@ -536,7 +595,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
       # Step 2: Position reaches 10% (activation threshold)
       position2 = create_position_in_cache(
         pnl: 0.10 * buy_value,
-        pnl_pct: 0.1,
+        pnl_pct: 10.0,
         ltp: 110.0,
         peak_profit_pct: 10.0
       )
@@ -546,7 +605,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
       # Step 3: Position peaks at 25%
       position3 = create_position_in_cache(
         pnl: 0.25 * buy_value,
-        pnl_pct: 0.25,
+        pnl_pct: 25.0,
         ltp: 125.0,
         peak_profit_pct: 25.0
       )
@@ -557,7 +616,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
       allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(true)
       position4 = create_position_in_cache(
         pnl: 0.20 * buy_value,
-        pnl_pct: 0.2,
+        pnl_pct: 20.0,
         ltp: 120.0,
         peak_profit_pct: 25.0
       )
@@ -607,7 +666,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
       tracker.update(status: 'exited')
       position = create_position_in_cache(
         pnl: 0.10 * buy_value,
-        pnl_pct: 0.1,
+        pnl_pct: 10.0,
         ltp: 110.0
       )
 
