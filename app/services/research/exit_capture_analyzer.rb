@@ -375,7 +375,6 @@ module Research
       c_last = active_candles.last
       [c_last[:close], c_last[:timestamp], "market_close"]
     end
-
     # 15. Dynamic hold/exit — composite rule set for naked option buying:
     # hard SL -> theta barrier (max hold without meaningful profit) -> OI
     # unwind -> IV crush -> EMA-of-underlying trend trail (once in real

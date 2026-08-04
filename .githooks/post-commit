@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # frozen_string_literal: true
 
-# Pre-push hook: update Woods codebase index before pushing.
-# Runs incremental extraction so AI coding tools always see fresh context.
+# Post-commit hook: update Woods codebase index incrementally.
+# Keeps AI coding tools' index in sync with committed changes.
 
 set -euo pipefail
 

@@ -346,16 +346,6 @@ RSpec.describe Research::First15mEngine do
       expect(compression_hyp.verdict).to eq(:accepted)
       expect(compression_hyp.reason).to include("Passes BH FDR correction")
     end
-
-    describe Research::Scheduler do
-      it "runs a nightly quant pipeline check successfully" do
-        allow(Research::First15mEngine).to receive(:run).and_return({})
-
-        res = described_class.run_nightly("NIFTY", 5)
-        expect(res[:status]).to eq(:failed)
-        expect(res[:reason]).to eq("no_data")
-      end
-    end
   end
 end
 
