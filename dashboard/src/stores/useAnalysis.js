@@ -5,13 +5,12 @@ const POLL_INTERVAL_MS = 30000
 export function useAnalysis() {
   // Per-index state maps: { NIFTY: signal, SENSEX: signal, BANKNIFTY: signal }
   const liveData = Object.fromEntries(INDICES.map(k => [k, createSignal(null)]))
-  const loading   = Object.fromEntries(INDICES.map(k => [k, createSignal(false)]))
+  const loadingMap   = Object.fromEntries(INDICES.map(k => [k, createSignal(false)]))
   const errors    = Object.fromEntries(INDICES.map(k => [k, createSignal(null)]))
 
   // Historical / snapshot follow the selected Analysis tab (auto-loaded once per index per visit)
   const [activeIndex, setActiveIndex] = createSignal(null)
   const [historicalData, setHistoricalData] = createSignal(null)
-  const [loading, setLoading] = createSignal(false)
   const [historicalLoading, setHistoricalLoading] = createSignal(false)
   const [error, setError] = createSignal(null)
   const [snapshotLoading, setSnapshotLoading] = createSignal(false)
@@ -121,7 +120,7 @@ export function useAnalysis() {
   return {
     INDICES,
     liveData:        (idx) => liveData[idx][0](),
-    isLoading:       (idx) => loading[idx][0](),
+    isLoading:       (idx) => loadingMap[idx][0](),
     getError:        (idx) => errors[idx][0](),
     fetchOne,
     fetchAll,
