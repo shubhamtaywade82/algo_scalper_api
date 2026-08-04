@@ -55,7 +55,6 @@ module Live
       return if @running
 
       @running = true
-      start_watchdog
 
       # Subscribe to PnL updates from EventBus for high-frequency evaluation
       @event_subscription = Core::EventBus.instance.subscribe(Core::EventBus::EVENTS[:pnl_update]) do |event|

@@ -18,9 +18,11 @@ const Settings = lazy(() => import('./views/Settings'))
 const Ledger = lazy(() => import('./views/Ledger'))
 const TrailEngine = lazy(() => import('./views/TrailEngine.jsx'))
 const OptionScalper = lazy(() => import('./views/OptionScalper'))
-const OptionChain = lazy(() => import('./views/OptionChain'))
+const OptionChain = lazy(() => import('./views/OptionChain')
 const Backtester = lazy(() => import('./views/Backtester'))
 const Replay = lazy(() => import('./views/Replay'))
+const Alpha = lazy(() => import('./views/Alpha'))
+const Charts = lazy(() => import('./views/Charts'))
 
 // New TDD routes — all backends implemented
 const MarketWatch = lazy(() => import('./views/MarketWatch'))

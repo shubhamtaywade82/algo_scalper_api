@@ -9,6 +9,14 @@ module TradingSystem
   module Bootstrap
     module_function
 
+    # Evaluates VIX gate and other pre-market gates at daemon startup.
+    # Fetches India VIX LTP and evaluates entry/force-exit gates.
+    # @return [Float, nil] VIX LTP if evaluated, nil otherwise
+    def boot_market_gates!
+      Rails.logger.info('[Bootstrap] Evaluating market gates...')
+      Market::VixGate.evaluate!
+    end
+
     # Performs startup reconciliation so broker and DB position state are aligned
     # before risk and signal services start.
     # @param strict [Boolean] raise on reconciliation errors when true

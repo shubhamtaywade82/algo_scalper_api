@@ -5,24 +5,6 @@ module Live
     module Runner
       private
 
-      # Start watchdog thread to ensure service thread is restarted if it dies
-      def start_watchdog
-        @watchdog_thread = Thread.new do
-          Thread.current.name = 'risk-manager-watchdog'
-          loop do
-            break unless @running # Exit if service is stopped
-
-            unless @thread&.alive?
-              Rails.logger.warn('[RiskManagerService] Watchdog detected dead thread — restarting...')
-              # Reset running flag if thread is dead or nil
-              @running = false
-              start
-            end
-            sleep 10
-          end
-        end
-      end
-
       # Central monitoring loop: keep PnL and caches fresh.
       # Always run enforcement - ExitEngine is only used for executing exits, not for triggering them.
       def monitor_loop(last_paper_pnl_update)
