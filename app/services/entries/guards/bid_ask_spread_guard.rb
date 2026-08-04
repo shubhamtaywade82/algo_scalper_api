@@ -15,12 +15,18 @@ module Entries
         segment = pick[:segment] || context.dig(:index_cfg, :segment)
         security_id = pick[:security_id]
         tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
-        return PASS unless tick
+        unless tick
+          Rails.logger.warn("[BidAskSpreadGuard] No tick data for #{segment}:#{security_id} — skipping spread check")
+          return PASS
+        end
 
-        # Existing price spread check
         bid = tick.bid.to_f
         ask = tick.ask.to_f
-        return PASS unless bid.positive? && ask.positive? && ask >= bid
+        unless bid.positive? && ask.positive? && ask >= bid
+          Rails.logger.warn("[BidAskSpreadGuard] bid/ask unavailable for #{segment}:#{security_id} " \
+                            "(bid=#{bid}, ask=#{ask}) — skipping spread check")
+          return PASS
+        end
 
         spread_pct = (ask - bid) / ltp
         return PASS if spread_pct <= max_spread_pct(context)

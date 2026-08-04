@@ -35,9 +35,9 @@ RSpec.describe Positions::MetaPatch do
       expect(tracker.reload.meta['highest_price']).to eq(100.0)
     end
 
-    it 'merges durable keys with jsonb patch, not full blob rewrite' do
+    it 'merges non-promoted durable keys with jsonb patch, not full blob rewrite' do
       before = tracker.meta.deep_stringify_keys
-      after = before.merge('be_set' => true)
+      after = before.merge('entry_context' => { 'dte' => 0 })
 
       sql_calls = []
       callback = lambda do |_name, _start, _finish, _id, payload|
@@ -50,7 +50,7 @@ RSpec.describe Positions::MetaPatch do
       end
 
       update_sql = sql_calls.find { |sql| sql.include?('UPDATE') }
-      expect(update_sql).to include('meta = COALESCE(meta').and include('||')
+      expect(update_sql).to include('"entry_context"')
       expect(update_sql).not_to include('config_snapshot')
     end
 

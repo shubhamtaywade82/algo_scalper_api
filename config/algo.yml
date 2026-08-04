@@ -10,9 +10,9 @@ paper_trading:
 
 # Double-entry paper ledger (financial source of truth alongside position_trackers)
 ledger:
-  enabled: false          # when true, GatewayPaper wallet reads from ledger
-  paper_enabled: false    # alias gate for paper wallet reads
-  shadow_mode: true         # post journals + keep legacy wallet for drift checks
+  enabled: true           # paper wallet + sizing read from ledger cash balance
+  paper_enabled: false    # wallet uses legacy calculation; ledger posts for reconciliation only
+  shadow_mode: true       # post journals; reconciliation job compares ledger vs legacy
   block_negative_cash: true
 
 # Realtime execution controls (tick-first architecture)
@@ -233,6 +233,7 @@ indices:
 
 trade_limits:
   global_max_trades_per_day: 8
+  global_max_concurrent_positions: 6 # Portfolio-level cap across all indices
 
 # ============================================
 # BROKER FEES
@@ -247,9 +248,79 @@ broker_fees:
 # RISK MODEL (NEMESIS V3)
 # ============================================
 risk:
-  sl_pct: 0.10 # -10% STOP LOSS (was 6%, too tight — frequent noise stops)
-  tp_pct: 0.25 # +25% TAKE PROFIT (was 12%, cut winners too short)
-  per_trade_risk_pct: 0.15
+  auto_update_ip: false # Set to true to automatically update whitelisted IP on Dhan after cooldown
+  # LEGACY FALLBACKS — Effective SL/TP resolved by DTE via risk.dte_parameters.by_dte
+  # These are used by risk_explorer, meta_builder as fallback when DTE resolution unavailable
+  sl_pct: 0.08 # -8% base premium SL — aligned with adaptive_trail entry_guard hard_stop
+  tp_pct: 0.45 # +45% TAKE PROFIT — capture convexity outliers
+  per_trade_risk_pct: 0.40
+
+  iv_vol_gate:
+    enabled: true
+    max_iv_rank: 1.0
+    min_iv_rank: 0.05
+
+  volume_velocity_gate:
+    enabled: true
+
+  momentum_gate:
+    enabled: true
+    adx_threshold: 25
+
+  regime_guard:
+    enabled: true
+    block_regimes:
+      - CHOPPY
+    bypass_adx: 25
+
+  # DTE-resolved intraday parameters — pinned into config_snapshot at entry
+  dte_parameters:
+    enabled: true
+    defaults:
+      sl_pct: 0.10
+      tp_pct: 0.45
+      trail_pct: 0.07
+      volume_velocity_multiplier: 2.0
+    by_dte:
+      "0":
+        sl_pct: 0.08
+        tp_pct: 0.25
+        trail_pct: 0.05
+        volume_velocity_multiplier: 2.5
+        max_entry_time: "12:30"
+      "1":
+        sl_pct: 0.10
+        tp_pct: 0.35
+        trail_pct: 0.08
+        volume_velocity_multiplier: 2.5
+        max_entry_time: "14:00"
+      "2":
+        sl_pct: 0.10
+        tp_pct: 0.40
+        trail_pct: 0.07
+        volume_velocity_multiplier: 2.0
+        max_entry_time: "14:30"
+
+  # 0-DTE afternoon theta-flat exit — force-close stale 0-DTE positions after cutoff
+  dte_zero_exit:
+    enabled: true
+    after_time: "14:00"           # IST — start at closing repricing (was 12:30)
+    min_pnl_pct_to_hold: 0.015    # keep if >= +1.5%; trailing owns clear winners (was 3%)
+
+  # Once trade was green, never ride back to full premium SL
+  green_trade_cap:
+    enabled: true
+    min_hwm_rupees: 300
+    max_adverse_pct: 0.08 # cap at -8% if HWM >= ₹300
+
+  fast_profit_lock:
+    enabled: true
+    tiers:
+      - { trigger_pct: 0.025, lock_pct: 0.005 } # +2.5% peak → lock +0.5%
+      - { trigger_pct: 0.04, lock_pct: 0.015 }   # +4% peak → lock +1.5%
+      - { trigger_pct: 0.06, lock_pct: 0.03 }    # +6% peak → lock +3%
+      - { trigger_pct: 0.10, lock_pct: 0.06 }    # +10% peak → lock +6%
+      - { trigger_pct: 0.15, lock_pct: 0.10 }    # +15% peak → lock +10%
 
   # --- New: Percentage-based PnL Exit ---
   percentage_pnl_exit:

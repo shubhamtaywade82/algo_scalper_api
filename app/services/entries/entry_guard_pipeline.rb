@@ -45,6 +45,7 @@ module Entries
         Guards::LossStreakGuard,
         Guards::DailyLimitsGuard,
         Guards::MaxConcurrentGuard,
+        Guards::GlobalMaxConcurrentGuard,
         Guards::InstrumentLookupGuard,
         Guards::LtpResolutionGuard,
         Guards::BidAskSpreadGuard,

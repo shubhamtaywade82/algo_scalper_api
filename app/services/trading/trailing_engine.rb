@@ -85,6 +85,17 @@ module Trading
 
       key = symbol_key
       raw = yml&.[](key) || DEFAULTS[key]
+      raw = raw.transform_keys(&:to_sym)
+      merge_strategy_profile_override!(raw)
+    end
+
+    def merge_strategy_profile_override!(base)
+      raw = @tracker.strategy_profile
+      profile = raw&.to_sym
+      return base unless profile
+
+      overrides = AlgoConfig.fetch.dig(:risk, :institutional_trailing, :profiles, profile)
+      return base unless overrides.is_a?(Hash)
 
       # Symbolize keys if loaded from YAML (string keys)
       raw.transform_keys(&:to_sym)

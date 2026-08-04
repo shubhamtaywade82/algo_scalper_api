@@ -22,8 +22,10 @@ module Live
 
       # Persist reason metadata
       def store_exit_reason(tracker, reason)
-        metadata = tracker.meta.is_a?(Hash) ? tracker.meta : {}
-        tracker.update!(meta: metadata.merge('exit_reason' => reason, 'exit_triggered_at' => Time.current))
+        tracker.update!(
+          exit_reason: reason,
+          exit_triggered_at: Time.current
+        )
       rescue StandardError => e
         Rails.logger.warn("[RiskManager] store_exit_reason failed for #{tracker.order_no}: #{e.class} - #{e.message}")
       end
@@ -72,7 +74,7 @@ module Live
       def record_trade_result_for_edge_detector(tracker, final_pnl, exit_reason)
         return unless tracker && final_pnl && exit_reason
 
-        index_key = tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
+        index_key = tracker.index_key || tracker.instrument&.symbol_name
         return unless index_key
 
         Live::EdgeFailureDetector.instance.record_trade_result(

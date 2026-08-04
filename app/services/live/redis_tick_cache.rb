@@ -7,7 +7,7 @@ module Live
     include Singleton
 
     PREFIX = 'tick'
-    TICK_TTL_SECONDS = 3600
+    TICK_TTL_SECONDS = 86_400
 
     # Store a tick as a hash under tick:<SEG>:<SID>
     # data is a hash of symbol/string keys -> values

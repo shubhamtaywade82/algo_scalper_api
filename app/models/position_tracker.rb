@@ -10,9 +10,62 @@ class PositionTracker < ApplicationRecord
   include PositionTracker::Broadcastable
   include PositionTracker::Lifecycle
 
-  # Attribute accessors
-  store_accessor :meta, :breakeven_locked, :trailing_stop_price, :index_key, :direction, :entry_path, :entry_strategy,
-                 :exit_path, :exit_reason, :highest_price
+  # `meta` accessor is the persisted thin shim (no config_snapshot blobs).
+  # Promoted store_accessor readers fall back to this hash when the column is nil,
+  # preserving backward compatibility for legacy read paths.
+
+  PROMOTED_META_KEYS = %w[
+    breakeven_locked trailing_stop_price index_key direction entry_path entry_strategy
+    exit_path exit_reason highest_price lowest_price be_set profit_floor_rupees
+    profit_floor_set_at profit_zone_state profit_zone_transitioned_at secured_sl_price
+    secured_sl_rupees carry_mode carry_marked_at carry_roi_pct alpha_source
+    signal_confidence expected_value signal_timestamp client_order_id
+    decision execution entry_context dte_at_entry vix_at_entry iv_at_entry
+    iv_percentile spread_guard_pct atm_strike expiry_date bos_age_at_entry
+    retrace_pct pullback_candles entry_distance_r continuation_body_position
+    time_from_bos_to_entry premium_stop_price entry_risk_rupees entry_tf htf_tf
+    strategy_profile entry_underlying_price hwm_pnl_pct peak_premium_at
+  ].freeze
+
+  BOOLEAN_PROMOTED_KEYS = %w[breakeven_locked be_set].freeze
+
+  PROMOTED_META_KEYS.each do |key|
+    define_method(key) do
+      val = self[key]
+      return val unless val.nil?
+
+      meta_hash[key.to_s]
+    end
+
+    define_method("#{key}=") do |val|
+      casted = BOOLEAN_PROMOTED_KEYS.include?(key) ? ActiveModel::Type::Boolean.new.cast(val) : val
+      self[key] = casted
+    end
+  end
+
+  BOOLEAN_PROMOTED_KEYS.each do |key|
+    define_method("#{key}?") do
+      ActiveModel::Type::Boolean.new.cast(send(key))
+    end
+  end
+
+  after_update_commit :record_alpha_outcome!, if: :alpha_signal_just_exited?
+
+  has_one :meta_snapshot, class_name: 'PositionMetaSnapshot', dependent: :destroy
+  delegate :config_snapshot, :config_version_hash, :entry_at, to: :meta_snapshot, allow_nil: true
+
+  def peak_premium
+    highest_price
+  end
+
+  def create_position_meta_snapshot!(config_version_hash:, config_change_log_id: nil, config_snapshot:, entry_at: nil)
+    create_meta_snapshot!(
+      config_version_hash: config_version_hash,
+      config_change_log_id: config_change_log_id,
+      config_snapshot: config_snapshot,
+      entry_at: entry_at
+    )
+  end
 
   enum :status, {
     pending: 'pending',
@@ -25,171 +78,12 @@ class PositionTracker < ApplicationRecord
   validates :security_id, presence: true
   validate :segment_must_be_tradable
 
-  ORPHANED_CLEAR_INTERVAL = 5.minutes
-
-  # Callbacks
-  after_commit :register_in_index, on: %i[create update], if: :index_registration_relevant?
-  after_commit :unregister_from_index, on: :destroy
-  after_update_commit :refresh_index_if_relevant
-  after_update_commit :cleanup_if_exited
-  after_create_commit :subscribe_to_feed, if: :feed_subscription_relevant?
-  after_destroy_commit :clear_redis_pnl_cache
-  after_update_commit :clear_redis_cache_if_exited
-
-  # Associations
-  belongs_to :instrument, optional: false, inverse_of: :position_trackers # Kept for backward compatibility during transition
+  belongs_to :instrument, optional: false, inverse_of: :position_trackers
   belongs_to :watchable, polymorphic: true, optional: false
   has_one :trade_analytic, dependent: :destroy, inverse_of: :position_tracker
   has_one :trade_telemetry, class_name: 'TradeTelemetry', foreign_key: :tracker_id, dependent: :destroy,
                             inverse_of: :tracker
 
-  # Scopes
-  # Note: enum automatically creates scopes for :pending, :active, :exited, :cancelled
-  scope :paper, -> { where(paper: true) }
-  scope :live, -> { where(paper: false) }
-  scope :exited_paper, -> { where(paper: true, status: :exited) }
-  scope :today, -> { where(created_at: Time.zone.today.all_day) }
-  # Active with exit requested but not yet exited (stuck if order failed or pending)
-  scope :active_with_exit_requested, -> { active.where.not(exit_requested_at: nil) }
-
-  # Class Methods
-  class << self
-    def active_for(seg, sid)
-      where(segment: seg, security_id: sid, status: :active).first
-    end
-
-    def exited_for(seg, sid)
-      where(segment: seg, security_id: sid, status: :exited).order(id: :desc).first
-    end
-
-    def paper_trading_stats_with_pct(date: nil)
-      # Filter by date if provided, otherwise use all exited positions
-      if date
-        date_start = date.beginning_of_day
-        date_end = date.end_of_day
-        exited = exited_paper.where(exited_at: date_start..date_end)
-      else
-        # Default: only today's exited positions
-        today_start = Time.zone.today.beginning_of_day
-        today_end = Time.zone.today.end_of_day
-        exited = exited_paper.where(exited_at: today_start..today_end)
-      end
-      active = paper.active
-      # Load once to avoid multiple queries (any? + count + iteration)
-      exited = exited.load
-      active = active.load
-
-      active_count = active.size
-      realized_pnl_rupees = exited.sum { |t| t.last_pnl_rupees.to_f }
-      # Use current_pnl_rupees for active positions (reads from Redis cache for live values)
-      unrealized_pnl_rupees = active.sum { |t| t.current_pnl_rupees.to_f }
-
-      total_pnl_rupees = realized_pnl_rupees + unrealized_pnl_rupees
-
-      # Calculate PnL percentages based on initial capital, not by summing individual trade percentages
-      initial_capital = Capital::Allocator.paper_trading_balance.to_f
-      realized_pnl_pct = initial_capital.positive? ? (realized_pnl_rupees / initial_capital * 100.0) : 0.0
-      unrealized_pnl_pct = initial_capital.positive? ? (unrealized_pnl_rupees / initial_capital * 100.0) : 0.0
-      total_pnl_pct = initial_capital.positive? ? (total_pnl_rupees / initial_capital * 100.0) : 0.0
-
-      # Calculate average per-trade percentages (for reference)
-      # last_pnl_pct is stored as decimal (0.0573), convert to percentage for display
-      avg_realized_pnl_pct = if exited.any?
-                               (exited.filter_map { |t| t.last_pnl_pct.to_f * 100.0 }.sum / exited.size.to_f).round(2)
-                             else
-                               0.0
-                             end
-      # current_pnl_pct returns decimal from Redis, convert to percentage for display
-      avg_unrealized_pnl_pct = if active.any?
-                                 (active.filter_map { |t| (t.current_pnl_pct || 0).to_f * 100.0 }.sum / active.size.to_f).round(2)
-                               else
-                                 0.0
-                               end
-
-      {
-        total_trades: exited.size,
-        active_positions: active_count,
-        total_pnl_rupees: total_pnl_rupees.round(2),
-        total_pnl_pct: total_pnl_pct.round(2),
-        realized_pnl_rupees: realized_pnl_rupees.round(2),
-        realized_pnl_pct: realized_pnl_pct.round(2),
-        unrealized_pnl_rupees: unrealized_pnl_rupees.round(2),
-        unrealized_pnl_pct: unrealized_pnl_pct.round(2),
-        win_rate: paper_win_rate(date: date, exited: exited),
-        avg_realized_pnl_pct: avg_realized_pnl_pct,
-        avg_unrealized_pnl_pct: avg_unrealized_pnl_pct,
-        winners: exited.count { |t| (t.last_pnl_rupees || 0).positive? },
-        losers: exited.count { |t| (t.last_pnl_rupees || 0).negative? }
-      }
-    end
-
-    def paper_positions_details(limit: Positions::PaperPositionsQuery::DEFAULT_LIMIT, offset: 0)
-      Positions::PaperPositionsQuery.call(limit: limit, offset: offset)
-    end
-
-    def total_paper_pnl
-      exited_paper.sum do |tracker|
-        tracker.last_pnl_rupees || BigDecimal(0)
-      end
-    end
-
-    def active_paper_positions_count
-      paper.active.count
-    end
-
-    def paper_win_rate(date: nil, exited: nil)
-      return Positions::PaperStatsQuery.call(date: date)[:win_rate] if exited.nil?
-
-      return 0.0 if exited.empty?
-
-      winners = exited.count { |tracker| (tracker.last_pnl_rupees || 0).positive? }
-      (winners.to_f / exited.size * 100).round(2)
-    end
-
-    def paper_trading_stats
-      exited = exited_paper
-      active = paper.active
-      active_count = active.count
-
-      # Calculate realized PnL from exited positions
-      realized_pnl = total_paper_pnl.to_f
-
-      # Calculate unrealized PnL from active positions (use Redis cache)
-      unrealized_pnl = active.sum do |tracker|
-        tracker.current_pnl_rupees.to_f
-      end
-
-      # Total PnL = realized (exited) + unrealized (active)
-      total_pnl = realized_pnl + unrealized_pnl
-
-      {
-        total_trades: exited.count,
-        active_positions: active_count,
-        total_pnl: total_pnl,
-        realized_pnl: realized_pnl,
-        unrealized_pnl: unrealized_pnl,
-        win_rate: paper_win_rate,
-        average_pnl: exited.empty? ? 0.0 : (realized_pnl / exited.count).to_f,
-        winners: exited.count { |t| (t.last_pnl_rupees || 0).positive? },
-        losers: exited.count { |t| (t.last_pnl_rupees || 0).negative? }
-      }
-    end
-
-    # rubocop:disable Rails/Delegate
-    def clear_orphaned_redis_pnl!
-      Positions::IndexSync.clear_orphaned_redis_pnl!
-    end
-    # rubocop:enable Rails/Delegate
-
-    def should_clear_orphaned?
-      @last_clear ||= ORPHANED_CLEAR_INTERVAL.ago
-      return true if Time.current - @last_clear >= ORPHANED_CLEAR_INTERVAL
-
-      false
-    end
-  end
-
-  # Instance Methods
   def metadata_for_index
     {
       id: id,
@@ -247,38 +141,10 @@ class PositionTracker < ApplicationRecord
     !paper?
   end
 
-  def mark_exited!(exit_price: nil, exited_at: nil, exit_reason: nil)
-    state_machine.transition_to!(:exited)
-
-    # Persist final PnL from Redis cache to DB (force sync, no throttling)
-    persist_final_pnl_from_cache
-
-    exit_price = resolve_exit_price(exit_price)
-    metadata = prepare_exit_metadata(exit_reason)
-
-    update_exit_attributes(exit_price, exited_at, metadata)
-
-    # Record profit/loss in daily limits (after PnL is persisted)
-    record_daily_pnl
-
-    cleanup_exit_caches
-    unsubscribe
-    register_cooldown!
-
-    # Force final sync to DB (bypass throttling) to ensure final values are persisted
-    cache = Live::RedisPnlCache.instance.fetch_pnl(id)
-    if cache && cache[:pnl]
-      Live::RedisPnlCache.instance.sync_pnl_to_database(
-        id,
-        cache[:pnl],
-        cache[:pnl_pct],
-        cache[:hwm_pnl],
-        cache[:hwm_pnl_pct]
-      )
-    end
-
-    broadcast_position_exited
-    self
+  def lock_breakeven!
+    # rubocop:disable Rails/SkipsModelValidations
+    update_columns(breakeven_locked: true, updated_at: Time.current)
+    # rubocop:enable Rails/SkipsModelValidations
   end
 
   def tradable

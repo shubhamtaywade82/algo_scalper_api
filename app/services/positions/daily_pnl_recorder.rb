@@ -23,7 +23,7 @@ module Positions
     attr_reader :tracker
 
     def index_key
-      tracker.meta&.dig('index_key') || tracker.symbol || 'UNKNOWN'
+      tracker.index_key.presence || tracker.symbol || 'UNKNOWN'
     end
 
     def record_profit(daily_limits, pnl_amount)

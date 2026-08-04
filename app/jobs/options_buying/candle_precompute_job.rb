@@ -7,6 +7,13 @@ module OptionsBuying
     queue_as :background
 
     TIMEFRAMES = %w[1 5 15 60 D].freeze
+    LIMITS = {
+      '1' => 500,
+      '5' => 300,
+      '15' => 200,
+      '60' => 100,
+      'D' => 100
+    }.freeze
 
     def perform(*_args)
       return unless market_hours?
@@ -31,34 +38,16 @@ module OptionsBuying
       now >= now.beginning_of_day + 9.hours + 15.minutes && now <= now.beginning_of_day + 15.hours + 30.minutes
     end
 
-    def days_for_timeframe(timeframe)
-      case timeframe.to_s
-      when '1' then 5
-      when '5' then 10
-      when '15' then 20
-      when '60' then 30
-      else 5
-      end
-    end
-
     def cache_candles(index_key, sid, segment, timeframe)
-      instrument = Instrument.find_by_sid_and_segment(security_id: sid.to_s, segment_code: segment)
-      return unless instrument
+      candles = Market::CandleSeries.new(
+        security_id: sid,
+        segment: segment,
+        timeframe: timeframe
+      ).fetch(limit: LIMITS[timeframe])
 
-      raw_candles = if timeframe == 'D'
-                      instrument.historical_ohlc
-                    else
-                      instrument.intraday_ohlc(
-                        interval: timeframe,
-                        days: days_for_timeframe(timeframe)
-                      )
-                    end
-      return if raw_candles.blank?
+      return if candles.blank?
 
-      series = CandleSeries.new(symbol: sid, interval: timeframe)
-      series.load_from_raw(raw_candles)
-
-      StateStore.cache_index_candles(index_key, timeframe, series.to_hash)
+      StateStore.cache_index_candles(index_key, timeframe, candles)
     rescue StandardError => e
       Rails.logger.warn("[CandlePrecomputeJob] #{index_key} #{timeframe}m failed: #{e.class} - #{e.message}")
     end

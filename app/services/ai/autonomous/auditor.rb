@@ -53,10 +53,11 @@ module Ai
       end
 
       def exit_diagnostics
-        reasons = PositionTracker.where('meta->>\'index_key\' = ?', @symbol)
-                                 .where('exited_at >= ?', @start_time)
-                                 .group("meta->>'exit_reason'")
-                                 .count
+        reasons = PositionTracker
+                  .where(index_key: @symbol)
+                  .where(exited_at: @start_time..)
+                  .group(:exit_reason)
+                  .count
 
         {
           reason_breakdown: reasons,
@@ -81,10 +82,11 @@ module Ai
       end
 
       def capture_efficiency
-        analytics = TradeAnalytic.joins(:position_tracker)
-                                 .where(position_trackers: { paper: true })
-                                 .where('position_trackers.meta->>\'index_key\' = ?', @symbol)
-                                 .where('position_trackers.exited_at >= ?', @start_time)
+        analytics = TradeAnalytic
+                    .joins(:position_tracker)
+                    .where(position_trackers: { paper: true })
+                    .where(position_trackers: { index_key: @symbol })
+                    .where(position_trackers: { exited_at: @start_time.. })
 
         return { count: 0 } if analytics.empty?
 
@@ -142,6 +144,13 @@ module Ai
         end
         return 0.0 if available.zero?
         (captured / available).round(2)
+      end
+
+      def exited_scope
+        PositionTracker
+          .where(paper: true, status: :exited)
+          .where(index_key: @symbol)
+          .where(exited_at: @start_time..)
       end
     end
   end

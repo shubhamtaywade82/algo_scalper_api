@@ -93,29 +93,34 @@ module Risk
 
       private
 
-      # Load time limits from config, falling back to defaults
-      def time_limits
-        @time_limits ||= begin
-          cfg = AlgoConfig.fetch.dig(:risk, :time_stop) || {}
-          {
-            scalp: {
-              max_minutes: cfg.dig(:scalp, :max_minutes) || DEFAULT_TIME_LIMITS[:scalp][:max_minutes],
-              max_candles: cfg.dig(:scalp, :max_candles) || DEFAULT_TIME_LIMITS[:scalp][:max_candles]
-            },
-            trend: cfg[:trend]&.transform_keys(&:to_s) || DEFAULT_TIME_LIMITS[:trend]
-          }
-        end
+      def days_to_expiry(tracker)
+        watchable = tracker.watchable
+        return 7 unless watchable.respond_to?(:expiry_date)
+
+        expiry = watchable.expiry_date
+        return 7 unless expiry && expiry > Date.new(2000, 1, 1)
+
+        [(expiry - Date.current).to_i, 0].max
       end
 
-      # Determine trade type from tracker metadata or entry path
-      def determine_trade_type(tracker)
-        # Check entry metadata for trade type
-        entry_metadata = tracker.meta&.dig('entry_metadata') || {}
-        entry_path = entry_metadata['entry_path'] || tracker.meta&.dig('entry_path')
+      def base_time_limit_minutes(context)
+        tracker = context.tracker
+        cfg = context.risk_config[:time_stop] || context.risk_config.dig(:exits, :time_stop) || {}
 
-        # Scalp indicators: 1m timeframe, quick entries
-        if entry_path&.include?('1m') || entry_path&.include?('scalp')
-          return :scalp
+        entry_strategy = tracker.entry_strategy.to_s.downcase
+        entry_path = tracker.entry_path.to_s.downcase
+
+        is_scalp = entry_strategy.include?('scalp') ||
+                   entry_path.include?('scalp') ||
+                   entry_strategy.include?('momentum') ||
+                   (context.risk_config.dig(:options_buying, :mode).to_s == 'intraday_scalper')
+
+        if is_scalp
+          (cfg.dig(:scalp, :max_minutes) || 8).to_f
+        else
+          index_key = (tracker.index_key || tracker.underlying_instrument&.symbol_name || 'NIFTY').to_s.upcase
+          trend_cfg = cfg[:trend] || {}
+          (trend_cfg[index_key] || trend_cfg[index_key.to_sym] || 15).to_f
         end
 
         # Default to trend for longer timeframes

@@ -85,7 +85,7 @@ RSpec.describe Live::ExitEngine do
 
         expect(result[:success]).to be true
         expect(result[:exit_price]).to eq(101.5)
-        expect(result[:reason]).to eq('stop_loss')
+        expect(result[:reason]).to start_with('stop_loss')
         expect(result[:client_order_id]).to be_present
         expect(tracker.reload.exit_requested_at).to be_present
         expect(tracker.exit_sent_at).to be_present
@@ -96,7 +96,7 @@ RSpec.describe Live::ExitEngine do
 
         tracker.reload
         expect(tracker.status).to eq('exited')
-        expect(tracker.meta['exit_reason']).to eq('take_profit')
+        expect(tracker.exit_reason).to start_with('take_profit')
       end
 
       it 'calls router exit_market' do
@@ -111,7 +111,7 @@ RSpec.describe Live::ExitEngine do
 
         tracker.reload
         expect(tracker.status).to eq('exited')
-        expect(tracker.meta['exit_reason']).to eq('paper exit')
+        expect(tracker.exit_reason).to start_with('paper exit')
         expect(result).to include(success: true, reason: 'already_exited')
       end
 
@@ -123,7 +123,7 @@ RSpec.describe Live::ExitEngine do
       end
 
       it 'returns already_exited when tracker is already exited' do
-        tracker.update!(status: 'exited', meta: { 'exit_reason' => 'previous_exit' })
+        tracker.update!(status: 'exited', exit_reason: 'previous_exit')
         result = engine.execute_exit(tracker, 'new_exit')
 
         expect(result[:success]).to be true
@@ -413,6 +413,17 @@ RSpec.describe Live::ExitEngine do
           engine.execute_exit(tracker, 'test reason')
         end.to raise_error(StandardError, 'Lock error')
       end
+    end
+  end
+
+  describe '#normalize_exit_reason_with_final_pnl' do
+    it 'backfills meta when final PnL inputs are incomplete' do
+      tracker.update!(last_pnl_rupees: nil, meta: {})
+
+      engine.send(:normalize_exit_reason_with_final_pnl, tracker, 'MANUAL_HALT')
+
+      tracker.reload
+      expect(tracker.exit_reason).to eq('MANUAL_HALT')
     end
   end
 end

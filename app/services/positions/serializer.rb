@@ -27,8 +27,10 @@ module Positions
     def closed(tracker)
       entry = tracker.entry_price.to_f
       exit_p = tracker.exit_price.to_f
-      meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
-      execution_meta = meta['execution'].is_a?(Hash) ? meta['execution'] : {}
+      qty = tracker.quantity.to_i
+      net_pnl = tracker.last_pnl_rupees.to_f
+
+      execution_meta = tracker.execution.is_a?(Hash) ? tracker.execution : {}
       classification = execution_meta['classified_as']
 
       base_attributes(tracker).merge(
@@ -37,7 +39,8 @@ module Positions
         pnl: net_pnl.round(2),
         pnl_pct: net_pnl_pct(net_pnl, entry, qty),
         hwm_pnl: tracker.high_water_mark_pnl.to_f.round(2),
-        exit_reason: tracker.exit_reason || meta['exit_reason'],
+        exit_reason: tracker.exit_reason,
+        exit_path: tracker.exit_path,
         exit_classification: classification,
         exited_at: tracker.exited_at&.iso8601
       )
@@ -122,6 +125,27 @@ module Positions
         paper: tracker.paper?,
         created_at: tracker.created_at.iso8601
       }
+    end
+
+    def fallback_symbol(tracker)
+      meta_sym = tracker.meta&.dig('symbol')
+      return meta_sym if meta_sym.present?
+
+      tradable = tracker.tradable
+      if tradable.respond_to?(:symbol_name) && tradable.symbol_name.present?
+        return tradable.symbol_name
+      end
+      if tradable.respond_to?(:display_name) && tradable.display_name.present?
+        return tradable.display_name
+      end
+
+      inst = tracker.instrument
+      if inst && inst != tradable
+        return inst.symbol_name if inst.respond_to?(:symbol_name) && inst.symbol_name.present?
+        return inst.display_name if inst.respond_to?(:display_name) && inst.display_name.present?
+      end
+
+      nil
     end
 
     def net_pnl_pct(net_pnl, entry, qty)

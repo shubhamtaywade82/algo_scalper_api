@@ -44,7 +44,7 @@ module Entries
       tracker = create_tracker(response, order_no, fill_price)
       return failure('tracker_creation_failed') unless tracker
 
-      post_ledger_entry!(tracker, response)
+      post_ledger_entry!(tracker, response, fill_price)
       mark_bos_consumed! if @bos_context
       tracker
     end
@@ -59,12 +59,12 @@ module Entries
       Ledger::OrderResponse.extract_order_id(response) || Entries::EntryGuard.extract_order_no(response)
     end
 
-    def post_ledger_entry!(tracker, response)
+    def post_ledger_entry!(tracker, response, fill_price)
       return unless response.is_a?(Hash) ? response[:paper] : Ledger::OrderResponse.paper?(response)
 
       Ledger::EntryPoster.post!(
         tracker: tracker,
-        fill_price: @ltp,
+        fill_price: fill_price,
         quantity: @quantity,
         order_no: tracker.order_no
       )

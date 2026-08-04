@@ -80,6 +80,13 @@ development:
     priority: 8
     description: "Refresh option chain radar during session"
 
+  options_buying_candle_precompute:
+    class: OptionsBuying::CandlePrecomputeJob
+    schedule: every 1 minute during market hours
+    queue_name: background
+    priority: 5
+    description: "Pre-compute index candles for all strategy timeframes (1m, 5m, 15m, 60m, D)"
+
   options_buying_eod_carry:
     class: OptionsBuying::EodCarryJob
     schedule: at 3:10pm every day
@@ -239,11 +246,10 @@ production:
 
   options_buying_candle_precompute:
     class: OptionsBuying::CandlePrecomputeJob
-    schedule: every 1 minute
+    schedule: every 1 minute during market hours
     queue_name: background
     priority: 5
-    description: "Pre-compute index candles for all strategy timeframes (1m, 5m, 15m, 60m, D) — gated internally by market hours"
-
+    description: "Pre-compute index candles for all strategy timeframes (1m, 5m, 15m, 60m, D)"
 
   options_buying_eod_carry:
     class: OptionsBuying::EodCarryJob

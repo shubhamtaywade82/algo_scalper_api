@@ -62,6 +62,93 @@ module Capital
 
       private
 
+      # Returns the available cash for allocation, applying a safety buffer of 1% when
+      # the cash exceeds $100,000. This guards against over‑allocation due to stale
+      # balances or rounding errors.
+      def available_cash
+        cash = fetch_available_cash
+        cash = cash * 0.99 if cash > 100_000
+        cash
+      end
+
+      # Max fraction of available cash for position buy value (percentage path and rupee-based cap).
+      # Order: per-index capital_alloc_pct → sizing.allocation_cap_pct → deployment band alloc_pct.
+      def effective_allocation_pct(index_cfg, capital_available)
+        cfg = index_cfg || {}
+        return cfg[:capital_alloc_pct].to_f if cfg[:capital_alloc_pct].present?
+
+        global_cap = sizing_allocation_cap_pct
+        return global_cap.to_f if global_cap.present?
+
+        deployment_policy(capital_available.to_f)[:alloc_pct]
+      end
+
+      def sizing_allocation_cap_pct
+        AlgoConfig.fetch.dig(:sizing, :allocation_cap_pct)
+      rescue StandardError
+        nil
+      end
+
+      def normalize_multiplier(scale_multiplier)
+        [scale_multiplier.to_i, 1].max
+      end
+
+      def effective_multiplier(scale_multiplier)
+        base_multiplier = normalize_multiplier(scale_multiplier)
+        midday_multiplier = post_1100_multiplier
+        adjusted = base_multiplier
+        adjusted = (adjusted * midday_multiplier).floor if midday_multiplier < 1.0 && post_1100?
+
+        regime_cut = time_regime_size_multiplier
+        adjusted = (adjusted * regime_cut).floor if regime_cut < 1.0
+
+        peak_cut = post_peak_size_cut
+        adjusted = (adjusted * peak_cut).floor if peak_cut < 1.0
+
+        [adjusted, 1].max
+      end
+
+      # Scales position size down when the current market session is theta/IV-decay
+      # dominant. An option buyer's edge is weakest in the Chop/Theta zone (S3) and the
+      # Close/Gamma zone (S4) — risking full size there compounds the wasting-asset
+      # problem. Uses Live::TimeRegimeService's existing session classification (the
+      # same regimes that already gate entries) so sizing and entry logic agree on
+      # which windows are dangerous.
+      def time_regime_size_multiplier
+        return 1.0 unless decay_aware_sizing_enabled?
+
+        regime_service = Live::TimeRegimeService.instance
+        regime = regime_service.current_regime
+
+        case regime
+        when Live::TimeRegimeService::CHOP_DECAY
+          decay_sizing_cfg.fetch(:chop_decay_factor, 0.5).to_f
+        when Live::TimeRegimeService::CLOSE_GAMMA
+          decay_sizing_cfg.fetch(:close_gamma_factor, 0.6).to_f
+        else
+          1.0
+        end
+      rescue StandardError => e
+        Rails.logger.warn("[Allocator] time_regime_size_multiplier error: #{e.message}")
+        1.0
+      end
+
+      def decay_aware_sizing_enabled?
+        decay_sizing_cfg.fetch(:enabled, true) != false
+      end
+
+      def decay_sizing_cfg
+        AlgoConfig.fetch.dig(:capital_allocator, :decay_aware_sizing) || {}
+      rescue StandardError
+        {}
+      end
+
+      # Cuts size when intraday net PnL gives back a meaningful fraction of the
+      # day's peak. Reduces overtrading after the equity curve has rolled over.
+      def post_peak_size_cut
+        cfg = AlgoConfig.fetch.dig(:capital_allocator, :post_peak_size_cut) || {}
+        return 1.0 if cfg[:enabled] == false
+
         min_peak    = cfg[:min_peak].to_f
         min_peak    = 2_000.0 unless min_peak.positive?
         warn_ratio  = cfg[:giveback_ratio].to_f

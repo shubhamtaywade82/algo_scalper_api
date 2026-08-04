@@ -7,6 +7,7 @@ class PreMarketIvBaselineJob < ApplicationJob
   queue_as :background
 
   MAX_WEEKS = 6
+  MAX_DAYS  = 31
 
   def perform
     IndexConfigLoader.load_indices.each do |cfg|
@@ -42,7 +43,14 @@ class PreMarketIvBaselineJob < ApplicationJob
     return [] unless sid
 
     to_date   = Time.zone.today
-    from_date = to_date - (MAX_WEEKS * 7).days
+    preferred  = to_date - (MAX_WEEKS * 7).days
+    from_date  = [preferred, to_date - MAX_DAYS.days].max
+    if from_date > preferred
+      Rails.logger.info(
+        "[PreMarketIvBaselineJob] #{index_key}: clamped IV history window from #{preferred} to #{from_date} " \
+        "(#{((to_date - from_date).to_i)} days) to honor DhanHQ 31-day limit"
+      )
+    end
 
     ce_samples = fetch_daily_iv_series(sid, segment, from_date, to_date, 'CALL')
     pe_samples = fetch_daily_iv_series(sid, segment, from_date, to_date, 'PUT')

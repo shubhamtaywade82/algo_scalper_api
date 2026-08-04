@@ -51,20 +51,17 @@ module Risk
       private
 
       def entry_premium_for(tracker)
-        entry_price = tracker.respond_to?(:entry_price) ? tracker.entry_price : nil
-        entry_price = tracker.meta&.dig('entry_price') if entry_price.nil? || entry_price.zero?
-        entry_price
+        tracker.entry_price if tracker.respond_to?(:entry_price)
       rescue StandardError
         nil
       end
 
       def current_premium_for(tracker)
-        ltp = if tracker.respond_to?(:ltp)
-                tracker.ltp
-              elsif tracker.respond_to?(:current_price)
-                tracker.current_price
-              end
-        ltp || tracker.meta&.dig('current_price')
+        if tracker.respond_to?(:ltp)
+          tracker.ltp
+        elsif tracker.respond_to?(:current_price)
+          tracker.current_price
+        end
       rescue StandardError
         nil
       end

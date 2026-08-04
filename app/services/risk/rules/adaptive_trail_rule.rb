@@ -99,6 +99,7 @@ module Risk
         return false unless adaptive_config.fetch(:supertrend_flip_exit, true)
 
         direction = context.tracker.direction.to_s
+        series = underlying_series(context, '1')
         return false unless direction.present? && series&.candles&.any?
 
         st_cfg = AlgoConfig.fetch.dig(:signals, :supertrend) || {}
@@ -115,7 +116,7 @@ module Risk
         return false unless needed.positive?
 
         direction = context.tracker.direction.to_s
-        candles = series&.candles&.last(needed)
+        candles = underlying_series(context, '1')&.candles&.last(needed)
         return false unless direction.present? && candles&.size == needed
 
         long_trade?(direction) ? candles.all?(&:bearish?) : candles.all?(&:bullish?)
@@ -129,7 +130,7 @@ module Risk
       end
 
       def underlying_series(context, interval)
-        index_key = context.tracker.meta&.dig('index_key')
+        index_key = context.tracker.index_key
         instrument = context.tracker.instrument || context.tracker.watchable
         return instrument&.candle_series(interval: interval) unless index_key
 

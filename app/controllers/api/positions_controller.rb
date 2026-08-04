@@ -45,20 +45,18 @@ module Api
                      .map { |tracker| serialize_closed(tracker) }
     end
 
-    def serialize_open(tracker)
-      cache = Live::RedisPnlCache.instance.fetch_pnl(tracker.id) || {}
-      ltp = (cache[:ltp] || tracker.avg_price.to_f).to_f
-      entry = tracker.entry_price.to_f
-
-      base_attributes(tracker).merge(
-        entry_price: entry.round(2),
-        ltp: ltp.round(2),
-        pnl: (cache[:pnl] || tracker.last_pnl_rupees.to_f).round(2),
-        pnl_pct: pnl_pct(entry, ltp),
-        hwm_pnl: (cache[:hwm_pnl] || tracker.high_water_mark_pnl.to_f).round(2),
-        entry_strategy: tracker.entry_strategy,
-        time_in_position_sec: cache[:time_in_position_sec]
-      )
+    # Unique trade dates, newest first. Capped at 90 days for the dropdown.
+    def available_dates
+      PositionTracker
+        .exited
+        .where.not(exited_at: nil)
+        .group(Arel.sql("DATE(exited_at)"))
+        .order(Arel.sql("DATE(exited_at) DESC"))
+        .limit(90)
+        .pluck(Arel.sql("DATE(exited_at)"))
+        .map(&:to_s)
+    rescue StandardError
+      [Positions::IstScope.today_start.to_date.to_s]
     end
 
     def serialize_closed(tracker)
@@ -76,23 +74,15 @@ module Api
       )
     end
 
-    def base_attributes(tracker)
-      {
-        id: tracker.id,
-        order_no: tracker.order_no,
-        symbol: tracker.symbol,
-        side: tracker.side,
-        quantity: tracker.quantity.to_i,
-        index_key: tracker.index_key || tracker.meta&.dig('index_key'),
-        direction: tracker.direction || tracker.meta&.dig('direction'),
-        segment: tracker.segment,
-        paper: tracker.paper?,
-        created_at: tracker.created_at.iso8601
-      }
+    def filter_date
+      @filter_date ||= Positions::IstScope.today_start.to_date
     end
 
-    def pnl_pct(entry, current)
-      return 0.0 unless entry.positive? && current.positive?
+    def assign_filter_date!
+      if params[:date].blank?
+        @filter_date = Positions::IstScope.today_start.to_date
+        return
+      end
 
       (((current - entry) / entry) * 100).round(2)
     end

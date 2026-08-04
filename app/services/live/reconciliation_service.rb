@@ -150,6 +150,36 @@ module Live
       Rails.logger.info("[ReconciliationService] Fixed tracker #{tracker.id}: #{fixes_applied.join(', ')}")
     end
 
+    def stuck_in_exit?(tracker)
+      return false unless tracker.active?
+      return false if tracker.exit_requested_at.blank?
+
+      # If requested more than 30 seconds ago but still active
+      (Time.current - tracker.exit_requested_at) > 30.seconds
+    end
+
+    def fix_stuck_exit(tracker)
+      Rails.logger.warn("[ReconciliationService] Auto-correcting stuck exit for #{tracker.order_no}")
+
+      # Try the standard ExitEngine path first to ensure proper routing
+      supervisor = Rails.application.config.x.trading_supervisor
+      exit_engine = if supervisor.respond_to?(:exit_manager)
+                      supervisor.exit_manager
+                    elsif supervisor.is_a?(Hash)
+                      supervisor.dig(:exit_manager)
+                    end
+
+      if exit_engine
+        # The engine will check stale_exit_intent? and allow a retry
+        exit_engine.execute_exit(tracker, tracker.exit_reason.presence || 'AUTO_RECONCILED_EXIT')
+      else
+        # Fallback if supervisor/engine isn't available
+        tracker.mark_exited!(exit_reason: tracker.exit_reason.presence || 'AUTO_RECONCILED_EXIT')
+      end
+    rescue StandardError => e
+      Rails.logger.error("[ReconciliationService] Failed to auto-correct stuck exit for #{tracker.order_no}: #{e.class} - #{e.message}")
+    end
+
     def subscribed?(tracker, hub)
       return false unless hub.running?
 

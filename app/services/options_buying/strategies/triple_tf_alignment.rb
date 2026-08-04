@@ -58,10 +58,8 @@ module OptionsBuying
       end
 
       def determine_daily_trend
-        candles = Market::CandleSeries.new(
-          security_id: index_sid, segment: 'IDX_I', timeframe: 'D'
-        ).fetch(limit: daily_ma_period + 20)
-        return nil if candles.size < daily_ma_period
+        candles = StateStore.index_candles(@index_key, 'D')
+        return nil if candles.blank? || candles.size < daily_ma_period
 
         closes = candles.map { |c| c[:close].to_f }
         ma50 = calculate_sma(closes, 50)
@@ -77,10 +75,8 @@ module OptionsBuying
       end
 
       def determine_hourly_trend
-        candles = Market::CandleSeries.new(
-          security_id: index_sid, segment: 'IDX_I', timeframe: '60'
-        ).fetch(limit: hourly_ema_period * 2)
-        return nil if candles.size < hourly_ema_period
+        candles = StateStore.index_candles(@index_key, '60')
+        return nil if candles.blank? || candles.size < hourly_ema_period
 
         closes = candles.map { |c| c[:close].to_f }
         ema20 = calculate_ema(closes, 20)
@@ -96,10 +92,8 @@ module OptionsBuying
 
       def evaluate_pullback_setup(spot_ltp, trend)
         # Pullback to 20EMA or VWAP on 15m
-        candles = Market::CandleSeries.new(
-          security_id: index_sid, segment: 'IDX_I', timeframe: '15'
-        ).fetch(limit: 50)
-        return nil if candles.size < 20
+        candles = StateStore.index_candles(@index_key, '15')
+        return nil if candles.blank? || candles.size < 20
 
         closes = candles.map { |c| c[:close].to_f }
         ema20 = calculate_ema(closes, 20)

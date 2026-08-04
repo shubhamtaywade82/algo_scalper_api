@@ -22,16 +22,34 @@ module Orders
     def place_market(side:, segment:, security_id:, qty:, meta: {})
       order_no = meta[:client_order_id] || "PAPER-#{SecureRandom.hex(3)}"
 
-      # Simulate broker ack only; domain services own tracker persistence.
-      { success: true, order_id: order_no, paper: true }
+      tick = Live::TickQuery.for_security(segment: segment, security_id: security_id.to_s)
+      fill_price = if tick&.bid.to_f.positive? && tick&.ask.to_f.positive?
+                     side.to_s.downcase == 'buy' ? tick.ask.to_f : tick.bid.to_f
+                   else
+                     (meta[:ltp] || meta[:price] || 0).to_f
+                   end
+
+      {
+        success: true,
+        order_id: order_no,
+        paper: true,
+        status: :accepted,
+        fill_price: fill_price
+      }
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] place_market failed for #{segment}-#{security_id}: #{e.class} - #{e.message}")
       { success: false, error: e.message, paper: true }
     end
 
     def wallet_snapshot
-      balance = AlgoConfig.fetch.dig(:paper_trading, :balance) || 100_000
-      { cash: balance, equity: balance, mtm: 0, exposure: 0 }
+      if ledger_wallet_enabled?
+        ledger = Ledger::WalletReader.snapshot(mode: :paper)
+        return ledger if ledger[:utilized] >= 0
+
+        Rails.logger.warn("[GatewayPaper] ledger wallet state invalid (utilized=#{ledger[:utilized]}), falling back to legacy")
+      end
+
+      legacy_wallet_snapshot
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] wallet_snapshot failed: #{e.class} - #{e.message}")
       { cash: 100_000, equity: 100_000, mtm: 0, exposure: 0 } # Return default on error

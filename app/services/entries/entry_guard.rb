@@ -303,29 +303,9 @@ module Entries
           return false
         end
 
-          # 2. Order Execution
-          execution_result = OrderExecutionService.call(context)
-
-          if execution_result.is_a?(Hash) && execution_result[:error]
-            signal&.record_entry_outcome('blocked', execution_result[:error])
-            next false
-          end
-
-          # Success - Tracker created
-          signal&.record_entry_outcome('entered')
-          validate_entry_price!(execution_result, context)
-
-          # Record trade in DailyLimits
-          begin
-            Live::DailyLimits.new.record_trade(index_key: index_cfg[:key])
-          rescue StandardError => e
-            Rails.logger.error("[EntryGuard] Failed to record trade in DailyLimits: #{e.class} - #{e.message}")
-          end
-
-          true
-        end
-
-        Rails.logger.debug { "[EntryGuard] Exposure check passed for #{instrument.symbol_name}: #{current_count} < #{max_allowed}" }
+        # Success - Tracker created
+        signal&.record_entry_outcome('entered')
+        validate_entry_price!(execution_result, context)
         true
       end
 
@@ -361,66 +341,37 @@ module Entries
           meta_hash = build_base_meta(index_cfg: index_cfg, pick: pick, direction: bos_context&.dig(:direction))
           apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
-          entry = BigDecimal(tracker.entry_price.to_s)
-          exit_price = BigDecimal(ltp.to_s)
-          qty = tracker.quantity.to_i
-          gross_pnl = (exit_price - entry) * qty
+        snapshot = meta_hash.delete('config_snapshot')
+        version = meta_hash.delete('config_version') || {}
+        entry_at = meta_hash.delete('entry_at')
 
-          # Deduct broker fees (₹20 per order, ₹40 per trade if exited)
-          pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: tracker.exited?)
-          pnl_pct = ((exit_price - entry) / entry * 100).round(2)
+        tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
 
-          tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
+        tracker = PositionTracker.create!(
+          order_no: order_no,
+          instrument: instrument,
+          watchable: instrument,
+          security_id: pick[:security_id],
+          segment: pick[:segment] || index_cfg[:segment],
+          side: side,
+          quantity: quantity,
+          entry_price: ltp,
+          avg_price: ltp,
+          symbol: pick[:symbol],
+          status: :active,
+          paper: false,
+          **tracker_attrs,
+          meta: legacy_meta
+        )
 
-          tracker = PositionTracker.create!(
-            order_no: order_no,
-            instrument: instrument,
-            watchable: instrument,
-            security_id: pick[:security_id],
-            segment: pick[:segment] || index_cfg[:segment],
-            side: side,
-            quantity: quantity,
-            entry_price: ltp,
-            avg_price: ltp,
-            symbol: pick[:symbol],
-            status: :active,
-            paper: false,
-            **tracker_attrs,
-            meta: legacy_meta
-          )
+        tracker.create_position_meta_snapshot!(
+          config_version_hash: version['hash'].to_s,
+          config_change_log_id: version['change_log_id'],
+          config_snapshot: snapshot,
+          entry_at: entry_at
+        )
 
-          tracker.create_position_meta_snapshot!(
-            config_version_hash: version['hash'].to_s,
-            config_change_log_id: version['change_log_id'],
-            config_snapshot: snapshot,
-            entry_at: entry_at
-          )
-
-        # Fallback: Calculate from tick data if Redis PnL cache is empty
-        segment = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
-        security_id = tracker.security_id
-        return unless segment.present? && security_id.present?
-
-        # Try Redis tick cache
-        tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
-        if tick
-          ltp = tick.ltp
-          entry = BigDecimal(tracker.entry_price.to_s)
-          qty = tracker.quantity.to_i
-          pnl = (ltp - entry) * qty
-          # Calculate pnl_pct as decimal (0.0573 for 5.73%) for consistent storage (matches Redis format)
-          pnl_pct = entry.positive? ? ((ltp - entry) / entry) : nil
-
-          hwm = tracker.high_water_mark_pnl || BigDecimal(0)
-          hwm = [hwm, pnl].max
-
-          tracker.update!(
-            last_pnl_rupees: pnl,
-            last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil,
-            high_water_mark_pnl: hwm
-          )
-          Rails.logger.debug { "[EntryGuard] Calculated PnL from tick data for #{tracker.order_no}: PnL=₹#{pnl.round(2)}" }
-        end
+        tracker
       end
 
       def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:, order_no:, entry_metadata:, bos_context:)
@@ -428,35 +379,35 @@ module Entries
           meta_hash = build_base_meta(index_cfg: index_cfg, pick: pick, direction: bos_context&.dig(:direction))
           apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
-        # Try WebSocket cache first
-        tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
-        return tick.ltp if tick
+        snapshot = meta_hash.delete('config_snapshot')
+        version = meta_hash.delete('config_version') || {}
+        entry_at = meta_hash.delete('entry_at')
 
-          tracker = PositionTracker.create!(
-            order_no: order_no,
-            instrument: instrument,
-            watchable: instrument,
-            security_id: pick[:security_id],
-            segment: pick[:segment] || index_cfg[:segment],
-            side: side,
-            quantity: quantity,
-            entry_price: ltp,
-            avg_price: ltp,
-            symbol: pick[:symbol],
-            status: :active,
-            paper: true,
-            **tracker_attrs,
-            meta: legacy_meta
-          )
-          tracker.create_position_meta_snapshot!(
-            config_version_hash: version['hash'].to_s,
-            config_change_log_id: version['change_log_id'],
-            config_snapshot: snapshot,
-            entry_at: entry_at
-          )
+        tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
 
-          tracker
-        end
+        tracker = PositionTracker.create!(
+          order_no: order_no,
+          instrument: instrument,
+          watchable: instrument,
+          security_id: pick[:security_id],
+          segment: pick[:segment] || index_cfg[:segment],
+          side: side,
+          quantity: quantity,
+          entry_price: ltp,
+          avg_price: ltp,
+          symbol: pick[:symbol],
+          status: :active,
+          paper: true,
+          **tracker_attrs,
+          meta: legacy_meta
+        )
+        tracker.create_position_meta_snapshot!(
+          config_version_hash: version['hash'].to_s,
+          config_change_log_id: version['change_log_id'],
+          config_snapshot: snapshot
+        )
+
+        tracker
       end
 
       def build_client_order_id(index_cfg:, pick:)
@@ -643,113 +594,6 @@ module Entries
         )
       rescue StandardError => e
         Rails.logger.warn("[EntryGuard] validate_entry_price! failed: #{e.class} - #{e.message}")
-      end
-
-      # Check if time regime allows entry
-      def time_regime_allows_entry?(index_cfg:, pick:, direction:)
-        return true unless time_regime_rules_enabled?
-
-        regime_service = Live::TimeRegimeService.instance
-        regime = regime_service.current_regime
-
-        # Global override: No new trades after 14:50 (unless exceptional conditions)
-        unless regime_service.allow_new_trades?
-          Rails.logger.info("[EntryGuard] Entry blocked: No new trades allowed after #{Live::TimeRegimeService::NO_NEW_TRADES_AFTER}")
-          return false
-        end
-
-        # Check if entries are allowed in current regime
-        unless regime_service.allow_entries?(regime)
-          Rails.logger.info("[EntryGuard] Entry blocked: Regime #{regime} does not allow entries")
-          return false
-        end
-
-        # Check minimum ADX requirement for regime
-        min_adx = regime_service.min_adx_requirement(regime)
-        if min_adx > 15.0 # Only check if stricter than default
-          # Get ADX from signal metadata or calculate
-          # For now, skip ADX check here (should be done in signal generation)
-          # This is a safety net - signal generation should already filter by ADX
-        end
-
-        # Special rules for CHOP_DECAY regime (very strict)
-        if regime == Live::TimeRegimeService::CHOP_DECAY
-          # Allow ONLY if exceptional conditions (ADX ≥ 22, expansion present, large impulse)
-          # This should be checked in signal generation, but we log here
-          Rails.logger.info('[EntryGuard] Entry in CHOP_DECAY regime - ensure exceptional conditions met')
-        end
-
-        # Special rules for CLOSE_GAMMA regime
-        if regime == Live::TimeRegimeService::CLOSE_GAMMA
-          # Use IST timezone explicitly
-          current_time = Live::TimeRegimeService.instance.current_ist_time.strftime('%H:%M')
-          if current_time >= '14:45'
-            # No fresh breakouts after 14:45 IST - only continuation moves
-            # This should be checked in signal generation
-            Rails.logger.info('[EntryGuard] Entry after 14:45 IST - ensure continuation move only')
-          end
-        end
-
-        true
-      rescue StandardError => e
-        Rails.logger.error("[EntryGuard] time_regime_allows_entry? error: #{e.class} - #{e.message}")
-        true # Fail-safe: allow entry if check fails
-      end
-
-      def time_regime_rules_enabled?
-        AlgoConfig.fetch.dig(:risk, :time_regimes, :enabled) == true
-      rescue StandardError
-        false
-      end
-
-      # Check if daily loss/profit limits allow entry (NOT trade frequency - we don't cap trade count)
-      def daily_limits_allow_entry?(index_cfg:)
-        return true unless daily_limits_enabled?
-
-        daily_limits = Live::DailyLimits.new
-        result = daily_limits.can_trade?(index_key: index_cfg[:key])
-
-        unless result[:allowed]
-          reason = result[:reason]
-          # Only block on loss/profit limits, NOT trade frequency limits
-          case reason
-          when 'trade_frequency_limit_exceeded', 'global_trade_frequency_limit_exceeded'
-            # Ignore trade frequency limits - we don't cap trade count
-            return true
-          when 'daily_loss_limit_exceeded'
-            Rails.logger.warn(
-              "[EntryGuard] Daily loss limit exceeded for #{index_cfg[:key]}: " \
-              "₹#{result[:daily_loss].round(2)}/₹#{result[:max_daily_loss]}"
-            )
-            return false
-          when 'global_daily_loss_limit_exceeded'
-            Rails.logger.warn(
-              '[EntryGuard] Global daily loss limit exceeded: ' \
-              "₹#{result[:global_daily_loss].round(2)}/₹#{result[:max_global_loss]}"
-            )
-            return false
-          when 'daily_profit_target_reached'
-            Rails.logger.info(
-              '[EntryGuard] Daily profit target reached: ' \
-              "₹#{result[:global_daily_profit].round(2)}/₹#{result[:max_daily_profit]}"
-            )
-            return false
-          end
-          return false
-        end
-
-        true
-      rescue StandardError => e
-        Rails.logger.error("[EntryGuard] daily_limits_allow_entry? error: #{e.class} - #{e.message}")
-        true # Fail-safe: allow entry if check fails
-      end
-
-      def daily_limits_enabled?
-        config = AlgoConfig.fetch[:risk] || {}
-        daily_limits_cfg = config[:daily_limits] || {}
-        daily_limits_cfg[:enable] != false
-      rescue StandardError
-        true # Default to enabled
       end
 
       private
@@ -1129,6 +973,22 @@ module Entries
           meta_hash[:entry_confirmation_timeframe] = entry_metadata[:confirmation_timeframe]
         end
         meta_hash[:entry_validation_mode] ||= entry_metadata[:validation_mode]
+      end
+
+      def split_meta_hash(meta_hash)
+        promoted = {}
+        legacy = {}
+
+        meta_hash.each do |key, val|
+          str_key = key.to_s
+          if PositionTracker::PROMOTED_META_KEYS.include?(str_key)
+            promoted[str_key] = val
+          else
+            legacy[key] = val
+          end
+        end
+
+        [promoted, legacy]
       end
     end
   end

@@ -217,14 +217,10 @@ RSpec.describe PositionTracker do
   end
 
   describe '#lock_breakeven!' do
-    it 'updates meta through Positions::MetaUpdater' do
-      tracker = create(:position_tracker, segment: 'NSE_FNO', meta: {})
-      updater = instance_double(Positions::MetaUpdater, update!: true)
-      allow(Positions::MetaUpdater).to receive(:new).with(tracker: tracker).and_return(updater)
+    it 'sets breakeven_locked column directly' do
+      tracker = create(:position_tracker, segment: 'NSE_FNO', breakeven_locked: false)
 
-      tracker.lock_breakeven!
-
-      expect(updater).to have_received(:update!)
+      expect { tracker.lock_breakeven! }.to change { tracker.reload.breakeven_locked }.to(true)
     end
   end
 end
