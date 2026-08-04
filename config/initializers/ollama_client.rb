@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'ollama_client'
+
 # Configure the ollama-client gem defaults. Runtime target (local vs cloud) is chosen from
 # +ai.ollama_use_cloud+ in AlgoConfig (dashboard Settings → AI); see Services::Ai::OllamaClient.
 #

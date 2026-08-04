@@ -1,7 +1,7 @@
 GEM
   remote: https://rubygems.org/
   specs:
-    DhanHQ (2.6.2)
+    DhanHQ (3.0.0)
       activesupport
       base64
       bindata
@@ -605,7 +605,7 @@ PLATFORMS
   x86_64-linux-musl
 
 DEPENDENCIES
-  DhanHQ (= 2.6.2)
+  DhanHQ (~> 3.0)
   activerecord-import
   annotaterb
   bootsnap
