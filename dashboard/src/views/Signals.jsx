@@ -530,10 +530,6 @@ export default function Signals() {
       <div class="w-full lg:w-1/4">
         <SignalsSidebar />
       </div>
-      </div>
-      <div class="w-full lg:w-1/4">
-        <SignalsSidebar />
-      </div>
     </div>
   )
 }

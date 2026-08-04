@@ -95,6 +95,18 @@ export function useDashboard(onPositionChange) {
     setLastUpdated(data.timestamp || new Date().toISOString())
   }
 
+  const fetchInitial = async () => {
+    try {
+      const res = await fetch('/api/dashboard', { headers: { 'Accept': 'application/json' } })
+      if (res.ok) {
+        const data = await res.json()
+        applyData(data)
+      }
+    } catch (e) {
+      console.error('[useDashboard] fetchInitial error:', e)
+    }
+  }
+
   onMount(() => {
     fetchInitial()
     pollTimer = setInterval(fetchInitial, POLL_INTERVAL_MS)
@@ -143,6 +155,16 @@ export function useDashboard(onPositionChange) {
 
   return {
     mode, connected, isStale, stats, balance, indices, subscribedIndices, system,
-    publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, config
+    publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, config,
+    marketStatus: () => {
+      const sys = system()
+      if (sys?.market_status) return sys.market_status
+      const now = new Date()
+      const hour = now.getHours()
+      const minute = now.getMinutes()
+      const currentTime = hour * 60 + minute
+      // Market hours: 9:15 - 15:30 IST
+      return (currentTime >= 9 * 60 + 15 && currentTime <= 15 * 60 + 30) ? 'open' : 'closed'
+    }
   }
 }

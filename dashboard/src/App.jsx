@@ -72,7 +72,8 @@ function AppShell(props) {
     lastUpdated, recentSignals, config,
     open, closed,
     positionsConnected, positionsStale, positionsLastMessageAt,
-    fetchPositions
+    fetchPositions,
+    marketStatus
   }
 
   return (
