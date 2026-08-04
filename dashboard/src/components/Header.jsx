@@ -272,7 +272,7 @@ export default function Header(props) {
             })()}
           </div>
         </div>
-      </div>
+      </header>
 
       <nav class="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 bg-white/[0.03] p-1 rounded-xl border border-white/5 backdrop-blur-md">
         <A href="/" end class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkActive} inactiveClass="">
@@ -322,6 +322,6 @@ export default function Header(props) {
           <span class="font-black tracking-[0.1em]">{props.connected ? 'CONNECTED' : 'DISCONNECTED'}</span>
         </div>
       </div>
-    </header>
+    </div>
   )
 }

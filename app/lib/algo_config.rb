@@ -4,6 +4,44 @@ class AlgoConfig
   CACHE_TTL = 30 # seconds
   PROFILES_DIR = 'config/profiles'
 
+  # Utility module for deep merging hashes with array handling
+  module MergeUtil
+    # Deep merge two hashes, handling arrays of hashes by matching on :key
+    def self.deep_merge_hashes_with_arrays(base, overrides)
+      merged = base.dup
+
+      overrides.each do |key, val|
+        if base[key].is_a?(Hash) && val.is_a?(Hash)
+          merged[key] = deep_merge_hashes_with_arrays(base[key], val)
+        elsif base[key].is_a?(Array) && val.is_a?(Array)
+          merged[key] = merge_arrays(base[key], val)
+        else
+          merged[key] = val
+        end
+      end
+
+      merged
+    end
+
+    # Merge two arrays of hashes by matching on :key attribute
+    def self.merge_arrays(base_arr, override_arr)
+      return override_arr unless base_arr.is_a?(Array) && override_arr.is_a?(Array)
+
+      merged = base_arr.dup
+      override_arr.each do |override_item|
+        next unless override_item.is_a?(Hash) && override_item[:key]
+
+        base_idx = merged.find_index { |item| item.is_a?(Hash) && item[:key] == override_item[:key] }
+        if base_idx
+          merged[base_idx] = deep_merge_hashes_with_arrays(merged[base_idx], override_item)
+        else
+          merged << override_item
+        end
+      end
+      merged
+    end
+  end
+
   class << self
     def fetch
       if @cached_config && @cache_expires_at && Time.current < @cache_expires_at
@@ -63,25 +101,9 @@ class AlgoConfig
         return config
       end
 
-      merged = deep_merge_hashes_with_arrays(config, profile)
+      merged = MergeUtil.deep_merge_hashes_with_arrays(config, profile)
       merged[:run_mode] = mode
       merged
-    end
-
-    # Custom deep merge to handle arrays of hashes (like the indices array where we match by :key)
-    def deep_merge_hashes_with_arrays(base, overrides)
-      merged = base.dup
-
-      overrides.each do |key, val|
-        if base[key].is_a?(Hash) && val.is_a?(Hash)
-          merged[key] = deep_merge_hashes_with_arrays(base[key], val)
-        elsif base[key].is_a?(Array) && val.is_a?(Array)
-          # Try to merge array of hashes by a common identifier, primarily :key
-          merged[key] = merge_arrays(base[key], val)
-        else
-          merged[key] = val
-        end
-      end
     end
 
     def deep_merge_hashes_with_arrays(base, overrides)

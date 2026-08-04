@@ -31,7 +31,8 @@ module Core
       candle_closed: :candle_closed,
       strategy_signal: :strategy_signal,
       strategy_error: :strategy_error,
-      strategy_status_change: :strategy_status_change
+      strategy_status_change: :strategy_status_change,
+      pnl_update: :pnl_update
     }.freeze
 
     def initialize
