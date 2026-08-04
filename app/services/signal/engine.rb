@@ -1957,8 +1957,18 @@ module Signal
 
         if expiry_blocked
           Rails.logger.info("[Signal] ExpiryModel BLOCKED #{index_cfg[:key]}: Midday decay period")
-          record_signal_skip(signal, 'expiry midday decay')
+          record_signal_skip(
+            signal,
+            'expiry_midday_decay: Midday decay period blocked entry for this expiry',
+            stage: 'expiry_model',
+            code: 'expiry_midday_decay'
+          )
           Signal::StateTracker.reset(index_cfg[:key])
+          return nil
+        end
+
+        if options_analysis_gate_blocks_entry?(signal: signal, index_cfg: index_cfg,
+                                               options_analysis: options_analysis)
           return nil
         end
 
@@ -1971,30 +1981,68 @@ module Signal
 
         unless expected_spot_move&.positive?
           Rails.logger.info("[Signal] Missing expected_spot_move (ATR) -> BLOCK #{index_cfg[:key]}")
-          record_signal_skip(signal, 'missing ATR')
+          record_signal_skip(
+            signal,
+            'missing_atr: Expected spot move (14-period ATR) missing or non-positive',
+            stage: 'strike_selection',
+            code: 'missing_atr'
+          )
           Signal::StateTracker.reset(index_cfg[:key])
           return nil
         end
 
-        execution_permission = effective_execution_permission(permission)
-
-        picks = Options::ChainAnalyzer.pick_strikes_with_qualification(
+        strike_result = Options::ChainAnalyzer.pick_strikes_with_qualification(
           index_cfg: index_cfg,
           direction: final_direction,
-          permission: execution_permission,
+          permission: permission,
           expected_spot_move: expected_spot_move,
           momentum_score: momentum_score
         )
 
-        if picks.blank?
-          Rails.logger.warn("[Signal] No suitable option strikes found for #{index_cfg[:key]} #{final_direction}")
-          record_signal_skip(signal, 'no suitable strikes')
+        if strike_result.picks.blank?
+          skip_reason = strike_result.failure_reason.presence || 'No suitable option strikes'
+          Rails.logger.warn("[Signal] No suitable option strikes for #{index_cfg[:key]} #{final_direction}: #{skip_reason}")
+          record_signal_skip(
+            signal,
+            skip_reason,
+            stage: 'strike_selection',
+            code: strike_result.failure_code
+          )
+          ActionCable.server.broadcast("dashboard", {
+            type: "toast",
+            level: "warning",
+            title: "Options Strike Blocked",
+            message: "#{index_cfg[:key]} #{final_direction}: #{skip_reason}"
+          })
           return nil
         end
 
+        picks = strike_result.picks
         Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.pluck(:symbol).join(', ')}")
 
-        market_context_extra, mc_gate_blocked = evaluate_market_context_for_entry(
+        signals_cfg = AlgoConfig.fetch[:signals] || {}
+        if signals_cfg.fetch(:enable_option_premium_momentum_gate, true)
+          premium_validation = Signal::MomentumValidator.validate_option_pick(
+            index_key: index_cfg[:key],
+            pick: picks.first,
+            direction: final_direction
+          )
+          unless premium_validation[:confirms]
+            Rails.logger.info(
+              "[Signal] Option premium momentum BLOCKED #{index_cfg[:key]}: #{premium_validation[:reason]}"
+            )
+            record_signal_skip(
+              signal,
+              "option_premium_momentum: #{premium_validation[:reason]}",
+              stage: 'premium_momentum',
+              code: 'option_premium_momentum'
+            )
+            Signal::StateTracker.reset(index_cfg[:key])
+            return nil
+          end
+        end
+
+        market_context_extra, mc_gate_blocked, mc_block_detail = evaluate_market_context_for_entry(
           index_cfg: index_cfg,
           primary_series: primary_series,
           expiry_date: expiry_date,
@@ -2005,12 +2053,17 @@ module Signal
         )
 
         if mc_gate_blocked
-          record_signal_skip(signal, 'market context gate')
+          record_signal_skip(
+            signal,
+            "market_context_gate: #{mc_block_detail.presence || 'blocked'}",
+            stage: 'market_context',
+            code: 'market_permission_gate'
+          )
           Signal::StateTracker.reset(index_cfg[:key])
           return nil
         end
 
-        { picks: picks, market_context_extra: market_context_extra, execution_permission: execution_permission }
+        { picks: picks, market_context_extra: market_context_extra, execution_permission: permission }
       end
 
       def trigger_entry_flow(index_cfg:, instrument:, signal:, picks:, final_direction:,
