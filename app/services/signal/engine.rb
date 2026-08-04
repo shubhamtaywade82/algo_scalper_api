@@ -325,6 +325,20 @@ module Signal
         )
         # ===== END STRIKE QUALIFICATION LAYER =====
 
+        unless expected_spot_move&.positive?
+          Rails.logger.info("[Signal] Missing expected_spot_move (ATR) -> BLOCK #{index_cfg[:key]}")
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
+
+        picks = Options::ChainAnalyzer.pick_strikes_with_qualification(
+          index_cfg: index_cfg,
+          direction: final_direction,
+          permission: permission,
+          expected_spot_move: expected_spot_move
+        )
+        # ===== END STRIKE QUALIFICATION LAYER =====
+
         entered = trigger_entry_flow(
           index_cfg: index_cfg,
           signal: signal,
