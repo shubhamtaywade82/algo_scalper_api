@@ -64,7 +64,7 @@ module Trading
     def compute_segment_stats(index_key:, regime:)
       positions = position_scope
                   .where(status: :exited)
-                  .by_index_key(index_key)
+                  .where("meta->>'index_key' = ?", index_key)
                   .where(exited_at: lookback_days.days.ago..Time.current)
                   .where.not(last_pnl_rupees: nil)
 

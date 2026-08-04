@@ -46,6 +46,8 @@ module Entries
         Guards::TradingTimeRestrictionGuard,
         Guards::EdgeFailureGuard,
         Guards::LossStreakGuard,
+        Guards::SegmentExpectancyGuard,
+        Guards::StrikeCooldownGuard,
         Guards::DailyLimitsGuard,
         Guards::IndexTradeLimitGuard,
         Guards::MaxConcurrentGuard,

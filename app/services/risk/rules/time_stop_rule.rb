@@ -12,33 +12,37 @@ module Risk
         return skip_result unless context.active?
 
         tracker = context.tracker
-        elapsed_seconds = context.current_time - tracker.created_at
+        return skip_result unless tracker.created_at
 
-        # Resolve DTE-scaled time limit
-        dte = days_to_expiry(tracker)
-        base_limit_minutes = base_time_limit_minutes(context)
+        # Determine trade type (scalp vs trend)
+        trade_type = determine_trade_type(tracker)
+        time_limit = get_time_limit(tracker, trade_type)
 
-        # Scale allowed hold time based on DTE: BaseLimit * (DTE / 7.0)
-        scale_factor = dte / 7.0
-        allowed_seconds = base_limit_minutes * 60 * scale_factor
+        return skip_result unless time_limit
 
-        # Apply a minimum floor (e.g., 3 minutes) to avoid instant closures
-        floor_seconds = 180.0
-        final_allowed_seconds = [allowed_seconds, floor_seconds].max
+        time_limit = apply_regime_decay_factor(time_limit)
 
-        if elapsed_seconds >= final_allowed_seconds
-          exit_result(
-            reason: 'TIME_STOP',
-            metadata: {
-              path: 'time_stop',
-              elapsed_seconds: elapsed_seconds.round(1),
-              allowed_seconds: final_allowed_seconds.round(1),
-              dte: dte,
-              base_limit_minutes: base_limit_minutes
-            }
-          )
-        else
-          no_action_result
+        pnl_pct = context.pnl_pct.to_f
+
+        # Any profitable or breakeven position is immune — trailing system owns winners.
+        return skip_result if pnl_pct >= 0.0
+
+        # Spot trend still intact? Give the trade more time regardless of PnL.
+        return skip_result if spot_trend_alive?(tracker)
+
+        # Check if time limit exceeded
+        entry_time = tracker.created_at
+        elapsed_minutes = ((Time.current - entry_time) / 60.0).round(2)
+
+        if elapsed_minutes >= time_limit
+          status = pnl_pct.positive? ? 'laggard' : 'loss'
+          reason = "TIME_STOP (#{trade_type} #{status} trade exceeded #{time_limit} minutes, elapsed: #{elapsed_minutes} min, pnl: #{(pnl_pct * 100).round(2)}%)"
+          return exit_result(reason: reason, metadata: {
+            trade_type: trade_type,
+            time_limit: time_limit,
+            elapsed_minutes: elapsed_minutes,
+            pnl_pct: pnl_pct
+          })
         end
       end
 
@@ -80,6 +84,81 @@ module Risk
           trend_cfg = cfg[:trend] || {}
           (trend_cfg[index_key] || trend_cfg[index_key.to_sym] || 15).to_f
         end
+
+        # Trend trade: get index-specific limit
+        index_key = tracker.meta&.dig('index_key') || 'NIFTY'
+        limits[:trend][index_key] || limits[:trend]['NIFTY']
+      end
+
+      # Theta burn is convex — it accelerates hardest in the Chop/Theta zone (S3) and
+      # the Close/Gamma zone (S4). A flat time limit lets a "dead trade" opened at
+      # 13:50 ride the same 20 minutes as one opened at 10:00, even though the second
+      # half of that window is far more destructive to premium. Shrink the limit in
+      # those decay-dominant regimes so dead trades get cut sooner when it matters most.
+      def apply_regime_decay_factor(time_limit)
+        regime_service = Live::TimeRegimeService.instance
+        regime = regime_service.current_regime
+
+        factor = case regime
+                 when Live::TimeRegimeService::CHOP_DECAY then chop_decay_time_factor
+                 when Live::TimeRegimeService::CLOSE_GAMMA then close_gamma_time_factor
+                 else 1.0
+                 end
+
+        return time_limit if factor >= 1.0
+
+        [(time_limit * factor), minimum_time_limit_minutes].max.round(2)
+      rescue StandardError
+        time_limit
+      end
+
+      def chop_decay_time_factor
+        regime_decay_cfg.fetch(:chop_decay_factor, 0.6).to_f
+      end
+
+      def close_gamma_time_factor
+        regime_decay_cfg.fetch(:close_gamma_factor, 0.5).to_f
+      end
+
+      def minimum_time_limit_minutes
+        regime_decay_cfg.fetch(:minimum_minutes, 5).to_f
+      end
+
+      def regime_decay_cfg
+        AlgoConfig.fetch.dig(:risk, :time_stop, :regime_decay) || {}
+      rescue StandardError
+        {}
+      end
+
+      def spot_trend_alive?(tracker)
+        # Only bypass if we have actual instrument data — don't bypass on missing data
+        instrument = tracker.instrument || tracker.watchable&.instrument
+        return false unless instrument
+
+        result = evaluate_spot_trend_for(tracker)
+        result[:trend_alive]
+      rescue StandardError
+        false # On error, don't block the time stop
+      end
+
+      # Check if candle count exceeded (for scalps)
+      def candle_count_exceeded?(tracker, max_candles)
+        instrument = tracker.instrument || tracker.watchable&.instrument
+        return false unless instrument
+
+        # Get 1m series to count candles since entry
+        series_1m = instrument.candle_series(interval: '1')
+        return false unless series_1m&.candles&.any?
+
+        entry_time = tracker.created_at
+        return false unless entry_time
+
+        # Count candles after entry time
+        candles_after_entry = series_1m.candles.select { |c| c.timestamp >= entry_time }
+        candles_after_entry.size > max_candles
+      rescue StandardError => e
+        Rails.logger.error("[TimeStopRule] candle_count_exceeded? error: #{e.class} - #{e.message}")
+        false
       end
     end
   end

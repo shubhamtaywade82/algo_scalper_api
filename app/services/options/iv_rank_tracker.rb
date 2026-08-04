@@ -40,31 +40,7 @@ module Options
       @redis = nil
     end
 
-    # bulk seed historical IV samples (timestamp -> iv) for a cold-start
-    # before the rolling window has today's live samples. Used by the
-    # PreMarketIvBaselineJob to backfill from expired-options history.
-    def seed_history(index_key:, samples:)
-      return unless @redis
-      return unless index_key.present? && samples.is_a?(Array) && samples.any?
-
-      key = history_key(index_key)
-      @redis.multi do |tx|
-        samples.each do |s|
-          ts  = s[:timestamp].to_f
-          iv  = s[:iv].to_f
-          next unless ts.positive? && iv.positive?
-
-          tx.zadd(key, ts, "#{ts}:#{iv}")
-        end
-        tx.zremrangebyrank(key, 0, -max_samples - 1)
-        tx.expire(key, window_seconds)
-      end
-      true
-    rescue StandardError => e
-      Rails.logger.warn("[IvRankTracker] seed_history error for #{index_key}: #{e.class} - #{e.message}")
-      false
-    end
-
+    # Records one ATM-IV sample (decimal form, e.g. 0.145) for the given index.
     def record_sample(index_key:, iv:)
       return unless @redis
       return unless index_key.present? && iv.to_f.positive?
