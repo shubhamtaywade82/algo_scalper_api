@@ -53,6 +53,8 @@ gem 'DhanHQ', '~> 3.0'
 gem 'telegram-bot-ruby', '~> 0.19'
 
 gem 'ollama-client', '~> 1.1'
+gem 'ruby_llm', '~> 1.16'
+gem 'ruby_llm-agents', '~> 3.15'
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 # gem "image_processing", "~> 1.2"
