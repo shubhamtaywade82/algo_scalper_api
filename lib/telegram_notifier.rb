@@ -12,16 +12,17 @@ class TelegramNotifier
   # Send a message to Telegram
   # @param text [String] Message text
   # @param chat_id [String, Integer, nil] Chat ID (falls back to ENV)
+  # @param skip_formatter [Boolean] Skip Markdown→HTML conversion (use when text is already HTML)
   # @param extra_params [Hash] Additional parameters (parse_mode, etc.)
   # @return [Net::HTTPResponse, nil]
-  def self.send_message(text, chat_id: nil, **extra_params)
+  def self.send_message(text, chat_id: nil, skip_formatter: false, **extra_params)
     return if text.blank?
 
     chat_id ||= ENV.fetch('TELEGRAM_CHAT_ID', nil)
     return if chat_id.blank?
 
     chunks(text).each do |chunk|
-      chunk = Telegram::Formatter.to_html(chunk)
+      chunk = Telegram::Formatter.to_html(chunk) unless skip_formatter
       post('sendMessage',
            chat_id: chat_id,
            text: chunk,

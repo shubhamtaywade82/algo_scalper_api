@@ -376,13 +376,20 @@ module Capital
         # Ensure minimum 1 lot
         quantity = [quantity, lot_size].max
 
-        # Check capital constraint
+        # Check capital allocation constraint (alloc_pct caps total buy value)
         cost_per_lot = BigDecimal(entry_price.to_s) * lot_size
+        policy = deployment_policy(capital_available.to_f)
+        alloc_pct = policy[:alloc_pct] || 0.35
+        max_allocation = capital_available * BigDecimal(alloc_pct.to_s)
+        max_lots_by_alloc = (max_allocation / cost_per_lot).floor
+        max_alloc_quantity = max_lots_by_alloc * lot_size
+
+        # Also check raw affordability
         max_affordable_lots = (capital_available / cost_per_lot).floor
         max_affordable_quantity = max_affordable_lots * lot_size
 
-        # Take minimum of risk-based and capital-based quantity
-        final_quantity = [quantity, max_affordable_quantity].min
+        # Take minimum of risk-based, allocation-based, and capital-based quantity
+        final_quantity = [quantity, max_alloc_quantity, max_affordable_quantity].min
 
         # Ensure at least 1 lot
         final_quantity = [final_quantity, lot_size].max
@@ -392,8 +399,8 @@ module Capital
           "[Allocator] RUPEES_BASED index:#{index_key} risk:₹#{risk_rupees} " \
           "fees:₹#{broker_fees} net_risk:₹#{net_risk_rupees} " \
           "stop_dist:₹#{stop_distance_rupees} risk_per_lot:₹#{risk_per_lot} " \
-          "max_lots:#{max_lots_by_risk} qty:#{final_quantity} " \
-          "buy_value:₹#{(entry_price.to_f * final_quantity).round(2)}"
+          "max_lots:#{max_lots_by_risk} alloc_cap:#{max_lots_by_alloc}(#{(alloc_pct * 100).round(0)}%) " \
+          "qty:#{final_quantity} buy_value:₹#{(entry_price.to_f * final_quantity).round(2)}"
         )
 
         final_quantity

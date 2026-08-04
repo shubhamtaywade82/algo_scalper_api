@@ -108,8 +108,8 @@ module Orders
 
     def generate_client_order_id(prefix, sid)
       # Generate unique client order ID with random component to prevent collisions
-      # Format: AS-{prefix}-{security_id}-{timestamp}-{random}
-      "AS-#{prefix}-#{sid}-#{Time.now.to_i}-#{SecureRandom.hex(2)}"
+      # Format: SCALPER_{prefix}_{random} (DhanHQ 2.7.0 convention, max 30 chars)
+      "SCALPER_#{prefix}_#{sid}_#{SecureRandom.hex(4)}"
     end
 
     def normalize_exit_response(order, client_order_id:)

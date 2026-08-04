@@ -44,7 +44,6 @@ module Entries
         Guards::EdgeFailureGuard,
         Guards::LossStreakGuard,
         Guards::DailyLimitsGuard,
-        Guards::IndexTradeLimitGuard,
         Guards::MaxConcurrentGuard,
         Guards::InstrumentLookupGuard,
         Guards::LtpResolutionGuard,

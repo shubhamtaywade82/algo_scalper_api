@@ -1,5 +1,4 @@
 # frozen_string_literal: true
-# rubocop:disable Metrics/BlockNesting
 
 require_relative '../concerns/broker_fee_calculator'
 require_relative 'bos_extractor'
@@ -492,6 +491,13 @@ module Entries
         false
       end
 
+      def cooldown_active_for_index?(index_key, cooldown)
+        return false if index_key.blank? || cooldown <= 0
+
+        last = Rails.cache.read("reentry:index:#{index_key}")
+        last.present? && (Time.current - last) < cooldown
+      end
+
       # BANKNIFTY trades only in the last week before monthly expiry (last Thursday of month).
       # Returns true if today is within 7 calendar days of the last Thursday.
       def banknifty_last_week?
@@ -971,16 +977,31 @@ module Entries
       def apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price:, quantity:)
         return unless bos_context
 
-        origin_price = bos_context[:origin_swing][:price].to_f
-        entry_underlying_price = bos_context[:entry_underlying_price]
-        reference_price = entry_underlying_price || entry_price
-        entry_risk_rupees = (reference_price.to_f - origin_price).abs * quantity.to_i
-        premium_r = entry_risk_rupees / quantity.to_f
+        contract = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_contract].to_s : ''
+        if contract == SUPERTREND_CONTRACT
+          # Supertrend direct entries do not have BOS structure risk; derive premium risk from configured SL %.
+          sl_decimal = supertrend_sl_decimal
+          premium_r = entry_price.to_f * sl_decimal
+          entry_risk_rupees = premium_r * quantity.to_i
+          origin_price = nil # No BOS swing level; structure invalidation must use underlying at entry
+          entry_underlying_price = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_underlying_price] : nil
+        else
+          origin_price = bos_context[:origin_swing][:price].to_f
+          entry_underlying_price = bos_context[:entry_underlying_price]
+          sl_decimal = supertrend_sl_decimal
+          premium_r = entry_price.to_f * sl_decimal
+          entry_risk_rupees = premium_r * quantity.to_i
+        end
         premium_stop = entry_price.to_f - premium_r
         premium_target = entry_price.to_f + premium_r
 
-        meta_hash[:structure_invalidation_price] = origin_price
+        # Structure invalidation must be in UNDERLYING domain (index level). Never use option premium.
+        # For BOS entries we use origin_swing price (underlying). For supertrend we omit so only the
+        # 5m/15m candle-based rule runs (avoids tick-noise exits and reduces brokerage from quick flips).
+        meta_hash[:structure_invalidation_price] = origin_price if origin_price.present?
         meta_hash[:entry_premium] = entry_price.to_f
+        meta_hash[:peak_premium] = entry_price.to_f
+        meta_hash[:peak_premium_at] = Time.current.iso8601
         meta_hash[:entry_risk_rupees] = entry_risk_rupees
         meta_hash[:premium_stop_price] = premium_stop
         meta_hash[:premium_target_price] = premium_target

@@ -3,6 +3,15 @@
 module Live
   class RiskManagerService
     module ExitEnforcement
+      include Live::UnderlyingLtpResolver
+      include Live::StructureInvalidationEvaluator
+
+      # Lightweight struct for ETF position data (replaces OpenStruct for performance)
+      EtfPositionData = Struct.new(
+        :trend_score, :peak_trend_score, :adx, :atr_ratio,
+        :underlying_price, :vwap, :is_long?
+      )
+
       # Enforcement methods always accept an exit_engine keyword. They do not fetch positions from caller.
       # If exit_engine is provided, they will delegate the actual exit to it. Otherwise they call internal execute_exit.
 
@@ -475,10 +484,16 @@ module Live
       # NEW 5-LAYER EXIT SYSTEM ENFORCEMENT METHODS
       # ============================================================
 
-      # LAYER 1: HARD RISK CIRCUIT BREAKER
-      # Purpose: Account protection ONLY - no trade logic
-      def enforce_hard_rupee_stop_loss(exit_engine:)
-        return unless hard_rupee_sl_enabled?
+        # Skip R-stop when trailing system has taken ownership
+        if trailing_armed_for?(tracker, snapshot)
+          Rails.logger.debug do
+            "[RiskManager] PREMIUM_R_STOP suppressed for #{tracker.order_no} — trailing armed"
+          end
+          return
+        end
+
+        ltp = snapshot[:ltp]
+        return unless ltp
 
         exited = false
         PositionTracker.active.find_each do |tracker|
@@ -513,9 +528,29 @@ module Live
         end
       end
 
-      # LAYER 0: EXECUTABLE R STOP (premium hard stop)
-      # Purpose: Enforce 1R loss cap in premium terms, independent of structure recalculation.
-      def enforce_premium_r_stop(exit_engine:)
+      def trailing_armed_for?(tracker, snapshot)
+        trailing_cfg = AlgoConfig.fetch.dig(:risk, :trailing) || {}
+        return false if trailing_cfg[:enabled] == false
+
+        activation = (trailing_cfg[:activation_pct] || 0.025).to_f
+        return false unless activation.positive?
+
+        entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
+        return false unless entry_value.positive?
+
+        peak_profit_pct = snapshot[:hwm_pnl].to_f / entry_value
+        peak_profit_pct >= activation
+      rescue StandardError
+        false
+      end
+
+      # LAYER 1: DYNAMIC TRAILING SL
+      # Purpose: Move SL up-only to capture trend moves (direct trailing)
+      def enforce_dynamic_trailing_stops(exit_engine:)
+        engine = @trailing_engine ||= Live::TrailingEngine.new
+        cache = active_cache
+        return unless cache
+
         PositionTracker.active.find_each do |tracker|
           snapshot = pnl_snapshot(tracker)
           next unless snapshot
@@ -547,8 +582,33 @@ module Live
         PositionTracker.active.find_each do |tracker|
           break if exited
 
-          snapshot = pnl_snapshot(tracker)
-          next unless snapshot
+      def enforce_structure_invalidation_for(tracker, exit_engine:)
+        snapshot = pnl_snapshot(tracker)
+        return unless snapshot
+
+        si_cfg = (risk_config[:exits] || {})[:structure_invalidation] || {}
+
+        if si_cfg[:underlying_move_pct] && si_cfg[:premium_drop_pct]
+          return unless options_structure_invalidated_enforcement?(tracker, snapshot, si_cfg)
+
+          reason = 'STRUCTURE_INVALIDATION (dual: underlying move + premium drop)'
+          exit_path = 'structure_invalidation'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
+          return
+        end
+
+        # Legacy rule-engine path
+        position_data = build_position_data_for_rule_engine(tracker, snapshot)
+        context = Risk::Rules::RuleContext.new(
+          position: position_data,
+          tracker: tracker,
+          risk_config: risk_config
+        )
+
+        rule = Risk::Rules::StructureInvalidationRule.new(config: { enabled: true })
+        result = rule.evaluate(context)
 
           # Build rule context
           position_data = build_position_data_for_rule_engine(tracker, snapshot)
@@ -573,6 +633,17 @@ module Live
         rescue StandardError => e
           Rails.logger.error("[RiskManager] enforce_structure_invalidation error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
         end
+      end
+
+      def options_structure_invalidated_enforcement?(tracker, snapshot, si_cfg)
+        min_hold = (si_cfg[:min_hold_seconds] || 120).to_i
+        return false unless tracker.created_at && (Time.current - tracker.created_at) >= min_hold
+
+        index_key = tracker.meta&.dig('index_key')
+        underlying_ltp = resolve_underlying_ltp(index_key)
+        return false unless underlying_ltp
+
+        dual_condition_met?(tracker, underlying_ltp, snapshot[:ltp].to_f, si_cfg)
       end
 
       # LAYER 3: PREMIUM MOMENTUM FAILURE
@@ -701,7 +772,31 @@ module Live
         end
       end
 
-      private
+      # Ratchet the profit floor upward as HWM PnL grows.
+      # Monotonic — floor only moves up, never down.
+      # Called every monitor cycle once the floor is armed.
+      # @param tracker [PositionTracker]
+      # @param hwm_pnl [BigDecimal, nil] High water mark PnL from Redis snapshot
+      # @param trail_pct [Numeric] Floor as DECIMAL fraction of HWM (e.g., 0.70 = protect 70% of peak)
+      def update_trailing_floor!(tracker, hwm_pnl, trail_pct:)
+        return unless hwm_pnl&.positive?
+
+        # trail_pct is DECIMAL (0.70), so no division by 100 needed
+        dynamic_floor = (BigDecimal(hwm_pnl.to_s) * BigDecimal(trail_pct.to_s)).ceil
+        current_floor = BigDecimal(tracker.profit_floor_rupees.to_s)
+        return if dynamic_floor <= current_floor
+
+        # profit_floor_rupees is stored in meta (store_accessor), not a DB column
+        meta = (tracker.meta || {}).stringify_keys
+        meta['profit_floor_rupees'] = dynamic_floor.to_i
+        tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
+        Rails.logger.info(
+          "[RiskManager] Trailing floor raised for #{tracker.order_no}: " \
+          "₹#{current_floor} → ₹#{dynamic_floor} (HWM: ₹#{hwm_pnl.round(2)}, trail: #{(trail_pct * 100).round}%)"
+        )
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] update_trailing_floor! failed for #{tracker.order_no}: #{e.message}")
+      end
 
       def price_stalled?(tracker, stall_candles)
         # Get recent LTP history

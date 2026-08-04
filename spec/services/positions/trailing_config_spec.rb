@@ -65,4 +65,39 @@ RSpec.describe Positions::TrailingConfig do
       expect(described_class.sl_price_from_entry(100.0, 10.0)).to eq(110.0)
     end
   end
+
+  describe '.adaptive_drawdown_for_peak' do
+    let(:tiers) do
+      [
+        { min_profit: 0.025, drawdown: 0.018 },
+        { min_profit: 0.10, drawdown: 0.022 },
+        { min_profit: 0.20, drawdown: 0.025 },
+        { min_profit: 0.35, drawdown: 0.030 }
+      ]
+    end
+
+    it 'returns tier 1 drawdown for peak profit of 5%' do
+      expect(described_class.adaptive_drawdown_for_peak(0.05, tiers)).to eq(0.018)
+    end
+
+    it 'returns tier 2 drawdown for peak profit of 15%' do
+      expect(described_class.adaptive_drawdown_for_peak(0.15, tiers)).to eq(0.022)
+    end
+
+    it 'returns tier 3 drawdown for peak profit of 25%' do
+      expect(described_class.adaptive_drawdown_for_peak(0.25, tiers)).to eq(0.025)
+    end
+
+    it 'returns tier 4 drawdown for peak profit of 40%' do
+      expect(described_class.adaptive_drawdown_for_peak(0.40, tiers)).to eq(0.030)
+    end
+
+    it 'returns nil for peak profit below first tier' do
+      expect(described_class.adaptive_drawdown_for_peak(0.01, tiers)).to be_nil
+    end
+
+    it 'returns nil for empty tiers' do
+      expect(described_class.adaptive_drawdown_for_peak(0.05, [])).to be_nil
+    end
+  end
 end

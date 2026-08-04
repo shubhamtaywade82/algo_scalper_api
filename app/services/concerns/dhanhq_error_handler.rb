@@ -22,6 +22,13 @@ module DhanhqErrorHandler
   # and as class methods (when included via ActiveSupport::Concern)
   module_function
 
+  # Check if error indicates live trading is disabled (DhanHQ 2.7.0+)
+  # @param error [StandardError] Error object
+  # @return [Boolean]
+  def live_trading_disabled?(error)
+    defined?(DhanHQ::LiveTradingDisabledError) && error.is_a?(DhanHQ::LiveTradingDisabledError)
+  end
+
   # Check if error indicates token expiry
   # @param error [StandardError, String] Error object or message
   # @return [Boolean]
@@ -90,6 +97,12 @@ module DhanhqErrorHandler
   # @return [Hash] Error information hash
   def handle_dhanhq_error(error, context: 'API')
     error_msg = error.message.to_s
+
+    if live_trading_disabled?(error)
+      Rails.logger.warn("[DhanhqErrorHandler] Live trading disabled in #{context}: #{error_msg}. Set LIVE_TRADING=true to enable.")
+      return { error: error, message: error_msg, live_trading_disabled: true }
+    end
+
     is_token_expiry = token_expired?(error)
 
     if is_token_expiry

@@ -493,6 +493,11 @@ class PositionTracker < ApplicationRecord
     return if symbol.blank?
 
     Rails.cache.write("reentry:#{symbol}", Time.current, expires_in: 8.hours)
+
+    idx_key = meta&.dig('index_key')
+    if idx_key.present?
+      Rails.cache.write("reentry:index:#{idx_key}", Time.current, expires_in: 8.hours)
+    end
   end
 
   def clear_redis_cache_if_exited

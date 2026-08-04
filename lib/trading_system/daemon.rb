@@ -5,13 +5,19 @@ module TradingSystem
   #
   # This is intentionally decoupled from the web server lifecycle so trading
   # can be restarted/monitored independently of Puma.
+  #
+  # If started while market is closed, only the WebSocket feed runs until market
+  # opens; a background thread then starts the remaining services automatically.
   class Daemon
+    MARKET_OPEN_POLL_INTERVAL = 60 # seconds
+
     def self.start(...)
       new.start(...)
     end
 
     def initialize(supervisor: nil)
       @supervisor = supervisor
+      @market_open_thread = nil
     end
 
     def start(keep_alive: true, allow_in_test: false)
@@ -56,9 +62,10 @@ module TradingSystem
       TradingSystem::Bootstrap.boot_reconciliation!(strict: strict_boot_reconciliation?(market_closed: market_closed))
 
       if market_closed
-        Rails.logger.info('[TradingDaemon] Market closed - starting WebSocket only')
+        Rails.logger.info('[TradingDaemon] Market closed - starting WebSocket only; will start full services when market opens')
         @supervisor[:market_feed]&.start
         Rails.logger.info('[Supervisor] started market_feed (WebSocket only)')
+        start_market_open_poller!
         return
       end
 
@@ -84,6 +91,22 @@ module TradingSystem
       @supervisor.start_all
       subscribe_active_positions!
       TradingSystem::Bootstrap.boot_market_gates!
+    end
+
+    def start_market_open_poller!
+      @market_open_thread = Thread.new do
+        Thread.current.name = 'daemon-market-open-poller'
+        loop do
+          sleep MARKET_OPEN_POLL_INTERVAL
+          next if TradingSession::Service.market_closed?
+
+          Rails.logger.info('[TradingDaemon] Market opened - starting remaining services')
+          @supervisor.start_all
+          subscribe_active_positions!
+          Rails.logger.info('[TradingDaemon] Full services started')
+          break
+        end
+      end
     end
 
     def subscribe_active_positions!
@@ -118,23 +141,11 @@ module TradingSystem
     end
 
     def safe_stop!
-      # Guard against multiple calls
-      return if @stopping
-      @stopping = true
-
       if @market_open_thread&.alive?
         @market_open_thread.kill
         @market_open_thread = nil
       end
-
-      if @supervisor
-        begin
-          @supervisor.stop_all
-        rescue StandardError => e
-          # If we're here, we're likely outside trap context, but let's be safe
-          $stderr.puts "[TradingDaemon] stop_all failed: #{e.class} - #{e.message}"
-        end
-      end
+      @supervisor&.stop_all
     rescue StandardError => e
       $stderr.puts "[TradingDaemon] safe_stop! failed: #{e.class} - #{e.message}"
     end

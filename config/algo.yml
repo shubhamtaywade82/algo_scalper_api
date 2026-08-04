@@ -107,8 +107,9 @@ market:
 indices:
   - key: NIFTY
     capital_alloc_pct: 0.30
-    max_same_side: 4 # AGGRESSIVE: Increased to 4 to allow multiple concurrent positions
-    cooldown_sec: 10 # AGGRESSIVE: Reduced to 10 seconds for very frequent trades
+    max_same_side: 1
+    cooldown_sec: 180
+    max_concurrent_per_index: 2
     direction: bullish
 
     premium_band:
@@ -148,8 +149,9 @@ indices:
 
   - key: BANKNIFTY
     capital_alloc_pct: 0.30
-    max_same_side: 4 # AGGRESSIVE: Increased to 4 to allow multiple concurrent positions
-    cooldown_sec: 10 # AGGRESSIVE: Reduced to 10 seconds for very frequent trades
+    max_same_side: 1
+    cooldown_sec: 180
+    max_concurrent_per_index: 2
     direction: bullish
 
     premium_band:
@@ -189,8 +191,9 @@ indices:
 
   - key: SENSEX
     capital_alloc_pct: 0.30
-    max_same_side: 4 # AGGRESSIVE: Increased to 4 to allow multiple concurrent positions
-    cooldown_sec: 10 # AGGRESSIVE: Reduced to 10 seconds for very frequent trades
+    max_same_side: 1
+    cooldown_sec: 180
+    max_concurrent_per_index: 2
     direction: bullish
 
     premium_band:
@@ -244,23 +247,14 @@ broker_fees:
 # RISK MODEL (NEMESIS V3)
 # ============================================
 risk:
-  sl_pct: 0.12 # -12% STOP LOSS
-  tp_pct: 0.25 # +25% TAKE PROFIT
+  sl_pct: 0.10 # -10% STOP LOSS (was 6%, too tight — frequent noise stops)
+  tp_pct: 0.25 # +25% TAKE PROFIT (was 12%, cut winners too short)
   per_trade_risk_pct: 0.15
 
   # --- New: Percentage-based PnL Exit ---
   percentage_pnl_exit:
     enabled: true
-    target_pct: 15.0 # Full exit when total PnL reaches 15%
-
-  # Underlying-context-aware trailing exit (tick-first path)
-  # Tightens or forces trailing exit when underlying structure/trend signals reversal.
-  # Only active when trailing is already armed (position profitable >= activation_pct).
-  underlying_context_exit:
-    enabled: true
-    trend_score_threshold: 15     # trend_score below this = weak trend
-    atr_ratio_threshold: 0.65     # atr_ratio below this AND falling = collapsing
-    tightening_multiplier: 0.5    # compress allowed_dd by this factor when weakening
+    target_pct: 0.20 # 20% safety net for options
 
   # Hard rupee-based stops (HIGHEST PRIORITY - checked before %-based stops)
   # Perfect for scalping: fixed ₹1k SL + ₹2k TP per trade
@@ -289,21 +283,17 @@ risk:
       buffer_pct: 0.004       # Legacy: require underlying to breach level by this fraction
       underlying_move_pct: 0.01  # Underlying must move 1%+ against trade direction
       premium_drop_pct: 0.05     # Premium must drop 5%+ from peak
-    smc_navigator_exit:
-      enabled: false           # opt-in: enforce Navigator exit signals (CHoCH, liquidity sweep)
-      min_hold_seconds: 120    # no SMC navigator exit before position age >= this
-      min_confidence: 0.65     # minimum Navigator exit confidence to trigger
     premium_momentum_failure:
       enabled: true
-      default_stall_minutes: 2
+      default_stall_minutes: 3
       index_overrides:
         SENSEX:
-          stall_minutes: 2
+          stall_minutes: 4
       session_overrides:
         chop_decay:
-          stall_minutes_add: 0  # In chop, cut dead trades fast — no extension
+          stall_minutes_add: 2
         close_gamma:
-          stall_minutes_add: 1
+          stall_minutes_add: 2
 
   # Time Stop: Prevents holding dead trades beyond time limits
   # Previously hardcoded in Risk::Rules::TimeStopRule — now runtime-configurable
@@ -326,27 +316,27 @@ risk:
     expiry_day_tightening: 0.60   # 60% of normal trail on expiry day (Thursday)
 
     nifty:
-      early_trigger: 0.05         # Phase 1: Survival (+5% profit → -12% SL)
-      early_sl_offset: -0.12
-      breakeven_trigger: 0.157    # Phase 2: Breakeven at +15.7% (25% of avg 62.88% max gain)
-      activation_trigger: 0.20    # Phase 3: HWM Trailing at +20%
-      trailing_distance: 0.386    # 38.6% from HWM (80% of avg 48.3% retrace)
-    sensex:
-      # SENSEX profile: CE avg max gain +30.47%, PE +69.07%, post-peak retrace ~99.8%
-      # Options decay to near-zero after peak → activate early, lock in gains quickly
       early_trigger: 0.03         # Phase 1: Survival (+3% profit → -8% SL)
       early_sl_offset: -0.08
-      breakeven_trigger: 0.08     # Phase 2: Breakeven at +8% (calibration: CE breakeven 7.6%)
-      activation_trigger: 0.15    # Phase 3: HWM Trailing at +15% (between CE 7.6% and PE 17.3%)
-      trailing_distance: 0.15     # 15% from HWM (wider than NIFTY — SENSEX moves are 2x larger)
+      breakeven_trigger: 0.07     # Phase 2: Breakeven at +7%
+      activation_trigger: 0.12    # Phase 3: HWM Trailing at +12%
+      trailing_distance: 0.06     # 6% from HWM (was 1.8% — too tight)
       adaptive_drawdown:
-        - { min_profit: 0.08, drawdown: 0.12 }  # At +8%: 12% drawdown room
-        - { min_profit: 0.15, drawdown: 0.10 }  # At +15%: tighten to 10%
-        - { min_profit: 0.30, drawdown: 0.08 }  # At +30% (avg CE peak): 8%
-        - { min_profit: 0.50, drawdown: 0.06 }  # At +50% (deep PE zone): 6%
-        - { min_profit: 0.75, drawdown: 0.04 }  # At +75%: tighten — gains can evaporate rapidly near expiry
-        - { min_profit: 1.00, drawdown: 0.03 }  # At +100%: very tight — option likely near peak, protect aggressively
-        - { min_profit: 1.50, drawdown: 0.02 }  # At +150%+: near-expiry gamma extreme — lock in immediately on any retreat
+        - { min_profit: 0.03, drawdown: 0.06 }
+        - { min_profit: 0.12, drawdown: 0.05 }
+        - { min_profit: 0.25, drawdown: 0.04 }
+        - { min_profit: 0.40, drawdown: 0.03 }
+    sensex:
+      early_trigger: 0.03
+      early_sl_offset: -0.08
+      breakeven_trigger: 0.07
+      activation_trigger: 0.12
+      trailing_distance: 0.06
+      adaptive_drawdown:
+        - { min_profit: 0.03, drawdown: 0.06 }
+        - { min_profit: 0.12, drawdown: 0.05 }
+        - { min_profit: 0.25, drawdown: 0.04 }
+        - { min_profit: 0.40, drawdown: 0.03 }
     banknifty:
       early_trigger: 0.06         # Phase 1: Survival (+6% profit → -15% SL)
       early_sl_offset: -0.15      # Wider SL — BN is more volatile
@@ -1107,3 +1097,27 @@ ai:
   #   - AI_AGENT_STREAM_TIMEOUT: Timeout for streaming responses per iteration (default: 60 seconds)
   #     If AI doesn't respond within this time, iteration is aborted and retried
   #     Example: export AI_AGENT_STREAM_TIMEOUT=30
+
+# ===== ENTRY QUALITY FILTER =====
+entry_quality:
+  enforce: true                      # false = log-only mode (no blocking)
+  min_score: 55                      # tightened minimum quality score (0-100)
+  gates:
+    min_adx: 25                      # hard gate: minimum ADX value
+    block_choppy_regime: true        # hard gate: block CHOPPY regime
+    min_body_ratio: 0.40             # hard gate: minimum candle body/range ratio
+    require_momentum_confirm: true   # hard gate: close must be beyond Supertrend level
+  scoring:
+    candle_body_weight: 25           # max points for candle body strength
+    adx_strength_weight: 20          # max points for ADX bonus
+    bos_weight: 20                   # max points for break of structure
+    range_expansion_weight: 20       # max points for range expansion
+    momentum_weight: 15              # max points for momentum strength
+  session_overrides:
+    chop_decay:
+      min_score: 60
+      gates:
+        min_adx: 30
+  index_overrides:
+    SENSEX:
+      min_adx: 25                    # SENSEX keeps slightly higher ADX floor

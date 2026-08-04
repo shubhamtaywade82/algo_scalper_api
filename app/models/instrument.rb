@@ -270,6 +270,8 @@ class Instrument < ApplicationRecord
 
     filtered_data = filter_option_chain_data(normalized)
 
+    filtered_data = filter_option_chain_data(normalized)
+
     { last_price: data["last_price"], oc: filtered_data }
   rescue StandardError => e
     DhanhqErrorHandler.handle_dhanhq_error(
@@ -300,33 +302,33 @@ class Instrument < ApplicationRecord
   # Returns: Hash with string strike keys and ce/pe sub-hashes
   def normalize_option_chain_response(data)
     # Legacy format — already a hash keyed by strike
-    return data if data["oc"].is_a?(Hash)
+    return data if data['oc'].is_a?(Hash)
 
     # DhanHQ 2.7.0+ format — array of strike objects
-    strikes = data["strikes"]
-    return data if strikes.nil? && data["oc"]
+    strikes = data['strikes']
+    return data if strikes.nil? && data['oc']
 
     return nil unless strikes.is_a?(Array)
 
     oc_hash = {}
     strikes.each do |strike_obj|
-      key = strike_obj["strike"].to_f.to_s
+      key = strike_obj['strike'].to_f.to_s
       oc_hash[key] = {
-        "ce" => strike_obj["call"],
-        "pe" => strike_obj["put"]
+        'ce' => strike_obj['call'],
+        'pe' => strike_obj['put']
       }
     end
 
-    data.merge("oc" => oc_hash)
+    data.merge('oc' => oc_hash)
   end
 
   def filter_option_chain_data(data)
-    oc = data["oc"]
+    oc = data['oc']
     return {} unless oc.is_a?(Hash)
 
     oc.select do |_strike, option_data|
-      call_data = option_data["ce"]
-      put_data = option_data["pe"]
+      call_data = option_data['ce']
+      put_data = option_data['pe']
 
       has_call_values = call_data && call_data.except("implied_volatility").values.any? do |v|
         numeric_value?(v) && v.to_f.positive?
