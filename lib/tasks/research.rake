@@ -130,4 +130,79 @@ namespace :research do
       end
     end
   end
+  desc "Grid-search dynamic hold/exit thresholds (theta barrier, hard SL, IV crush) over scored candidates"
+  task :sweep_hold_exit, %i[status] => :environment do |_t, args|
+    status = args[:status].presence || "scored"
+
+    puts "\n#{'=' * 100}"
+    puts "Dynamic hold/exit sweep — Research::OptionCandidate.where(status: #{status.inspect})"
+    puts '=' * 100
+
+    rows = Research::HoldExitSweep.run(scope: Research::OptionCandidate.where(status: status))
+
+    if rows.all? { |r| r[:sample_size].zero? }
+      puts "No candidates with usable bars/entry data (run research:run_signal or research:run_regime_scan first)."
+      next
+    end
+
+    printf("%-8s %-8s %-8s %10s %8s %10s\n", "Theta", "SL%", "IVCrush%", "AvgRet%", "Win%", "AvgHoldMin")
+    rows.each do |r|
+      printf("%-8s %-8s %-8s %10s %8s %10s\n",
+             r[:theta_minutes], (r[:hard_sl_pct] * 100).round, (r[:iv_crush_pct] * 100).round,
+             r[:avg_return_pct], r[:win_rate_pct], r[:avg_holding_minutes])
+    end
+  end
+
+  desc "Forensic-scan research_option_bars for explosive premium moves (open->peak) and their spot/IV context"
+  task :scan_explosive_moves, %i[symbol from_date to_date expiry_flag min_gain_pct min_premium] => :environment do |_t, args|
+    symbol = args[:symbol].presence || raise(ArgumentError, "symbol is required")
+    from_date = args[:from_date].presence || raise(ArgumentError, "from_date is required")
+    to_date = args[:to_date].presence || raise(ArgumentError, "to_date is required")
+    expiry_flag = args[:expiry_flag].presence
+    min_gain_pct = (args[:min_gain_pct] || 0.5).to_f
+    min_premium = (args[:min_premium] || 10.0).to_f
+
+    puts "\n#{'=' * 100}"
+    puts "Explosive move scan — #{symbol} #{from_date} to #{to_date} (>= #{(min_gain_pct * 100).round}% gain, min premium #{min_premium})"
+    puts '=' * 100
+
+    moves = Research::ExplosiveMoveScanner.scan(
+      symbol: symbol, from_date: from_date, to_date: to_date, expiry_flag: expiry_flag,
+      min_gain_pct: min_gain_pct, min_premium: min_premium
+    )
+
+    if moves.empty?
+      puts "No moves found (check date range / research_option_bars coverage / lower min_gain_pct)."
+      next
+    end
+
+    puts "#{moves.size} explosive moves found. Top 50 by gain%:\n\n"
+    printf("%-12s %-4s %8s %8s %8s %6s %6s %10s %10s %10s %8s %8s\n",
+           "Date", "Type", "Strike", "Open", "Peak", "Gain%", "Time", "SpotStart", "SpotEnd", "SpotMv%", "IVStart", "IVPeak")
+    moves.first(50).each do |r|
+      printf("%-12s %-4s %8s %8s %8s %6s %6s %10s %10s %10s %8s %8s\n",
+             r[:date], r[:option_type], r[:strike], r[:open_price], r[:peak_price], r[:gain_pct],
+             r[:time_of_peak].strftime("%H:%M"), r[:spot_start], r[:spot_end], r[:spot_move_pct] || "-",
+             r[:iv_start] || "-", r[:iv_peak] || "-")
+    end
+
+    puts "\n#{'-' * 100}"
+    puts "By hour of peak:"
+    moves.group_by { |r| r[:time_of_peak].hour }.sort.each do |hour, group|
+      puts "  #{hour}:00-#{hour}:59  n=#{group.size}  avg_gain=#{(group.sum { |r| r[:gain_pct] } / group.size.to_f).round(1)}%"
+    end
+
+    puts "\nBy weekday:"
+    moves.group_by { |r| r[:date].strftime("%A") }.each do |wday, group|
+      puts "  #{wday.ljust(10)} n=#{group.size}  avg_gain=#{(group.sum { |r| r[:gain_pct] } / group.size.to_f).round(1)}%"
+    end
+
+    with_iv = moves.select { |r| r[:iv_start] }
+    if with_iv.any?
+      low_iv, high_iv = with_iv.partition { |r| r[:iv_start] < 12.0 }
+      puts "\nBy starting IV:"
+      puts "  IV < 12   n=#{low_iv.size}  avg_gain=#{low_iv.any? ? (low_iv.sum { |r| r[:gain_pct] } / low_iv.size.to_f).round(1) : '-'}%"
+      puts "  IV >= 12  n=#{high_iv.size}  avg_gain=#{high_iv.any? ? (high_iv.sum { |r| r[:gain_pct] } / high_iv.size.to_f).round(1) : '-'}%"
+    end
+  end
 end

@@ -31,8 +31,18 @@ module Positions
       live_view.trailing_mode
     end
 
-    def direct_trailing_enabled?
-      live_view.direct_trailing_enabled?
+    def hybrid_atr_enabled?
+      live_view.hybrid_atr_enabled?
+    end
+
+    def calculate_hybrid_atr_trailing_sl(current_price:, entry_price:, peak_price:, current_profit_pct:, atr_value:)
+      live_view.calculate_hybrid_atr_trailing_sl(
+        current_price: current_price,
+        entry_price: entry_price,
+        peak_price: peak_price,
+        current_profit_pct: current_profit_pct,
+        atr_value: atr_value
+      )
     end
 
     def direct_trailing_distance_pct
@@ -63,8 +73,8 @@ module Positions
       )
     end
 
-    def peak_drawdown_triggered?(peak_profit_pct, current_profit_pct, _capital_deployed: nil)
-      live_view.peak_drawdown_triggered?(peak_profit_pct, current_profit_pct, _capital_deployed: _capital_deployed)
+    def peak_drawdown_triggered?(peak_profit_pct, current_profit_pct, capital_deployed: nil)
+      live_view.peak_drawdown_triggered?(peak_profit_pct, current_profit_pct, _capital_deployed: capital_deployed)
     end
 
     def calculate_tiered_drawdown_threshold(peak_profit_pct)

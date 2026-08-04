@@ -40,7 +40,7 @@ RSpec.describe Positions::ExitedPnlReconciler do
       expect(result[:reason]).to eq(:aligned)
     end
 
-    it 'rewrites stale peak pnl from exit_price truth' do
+    it 'rewrites stale peak pnl from exit_price truth' do # rubocop:disable RSpec/MultipleExpectations
       tracker = create(:position_tracker, :option_position, **base_attrs)
       expected = Positions::FinalPnl.from_exit_price(
         entry_price: tracker.entry_price,
@@ -55,7 +55,7 @@ RSpec.describe Positions::ExitedPnlReconciler do
       expect(result[:fixed]).to be(true)
       expect(tracker.last_pnl_rupees).to eq(expected[:pnl])
       expect(tracker.last_pnl_pct.to_f).to be_within(0.0001).of(expected[:pnl_pct].to_f)
-      expect(tracker.meta.dig('execution', 'final_pnl_pct')).to eq((expected[:pnl_pct].to_f * 100).round(2))
+      expect(tracker.execution['final_pnl_pct']).to eq((expected[:pnl_pct].to_f * 100).round(2))
       expect(Live::RedisPnlCache.instance).to have_received(:clear_tracker).with(tracker.id)
     end
 
