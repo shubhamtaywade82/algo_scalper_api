@@ -6,21 +6,6 @@ module Entries
   class EntryGuard
     class << self
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
-        # Global Profit Protection Check
-        if Portfolio::DrawdownGuard.triggered?
-          Observability::StructuredLog.info(
-            event: 'entry_blocked',
-            payload: {
-              service: 'Entries::EntryGuard',
-              index_key: index_cfg[:key].to_s,
-              symbol: pick[:symbol].to_s,
-              stage: 'profit_protection',
-              reason: 'drawdown_guard_active'
-            }
-          )
-          return false
-        end
-
         Observability::StructuredLog.info(
           event: 'entry_attempted',
           payload: {
