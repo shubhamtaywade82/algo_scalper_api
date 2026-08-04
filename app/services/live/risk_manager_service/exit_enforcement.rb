@@ -860,15 +860,34 @@ module Live
         end
 
         return 0.0 if true_ranges.empty?
+        true_ranges.sum / true_ranges.size
+      end
 
       def update_peak_trend_score(tracker, position_data, pending_meta: nil)
-        # Use trend score from position_data if available (from ActiveCache)
-        trend_score = position_data.respond_to?(:underlying_trend_score) ? position_data.underlying_trend_score : nil
-        
-        # Fallback to calculation only if not in position_data
-        if trend_score.nil?
-          instrument = tracker.instrument || tracker.watchable&.instrument
-          return unless instrument
+        begin
+          # Use trend score from position_data if available (from ActiveCache)
+          trend_score = position_data.respond_to?(:underlying_trend_score) ? position_data.underlying_trend_score : nil
+          
+          # Fallback to calculation only if not in position_data
+          if trend_score.nil?
+            instrument = tracker.instrument || tracker.watchable&.instrument
+            return unless instrument
+          end
+          
+          peak = (pending_meta || tracker.meta || {})['peak_trend_score'] || 0
+          if trend_score > peak
+            if pending_meta
+              pending_meta['peak_trend_score'] = trend_score
+            else
+              meta = tracker.meta || {}
+              meta['peak_trend_score'] = trend_score
+              tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
+            end
+          end
+        rescue StandardError
+          nil
+        end
+      end
 
       # Calculate momentum score from candles (0-50 range)
       def momentum_score(candles)
@@ -886,27 +905,19 @@ module Live
                           0.5
                         end
 
-        peak = (pending_meta || tracker.meta || {})['peak_trend_score'] || 0
-        if trend_score > peak
-          if pending_meta
-            pending_meta['peak_trend_score'] = trend_score
-          else
-            meta = tracker.meta || {}
-            meta['peak_trend_score'] = trend_score
-            tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
-          end
-        end
-      rescue StandardError
-        nil
+        # Return a simple momentum indicator (0-50 range)
+        ((price_change.abs * 25) + (volume_factor * 25)).round.clamp(0, 50)
       end
 
       def mark_breakeven_reached!(tracker, net_pnl, threshold_rupees:)
-        return if tracker.be_set?
-        return unless BigDecimal(threshold_rupees.to_s) <= net_pnl
+        begin
+          return if tracker.be_set?
+          return unless BigDecimal(threshold_rupees.to_s) <= net_pnl
 
-        tracker.update!(be_set: true)
-      rescue StandardError => e
-        Rails.logger.warn("[RiskManager] mark_breakeven_reached! failed for #{tracker.order_no}: #{e.class} - #{e.message}")
+          tracker.update!(be_set: true)
+        rescue StandardError => e
+          Rails.logger.warn("[RiskManager] mark_breakeven_reached! failed for #{tracker.order_no}: #{e.class} - #{e.message}")
+        end
       end
 
       def arm_profit_floor!(tracker, net_pnl, lock_rupees:)
@@ -918,19 +929,22 @@ module Live
           profit_floor_set_at: Time.current
         )
         Rails.logger.info("[RiskManager] Profit floor armed for #{tracker.order_no}: ₹#{lock_rupees}")
-      rescue StandardError => e
-        Rails.logger.error("[RiskManager] arm_profit_floor! failed for #{tracker.order_no}: #{e.class} - #{e.message}")
       end
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] arm_profit_floor! failed for #{tracker.order_no}: #{e.class} - #{e.message}")
+    end
 
       def profit_floor_time_kill?(tracker, time_kill_minutes:, pending_meta: nil)
-        return false unless time_kill_minutes
-        
-        floor_set_at = (pending_meta || tracker.meta || {})['profit_floor_set_at'] || tracker.profit_floor_set_at
-        return false unless floor_set_at
- 
-        (Time.current - floor_set_at) >= time_kill_minutes.minutes
-      rescue StandardError
-        false
+        begin
+          return false unless time_kill_minutes
+          
+          floor_set_at = (pending_meta || tracker.meta || {})['profit_floor_set_at'] || tracker.profit_floor_set_at
+          return false unless floor_set_at
+  
+          (Time.current - floor_set_at) >= time_kill_minutes.minutes
+        rescue StandardError
+          false
+        end
       end
 
       def update_trailing_floor!(tracker, hwm_pnl, trail_pct:, pending_meta: nil)
@@ -991,7 +1005,7 @@ module Live
         buy_value = entry_price * quantity
         return nil unless buy_value.positive?
 
-        (hwm / buy_value).to_f
+        return (hwm / buy_value).to_f
       end
     end
   end

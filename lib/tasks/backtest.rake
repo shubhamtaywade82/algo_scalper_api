@@ -304,6 +304,7 @@ namespace :backtest do
           end
 
         sleep 1 # Rate limit protection
+        end
       end
     end
 
@@ -314,7 +315,7 @@ namespace :backtest do
 
     if all_results.empty?
       puts "\n⚠️  No successful backtests completed"
-      next
+      return
     end
 
     # Best by Expectancy

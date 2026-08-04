@@ -2,49 +2,22 @@
 
 require 'singleton'
 require 'concurrent/map'
-require_relative '../concerns/broker_fee_calculator'
 
 module Positions
-  # Ultra-fast in-memory position cache for NEMESIS V3
-  # Mirrors Redis PnL + RedisTickCache for sub-millisecond lookups
-  # Subscribes directly to MarketFeedHub callbacks for real-time updates
-  # rubocop:disable Metrics/ClassLength
-  class ActiveCache
-    include Singleton
+  # Position data structure - defined outside ActiveCache to avoid re-definition issues
+  class PositionData
+    attr_accessor :tracker_id, :security_id, :segment, :entry_price, :quantity,
+                  :sl_price, :tp_price, :high_water_mark, :current_ltp, :pnl,
+                  :pnl_pct, :peak_profit_pct, :min_profit_pct, :trend,
+                  :time_in_position, :breakeven_locked, :trailing_stop_price,
+                  :sl_offset_pct, :position_direction, :index_key,
+                  :underlying_segment, :underlying_security_id, :underlying_symbol,
+                  :underlying_trend_score, :underlying_ltp, :price_history,
+                  :last_updated_at
 
-    # Position data structure
-    PositionData = Struct.new(
-      :tracker_id,
-      :security_id,
-      :segment,
-      :entry_price,
-      :quantity,
-      :sl_price,
-      :tp_price,
-      :high_water_mark,
-      :current_ltp,
-      :pnl,
-      :pnl_pct,
-      :peak_profit_pct,
-      :min_profit_pct,
-      :trend,
-      :time_in_position,
-      :breakeven_locked,
-      :trailing_stop_price,
-      :sl_offset_pct,
-      :position_direction,
-      :index_key,
-      :underlying_segment,
-      :underlying_security_id,
-      :underlying_symbol,
-      :underlying_trend_score,
-      :underlying_ltp,
-      :price_history,
-      :last_updated_at,
-      keyword_init: true # rubocop:disable Style/RedundantStructKeywordInit
-    ) do
-      def composite_key
-        "#{segment}:#{security_id}"
+    def initialize(attrs = {})
+      attrs.each do |k, v|
+        public_send("#{k}=", v) if respond_to?("#{k}=")
       end
     end
 
@@ -84,17 +57,12 @@ module Positions
       is_ce ? (current_ltp >= tp_price) : (current_ltp <= tp_price)
     end
 
-      def update_ltp(ltp, timestamp: Time.current)
-        self.current_ltp = ltp.to_f
-        self.last_updated_at = timestamp
-
-        # Maintain price history (last 10 ticks) for velocity/acceleration
-        self.price_history ||= []
-        self.price_history << ltp.to_f
-        self.price_history.shift if self.price_history.size > 10
-
-        recalculate_pnl
-      end
+    # Determine if this is a CE (Call) position
+    def ce_position?
+      # Check position_direction (can be :bullish/:bearish or 'long_ce'/'long_pe')
+      dir = position_direction.to_s.downcase
+      return true if %w[long_ce bullish].include?(dir)
+      return false if %w[long_pe bearish].include?(dir)
 
       # Fallback: default to CE if unknown (safer default for long positions)
       true
@@ -112,14 +80,22 @@ module Positions
       recalculate_pnl
     end
 
-        # Update min profit percentage (lowest profit % achieved - MAE)
-        self.min_profit_pct = pnl_pct if min_profit_pct.nil? || pnl_pct < min_profit_pct
+    # rubocop:disable Metrics/AbcSize
+    def recalculate_pnl
+      return unless entry_price&.positive? && current_ltp&.positive? && quantity&.positive?
 
-        # NEW (Step 12): Persist peak if it was updated
-        # Note: Peak persistence is handled by ActiveCache.update_ltp, not here
-        # This avoids calling private methods from PositionData struct
-      end
-      # rubocop:enable Metrics/AbcSize
+      self.pnl = (current_ltp - entry_price) * quantity
+      # Calculate pnl_pct as decimal (0.0573 for 5.73%) for consistent storage (matches Redis format)
+      self.pnl_pct = entry_price.positive? ? ((current_ltp - entry_price) / entry_price) : 0.0
+
+      # Update HWM
+      self.high_water_mark = pnl if high_water_mark.nil? || pnl > high_water_mark
+
+      # Update peak profit percentage (highest profit % achieved)
+      self.peak_profit_pct = pnl_pct if peak_profit_pct.nil? || pnl_pct > peak_profit_pct
+
+      # Update min profit percentage (lowest profit % achieved - MAE)
+      self.min_profit_pct = pnl_pct if min_profit_pct.nil? || pnl_pct < min_profit_pct
     end
     # rubocop:enable Metrics/AbcSize
 
@@ -139,23 +115,12 @@ module Positions
   class ActiveCache
     include Singleton
 
-    def []=(key, value)
-      public_send("#{key}=", value)
-    end
-  end
-
-  # Ultra-fast in-memory position cache for NEMESIS V3
-  # Mirrors Redis PnL + RedisTickCache for sub-millisecond lookups
-  # Subscribes directly to MarketFeedHub callbacks for real-time updates
-  # rubocop:disable Metrics/ClassLength
-  class ActiveCache
-    include Singleton
-
     def initialize
       @cache = Concurrent::Map.new # composite_key => PositionData
       @tracker_index = Concurrent::Map.new # tracker_id => composite_key
       @lock = Mutex.new
       @subscription_id = nil
+      @tick_query = Live::TickQuery
       @stats = {
         positions_tracked: 0,
         updates_processed: 0,
@@ -169,6 +134,7 @@ module Positions
         nil
       end
       @last_bulk_load_count = nil
+      @last_profit_lock_check = Time.current
     end
 
     # Start the cache (subscribe to MarketFeedHub callbacks)
