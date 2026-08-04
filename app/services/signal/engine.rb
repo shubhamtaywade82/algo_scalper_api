@@ -236,6 +236,21 @@ module Signal
                                                          primary_analysis[:supertrend], { value: primary_analysis[:adx_value] },
                                                          validation_mode: effective_validation_mode)
           end
+
+          result = {
+            direction: final_direction,
+            primary_analysis: primary_analysis,
+            confirmation_analysis: confirmation_analysis,
+            primary_series: primary_series,
+            ta_result: ta_result,
+            regime_result: regime_result,
+            regime: regime,
+            validation_result: validation_result,
+            effective_validation_mode: effective_validation_mode,
+            effective_timeframe: effective_timeframe,
+            strategy_recommendation: strategy_recommendation,
+            use_strategy_recommendations: use_strategy_recommendations
+          }
         end
 
         return unless result
@@ -252,6 +267,12 @@ module Signal
         effective_timeframe = result[:effective_timeframe] || primary_tf
         strategy_recommendation = result[:strategy_recommendation]
         use_strategy_recommendations = result[:use_strategy_recommendations] || false
+
+        if signals_cfg[:halt_on_validation_failure] && validation_result && validation_result[:valid] == false
+          Rails.logger.info("[Signal] halt_on_validation_failure BLOCKED #{index_cfg[:key]}: #{validation_result[:reason]}")
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
 
         # 5. Trading Context Gate
         if trading_context_blocked?(index_cfg, primary_series, primary_analysis, regime_result, regime_state, exit_testing_mode, signals_cfg)
@@ -1170,7 +1191,8 @@ module Signal
       end
 
       def validate_iv_rank(_index_cfg, series, mode_config = nil)
-        mode_config ||= get_validation_mode_config
+        mode_config = get_validation_mode_config(override_mode: mode_config) if mode_config.nil? || mode_config.is_a?(String) || mode_config.is_a?(Symbol)
+        mode_config = get_validation_mode_config unless mode_config.is_a?(Hash)
 
         # For now, we'll use a simple volatility check based on recent price movement
         # In a full implementation, you'd calculate actual IV rank from historical IV data
@@ -1206,7 +1228,8 @@ module Signal
       # Validate theta risk - avoid high theta decay situations
 
       def validate_theta_risk(_index_cfg, _direction, mode_config = nil)
-        mode_config ||= get_validation_mode_config
+        mode_config = get_validation_mode_config(override_mode: mode_config) if mode_config.nil? || mode_config.is_a?(String) || mode_config.is_a?(Symbol)
+        mode_config = get_validation_mode_config unless mode_config.is_a?(Hash)
 
         current_time = Time.zone.now
         hour = current_time.hour
@@ -2113,6 +2136,8 @@ module Signal
       end
 
       def expiry_trade_allowed?(symbol)
+        return true if exit_testing_mode?
+
         expiry_model = "Strategies::ExpiryModel".safe_constantize
         return true unless expiry_model
 

@@ -138,7 +138,7 @@ RSpec.describe Signal::DirectionValidator do
         )
 
         expect(result.valid).to be false
-        expect(result.reasons).to include('Invalid min_agreement')
+        expect(result.reasons).to include('Invalid min_agreement (must be 1-6)')
       end
     end
 
@@ -177,30 +177,28 @@ RSpec.describe Signal::DirectionValidator do
     it 'agrees when ADX >= threshold' do
       result = described_class.send(:check_adx_strength, adx: 18.0, index_cfg: index_cfg)
       expect(result[:agrees]).to be true
-      expect(result[:reason]).to include('ADX 18.0 >= 15')
+      expect(result[:reason]).to include('ADX 18.0 >= 5')
     end
 
     it 'disagrees when ADX < threshold' do
-      result = described_class.send(:check_adx_strength, adx: 12.0, index_cfg: index_cfg)
+      result = described_class.send(:check_adx_strength, adx: 3.0, index_cfg: index_cfg)
       expect(result[:agrees]).to be false
-      expect(result[:reason]).to include('ADX 12.0 < 15')
+      expect(result[:reason]).to include('ADX 3.0 < 5')
     end
 
     it 'uses index-specific thresholds' do
       banknifty_cfg = index_cfg.merge(key: 'BANKNIFTY')
-      result = described_class.send(:check_adx_strength, adx: 18.0, index_cfg: banknifty_cfg)
+      result = described_class.send(:check_adx_strength, adx: 4.0, index_cfg: banknifty_cfg)
       expect(result[:agrees]).to be false
-      expect(result[:reason]).to include('ADX 18.0 < 20')
+      expect(result[:reason]).to include('ADX 4.0 < 6')
     end
   end
 
   describe '.check_vwap_position' do
     let(:candles) do
-      [
-        instance_double(Candle, close: 19_400.0),
-        instance_double(Candle, close: 19_450.0),
-        instance_double(Candle, close: 19_500.0)
-      ]
+      Array.new(12) do |i|
+        instance_double(Candle, close: 19_400.0 + (i * 10.0))
+      end
     end
 
     before do

@@ -38,7 +38,7 @@ RSpec.describe Signal::VolatilityValidator do
         result = described_class.validate(series: series, min_atr_ratio: 3.0)
 
         expect(result.valid).to be false
-        expect(result.reasons).to include('Invalid min_atr_ratio')
+        expect(result.reasons).to include('Invalid min_atr_ratio (must be 0.0-2.0)')
       end
     end
 
@@ -76,7 +76,7 @@ RSpec.describe Signal::VolatilityValidator do
         result = described_class.validate(series: series, min_atr_ratio: 0.65)
 
         expect(result.valid).to be false
-        expect(result.reasons).to include('compression')
+        expect(result.reasons).to include('ATR declining (volatility compression detected)')
       end
     end
 
@@ -95,7 +95,7 @@ RSpec.describe Signal::VolatilityValidator do
         result = described_class.validate(series: series, min_atr_ratio: 0.65)
 
         expect(result.valid).to be false
-        expect(result.reasons).to include('chop')
+        expect(result.reasons).to include('Lunchtime VWAP chop detected')
       end
     end
   end

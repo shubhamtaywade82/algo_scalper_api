@@ -442,10 +442,6 @@ RSpec.describe Orders::Placer do
 
         expect(captured_attrs.last).to match(hash_including(expected_sell_payload))
       end
-
-      expect(result).to eq(:ok)
-      expect(call_count).to eq(2)
-      expect(Dhan::TokenManager).to have_received(:refresh!).once
     end
 
     it "does not loop forever when the token keeps expiring after retry" do

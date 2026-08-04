@@ -250,11 +250,11 @@ module Signal
 
     def self.option_premium_speed_threshold(index_key)
       thresholds = {
-        'NIFTY' => 1.5,
-        'BANKNIFTY' => 2.0,
-        'SENSEX' => 1.5
+        'NIFTY' => 8.0,
+        'BANKNIFTY' => 10.0,
+        'SENSEX' => 8.0
       }
-      thresholds[index_key.to_s.upcase] || 1.5
+      thresholds[index_key.to_s.upcase] || 8.0
     end
   end
 end
