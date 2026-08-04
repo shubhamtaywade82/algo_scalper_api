@@ -5,37 +5,18 @@ module Live
     module ExitExecution
       private
 
-      # RiskManagerService no longer supports self-managed fallback execution directly.
-      # We provide execute_exit for backward compatibility by delegating to a transient ExitEngine.
-      def execute_exit(tracker, reason)
-        engine = @exit_engine || Live::ExitEngine.new(order_router: @orders_gateway)
-        engine.start unless engine.running?
-        engine.execute_exit(tracker, reason)
-      end
-
       # Helper that centralizes exit dispatching logic.
+      # If exit_engine is an object responding to execute_exit, delegate to it.
+      # RiskManagerService no longer supports self-managed fallback execution.
       def dispatch_exit(exit_engine, tracker, reason)
         if exit_engine.respond_to?(:execute_exit) && !exit_engine.equal?(self)
-          result = exit_engine.execute_exit(tracker, reason)
-
-          # ONLY record realized PnL if the exit was successful and NOT already processed
-          # This prevents double-counting PnL when multiple ticks trigger the same exit
-          if result[:success] && !%w[already_exited exit_lock_held].include?(result[:reason])
-            begin
-              pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)&.dig(:pnl) ||
-                    tracker.last_pnl_rupees.to_f
-              Portfolio::PnlTracker.mark_realized(tracker_id: tracker.id, pnl: pnl.to_f)
-            rescue StandardError => e
-              Rails.logger.error(
-                "[RiskManager] Portfolio::PnlTracker.mark_realized failed for tracker=#{tracker.id}: #{e.message}"
-              )
-            end
-          elsif result[:success] && result[:reason] == 'already_exited'
-             Rails.logger.debug("[RiskManager] Tracker #{tracker.id} already exited, skipping mark_realized in dispatch_exit")
-          end
+          exit_engine.execute_exit(tracker, reason)
         else
-          # Fallback to internal execute_exit if engine is invalid
-          execute_exit(tracker, reason)
+          Rails.logger.fatal(
+            "[RiskManager] CRITICAL: ExitEngine unavailable for #{tracker.order_no} " \
+              "(reason=#{reason}) — position NOT exited"
+          )
+          raise "ExitEngine unavailable for #{tracker.order_no}"
         end
       end
 

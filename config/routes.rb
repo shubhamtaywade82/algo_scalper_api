@@ -24,31 +24,11 @@ Rails.application.routes.draw do
   namespace :api do
     get :health, to: "health#show"
     post :test_broadcast, to: "test#broadcast"
-    get :dashboard, to: "dashboard#show"
-    get "public_ip/audit", to: "public_ip#audit"
-    get :positions, to: "positions#index"
-    get :signals,   to: "signals#index"
-
-    get 'smc/decision', to: 'smc#decision'
-
-    # Live AI analysis dashboard
-    get  'analysis/:index_key',            to: 'analysis#show',        as: :analysis
-    get  'analysis/:index_key/historical', to: 'analysis#historical',  as: :analysis_historical
-    post 'analysis/:index_key/ai_snapshot', to: 'analysis#ai_snapshot', as: :analysis_ai_snapshot
-
-    # Algo Settings
-    get    'settings',           to: 'settings#index'
-    patch  'settings/bulk',      to: 'settings#update_bulk'
-    post   'settings/update_ip', to: 'settings#update_ip'
-
-    # Calibration runs — view and apply automated config patches
-    resources :calibration_runs, only: %i[index show] do
-      member do
-        post :apply
-      end
-    end
 
     # Circuit breaker — emergency halt
+    # GET    /api/circuit_breaker        → status (unauthenticated)
+    # POST   /api/circuit_breaker/trip   → trip   (requires X-Circuit-Breaker-Token)
+    # DELETE /api/circuit_breaker/trip   → reset  (requires X-Circuit-Breaker-Token)
     resource :circuit_breaker, only: %i[show], controller: 'circuit_breaker' do
       post :trip, on: :member
       delete :trip, action: :reset, on: :member

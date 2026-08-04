@@ -85,7 +85,7 @@ RSpec.describe Live::ExitEngine do
 
         expect(result[:success]).to be true
         expect(result[:exit_price]).to eq(101.5)
-        expect(result[:reason]).to start_with('stop_loss')
+        expect(result[:reason]).to eq('stop_loss')
         expect(result[:client_order_id]).to be_present
         expect(tracker.reload.exit_requested_at).to be_present
         expect(tracker.exit_sent_at).to be_present
@@ -162,6 +162,18 @@ RSpec.describe Live::ExitEngine do
         expect(router).not_to have_received(:exit_market)
       end
     end
+
+    context 'when exit was already requested earlier' do
+      it 'returns exit_already_requested and does not place another broker order' do
+        tracker.update!(exit_requested_at: Time.current, exit_coid: 'AS-EXIT-EXISTING')
+
+        result = engine.execute_exit(tracker, 'stop_loss')
+
+        expect(result).to include(success: true, reason: 'exit_already_requested', client_order_id: 'AS-EXIT-EXISTING')
+        expect(router).not_to have_received(:exit_market)
+      end
+    end
+
 
     context 'when exit was already requested earlier' do
       it 'returns exit_already_requested and does not place another broker order' do

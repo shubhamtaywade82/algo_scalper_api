@@ -139,6 +139,35 @@ indices:
 
 Trading daemon startup performs a broker-vs-DB reconciliation pass before starting risk/signal loops. This is handled by `Live::PositionSyncService.instance.force_sync!` and prevents stale DB-only state after restarts.
 
+- During market hours, reconciliation failures are strict by default and block daemon startup.
+- Outside market hours, strict mode defaults to false.
+- Override with `TRADING_BOOT_RECONCILIATION_STRICT=true|false`.
+
+
+## 📊 Trading System
+
+### Options Buying Readiness
+
+The engine is optimized for **long-only index options** execution:
+
+- **Strike Selection**: `Options::ChainAnalyzer` narrows to ATM and neighbouring strikes while rejecting illiquid contracts to keep slippage manageable. It consumes the `indices` configuration in [`config/algo.yml`](config/algo.yml) to adapt thresholds per index.
+- **Risk Controls**: `Live::RiskManagerService` enforces per-trade stop loss, target, and daily cut-offs before any order is placed.
+- **Order Placement**: `Orders::PlacementService` prepares CE/PE bracket legs with stop loss and target prices when the broker allows; otherwise it schedules follow-up modify calls for protective exits.
+- **Market Data Flow**: `Live::MarketFeedHub` subscribes to index quotes and open option positions so entry/exit decisions use fresh LTP data.
+
+> **Warning:** Confirm `PAPER_MODE=true` and test on the sandbox before enabling live trades with `DHANHQ_ENABLED=true`.
+
+To run pure options-buying strategies:
+
+1. Set `trade_mode: buy_only` under each desired index in [`config/algo.yml`](config/algo.yml) to disable short legs.
+2. Enable paper trading with `PAPER_MODE=true` in your `.env` while validating signal quality.
+3. Start the scheduler (`bin/dev`) and monitor `log/trading.log` for strike, quantity, and guardrail summaries.
+4. Flip to live mode only after verifying order tickets and broker credentials via `rails console` dry-runs.
+
+### Paper Trading Mode
+
+Trading daemon startup performs a broker-vs-DB reconciliation pass before starting risk/signal loops. This is handled by `Live::PositionSyncService.instance.force_sync!` and prevents stale DB-only state after restarts.
+
 | Process | Command | Purpose |
 |---------|---------|---------|
 | `web` | `bin/rails server -p 3001` | Rails API server |

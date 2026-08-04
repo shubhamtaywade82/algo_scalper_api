@@ -462,7 +462,32 @@ module Live
       is_index = tick[:instrument_type].to_s.upcase == 'INDEX' || %w[NIFTY SENSEX BANKNIFTY].include?(symbol.to_s.upcase)
       MarketData::MarketCache.update_ltp(symbol, ltp, is_index: is_index)
 
-      return unless tick[:oi].present? || tick[:volume].present?
+      # puts tick  # Uncomment only for debugging - very noisy!
+      # Log every tick (segment:security_id and LTP) for verification during development
+      # # Rails.logger.info("[WS tick] #{tick[:segment]}:#{tick[:security_id]} ltp=#{tick[:ltp]} kind=#{tick[:kind]}")
+
+      # Store in in-memory cache (primary)
+      # Update TickCache for both ticker (with LTP) and prev_close (with prev_close) ticks
+      # TickCache.put() handles merging of both types
+      Live::TickCache.put(tick) if tick[:ltp].to_f.positive? || tick[:prev_close].to_f.positive?
+
+      # # puts Live::TickQuery.for_security(segment: tick[:segment], security_id: tick[:security_id])&.ltp
+      # # Store in Redis for PnL tracking (secondary)
+      # # Only store if we have valid segment, security_id, and LTP
+      # if tick[:segment].present? && tick[:security_id].present? && tick[:ltp].present? && tick[:ltp].to_f.positive?
+      #   begin
+      #     if tick[:ltp].present? && tick[:ltp].to_f.positive?
+      #       Live::RedisPnlCache.instance.store_tick(
+      #         segment: tick[:segment],
+      #         security_id: tick[:security_id].to_s,
+      #         ltp: tick[:ltp],
+      #         timestamp: Time.current
+      #       )
+      #     end
+      #   rescue StandardError => e
+      #     Rails.logger.debug { "[MarketFeedHub] Failed to store tick in Redis: #{e.message}" } if defined?(Rails.logger)
+      #   end
+      # end
 
       MarketData::MarketCache.update_option_data(symbol, {
         oi: tick[:oi],

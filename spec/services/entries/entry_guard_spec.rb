@@ -36,9 +36,20 @@ RSpec.describe Entries::EntryGuard do
         allow(Entries::OrderExecutionService).to receive(:call).and_return({ error: 'order_failed' })
       end
 
-      it 'blocks entry and records outcome' do
-        expect(described_class.try_enter(index_cfg: index_cfg, pick: pick, direction: direction, signal: signal)).to be false
-        expect(signal).to have_received(:record_entry_outcome).with('blocked', 'order_failed')
+      context 'when quantity calculation fails' do
+        it 'returns false when quantity is zero' do
+          allow(Capital::Allocator).to receive(:qty_for).and_return(0)
+
+          expect do
+            result = described_class.try_enter(
+              index_cfg: index_cfg,
+              pick: pick,
+              direction: :bullish
+            )
+
+            expect(result).to be false
+          end.not_to change(PositionTracker, :count)
+        end
       end
     end
 

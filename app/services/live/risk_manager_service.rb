@@ -27,12 +27,14 @@ module Live
 
     def initialize(exit_engine: nil)
       @exit_engine = exit_engine
-      @active_cache = Positions::ActiveCache.instance
       @algo_config = begin
         AlgoConfig.fetch
       rescue StandardError
         {}
       end
+      @paper_mode = @algo_config.dig(:paper_trading, :enabled) == true
+      @orders_gateway = @paper_mode ? Orders::GatewayPaper.new : Orders::GatewayLive.new
+      @mutex = Mutex.new
       @running = false
       @thread = nil
       @market_closed_checked = false # Track if we've already checked after market closed

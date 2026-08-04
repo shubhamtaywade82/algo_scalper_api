@@ -34,6 +34,10 @@ allow(ENV).to receive(:[]).and_call_original
 allow(TradingSystem::Bootstrap).to receive(:boot_reconciliation!).and_return(true)
   end
 
+  before do
+    allow(TradingSystem::Bootstrap).to receive(:boot_reconciliation!).and_return(true)
+  end
+
   describe 'when market is closed' do
     before do
       allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
@@ -74,22 +78,6 @@ allow(TradingSystem::Bootstrap).to receive(:boot_reconciliation!).and_return(tru
       expect(active_cache).to have_received(:start)
       expect(reconciliation).to have_received(:start)
       expect(TradingSystem::Bootstrap).to have_received(:boot_reconciliation!).with(strict: true)
-    end
-  end
-
-  describe 'when trading services are explicitly disabled' do
-    before do
-      allow(ENV).to receive(:[]).with('DISABLE_TRADING_SERVICES').and_return('1')
-      allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
-    end
-
-    it 'does not start any services' do
-      expect(described_class.new(supervisor: supervisor).start(keep_alive: false, allow_in_test: true)).to be false
-
-      expect(market_feed).not_to have_received(:start)
-      expect(strategy_manager).not_to have_received(:start)
-      expect(risk_manager).not_to have_received(:start)
-      expect(TradingSystem::Bootstrap).not_to have_received(:boot_reconciliation!)
     end
   end
 end

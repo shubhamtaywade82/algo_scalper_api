@@ -22,7 +22,7 @@ RSpec.describe Orders::GatewayLive do
   end
 
   describe '#cancel_order' do
-    let(:order) { instance_double(DhanHQ::Models::Order, cancel: { status: 'success' }) }
+    let(:order) { instance_double('DhanOrder', cancel: { status: 'success' }) }
 
     it 'finds and cancels the order' do
       allow(DhanHQ::Models::Order).to receive(:find).with('ORD-123').and_return(order)

@@ -69,6 +69,8 @@ module Live
           return
         end
 
+        advance_trade_states!
+
         # ============================================================
         # 5-LAYER EXIT SYSTEM (Template Method: run_enforcement_cycle)
         # Priority order: first-match-wins, evaluation stops on exit
