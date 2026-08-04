@@ -37,7 +37,7 @@ namespace :debug do
 
         # Step 3: Check expiry list
         expiry_list = instrument.expiry_list
-        if expiry_list.blank?
+        if expiry_list.nil? || expiry_list.empty?
           puts "\n❌ No expiry list available for #{symbol_name}"
           next
         end
@@ -49,6 +49,7 @@ namespace :debug do
             when Date then exp
             when Time, DateTime, ActiveSupport::TimeWithZone then exp.to_date
             when String then Date.parse(exp)
+            else nil
             end
           rescue ArgumentError
             nil
@@ -56,10 +57,10 @@ namespace :debug do
 
           if parsed
             days_away = (parsed - Time.zone.today).to_i
-            status = if days_away.negative?
+            status = if days_away < 0
                        '❌ PAST'
                      else
-                       days_away.zero? ? '🟡 TODAY' : "✅ #{days_away} days"
+                       days_away == 0 ? '🟡 TODAY' : "✅ #{days_away} days"
                      end
             puts "   #{idx + 1}. #{parsed.strftime('%Y-%m-%d')} (#{status})"
           else
@@ -80,7 +81,7 @@ namespace :debug do
 
         # Step 5: Get spot LTP
         spot = analyzer.spot_ltp
-        if spot&.positive?
+        if spot && spot.positive?
           puts "💰 Spot LTP: ₹#{spot.round(2)}"
         else
           puts "⚠️  Spot LTP: Not available (#{spot.inspect})"
@@ -113,7 +114,7 @@ namespace :debug do
           puts "✅ Option chain loaded: #{chain.size} options found"
 
           # Show sample strikes
-          strikes = chain.filter_map { |opt| opt[:strike] }.uniq.sort
+          strikes = chain.map { |opt| opt[:strike] }.compact.uniq.sort
           puts "\n   📊 Strike Range:"
           puts "      - Min: ₹#{strikes.first}" if strikes.any?
           puts "      - Max: ₹#{strikes.last}" if strikes.any?
@@ -133,7 +134,7 @@ namespace :debug do
                           else 50
                           end
 
-        if spot&.positive?
+        if spot && spot.positive?
           puts "\n🎲 Strike Calculation Example (LTP: ₹#{spot.round(2)}, Rounding: #{strike_rounding}):"
           atm_strike = (spot / strike_rounding).round * strike_rounding
           puts "   - ATM: ₹#{atm_strike}"

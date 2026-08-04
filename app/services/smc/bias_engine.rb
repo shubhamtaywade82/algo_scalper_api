@@ -90,7 +90,7 @@ module Smc
 
     # Analyze SMC/AVRZ data with AI (Ollama or OpenAI)
     # Returns AI analysis of the market structure, liquidity, and trading bias
-    # Uses AiAnalyzer with pre-fetched data and single-pass analysis
+    # Uses new AiAnalyzer with chat completion, history, and tool calling
     def analyze_with_ai(stream: false, &)
       return nil unless ai_enabled?
 
@@ -149,6 +149,7 @@ module Smc
       Rails.logger.error("[Smc::BiasEngine] #{e.class} - #{e.message}")
       series
     end
+
 
     def htf_bias_valid?(ctx)
       ctx.pd.discount? || ctx.pd.premium?

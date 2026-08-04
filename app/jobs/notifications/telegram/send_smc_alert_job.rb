@@ -86,23 +86,11 @@ module Notifications
             }
           }
 
-          # Enrich with outputs from LTF engines (Displacement, Volume, Zone, Navigator).
-          # These run in the background job so the scanner thread stays fast.
-          details_data[:ltf_engines] = build_ltf_enrichment(instrument, ltf_series, decision)
-
           Rails.logger.debug { "[SendSmcAlertJob] Fetching AI analysis for #{instrument.symbol_name}..." }
 
-          # Use AiAnalyzer with pre-fetched data and single-pass analysis
+          # Use new AiAnalyzer with chat completion, history, and tool calling
           analyzer = Smc::AiAnalyzer.new(instrument, initial_data: details_data)
-          result = analyzer.analyze
-
-          if result.present?
-            Rails.logger.info("[SendSmcAlertJob] AI analysis generated successfully (#{result.length} chars) for #{instrument.symbol_name}")
-          else
-            Rails.logger.warn("[SendSmcAlertJob] AI analyzer returned empty result for #{instrument.symbol_name}")
-          end
-
-          result
+          analyzer.analyze
         rescue StandardError => e
           Rails.logger.warn("[SendSmcAlertJob] Failed to get AI analysis: #{e.class} - #{e.message}")
           nil
@@ -116,19 +104,8 @@ module Notifications
         false
       end
 
-      def build_reasons(contexts, decision:)
-        context_decision = contexts[:decision]
-        if context_decision.present? && context_decision.to_s.casecmp(decision.to_s) != 0
-          Rails.logger.warn(
-            "[SendSmcAlertJob] decision/context mismatch: job_decision=#{decision.inspect} " \
-            "contexts[:decision]=#{context_decision.inspect}"
-          )
-        end
 
-        htf_context = contexts[:htf] || {}
-        mtf_context = contexts[:mtf] || {}
-        ltf_context = contexts[:ltf] || {}
-
+      def build_reasons(htf_context, mtf_context, ltf_context)
         reasons = []
 
         # Use serialized context data to build reasons

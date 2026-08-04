@@ -124,10 +124,10 @@ development:
 
   smc_scanner:
     class: SmcScannerJob
-    schedule: at 4:00pm every day
-    queue_name: background
+    schedule: every 15 minutes
+    queue_name: default
     priority: 10
-    description: "SMC + AVRZ scanner for all configured indices - post-close scheduled run; intraday flow is event-driven from tick events"
+    description: "SMC + AVRZ scanner for all configured indices - runs every 15 minutes (aligns with 15m MTF candles)"
 
   ai_technical_analysis_nifty:
     class: AiTechnicalAnalysisJob
@@ -292,10 +292,10 @@ production:
 
   smc_scanner:
     class: SmcScannerJob
-    schedule: at 4:00pm every weekday
-    queue_name: background
+    schedule: every 15 minutes between 9:15am and 3:30pm on weekdays
+    queue_name: default
     priority: 10
-    description: "SMC + AVRZ scanner - post-close scheduled run on weekdays; intraday flow is event-driven from tick events"
+    description: "SMC + AVRZ scanner - market hours only, runs every 15 minutes (aligns with 15m MTF candles)"
 
   ai_technical_analysis_nifty:
     class: AiTechnicalAnalysisJob

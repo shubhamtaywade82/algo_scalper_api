@@ -224,7 +224,7 @@ namespace :ai do
       TelegramNotifier.send_chat_action(action: 'typing') if telegram_enabled
 
       # Accumulate chunks for Telegram (filtered - no verbose logs)
-      telegram_buffer = +'' # Create mutable string (frozen_string_literal is enabled)
+      telegram_buffer = String.new # Create mutable string (frozen_string_literal is enabled)
       # Escape HTML special characters in query
       escaped_query = query.to_s.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
       telegram_buffer << "📊 <b>Technical Analysis: #{escaped_query}</b>\n\n"

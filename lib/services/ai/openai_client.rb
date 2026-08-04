@@ -227,8 +227,7 @@ module Services
       # Chat completion interface (works with both gems)
       # For Ollama: Serializes requests to prevent parallel calls
       # Returns full response object if tools are provided, otherwise returns content string
-      # log_context: :ai_intent routes prompt logging to log/ai_intent.log only
-      def chat(messages:, model: nil, temperature: 0.7, tools: nil, tool_choice: nil, log_context: nil, **options)
+      def chat(messages:, model: nil, temperature: 0.7, tools: nil, tool_choice: nil, **)
         return nil unless enabled?
 
         # Auto-select model for Ollama if not provided
@@ -238,11 +237,14 @@ module Services
                     'gpt-4o'
                   end
 
-        opts = options.merge(log_context: log_context)
-
-        # Serialize Ollama requests to prevent parallel calls; retry on connection reset
-        result = chat_with_retry(messages: messages, model: model, temperature: temperature, tools: tools,
-                                 tool_choice: tool_choice, opts: opts)
+        # Serialize Ollama requests to prevent parallel calls
+        result = if @provider == :ollama
+                   with_request_serialization do
+                     execute_chat(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, **)
+                   end
+                 else
+                   execute_chat(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, **)
+                 end
 
         # If tools are provided, return full response hash; otherwise return content string (backward compatibility)
         if tools
@@ -292,22 +294,17 @@ module Services
       end
 
       # Internal chat execution (without serialization wrapper)
-      def execute_chat(messages:, model:, temperature:, tools: nil, tool_choice: nil, log_context: nil, **options)
-        opts = options.merge(log_context: log_context)
+      def execute_chat(messages:, model:, temperature:, tools: nil, tool_choice: nil, **)
         case @provider
         when :ruby_openai
-          chat_ruby_openai(messages: messages, model: model, temperature: temperature, tools: tools,
-                           tool_choice: tool_choice, **opts)
+          chat_ruby_openai(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, **)
         when :openai_ruby
-          chat_openai_ruby(messages: messages, model: model, temperature: temperature, tools: tools,
-                           tool_choice: tool_choice, **opts)
+          chat_openai_ruby(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, **)
         when :ollama
           if defined?(OpenAI) && OpenAI.respond_to?(:configure)
-            chat_ruby_openai(messages: messages, model: model, temperature: temperature, tools: tools,
-                             tool_choice: tool_choice, **opts)
+            chat_ruby_openai(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, **)
           else
-            chat_openai_ruby(messages: messages, model: model, temperature: temperature, tools: tools,
-                             tool_choice: tool_choice, **opts)
+            chat_openai_ruby(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, **)
           end
         else
           raise "Unknown provider: #{@provider}"
@@ -330,14 +327,10 @@ module Services
         # Serialize Ollama requests to prevent parallel calls
         if @provider == :ollama
           with_request_serialization do
-            execute_chat_stream(
-              messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &block
-            )
+            execute_chat_stream(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &block)
           end
         else
-          execute_chat_stream(
-            messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &block
-          )
+          execute_chat_stream(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &block)
         end
       rescue StandardError => e
         Rails.logger.error("[OpenAIClient] Chat stream error: #{e.class} - #{e.message}")
@@ -348,23 +341,15 @@ module Services
       def execute_chat_stream(messages:, model:, temperature:, tools: nil, tool_choice: nil, &)
         case @provider
         when :ruby_openai
-          chat_stream_ruby_openai(
-            messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &
-          )
+          chat_stream_ruby_openai(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &)
         when :openai_ruby
-          chat_stream_openai_ruby(
-            messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &
-          )
+          chat_stream_openai_ruby(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &)
         when :ollama
           # Ollama uses OpenAI-compatible API, use the same client methods
           if defined?(OpenAI) && OpenAI.respond_to?(:configure)
-            chat_stream_ruby_openai(
-              messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &
-            )
+            chat_stream_ruby_openai(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &)
           else
-            chat_stream_openai_ruby(
-              messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &
-            )
+            chat_stream_openai_ruby(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &)
           end
         else
           raise "Unknown provider: #{@provider}"
@@ -529,7 +514,7 @@ module Services
       end
 
       # Chat completion using ruby-openai
-      def chat_ruby_openai(messages:, model:, temperature:, tools: nil, tool_choice: nil, log_context: nil, **options)
+      def chat_ruby_openai(messages:, model:, temperature:, tools: nil, tool_choice: nil, **options)
         formatted_messages = format_messages_ruby_openai(messages)
         token_count = estimate_token_count(formatted_messages)
 
@@ -558,7 +543,7 @@ module Services
       end
 
       # Chat completion using openai-ruby
-      def chat_openai_ruby(messages:, model:, temperature:, tools: nil, tool_choice: nil, log_context: nil, **)
+      def chat_openai_ruby(messages:, model:, temperature:, tools: nil, tool_choice: nil, **)
         formatted_messages = format_messages_openai_ruby(messages)
         token_count = estimate_token_count(formatted_messages)
 
@@ -574,7 +559,7 @@ module Services
         params[:tools] = tools if tools
         params[:tool_choice] = tool_choice if tool_choice
 
-        response = @client.chat.completions.create(**params, **)
+        response = @client.chat.completions.create(**params.merge(**))
 
         # Return full response hash if tools were used, otherwise extract content string
         if tools
@@ -618,7 +603,9 @@ module Services
                 content = delta['content']
 
                 # Capture tool_calls if present (for native tool calling)
-                stream_tool_calls.concat(delta['tool_calls']) if delta['tool_calls']
+                if delta['tool_calls']
+                  stream_tool_calls.concat(delta['tool_calls'])
+                end
 
                 if content.present? && block
                   chunk_count += 1
@@ -789,15 +776,17 @@ module Services
             content: message['content'],
             tool_calls: message['tool_calls']
           }
-        elsif response.respond_to?(:dig)
-          # Fallback for different response formats
-          message = response.dig('choices', 0, 'message') || {}
-          {
-            content: message['content'],
-            tool_calls: message['tool_calls']
-          }
         else
-          { content: response.to_s, tool_calls: nil }
+          # Fallback for different response formats
+          if response.respond_to?(:dig)
+            message = response.dig('choices', 0, 'message') || {}
+            {
+              content: message['content'],
+              tool_calls: message['tool_calls']
+            }
+          else
+            { content: response.to_s, tool_calls: nil }
+          end
         end
       end
 
