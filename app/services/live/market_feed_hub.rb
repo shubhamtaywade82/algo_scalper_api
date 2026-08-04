@@ -374,18 +374,16 @@ module Live
 
     private
 
-    def acquire_budget!(connection_id)
-      WsConnectionBudget.acquire!(connection_id)
-    rescue WsConnectionBudget::BudgetExceeded
-      Rails.logger.warn("[MarketFeedHub] WebSocket connection budget exhausted - cannot start feed (#{connection_id})")
-      false
-    end
+    def wait_for_open(timeout = 3)
+      start_time = Time.now
 
-    def release_budget!(connection_id)
-      WsConnectionBudget.release!(connection_id)
-    rescue StandardError => e
-      Rails.logger.warn("[MarketFeedHub] Failed to release connection budget for #{connection_id}: #{e.message}")
-      false
+      until @ws_open
+        sleep 0.05
+        if Time.now - start_time > timeout
+          Rails.logger.warn("[MarketFeedHub] WebSocket open timeout, continuing anyway")
+          break
+        end
+      end
     end
 
     def enabled?

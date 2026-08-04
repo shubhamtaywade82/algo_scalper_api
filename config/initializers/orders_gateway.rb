@@ -1,20 +1,28 @@
 # frozen_string_literal: true
 
 Rails.application.config.to_prepare do
+  # registry for Orders.config
   module Orders
     class << self
       attr_accessor :config
     end
   end
 
-  gateway = Orders::GatewayFactory.build
+  paper_mode =
+    begin
+      AlgoConfig.fetch.dig(:paper_trading, :enabled)
+    rescue StandardError
+      true
+    end
 
-  # Set structured config, not raw gateway
+  gateway =
+    if paper_mode
+      Orders::GatewayPaper.new
+    else
+      Orders::GatewayLive.new
+    end
+
   Orders.config = Orders::Config.new(gateway: gateway)
 
-  paper = AlgoConfig.fetch.dig(:paper_trading, :enabled)
-  Rails.logger.info(
-    "[Orders] Using #{gateway.class.name} (paper_trading.enabled=#{paper}; " \
-    "set LIVE_TRADING=true for live broker execution)"
-  )
+  Rails.logger.info("[Orders] Gateway initialized → #{gateway.class.name}")
 end
