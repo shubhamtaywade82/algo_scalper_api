@@ -39,7 +39,6 @@ export const ROUTES = {
   // Existing routes (keep for backward compat)
   ALPHA: '/alpha',
   SIGNALS: '/signals',
-  RESEARCH: '/research',
   OPTION_SCALPER: '/option-scalper',
   ANALYSIS: '/analysis',
   LEDGER: '/ledger',
@@ -64,7 +63,6 @@ export const navigationConfig = [
       { id: 'signals', label: 'Signals', href: ROUTES.SIGNALS, icon: 'signals' },
       { id: 'alpha', label: 'Alpha', href: ROUTES.ALPHA, icon: 'alpha' },
       { id: 'analysis', label: 'Analysis', href: ROUTES.ANALYSIS, icon: 'analysis' },
-      { id: 'research', label: 'Research', href: ROUTES.RESEARCH, icon: 'research' },
       { id: 'strategies', label: 'Strategies', href: ROUTES.STRATEGIES, icon: 'strategies' },
       { id: 'option-scalper', label: 'Option Scalper', href: ROUTES.OPTION_SCALPER, icon: 'optionScalper' },
       { id: 'backtester', label: 'Backtester', href: ROUTES.BACKTESTER, icon: 'strategies' },
@@ -83,7 +81,7 @@ export const navigationConfig = [
   {
     section: NAV_SECTIONS.PORTFOLIO,
     items: [
-      { id: 'positions', label: 'Positions', href: ROUTES.POSITIONS, icon: 'positions' },
+      { id: 'positions', label: 'Positions', href: ROUTES.DASHBOARD, icon: 'positions' }, // Existing positions are on dashboard
       { id: 'orders', label: 'Orders', href: ROUTES.LEDGER, icon: 'ledger' }, // Ledger acts as orders or trades log
       { id: 'holdings', label: 'Holdings', href: ROUTES.HOLDINGS, icon: 'holdings' },
       { id: 'funds', label: 'Funds', href: ROUTES.FUNDS, icon: 'funds' }

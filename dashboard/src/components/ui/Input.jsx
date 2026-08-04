@@ -20,9 +20,6 @@ export default function Input(props) {
           placeholder={props.placeholder}
           type={props.type || 'text'}
           disabled={props.disabled}
-          min={props.min}
-          max={props.max}
-          step={props.step}
         />
         <Show when={props.rightAddon}>
           <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">

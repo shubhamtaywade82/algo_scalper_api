@@ -87,8 +87,6 @@ module Api
         {
           id: i + 1,
           time: t[:entry_time]&.strftime('%d %b %H:%M:%S'),
-          entry_timestamp: t[:entry_time]&.to_i,
-          exit_timestamp: t[:exit_time]&.to_i,
           type: t[:signal_type].to_s == 'ce' ? 'BUY' : 'SELL',
           inst: "#{runner[:symbol]} #{t[:signal_type].to_s.upcase}",
           qty: 75,
@@ -103,23 +101,22 @@ module Api
 
     def build_events(runner)
       events = []
-      market_open_ts = runner[:spot_rows]&.first&.dig(:timestamp)&.to_i || Time.zone.now.to_i
-      events << { time: '09:00:00', text: 'Market Open', type: 'system', timestamp: market_open_ts }
+      events << { time: '09:00:00', text: 'Market Open', type: 'system' }
 
       (runner[:spot_rows] || []).each do |row|
         t = row[:timestamp]&.strftime('%H:%M:%S') || '--'
-        events << { time: t, text: "#{row[:action]} signal (#{row[:reason]})", type: 'signal', timestamp: row[:timestamp]&.to_i }
+        events << { time: t, text: "#{row[:action]} signal (#{row[:reason]})", type: 'signal' }
       end
 
       (runner[:option_trades] || []).each do |t|
         entry_t = t[:entry_time]&.strftime('%H:%M:%S') || '--'
         exit_t = t[:exit_time]&.strftime('%H:%M:%S') || '--'
-        events << { time: entry_t, text: "Order placed #{t[:signal_type].to_s.upcase}", type: 'order', timestamp: t[:entry_time]&.to_i }
-        events << { time: entry_t, text: "Order filled @ #{t[:entry_price].to_f.round(2)}", type: 'order', timestamp: t[:entry_time]&.to_i }
-        events << { time: exit_t, text: "Exit (#{t[:exit_reason]}) @ #{t[:exit_price].to_f.round(2)}", type: 'order', timestamp: t[:exit_time]&.to_i }
+        events << { time: entry_t, text: "Order placed #{t[:signal_type].to_s.upcase}", type: 'order' }
+        events << { time: entry_t, text: "Order filled @ #{t[:entry_price].to_f.round(2)}", type: 'order' }
+        events << { time: exit_t, text: "Exit (#{t[:exit_reason]}) @ #{t[:exit_price].to_f.round(2)}", type: 'order' }
       end
 
-      events.sort_by { |e| e[:timestamp] || 0 }
+      events.sort_by { |e| e[:time] }
     end
 
     def transform_spot_row(row)

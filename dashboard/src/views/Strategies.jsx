@@ -1,6 +1,8 @@
 import { createMemo } from 'solid-js'
 import { For } from 'solid-js'
 import { useDashboardContext } from '../context/DashboardContext'
+import { expiryBadgeMeta } from '../lib/expiryBadge'
+import Badge from '../components/ui/Badge'
 
 export default function Strategies() {
   const { indices, config } = useDashboardContext()
@@ -33,11 +35,19 @@ export default function Strategies() {
     return Object.values(val).filter(i => i && i.key)
   })
 
+  function expiryVariant(className) {
+    if (className.includes('text-emerald')) return 'success'
+    if (className.includes('text-red') || className.includes('text-rose')) return 'danger'
+    if (className.includes('text-amber') || className.includes('text-yellow')) return 'warning'
+    if (className.includes('text-blue') || className.includes('text-cyan')) return 'info'
+    return 'outline'
+  }
+
   return (
     <div class="space-y-6">
       <div class="flex items-center justify-between mb-2 px-2">
         <h2 class="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full bg-primary-500"></span>
+          <span class="w-2 h-2 rounded-full bg-primary-500" />
           Active Strategies
         </h2>
         <span class="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">Live Config</span>
@@ -47,15 +57,31 @@ export default function Strategies() {
         <For each={indicesList()}>
           {(idx) => (
             <div class="glass glass-hover p-6 rounded-2xl flex flex-col gap-4 group overflow-hidden relative min-h-[160px]">
-              <div class="absolute top-0 right-0 w-32 h-32 bg-primary-500/5 blur-3xl group-hover:bg-primary-500/10 transition-colors"></div>
-              <div class="flex items-center justify-between relative z-10">
-                <div class="flex flex-col">
+              <div class="absolute top-0 right-0 w-32 h-32 bg-primary-500/5 blur-3xl group-hover:bg-primary-500/10 transition-colors" />
+              <div class="flex items-center justify-between relative z-10 gap-2">
+                <div class="flex flex-col min-w-0">
                   <span class="text-xl font-black text-white tracking-tight">{idx.key}</span>
                   <span class="text-xs font-bold text-gray-500 uppercase tracking-widest mt-0.5">{idx.timeframe} Interval</span>
+                  {(() => {
+                    const b = expiryBadgeMeta(idx)
+                    return (
+                      <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                        <Badge
+                          variant={expiryVariant(b.className)}
+                          class="text-[9px] font-black uppercase tracking-tight"
+                        >
+                          {b.text}
+                        </Badge>
+                        <Show when={b.sub}>
+                          <span class="text-[9px] font-bold text-gray-600">{b.sub}</span>
+                        </Show>
+                      </div>
+                    )
+                  })()}
                 </div>
-                <div class="px-3 py-1 rounded-full bg-primary-500/10 border border-primary-500/20">
-                  <span class="text-xs font-black text-primary-400 uppercase tracking-tighter">{idx.strategy}</span>
-                </div>
+                <Badge variant="info" class="text-xs font-black uppercase tracking-tighter">
+                  {idx.strategy}
+                </Badge>
               </div>
               <div class="flex flex-col gap-2 mt-auto relative z-10">
                 <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-gray-600">
@@ -63,7 +89,7 @@ export default function Strategies() {
                   <span class="text-emerald-500">Scoping Index</span>
                 </div>
                 <div class="w-full bg-white/5 h-1 rounded-full overflow-hidden">
-                  <div class="bg-primary-500 h-full w-2/3 animate-pulse"></div>
+                  <div class="bg-primary-500 h-full w-2/3 animate-pulse" />
                 </div>
               </div>
             </div>
@@ -79,14 +105,14 @@ export default function Strategies() {
               The execution engine utilizes a multi-layered validation system. Primary entries are dictated by Supertrend flips on the 1-minute interval, while ADX strength scores and 5-minute HTF alignment act as critical gateways.
             </p>
             <div class="flex flex-wrap gap-4">
-              <div class="px-4 py-2 rounded-xl bg-white/5 border border-white/10">
-                <span class="block text-[10px] font-black text-gray-600 uppercase mb-1">Entry Strategy</span>
+              <Badge variant="outline" class="px-4 py-2 rounded-xl">
+                <span class="block text-[10px] font-black text-gray-600 uppercase tracking-widest mb-1">Entry Strategy</span>
                 <span class="text-xs font-bold text-white uppercase">Supertrend Trend</span>
-              </div>
-              <div class="px-4 py-2 rounded-xl bg-white/5 border border-white/10">
-                <span class="block text-[10px] font-black text-gray-600 uppercase mb-1">Exit Engine</span>
+              </Badge>
+              <Badge variant="outline" class="px-4 py-2 rounded-xl">
+                <span class="block text-[10px] font-black text-gray-600 uppercase tracking-widest mb-1">Exit Engine</span>
                 <span class="text-xs font-bold text-white uppercase">Dynamic ATR + SL</span>
-              </div>
+              </Badge>
             </div>
           </div>
 
