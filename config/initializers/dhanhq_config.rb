@@ -120,3 +120,51 @@ DhanHQ.configure do |config|
     Dhan::TokenManager.refresh!(force: true) if defined?(Dhan::TokenManager)
   end
 end
+
+def fetch_authority_token!
+  Rails.cache.fetch("scalper:dhan_token", expires_in: 60.seconds) do
+    token_url = token_authority_url
+    authority_token = ENV["DHAN_TOKEN_ACCESS_TOKEN"].presence
+
+    if token_url.blank?
+      raise "Token authority URL invalid/missing (TRADER_API_BASE_URL)"
+    end
+    if authority_token.blank?
+      raise "Token authority bearer missing (DHAN_TOKEN_ACCESS_TOKEN)"
+    end
+
+    response = Faraday.get(token_url) do |req|
+      req.headers["Authorization"] = "Bearer #{authority_token}"
+    end
+
+    unless response.success?
+      raise "Token authority unreachable (status=#{response.status})"
+    end
+
+    data = JSON.parse(response.body)
+    token = data["access_token"].presence || data["accessToken"].presence
+    return token if token.present?
+
+    raise "Token authority response missing access_token"
+  end
+end
+
+def token_authority_url
+  raw_base = ENV["TRADER_API_BASE_URL"].to_s.strip
+  return nil if raw_base.blank?
+  return nil if raw_base.include?("<") || raw_base.include?(">")
+
+  uri = URI.parse(raw_base)
+  return nil unless uri.is_a?(URI::HTTP) && uri.host.present?
+
+  "#{raw_base.chomp('/')}/auth/dhan/token"
+rescue URI::InvalidURIError
+  nil
+end
+
+def log_token_authority_fallback_once!(key:, message:)
+  return if Rails.cache.read(key)
+
+  Rails.logger.warn(message)
+  Rails.cache.write(key, true, expires_in: 10.minutes)
+end

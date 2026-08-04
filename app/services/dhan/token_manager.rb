@@ -42,12 +42,11 @@ module Dhan
         mutex.synchronize do
           token_data = cached_token
           return token_data[:token] if token_data && !expiring?(token_data) && !force
+          authority_response = fetch_from_authority
+          return nil if authority_response.blank?
 
-          strategy  = Dhan::Auth::StrategyResolver.resolve
-          response  = strategy.call
-
-          access_token = response[:access_token]
-          expiry_time  = response[:expiry_time]
+          access_token = authority_response[:access_token]
+          expiry_time = authority_response[:expiry_time]
 
           persist_token(access_token, expiry_time)
           cache_token(access_token, expiry_time)
@@ -93,8 +92,56 @@ module Dhan
       def persist_token(token, expiry_time)
         DhanAccessToken.transaction do
           DhanAccessToken.delete_all
-          DhanAccessToken.create!(token: token, expiry_time: expiry_time)
+          DhanAccessToken.create!(
+            token: token,
+            expiry_time: expiry_time
+          )
         end
+      end
+
+      def fetch_from_authority
+        token_url = token_authority_url
+        bearer = ENV['DHAN_TOKEN_ACCESS_TOKEN'].presence
+
+        if token_url.blank? || bearer.blank?
+          Rails.logger.error(
+            '[DHAN] Token refresh skipped: authority config missing. ' \
+            'Set TRADER_API_BASE_URL and DHAN_TOKEN_ACCESS_TOKEN.'
+          )
+          return nil
+        end
+
+        response = Faraday.get(token_url) { |req| req.headers['Authorization'] = "Bearer #{bearer}" }
+        unless response.success?
+          Rails.logger.error("[DHAN] Token authority request failed (status=#{response.status})")
+          return nil
+        end
+
+        data = JSON.parse(response.body)
+        access_token = data['access_token'].presence || data['accessToken'].presence
+        expiry_raw = data['expires_at'].presence || data['expiryTime'].presence
+
+        if access_token.blank? || expiry_raw.blank?
+          Rails.logger.error('[DHAN] Token authority response missing access_token or expires_at')
+          return nil
+        end
+
+        { access_token: access_token, expiry_time: Time.parse(expiry_raw) }
+      rescue StandardError => e
+        Rails.logger.error("[DHAN] Token authority fetch failed: #{e.class} - #{e.message}")
+        nil
+      end
+
+      def token_authority_url
+        raw_base = ENV['TRADER_API_BASE_URL'].to_s.strip
+        return nil if raw_base.blank? || raw_base.include?('<') || raw_base.include?('>')
+
+        uri = URI.parse(raw_base)
+        return nil unless uri.is_a?(URI::HTTP) && uri.host.present?
+
+        "#{raw_base.chomp('/')}/auth/dhan/token"
+      rescue URI::InvalidURIError
+        nil
       end
 
       def apply_token_to_runtime!(access_token)

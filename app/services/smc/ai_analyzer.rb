@@ -1190,6 +1190,45 @@ module Smc
       lines.join("\n")
     end
 
+    def build_ltf_engines_section(engines)
+      lines = ['**LTF ENGINE ANALYSIS (5m real-time confirmation):**']
+
+      if (disp = engines[:displacement])
+        direction = if disp[:bullish] then 'BULLISH'
+                    elsif disp[:bearish] then 'BEARISH'
+                    else 'NONE (no displacement candle)'
+                    end
+        lines << "- Displacement: #{direction}"
+        lines << "  Body: #{disp[:body]} pts | ATR: #{disp[:atr]} pts | Body/ATR ratio: #{disp[:body_atr_ratio]} (threshold ≥1.2)"
+      end
+
+      if (vol = engines[:volume])
+        spike_str = vol[:spike] ? "YES ─ volume spike confirmed (#{vol[:ratio]}x avg)" : "NO (#{vol[:ratio]}x avg)"
+        lines << "- Volume Spike: #{spike_str}"
+        lines << "  Current volume: #{vol[:current]} | Avg volume (20-bar): #{vol[:avg]}"
+      end
+
+      if (z = engines[:zone])
+        loc = z[:location]&.upcase || 'UNKNOWN'
+        eq = z[:equilibrium] ? "₹#{z[:equilibrium]}" : 'N/A'
+        lines << "- Market Zone: #{loc} (Equilibrium: #{eq})"
+        lines << '  Premium zone = supply; Discount zone = demand'
+      end
+
+      if (nav = engines[:navigator])
+        decision_str = nav[:allow] ? "ALLOW (confidence: #{nav[:confidence]})" : "BLOCK ─ #{nav[:reason]} (confidence: #{nav[:confidence]})"
+        lines << "- Navigator Entry Evaluation: #{decision_str}"
+      end
+
+      lines << ''
+      lines << '**Use the above LTF confirmations to validate or reject the trade setup:**'
+      lines << '- Displacement present + Volume spike = high-quality move'
+      lines << '- Zone location must match bias (CE in Discount, PE in Premium)'
+      lines << '- Navigator BLOCK = reduce confidence or recommend AVOID'
+
+      lines.join("\n")
+    end
+
     def system_prompt
       <<~PROMPT
         You are an expert Smart Money Concepts (SMC) and market structure analyst specializing in Indian index options trading (NIFTY, BANKNIFTY, SENSEX).

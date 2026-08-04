@@ -35,7 +35,10 @@ module Trading
         Smc::SmcPermissionResolver.resolve(smc_result: smc_result, avrz_result: avrz_result)
       rescue StandardError => e
         Rails.logger.error("[Trading::PermissionResolver] #{e.class} - #{e.message}")
-        :blocked
+        # In lenient mode, default to execution_only instead of blocked
+        config = AlgoConfig.fetch[:signals] || {}
+        permission_mode = config[:permission_mode] || 'strict'
+        permission_mode == 'lenient' ? :execution_only : :blocked
       end
     end
   end
