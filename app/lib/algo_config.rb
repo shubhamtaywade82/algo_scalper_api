@@ -3,6 +3,8 @@
 class AlgoConfig
   CACHE_TTL = 30 # seconds
   PROFILES_DIR = 'config/profiles'
+  # Credential-bearing sections excluded from the per-position snapshot persisted on trades.
+  SENSITIVE_SECTIONS = %i[dhanhq telegram ai].freeze
 
   # Utility module for deep merging hashes with array handling
   module MergeUtil
@@ -79,12 +81,83 @@ class AlgoConfig
       base.presence || 'production'
     end
 
+    # Identity of the effective config at this moment — stamped on signals/positions so a
+    # trade can be tied back to the exact gates/params that were active when it was taken.
+    def version
+      {
+        hash: Digest::SHA256.hexdigest(fetch.to_json)[0, 16],
+        change_log_id: latest_change_log_id
+      }
+    end
+
+    # Effective config minus credential sections — pinned on a position at entry so its
+    # exit/trailing math stays fixed for the life of the trade (see Positions::ExitConfigResolver).
+    def position_snapshot
+      fetch.except(*SENSITIVE_SECTIONS)
+    end
+
+    def paper_trading_enabled?
+      fetch.dig(:paper_trading, :enabled) != false
+    end
+
+    # Tick-triggered AI (+Smc::TickAi::AnalysisService+) or explicit event-driven mode.
+    # DB JSON overrides may store booleans as strings — treat "true" like true.
+    def event_driven_intraday_ai?
+      s = fetch[:signals] || {}
+      truthy_signal_flag?(s[:tick_ai_analysis_enabled]) ||
+        truthy_signal_flag?(s[:event_driven_ai_alerts])
+    rescue StandardError
+      false
+    end
+
+    # When true during open session, Solid Queue should not run 15m AI/SMC jobs; daemon tick path owns alerts.
+    def defer_scheduled_intraday_ai_jobs?
+      return false if market_closed_for_scheduling?
+
+      event_driven_intraday_ai?
+    rescue StandardError
+      false
+    end
+
+    def scheduled_ai_technical_analysis_job_deferred?
+      return false if ENV['SCHEDULED_AI_TECHNICAL_ANALYSIS'] == 'true'
+
+      defer_scheduled_intraday_ai_jobs?
+    end
+
+    def scheduled_smc_scanner_job_deferred?
+      return false if ENV['SCHEDULED_SMC_SCANNER'] == 'true'
+
+      defer_scheduled_intraday_ai_jobs?
+    end
+
+    # Suppress +BiasEngine#notify+ (SendSmcAlertJob) from periodic daemon scans when event-driven.
+    def suppress_smc_bias_notify_for_event_driven_ai?
+      defer_scheduled_intraday_ai_jobs?
+    end
+
+    def market_closed_for_scheduling?
+      TradingSession::Service.market_closed?
+    rescue StandardError
+      false
+    end
+
     def reset!
       @cached_config = nil
       @cache_expires_at = nil
     end
 
     private
+
+    def latest_change_log_id
+      AlgoConfigChangeLog.maximum(:id)
+    rescue StandardError
+      nil
+    end
+
+    def truthy_signal_flag?(val)
+      val == true || val.to_s.strip.casecmp('true').zero?
+    end
 
     def apply_profile(config)
       mode = (ENV['RUN_MODE'].presence || config[:run_mode] || 'production').to_s.strip.presence || 'production'

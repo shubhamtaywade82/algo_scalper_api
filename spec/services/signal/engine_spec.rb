@@ -74,6 +74,11 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
     dummy_regime_result = { regime: 'TRENDING_UP', confidence: 85.0, metrics: {} }
     allow(dummy_detector).to receive(:detect).and_return(dummy_regime_result)
     allow(MarketRegimeDetector).to receive(:new).with(any_args).and_return(dummy_detector)
+
+    # Institutional entry filter added by the merged pipeline — allow through
+    # so run_for reaches EntryGuard (the subject under test).
+    entry_filter = instance_double(Entries::EntryFilterEngine, valid_entry?: true)
+    allow(Entries::EntryFilterEngine).to receive(:new).and_return(entry_filter)
   end
 
   let(:index_cfg) do

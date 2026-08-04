@@ -1,0 +1,50 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/sendMessage
+    body:
+      encoding: US-ASCII
+      string: chat_id=<TELEGRAM_CHAT_ID>&text=%F0%9F%9A%A8+%3Cb%3EERROR%3C%2Fb%3E%0A%3Cb%3EContext%3A%3C%2Fb%3E+IndexTechnicalAnalyzer%0A%0ATechnical+analysis+failed%3A+NameError+-+undefined+local+variable+or+method+%60ensure_dhanhq_ta_loaded%26%2339%3B+for+an+instance+of+IndexTechnicalAnalyzer%0A%0A%E2%8F%B0+11%3A47%3A51&parse_mode=HTML
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+      Host:
+      - api.telegram.org
+      Content-Type:
+      - application/x-www-form-urlencoded
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx/1.30.1
+      Date:
+      - Tue, 04 Aug 2026 17:08:44 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '548'
+      Connection:
+      - keep-alive
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Allow-Methods:
+      - GET, POST, OPTIONS
+      Access-Control-Expose-Headers:
+      - Content-Length,Content-Type,Date,Server,Connection
+    body:
+      encoding: UTF-8
+      string: '{"ok":true,"result":{"message_id":37179,"from":{"id":7590450232,"is_bot":true,"first_name":"MyTradingBot","username":"my_alert_system_bot"},"chat":{"id":<TELEGRAM_CHAT_ID>,"first_name":"S","last_name":"T","type":"private"},"date":1785863324,"text":"\ud83d\udea8
+        ERROR\nContext: IndexTechnicalAnalyzer\n\nTechnical analysis failed: NameError
+        - undefined local variable or method `ensure_dhanhq_ta_loaded'' for an instance
+        of IndexTechnicalAnalyzer\n\n\u23f0 11:47:51","entities":[{"offset":3,"length":5,"type":"bold"},{"offset":9,"length":8,"type":"bold"}]}}'
+  recorded_at: Sat, 01 Nov 2025 06:17:51 GMT
+recorded_with: VCR 6.4.0
