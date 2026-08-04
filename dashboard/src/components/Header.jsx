@@ -4,6 +4,7 @@ import { A } from '@solidjs/router'
 import { useDashboardContext } from '../context/DashboardContext'
 import { useFlash } from '../stores/useFlash'
 import { confluenceLtfCompact, expiryBadgeMeta, subscribedRowByKey } from '../lib/expiryBadge'
+import AnimatedNumber from './AnimatedNumber'
 
 function inr(val) {
   if (val == null) return '—'
