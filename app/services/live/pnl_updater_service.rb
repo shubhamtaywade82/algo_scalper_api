@@ -504,6 +504,11 @@ module Live
           banknifty: build_options_buying_state('BANKNIFTY'),
           sensex: build_options_buying_state('SENSEX')
         },
+        options_buying: {
+          nifty: build_options_buying_state('NIFTY'),
+          banknifty: build_options_buying_state('BANKNIFTY'),
+          sensex: build_options_buying_state('SENSEX')
+        },
         circuit_breaker: Risk::CircuitBreaker.instance.status,
         system: Live::SystemStatusCache.instance.all_statuses.merge(
           pnl_updater_running: running?,

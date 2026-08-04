@@ -33,6 +33,8 @@ Rails.application.routes.draw do
     get :positions, to: "positions#index"
     get :signals,   to: "signals#index"
 
+    get 'market/vix', to: 'market#vix'
+
     # Live AI analysis dashboard
     get  'analysis/:index_key',            to: 'analysis#show',        as: :analysis
     get  'analysis/:index_key/historical', to: 'analysis#historical',  as: :analysis_historical
@@ -49,6 +51,10 @@ Rails.application.routes.draw do
     patch  'settings/deep_merge',   to: 'settings#update_deep_merge'
     post   'settings/update_ip',    to: 'settings#update_ip'
 
+    resources :calibration_runs, only: %i[index show] do
+      post :apply, on: :member
+    end
+
     # Alpha Engine
     namespace :alpha do
       get  :status
@@ -56,20 +62,6 @@ Rails.application.routes.draw do
       post :execute
       get  :history
       get  :performance
-    end
-
-    # Calibration runs — view and apply automated config patches
-    resources :calibration_runs, only: %i[index show] do
-      post :apply, on: :member
-    end
-
-    # Alpha Engine — view into Strategies::Manager platform data (no separate signal
-    # generation of its own; SignalEngine that used to back scan/execute was an
-    # intentional no-op stub post-migration, so those actions were removed).
-    namespace :alpha do
-      get :status
-      get :history
-      get :performance
     end
 
     # Ledger (paper double-entry)

@@ -11,7 +11,7 @@ paper_trading:
 # Double-entry paper ledger (financial source of truth alongside position_trackers)
 ledger:
   enabled: true           # paper wallet + sizing read from ledger cash balance
-  paper_enabled: false    # wallet uses legacy calculation; ledger posts for reconciliation only
+  paper_enabled: true     # GatewayPaper.wallet_snapshot uses Ledger::WalletReader
   shadow_mode: true       # post journals; reconciliation job compares ledger vs legacy
   block_negative_cash: true
 
@@ -76,19 +76,15 @@ options_buying:
     subscribe_sync_seconds: 30      # daemon polls radar set this often to subscribe strikes to the WS feed
   execution:
     max_bid_ask_spread_pct: 0.015
+    tcm_enabled: false            # TransactionCostGuard (pre-trade net-edge gate) only runs when true
+    min_net_edge_pct: 0.0         # block when expected edge − round-trip cost < this (DECIMAL)
+    expected_edge_pct: 0.30       # fallback expected premium edge when signal injects none (DECIMAL)
+    slippage_pct_per_side: 0.001  # modelled slippage per fill; charged on entry + exit
     limit_chasing:
       enabled: true
       max_chase_seconds: 15
       tick_interval_seconds: 2
       fallback_to_market: true
-    order_slicing:
-      enabled: true
-      delay_ms: 500
-      freeze_limits:
-        NIFTY: 1800
-        BANKNIFTY: 900
-        SENSEX: 1000
-        default: 1800
   positional:
     enabled: false
     require_carry_allowed: true
@@ -129,13 +125,20 @@ options_buying:
     kill_switch_cooldown_hours: 8
   strategies:
     enabled:
-      - supertrend_v1
-      - supertrend_adx
-    supertrend_adx:
-      supertrend_period: 10
-      supertrend_multiplier: 2.0
-      adx_min: 20.0
-      adx_period: 14
+      - orb_breakout
+      - vcp_breakout
+      - triple_tf_alignment
+      - vix_expansion
+      - iv_percentile_confluence
+    orb_breakout:
+      period_minutes: 15
+      volume_multiplier: 1.5
+    vcp_breakout:
+      inside_bar_lookback: 5
+    triple_tf_alignment:
+      daily_ma_period: 50
+      hourly_ema_period: 20
+      pullback_rsi_range: [40, 60]
   event_calendar: []
 
 # Expiry-week power trend mode: detects and holds high-conviction directional entries
@@ -202,6 +205,7 @@ feature_flags:
   enable_demand_driven_services: true
   enable_underlying_aware_exits: true
   enable_peak_drawdown_activation: true
+  auto_paper_on_insufficient_balance: false
 
 # DhanHQ broker settings
 dhanhq:
@@ -368,13 +372,6 @@ broker_fees:
 # ============================================
 risk:
   auto_update_ip: false # Set to true to automatically update whitelisted IP on Dhan after cooldown
-  max_exposure_rupees:
-    NIFTY: 500000
-    BANKNIFTY: 300000
-    SENSEX: 300000
-    default: 200000
-  # LEGACY FALLBACKS — Effective SL/TP resolved by DTE via risk.dte_parameters.by_dte
-  # These are used by risk_explorer, meta_builder as fallback when DTE resolution unavailable
   sl_pct: 0.08 # -8% base premium SL — aligned with adaptive_trail entry_guard hard_stop
   tp_pct: 0.45 # +45% TAKE PROFIT — capture convexity outliers
   per_trade_risk_pct: 0.40
@@ -386,14 +383,6 @@ risk:
 
   volume_velocity_gate:
     enabled: true
-
-  chain_confirmation_gate:
-    enabled: true
-    min_oi_change: 0
-    min_iv: 8.0
-    max_iv: 45.0
-    min_delta: 0.25
-    max_delta: 0.75
 
   momentum_gate:
     enabled: true
@@ -476,10 +465,11 @@ risk:
   # Tuned for NIFTY/SENSEX intraday: arm later, allow more give-back before locking.
   profit_floor:
     enabled: true
-    lock_pct: 0.05         # 5% - arm floor when net PnL >= 5% of capital_deployed (was 0.10 — too high, missed peaks like +7.3%/+₹2,320 that reversed to -₹3,608 unlocked)
-    trail_pct: 0.70        # 70% - ratchet floor to 70% of HWM each cycle
-    breakeven_at: 200      # mark breakeven when net PnL reaches ₹200 (rupees, not percentage)
-    time_kill_minutes: 30  # give trailing more time to develop
+    lock_pct: 0.03         # 3% of capital — arm floor later vs 2.5%
+    min_arm_rupees: 200    # ↓ was 550 — arm earlier so scalp wins get protected
+    trail_pct: 0.75        # ↓ was 0.82 — lock more of the HWM on the way up
+    breakeven_at: 100      # ↓ was 200 — mark breakeven at ₹100 net PnL
+    time_kill_minutes: 35  # chop: slower stale-floor kill (was 20)
 
   # RR-Based Profit Booking (Dynamic Exit)
   # Captures profits based on R multiples (Reward / Risk)
@@ -669,11 +659,7 @@ risk:
   #
   # Each regime gets different SL/TP/trailing rules based on Greek behavior
   time_regimes:
-    # Enabled based on 61-trading-day regime research (real DhanHQ index price data,
-    # 5m bars, NIFTY/BANKNIFTY/SENSEX): chop_decay confirmed worst session everywhere,
-    # close_gamma outperformed trend_continuation in every matched ADX bucket, and ADX
-    # showed a clear ceiling (not just floor) within trend_continuation specifically.
-    enabled: true
+    enabled: false # disabled so entries aren't blocked by session regimes
 
     # S1: OPEN EXPANSION (09:15 – 09:45)
     # Delta explodes, Gamma spikes, IV expands, Theta irrelevant
@@ -1105,7 +1091,7 @@ signals:
   # selective = strict gates + higher quality bar (not a profit guarantee).
   # Single source of truth: this value (DB document). SIGNAL_TIER env is ignored unless SIGNAL_TIER_FORCE=true.
   # See config/signal_tier_presets.yml
-  signal_tier: selective
+  signal_tier: selective # Profitability Slice 2 — was exploratory; override via SIGNAL_TIER_FORCE only
 
   # Entry strategy selection (code enforces behavior; no strategy logic in YAML)
   # primary: supertrend => Supertrend flip only; omit or use other value for legacy multi-indicator path

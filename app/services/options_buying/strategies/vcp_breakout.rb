@@ -53,8 +53,13 @@ module OptionsBuying
       end
 
       def find_inside_bar_range
-        candles = StateStore.index_candles(@index_key, '5')
-        return nil if candles.blank? || candles.size < inside_bar_lookback
+        candles = Market::CandleSeries.new(
+          security_id: index_sid,
+          segment: 'IDX_I',
+          timeframe: '5' # VCP works well on 5m
+        ).fetch(limit: inside_bar_lookback)
+
+        return nil if candles.size < 2
 
         # Check if the second to last candle is an inside bar
         mother_bar = candles[-3] # or we can scan the recent

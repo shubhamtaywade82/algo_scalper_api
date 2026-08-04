@@ -11,6 +11,8 @@ const Strategies = lazy(() => import('./views/Strategies'))
 const Signals = lazy(() => import('./views/Signals'))
 const Analysis = lazy(() => import('./views/Analysis'))
 const Settings = lazy(() => import('./views/Settings'))
+const Ledger = lazy(() => import('./views/Ledger'))
+const TrailEngine = lazy(() => import('./views/TrailEngine.jsx'))
 
 function AppShell(props) {
   const {
@@ -22,13 +24,13 @@ function AppShell(props) {
   } = usePositions()
 
   const {
-    mode, connected, stats, balance, indices, system,
+    mode, connected, isStale: dashboardStale, stats, balance, indices, subscribedIndices, optionsBuying, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker,
     lastUpdated, recentSignals, config
   } = useDashboard(() => fetchPositions())
 
   const ctx = {
-    mode, connected, stats, balance, indices, system,
+    mode, connected, dashboardStale, stats, balance, indices, subscribedIndices, optionsBuying, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker,
     lastUpdated, recentSignals, config,
     open, closed,
@@ -42,6 +44,8 @@ function AppShell(props) {
         <Header
           mode={mode()}
           indices={indices()}
+          subscribedIndices={subscribedIndices()}
+          optionsBuying={optionsBuying()}
           system={system()}
           connected={connected()}
         />
@@ -67,12 +71,19 @@ function AppShell(props) {
 
 export default function App() {
   return (
-    <Router root={AppShell}>
-      <Route path="/" component={Dashboard} />
-      <Route path="/strategies" component={Strategies} />
-      <Route path="/signals" component={Signals} />
-      <Route path="/analysis" component={Analysis} />
-      <Route path="/settings" component={Settings} />
+    <Router>
+      <Route component={AppShell}>
+        <Route path="/" component={Dashboard} />
+        <Route path="/strategies" component={Strategies} />
+        <Route path="/alpha" component={Alpha} />
+        <Route path="/signals" component={Signals} />
+        <Route path="/analysis" component={Analysis} />
+        <Route path="/ledger" component={Ledger} />
+        <Route path="/settings" component={Settings} />
+      </Route>
+      {/* Fullscreen — own layout, no Header/footer chrome */}
+      <Route path="/charts" component={Charts} />
+      <Route path="/trail-engine" component={TrailEngine} />
     </Router>
   )
 }

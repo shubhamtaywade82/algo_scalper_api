@@ -79,7 +79,7 @@ module OptionsBuying
     def process_message!(security_id, message_id, fields)
       return if StateStore.kill_switch_active?
 
-      tick = StateStore.parse_stream_entry(fields)
+      tick = StateStore.parse_stream_message(fields)
       index_key = index_key_for_security(security_id)
       return unless index_key
 

@@ -470,68 +470,6 @@ RSpec.describe Orders::Placer do
     end
   end
 
-  describe "order slicing integration" do
-    let(:client_order_id) { "TEST-SLICE" }
-
-    before do
-      # Mock Slicer config to set NIFTY limit = 1000
-      allow(AlgoConfig).to receive(:fetch).and_return({
-        options_buying: {
-          execution: {
-            order_slicing: {
-              enabled: true,
-              delay_ms: 100,
-              freeze_limits: {
-                'NIFTY' => 1000,
-                'default' => 1000
-              }
-            }
-          }
-        }
-      })
-
-      # Mock resolve_index_key to return NIFTY for security_id
-      allow(described_class).to receive(:resolve_index_key).with(security_id).and_return('NIFTY')
-      # Mock sleep to avoid delaying test run
-      allow(described_class).to receive(:sleep)
-    end
-
-    it "places a single order when quantity is below freeze limit" do
-      described_class.buy_market!(seg: segment, sid: security_id, qty: 800, client_order_id: client_order_id)
-
-      expect(DhanHQ::Models::Order).to have_received(:create).once
-      expect(captured_attrs.last[:quantity]).to eq(800)
-      expect(captured_attrs.last[:correlation_id]).to eq(client_order_id)
-    end
-
-    it "slices order and places multiple orders when quantity exceeds freeze limit" do
-      described_class.buy_market!(seg: segment, sid: security_id, qty: 2500, client_order_id: client_order_id)
-
-      expect(DhanHQ::Models::Order).to have_received(:create).thrice
-      expect(captured_attrs.pluck(:quantity)).to eq([1000, 1000, 500])
-      expect(captured_attrs.pluck(:correlation_id)).to eq(["#{client_order_id}_1", "#{client_order_id}_2", "#{client_order_id}_3"])
-      expect(described_class).to have_received(:sleep).twice.with(0.1)
-    end
-
-    it "stops slicing and alerts when a middle slice fails, leaving a partial position" do
-      call_count = 0
-      allow(DhanHQ::Models::Order).to receive(:create) do |attributes|
-        call_count += 1
-        captured_attrs << attributes
-        call_count == 2 ? nil : order_double # slice 2 of 3 "fails" (nil result)
-      end
-      allow(Notifications::TelegramNotifier.instance).to receive(:notify_error)
-
-      described_class.buy_market!(seg: segment, sid: security_id, qty: 2500, client_order_id: client_order_id)
-
-      expect(DhanHQ::Models::Order).to have_received(:create).twice # stopped after slice 2, slice 3 never attempted
-      expect(Notifications::TelegramNotifier.instance).to have_received(:notify_error).with(
-        a_string_matching(/Slice 2\/3 failed.*filled 1000\/2500/),
-        context: 'Orders::Placer#place_order_with_slicing'
-      )
-    end
-  end
-
   describe ".order_placement_enabled?" do
     before do
       allow(ENV).to receive(:[]).and_call_original

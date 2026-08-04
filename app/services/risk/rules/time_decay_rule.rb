@@ -15,7 +15,7 @@ module Risk
         return skip_result unless context.active?
 
         tracker = context.tracker
-        elapsed = (context.current_time - tracker.created_at).to_f / 60.0
+        elapsed = (Time.current - tracker.created_at).to_f / 60.0
 
         threshold_minutes = (config[:threshold_minutes] || 45).to_f
         return no_action_result if elapsed <= threshold_minutes
@@ -51,17 +51,20 @@ module Risk
       private
 
       def entry_premium_for(tracker)
-        tracker.entry_price if tracker.respond_to?(:entry_price)
+        entry_price = tracker.respond_to?(:entry_price) ? tracker.entry_price : nil
+        entry_price = tracker.meta&.dig('entry_price') if entry_price.nil? || entry_price.zero?
+        entry_price
       rescue StandardError
         nil
       end
 
       def current_premium_for(tracker)
-        if tracker.respond_to?(:ltp)
-          tracker.ltp
-        elsif tracker.respond_to?(:current_price)
-          tracker.current_price
-        end
+        ltp = if tracker.respond_to?(:ltp)
+                tracker.ltp
+              elsif tracker.respond_to?(:current_price)
+                tracker.current_price
+              end
+        ltp || tracker.meta&.dig('current_price')
       rescue StandardError
         nil
       end

@@ -84,33 +84,7 @@ module Live
         snapshot[:hwm_pnl].to_f / entry_value
       end
 
-      def premium_momentum_failure_hit?(tracker, snapshot)
-        cfg = AlgoConfig.fetch.dig(:risk, :exits, :premium_momentum_failure) || {}
-        return false unless cfg[:enabled]
-        return false unless tracker.created_at
-
-        current_ltp = snapshot[:ltp].to_f
-        current_ltp = tracker.entry_price.to_f if current_ltp <= 0
-
-        meta = tracker.meta || {}
-        peak = meta['peak_premium'].to_f
-        last_peak_at = meta['peak_premium_at'] ? Time.zone.parse(meta['peak_premium_at']) : tracker.created_at
-
-        if current_ltp > peak
-          meta['peak_premium'] = current_ltp
-          meta['peak_premium_at'] = Time.current.iso8601
-          if tracker.respond_to?(:update_column) && tracker.exit_requested_at.blank? &&
-             tracker.exit_sent_at.blank? && !tracker.exited?
-            tracker.update_column(:meta, meta)
-          end
-          return false
-        end
-
-        # Only fires on losing positions (PnL <= 0)
-        return false if snapshot[:pnl_pct].to_f.positive?
-
-        stall_minutes = resolve_stall_minutes(tracker)
-        elapsed_since_peak = (Time.current - last_peak_at) / 60.0
+      private
 
       def build_exit_config(algo_cfg = AlgoConfig.fetch)
         risk_cfg = algo_cfg[:risk] || {}

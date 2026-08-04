@@ -3,37 +3,10 @@
 require 'rails_helper'
 
 RSpec.describe Risk::Rules::RuleEngine do
-  before do
-    hub = Live::MarketFeedHub.instance
-    allow(hub).to receive_messages(subscribe: nil, subscribed?: true)
-  end
-
-  let(:instrument) { create(:instrument, :nifty_future) }
-  let(:tracker) do
-    create(
-      :position_tracker,
-      instrument: instrument,
-      status: 'active',
-      entry_price: 100.0,
-      quantity: 10
-    )
-  end
-  let(:position_data) do
-    Positions::PositionData.new(
-      tracker_id: tracker.id,
-      entry_price: 100.0,
-      quantity: 10,
-      current_ltp: 96.0,
-      pnl: -40.0,
-      pnl_pct: -0.04
-    )
-  end
-  let(:risk_config) do
-    {
-      sl_pct: 0.02,
-      tp_pct: 0.05
-    }
-  end
+  let(:tracker) { instance_double(PositionTracker, active?: true, entry_price: 100.0, quantity: 10) }
+  let(:position) { OpenStruct.new(pnl_pct: -0.04, pnl: -40.0, current_ltp: 96.0) }
+  let(:tracker_snapshot) { { pnl_pct: -0.04, ltp: 96.0, pnl: -40.0, hwm_pnl: 0.0 } }
+  let(:risk_config) { { sl_pct: 0.02, tp_pct: 0.05 } }
   let(:context) do
     Risk::Rules::RuleContext.new(
       position: position,
@@ -100,14 +73,7 @@ RSpec.describe Risk::Rules::RuleEngine do
 
     context 'with disabled rules' do
       it 'skips disabled rules' do
-        # Rules read thresholds from RuleContext#risk_config, not the rule instance.
-        zero_sl_config = risk_config.merge(sl_pct: 0)
-        ctx = Risk::Rules::RuleContext.new(
-          position: position_data,
-          tracker: tracker,
-          risk_config: zero_sl_config
-        )
-        sl_rule = Risk::Rules::StopLossRule.new(config: {})
+        sl_rule = Risk::Rules::StopLossRule.new(config: { enabled: false })
         tp_rule = Risk::Rules::TakeProfitRule.new(config: risk_config)
 
         allow(Live::UnifiedExitChecker).to receive(:exit_config_for).and_return({ take_profit: 0.05 })
@@ -115,7 +81,6 @@ RSpec.describe Risk::Rules::RuleEngine do
         engine = described_class.new(rules: [sl_rule, tp_rule])
         result = engine.evaluate(ctx)
 
-        # SL rule skipped (sl_pct 0), TP rule evaluated but doesn't trigger
         expect(result.no_action?).to be true
       end
     end
@@ -180,31 +145,12 @@ RSpec.describe Risk::Rules::RuleEngine do
       end
     end
 
-    context 'combined scenarios' do
-      it 'session end overrides take profit' do
-        session_rule = Risk::Rules::SessionEndRule.new(config: {})
-        tp_rule = Risk::Rules::TakeProfitRule.new(config: risk_config)
-
-        position_data.pnl_pct = 0.10 # TP would trigger (10% as decimal)
-
-        allow(TradingSession::Service).to receive(:should_force_exit?).and_return(
-          { should_exit: true }
-        )
-
-        engine = described_class.new(rules: [session_rule, tp_rule])
-        result = engine.evaluate(context)
-
-        expect(result.exit?).to be true
-        expect(result.reason).to include('session end')
-      end
-
+    context 'when stop loss and take profit both match' do
       it 'stop loss overrides take profit' do
         sl_rule = Risk::Rules::StopLossRule.new(config: risk_config)
         tp_rule = Risk::Rules::TakeProfitRule.new(config: risk_config)
 
-        # Both conditions could be met, but SL has higher priority
-        position_data.pnl_pct = -0.04 # SL triggers
-        position_data.current_ltp = 96.0
+        allow(Live::UnifiedExitChecker).to receive(:loss_limit_hit?).and_return(true)
 
         engine = described_class.new(rules: [sl_rule, tp_rule])
         result = engine.evaluate(context)

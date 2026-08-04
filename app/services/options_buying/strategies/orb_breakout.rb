@@ -73,9 +73,14 @@ module OptionsBuying
       end
 
       def calculate_opening_range
-        # Use pre-computed cached 1m candles
-        candles = StateStore.index_candles(@index_key, '1')
-        return nil if candles.blank?
+        # Fetch 1m candles for the ORB period
+        candles = Market::CandleSeries.new(
+          security_id: index_sid,
+          segment: 'IDX_I',
+          timeframe: '1'
+        ).fetch(limit: period_minutes)
+
+        return nil if candles.empty?
 
         today_start = Time.zone.now.beginning_of_day + 9.hours + 15.minutes
         orb_end = today_start + period_minutes.minutes
@@ -101,11 +106,16 @@ module OptionsBuying
       end
 
       def volume_confirmed?(direction, range)
-        # Use pre-computed cached 1m candles
-        candles = StateStore.index_candles(@index_key, '1')
-        return false if candles.blank?
+        # Fetch current 1m candle volume
+        candles = Market::CandleSeries.new(
+          security_id: index_sid,
+          segment: 'IDX_I',
+          timeframe: '1'
+        ).fetch(limit: 2)
 
+        return false if candles.empty?
         current_candle_vol = candles.last[:volume].to_f
+
         current_candle_vol > (range[:avg_volume] * volume_multiplier)
       end
 

@@ -8,6 +8,7 @@ module Entries
       contract = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_contract].to_s : ""
       return if bos_context.nil? && contract != SUPERTREND_CONTRACT
 
+      contract = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_contract].to_s : ""
       sl_decimal = supertrend_sl_decimal
       premium_r = entry_price.to_f * sl_decimal
       qty_int = SafeNumeric.to_non_negative_integer(quantity)

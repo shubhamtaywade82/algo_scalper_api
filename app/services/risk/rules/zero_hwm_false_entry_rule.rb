@@ -13,31 +13,24 @@ module Risk
     #   risk:
     #     zero_hwm_false_entry:
     #       enabled: true
-    #       min_hold_seconds: 120    # grace period before the HWM check can fire
-    #       hwm_threshold_rupees: 0  # exit if HWM is at or below this after grace period
-    #       max_loss_pct: -0.05      # hard cap: fires immediately regardless of grace period
-    #                                # (HWM check alone let losses run to -6.76% before firing —
-    #                                # near the 8% static SL — defeating the "cheap early exit" intent)
+    #       min_hold_seconds: 120   # grace period before the rule can fire
+    #       hwm_threshold_rupees: 0 # exit if HWM is at or below this after grace period
     class ZeroHwmFalseEntryRule < BaseRule
       PRIORITY = 15 # Fires before TimeStopRule (40) — fast-exits confirmed false entries
 
       DEFAULT_MIN_HOLD_SECONDS   = 120
       DEFAULT_HWM_THRESHOLD      = 0.0
-      DEFAULT_MAX_LOSS_PCT       = -0.05
 
       def evaluate(context)
         return skip_result unless context.active?
         return no_action_result unless enabled?(context)
 
         tracker = context.tracker
-        elapsed  = (context.current_time - tracker.created_at).to_f
-        pnl_pct  = context.pnl_pct.to_f
-        loss_cap_breached = pnl_pct <= max_loss_pct(context)
-
-        return no_action_result if elapsed < min_hold_seconds(context) && !loss_cap_breached
+        elapsed  = (Time.current - tracker.created_at).to_f
+        return no_action_result if elapsed < min_hold_seconds(context)
 
         hwm_rupees = context.position.hwm_pnl.to_f
-        return no_action_result if hwm_rupees > hwm_threshold(context) && !loss_cap_breached
+        return no_action_result if hwm_rupees > hwm_threshold(context)
 
         exit_result(
           reason: "ZERO_HWM_FALSE_ENTRY",
@@ -47,9 +40,6 @@ module Risk
             min_hold_seconds:   min_hold_seconds(context),
             hwm_rupees:         hwm_rupees,
             hwm_threshold:      hwm_threshold(context),
-            pnl_pct:            pnl_pct,
-            max_loss_pct:       max_loss_pct(context),
-            loss_cap_breached:  loss_cap_breached,
             current_ltp:        context.current_ltp.to_f,
             entry_price:        tracker.entry_price.to_f
           }
@@ -76,10 +66,6 @@ module Risk
 
       def hwm_threshold(context)
         rule_config(context).fetch(:hwm_threshold_rupees, DEFAULT_HWM_THRESHOLD).to_f
-      end
-
-      def max_loss_pct(context)
-        rule_config(context).fetch(:max_loss_pct, DEFAULT_MAX_LOSS_PCT).to_f
       end
     end
   end

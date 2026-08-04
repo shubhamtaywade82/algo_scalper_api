@@ -44,6 +44,20 @@ module Orders
       { success: false, error: e.message, paper: true }
     end
 
+    def place_ioc_limit(side:, segment:, security_id:, qty:, price:, meta: {})
+      # Paper mode: IOC always fills at the given price
+      {
+        success: true,
+        order_id: "PAPER-IOC-#{SecureRandom.hex(3)}",
+        paper: true,
+        status: :accepted,
+        fill_price: price.to_f
+      }
+    rescue StandardError => e
+      Rails.logger.error("[GatewayPaper] place_ioc_limit failed for #{segment}-#{security_id}: #{e.class} - #{e.message}")
+      { success: false, error: e.message, paper: true }
+    end
+
     # Returns unified shape: { cash:, equity:, mtm:, exposure:, utilized:, margin: }
     # cash = free balance (like broker available); utilized/exposure = premium tied in open legs.
     def wallet_snapshot

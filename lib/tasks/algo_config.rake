@@ -53,4 +53,59 @@ namespace :algo_config do
     results = AlgoConfig::AuxiliaryBootstrap.bootstrap!(force: force)
     puts "[algo_config:bootstrap_auxiliary] tier_presets=#{results[:tier_presets]} registry=#{results[:registry]}"
   end
+
+  desc 'Profitability Slice 2 — enable midday session blackout + selective signal tier (DB document)'
+  task apply_slice2: :environment do
+    AlgoConfig::ProfitabilitySlice2.apply!
+    status = AlgoConfig::ProfitabilitySlice2.status
+    puts '[algo_config:apply_slice2] applied'
+    puts "  trading_time_restrictions.enabled=#{status[:trading_time_restrictions_enabled]}"
+    puts "  avoid_periods=#{status[:avoid_periods].inspect}"
+    puts "  signals.signal_tier=#{status[:signal_tier]}"
+  end
+
+  desc 'Rollback Profitability Slice 2 (disable blackout, restore exploratory tier)'
+  task rollback_slice2: :environment do
+    AlgoConfig::ProfitabilitySlice2.rollback!
+    status = AlgoConfig::ProfitabilitySlice2.status
+    puts '[algo_config:rollback_slice2] rolled back'
+    puts "  trading_time_restrictions.enabled=#{status[:trading_time_restrictions_enabled]}"
+    puts "  signals.signal_tier=#{status[:signal_tier]}"
+  end
+
+  desc 'Profitability Slice 3 — pause SENSEX (max_trades_per_day=0 in DB document)'
+  task apply_slice3: :environment do
+    AlgoConfig::ProfitabilitySlice3.apply!
+    status = AlgoConfig::ProfitabilitySlice3.status
+    puts '[algo_config:apply_slice3] applied'
+    puts "  sensex_max_trades_per_day=#{status[:sensex_max_trades_per_day]}"
+    puts "  sensex_paused=#{status[:sensex_paused]}"
+  end
+
+  desc 'Rollback Profitability Slice 3 (restore SENSEX max_trades_per_day=2)'
+  task rollback_slice3: :environment do
+    AlgoConfig::ProfitabilitySlice3.rollback!
+    status = AlgoConfig::ProfitabilitySlice3.status
+    puts '[algo_config:rollback_slice3] rolled back'
+    puts "  sensex_max_trades_per_day=#{status[:sensex_max_trades_per_day]}"
+    puts "  sensex_paused=#{status[:sensex_paused]}"
+  end
+
+  desc 'Profitability Slice 4 — tighten catastrophic exit (hard_stop -0.08, sl_pct 0.08)'
+  task apply_slice4: :environment do
+    AlgoConfig::ProfitabilitySlice4.apply!
+    status = AlgoConfig::ProfitabilitySlice4.status
+    puts '[algo_config:apply_slice4] applied'
+    puts "  risk.sl_pct=#{status[:sl_pct]}"
+    puts "  entry_guard.hard_stop=#{status[:entry_guard_hard_stop]}"
+  end
+
+  desc 'Rollback Profitability Slice 4 (restore hard_stop -0.30, sl_pct 0.10)'
+  task rollback_slice4: :environment do
+    AlgoConfig::ProfitabilitySlice4.rollback!
+    status = AlgoConfig::ProfitabilitySlice4.status
+    puts '[algo_config:rollback_slice4] rolled back'
+    puts "  risk.sl_pct=#{status[:sl_pct]}"
+    puts "  entry_guard.hard_stop=#{status[:entry_guard_hard_stop]}"
+  end
 end

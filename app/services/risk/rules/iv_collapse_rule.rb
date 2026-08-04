@@ -11,7 +11,7 @@ module Risk
         return skip_result unless context.active?
 
         tracker = context.tracker
-        entry_iv = tracker.iv_at_entry
+        entry_iv = tracker.meta&.dig('iv_at_entry') || tracker.meta&.dig(:iv_at_entry)
         return no_action_result unless entry_iv&.to_f&.positive?
 
         current_iv_val = fetch_current_iv(context)
@@ -61,7 +61,7 @@ module Risk
         instrument = tracker.underlying_instrument
         return nil unless instrument
 
-        expiry_date = tracker.expiry_date || tracker.watchable&.expiry_date
+        expiry_date = tracker.meta&.dig('expiry_date') || tracker.watchable&.expiry_date
         return nil unless expiry_date
 
         # Fetch option chain from the underlying instrument (uses 2-minute cache)

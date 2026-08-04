@@ -36,35 +36,31 @@ module Orders
           return nil
         end
 
-        nil
-        place_order_with_slicing(sid: sid, qty: qty, client_order_id: normalized_id) do |slice_qty, slice_coid|
-          payload = {
-            transaction_type: DhanHQ::Constants::TransactionType::BUY,
-            exchange_segment: seg,
-            security_id: sid.to_s,
-            quantity: slice_qty.to_i,
-            order_type: DhanHQ::Constants::OrderType::MARKET,
-            product_type: product_type,
-            validity: DhanHQ::Constants::Validity::DAY,
-            correlation_id: slice_coid,
-            disclosed_quantity: 0
-          }
-          # DhanHQ 2.6.x PlaceOrderContract: MARKET orders must not send price
-          payload[:bo_profit_value] = target_price if target_price.present?
-          payload[:bo_stop_loss_value] = stop_loss_price if stop_loss_price.present?
+        payload = {
+          transaction_type: DhanHQ::Constants::TransactionType::BUY,
+          exchange_segment: seg,
+          security_id: sid.to_s,
+          quantity: qty.to_i,
+          order_type: DhanHQ::Constants::OrderType::MARKET,
+          product_type: product_type,
+          validity: DhanHQ::Constants::Validity::DAY,
+          correlation_id: normalized_id,
+          disclosed_quantity: 0
+        }
+        # DhanHQ 2.6.x PlaceOrderContract: MARKET orders must not send price
+        payload[:bo_profit_value] = target_price if target_price.present?
+        payload[:bo_stop_loss_value] = stop_loss_price if stop_loss_price.present?
 
-          Rails.logger.info("[Orders::Placer] BUY payload: #{payload.inspect}")
+        Rails.logger.info("[Orders::Placer] BUY payload: #{payload.inspect}")
 
-          if order_placement_enabled?
-            slice_order = with_token_auto_heal(context: "orders.buy_market") do
-              DhanHQ::Models::Order.create(payload)
-            end
-            Rails.logger.info("[Orders::Placer] BUY response: #{slice_order.inspect}") if slice_order
-            slice_order
-          else
-            Rails.logger.warn("[Orders::Placer] BUY blocked because PLACE_ORDER is not enabled")
-            OpenStruct.new(order_id: "MOCK_MARKET_#{SecureRandom.hex(4).upcase}", status: "success")
+        if order_placement_enabled?
+          order = with_order_rate_limit(context: "orders.buy_market") do
+            DhanHQ::Models::Order.create(payload)
           end
+          Rails.logger.info("[Orders::Placer] BUY response: #{order.inspect}") if order
+        else
+          Rails.logger.warn("[Orders::Placer] BUY blocked because PLACE_ORDER is not enabled")
+          order = nil
         end
       ensure
         remember(normalized_id)
@@ -128,60 +124,14 @@ module Orders
         normalized_id = normalize_client_order_id(client_order_id)
         return nil if duplicate?(normalized_id)
 
-        unless seg && sid && qty && price && normalized_id
-          Rails.logger.error("[Orders::Placer] Missing required parameters for buy_limit!: seg=#{seg}, sid=#{sid}, qty=#{qty}, price=#{price}, client_order_id=#{client_order_id}")
-          return nil
-        end
-
-        unless segment_tradable?(seg)
-          Rails.logger.error("[Orders::Placer] Segment #{seg} is not tradable.")
-          return nil
-        end
-
-        nil
-        place_order_with_slicing(sid: sid, qty: qty, client_order_id: normalized_id) do |slice_qty, slice_coid|
-          payload = {
-            transaction_type: DhanHQ::Constants::TransactionType::BUY,
-            exchange_segment: seg,
-            security_id: sid.to_s,
-            quantity: slice_qty.to_i,
-            order_type: DhanHQ::Constants::OrderType::LIMIT,
-            product_type: product_type,
-            price: price.to_f.round(2),
-            validity: DhanHQ::Constants::Validity::DAY,
-            correlation_id: slice_coid,
-            disclosed_quantity: 0
-          }
-
-          Rails.logger.info("[Orders::Placer] BUY LIMIT payload: #{payload.inspect}")
-
-          if order_placement_enabled?
-            slice_order = with_token_auto_heal(context: "orders.buy_limit") do
-              DhanHQ::Models::Order.create(payload)
-            end
-            Rails.logger.info("[Orders::Placer] BUY LIMIT response: #{slice_order.inspect}") if slice_order
-            slice_order
-          else
-            Rails.logger.warn("[Orders::Placer] BUY LIMIT blocked because PLACE_ORDER is not enabled")
-            OpenStruct.new(order_id: "MOCK_LIMIT_#{SecureRandom.hex(4).upcase}", status: "success")
+        if order_placement_enabled?
+          order = with_order_rate_limit(context: "orders.sell_market") do
+            DhanHQ::Models::Order.create(payload)
           end
-        end
-      ensure
-        remember(normalized_id)
-      end
-
-      def buy_ioc_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "NORMAL")
-        normalized_id = normalize_client_order_id(client_order_id)
-        return nil if duplicate?(normalized_id)
-
-        unless seg && sid && qty && price && normalized_id
-          Rails.logger.error("[Orders::Placer] Missing required parameters for buy_ioc_limit!: seg=#{seg}, sid=#{sid}, qty=#{qty}, price=#{price}, client_order_id=#{client_order_id}")
-          return nil
-        end
-
-        unless segment_tradable?(seg)
-          Rails.logger.error("[Orders::Placer] Segment #{seg} is not tradable.")
-          return nil
+          Rails.logger.info("[Orders::Placer] SELL response: #{order.inspect}") if order
+        else
+          Rails.logger.warn("[Orders::Placer] SELL blocked because PLACE_ORDER is not enabled")
+          order = nil
         end
 
         nil
@@ -324,6 +274,194 @@ module Orders
         remember(normalized_id)
       end
 
+      def buy_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "NORMAL")
+        normalized_id = normalize_client_order_id(client_order_id)
+        return nil if duplicate?(normalized_id)
+
+        unless seg && sid && qty && price && normalized_id
+          Rails.logger.error("[Orders::Placer] Missing required parameters for buy_limit!: seg=#{seg}, sid=#{sid}, qty=#{qty}, price=#{price}, client_order_id=#{client_order_id}")
+          return nil
+        end
+
+        unless segment_tradable?(seg)
+          Rails.logger.error("[Orders::Placer] Segment #{seg} is not tradable.")
+          return nil
+        end
+
+        payload = {
+          transaction_type: DhanHQ::Constants::TransactionType::BUY,
+          exchange_segment: seg,
+          security_id: sid.to_s,
+          quantity: qty.to_i,
+          order_type: DhanHQ::Constants::OrderType::LIMIT,
+          product_type: product_type,
+          price: price.to_f.round(2),
+          validity: DhanHQ::Constants::Validity::DAY,
+          correlation_id: normalized_id,
+          disclosed_quantity: 0
+        }
+
+        Rails.logger.info("[Orders::Placer] BUY LIMIT payload: #{payload.inspect}")
+
+        if order_placement_enabled?
+          order = with_order_rate_limit(context: "orders.buy_limit") do
+            DhanHQ::Models::Order.create(payload)
+          end
+          Rails.logger.info("[Orders::Placer] BUY LIMIT response: #{order.inspect}") if order
+        else
+          Rails.logger.warn("[Orders::Placer] BUY LIMIT blocked because PLACE_ORDER is not enabled")
+          order = OpenStruct.new(order_id: "MOCK_LIMIT_#{SecureRandom.hex(4).upcase}", status: "success")
+        end
+
+        remember(normalized_id)
+        order
+      end
+
+      def buy_ioc_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "NORMAL")
+        normalized_id = normalize_client_order_id(client_order_id)
+        return nil if duplicate?(normalized_id)
+
+        unless seg && sid && qty && price && normalized_id
+          Rails.logger.error("[Orders::Placer] Missing required parameters for buy_ioc_limit!: seg=#{seg}, sid=#{sid}, qty=#{qty}, price=#{price}, client_order_id=#{client_order_id}")
+          return nil
+        end
+
+        unless segment_tradable?(seg)
+          Rails.logger.error("[Orders::Placer] Segment #{seg} is not tradable.")
+          return nil
+        end
+
+        payload = {
+          transaction_type: DhanHQ::Constants::TransactionType::BUY,
+          exchange_segment: seg,
+          security_id: sid.to_s,
+          quantity: qty.to_i,
+          order_type: DhanHQ::Constants::OrderType::LIMIT,
+          product_type: product_type,
+          price: price.to_f.round(2),
+          validity: DhanHQ::Constants::Validity::IOC,
+          correlation_id: normalized_id,
+          disclosed_quantity: 0
+        }
+
+        Rails.logger.info("[Orders::Placer] BUY IOC LIMIT payload: #{payload.inspect}")
+
+        if order_placement_enabled?
+          order = with_order_rate_limit(context: "orders.buy_ioc_limit") do
+            DhanHQ::Models::Order.create(payload)
+          end
+          Rails.logger.info("[Orders::Placer] BUY IOC LIMIT response: #{order.inspect}") if order
+        else
+          Rails.logger.warn("[Orders::Placer] BUY IOC LIMIT blocked because PLACE_ORDER is not enabled")
+          order = OpenStruct.new(order_id: "MOCK_IOC_#{SecureRandom.hex(4).upcase}", status: "success")
+        end
+
+        remember(normalized_id)
+        order
+      end
+
+      # Market order first; fall back to IOC limit if market returns nil (e.g. PLACE_ORDER disabled
+      # or broker rejected). This keeps the entry pipeline resilient without changing live code paths.
+      def buy_entry_with_fallback!(seg:, sid:, qty:, client_order_id:, product_type: "NORMAL")
+        normalized_id = normalize_client_order_id(client_order_id)
+        return nil unless seg && sid && qty && normalized_id
+
+        order = buy_market!(seg: seg, sid: sid, qty: qty, client_order_id: normalized_id, product_type: product_type)
+        return order if order
+
+        Rails.logger.warn("[Orders::Placer] buy_market! returned nil for #{sid}; falling back to IOC limit")
+        buy_ioc_limit!(seg: seg, sid: sid, qty: qty, client_order_id: normalized_id, product_type: product_type)
+      rescue StandardError => e
+        Rails.logger.warn("[Orders::Placer] buy_entry_with_fallback! market failed (#{e.class}); trying IOC limit")
+        buy_ioc_limit!(seg: seg, sid: sid, qty: qty, client_order_id: normalized_id, product_type: product_type)
+      end
+
+      def sell_ioc_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "NORMAL")
+        normalized_id = normalize_client_order_id(client_order_id)
+        return nil if duplicate?(normalized_id)
+
+        unless seg && sid && qty && price && normalized_id
+          Rails.logger.error("[Orders::Placer] Missing required parameters for sell_ioc_limit!: seg=#{seg}, sid=#{sid}, qty=#{qty}, price=#{price}, client_order_id=#{client_order_id}")
+          return nil
+        end
+
+        unless segment_tradable?(seg)
+          Rails.logger.error("[Orders::Placer] Segment #{seg} is not tradable.")
+          return nil
+        end
+
+        payload = {
+          transaction_type: DhanHQ::Constants::TransactionType::SELL,
+          exchange_segment: seg,
+          security_id: sid.to_s,
+          quantity: qty.to_i,
+          order_type: DhanHQ::Constants::OrderType::LIMIT,
+          product_type: product_type,
+          price: price.to_f.round(2),
+          validity: DhanHQ::Constants::Validity::IOC,
+          correlation_id: normalized_id,
+          disclosed_quantity: 0
+        }
+
+        Rails.logger.info("[Orders::Placer] SELL IOC LIMIT payload: #{payload.inspect}")
+
+        if order_placement_enabled?
+          order = with_order_rate_limit(context: "orders.sell_ioc_limit") do
+            DhanHQ::Models::Order.create(payload)
+          end
+          Rails.logger.info("[Orders::Placer] SELL IOC LIMIT response: #{order.inspect}") if order
+        else
+          Rails.logger.warn("[Orders::Placer] SELL IOC LIMIT blocked because PLACE_ORDER is not enabled")
+          order = OpenStruct.new(order_id: "MOCK_IOC_#{SecureRandom.hex(4).upcase}", status: "success")
+        end
+
+        remember(normalized_id)
+        order
+      end
+
+      def sell_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "NORMAL")
+        normalized_id = normalize_client_order_id(client_order_id)
+        return nil if duplicate?(normalized_id)
+
+        unless seg && sid && qty && price && normalized_id
+          Rails.logger.error("[Orders::Placer] Missing required parameters for sell_limit!: seg=#{seg}, sid=#{sid}, qty=#{qty}, price=#{price}, client_order_id=#{client_order_id}")
+          return nil
+        end
+
+        unless segment_tradable?(seg)
+          Rails.logger.error("[Orders::Placer] Segment #{seg} is not tradable.")
+          return nil
+        end
+
+        payload = {
+          transaction_type: DhanHQ::Constants::TransactionType::SELL,
+          exchange_segment: seg,
+          security_id: sid.to_s,
+          quantity: qty.to_i,
+          order_type: DhanHQ::Constants::OrderType::LIMIT,
+          product_type: product_type,
+          price: price.to_f.round(2),
+          validity: DhanHQ::Constants::Validity::DAY,
+          correlation_id: normalized_id,
+          disclosed_quantity: 0
+        }
+
+        Rails.logger.info("[Orders::Placer] SELL LIMIT payload: #{payload.inspect}")
+
+        if order_placement_enabled?
+          order = with_order_rate_limit(context: "orders.sell_limit") do
+            DhanHQ::Models::Order.create(payload)
+          end
+          Rails.logger.info("[Orders::Placer] SELL LIMIT response: #{order.inspect}") if order
+        else
+          Rails.logger.warn("[Orders::Placer] SELL LIMIT blocked because PLACE_ORDER is not enabled")
+          order = OpenStruct.new(order_id: "MOCK_LIMIT_#{SecureRandom.hex(4).upcase}", status: "success")
+        end
+
+        remember(normalized_id)
+        order
+      end
+
       def exit_position!(seg:, sid:, client_order_id:)
         normalized_id = normalize_client_order_id(client_order_id)
         return nil if duplicate?(normalized_id)
@@ -371,7 +509,7 @@ module Orders
         Rails.logger.info("[Orders::Placer] EXIT payload: #{payload.inspect}")
 
         if order_placement_enabled?
-          order = with_token_auto_heal(context: "orders.exit_position") do
+          order = with_order_rate_limit(context: "orders.exit_position") do
             DhanHQ::Models::Order.create(payload)
           end
           Rails.logger.info("[Orders::Placer] EXIT response: #{order.inspect}") if order
@@ -413,10 +551,9 @@ module Orders
 
       def with_token_auto_heal(context:, &)
         retried = false
-        begin
-          with_order_rate_limit(context: context, &)
-        rescue StandardError => e
-          Rails.logger.error("[Orders::Placer] #{context} failed: #{e.class} - #{e.message}")
+        with_order_rate_limit(&)
+      rescue StandardError => e
+        Rails.logger.error("[Orders::Placer] #{context} failed: #{e.class} - #{e.message}")
 
           unless DhanhqErrorHandler.token_expired?(e)
             return nil

@@ -27,7 +27,13 @@ RSpec.describe Orders::EntryManager do
       segment: 'NSE_FNO',
       security_id: '49081',
       symbol: 'NIFTY-25Jan2024-25000-CE',
-      active?: true
+      active?: true,
+      meta: {},
+      update_column: true,
+      direction: nil,
+      side: 'long_ce',
+      paper?: false,
+      index_key: nil
     )
   end
   let(:position_data) { instance_double(Positions::PositionData) }

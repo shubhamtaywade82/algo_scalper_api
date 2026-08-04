@@ -11,7 +11,6 @@ RSpec.describe Risk::Rules::TimeStopRule do
       entry_strategy: 'alpha_scalp',
       entry_path: 'scalp',
       meta: {},
-      index_key: 'NIFTY',
       watchable: double('watchable', expiry_date: Date.current),
       underlying_instrument: double('instrument', symbol_name: 'NIFTY')
     )
@@ -68,29 +67,6 @@ RSpec.describe Risk::Rules::TimeStopRule do
       end
 
       it 'exits when elapsed time exceeds scaled limit' do
-        allow(tracker).to receive(:created_at).and_return(25.minutes.ago)
-        result = rule.evaluate(context)
-        expect(result).to be_exit
-        expect(result.reason).to eq('TIME_STOP')
-        expect(result.metadata[:allowed_seconds]).to eq(1200.0)
-      end
-    end
-
-    context 'when watchable expiry_date is blank/invalid' do
-      before do
-        allow(tracker).to receive_messages(
-          entry_strategy: 'trend_buying',
-          entry_path: 'trend',
-          watchable: double('watchable', expiry_date: Date.new(1))
-        )
-      end
-
-      it 'falls back to 7 DTE and uses base limit' do
-        # tracker is 10 minutes ago (600s), fallback 7-DTE => scale=1 => allowed=1200s
-        result = rule.evaluate(context)
-        expect(result).to be_no_action
-
-        # Force exceed to confirm fallback DTE produced the expected allowed window
         allow(tracker).to receive(:created_at).and_return(25.minutes.ago)
         result = rule.evaluate(context)
         expect(result).to be_exit

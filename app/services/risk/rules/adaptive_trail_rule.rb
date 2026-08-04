@@ -129,7 +129,7 @@ module Risk
       end
 
       def underlying_series(context, interval)
-        index_key = context.tracker.index_key
+        index_key = context.tracker.meta&.dig('index_key')
         instrument = context.tracker.instrument || context.tracker.watchable
         return instrument&.candle_series(interval: interval) unless index_key
 

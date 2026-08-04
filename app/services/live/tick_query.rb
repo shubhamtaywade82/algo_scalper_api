@@ -40,7 +40,7 @@ module Live
           ask: tick_data&.dig(:ask)&.to_f,
           bid_qty: (tick_data&.dig(:bid_qty) || tick_data&.dig(:bid_quantity)).to_i,
           ask_qty: (tick_data&.dig(:ask_qty) || tick_data&.dig(:ask_quantity)).to_i,
-          volume: (tick_data&.dig(:volume) || tick_data&.dig(:vol)).to_i,
+          volume: tick_data&.dig(:volume).to_i,
           prev_close: tick_data&.dig(:prev_close)&.to_f
         )
       rescue StandardError => e
