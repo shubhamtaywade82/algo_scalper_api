@@ -7,7 +7,7 @@ module Live
     include Singleton
 
     PREFIX = 'tick'
-    TICK_TTL_SECONDS = 3600
+    TICK_TTL_SECONDS = 86_400
 
     # Store a tick as a hash under tick:<SEG>:<SID>
     # data is a hash of symbol/string keys -> values
@@ -215,14 +215,14 @@ module Live
     def symbolize_and_cast(raw)
       # raw is a hash with string keys and string values
       raw.each_with_object({}) do |(k, v), acc|
-        key = k.to_s.strip
-        val = v
-        acc[key.to_sym] = numeric?(val) ? numeric_to_f(val) : val
+        acc[k.to_s.strip.to_sym] = cast_numeric(v)
       end
     end
 
-    def numeric?(value)
-      value.to_s =~ /\A-?\d+(\.\d+)?\z/
+    def cast_numeric(value)
+      Float(value)
+    rescue StandardError
+      value
     end
 
     def numeric_to_f(value)

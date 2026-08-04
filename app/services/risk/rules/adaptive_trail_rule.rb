@@ -2,9 +2,7 @@
 
 module Risk
   module Rules
-    # Prop-desk adaptive option-premium trail.
-    # Uses the option premium high-water mark, a -30% entry guard, and tighter
-    # peak giveback bands as the trade progresses.
+    # Prop-desk adaptive option-premium trail with staged giveback bands.
     class AdaptiveTrailRule < BaseRule
       PRIORITY = 25
 
@@ -15,8 +13,9 @@ module Risk
         { min_profit: 1.20, trail_behind_peak: 0.22, hard_stop: nil, name: 'runner_mode' }
       ].freeze
 
-      # @param context [Risk::Rules::RuleContext] active option position context
-      # @return [Risk::Rules::RuleResult] exit when trail/hard stop/override fires
+      LONG_DIRECTIONS = %w[bullish long long_ce call ce].freeze
+      SHORT_DIRECTIONS = %w[bearish short long_pe put pe].freeze
+
       def evaluate(context)
         return skip_result unless context.active?
         return no_action_result if disabled?
@@ -40,6 +39,9 @@ module Risk
             metadata: metadata(stage, ltp, peak, entry, trail_price: entry * (1.0 + hard_stop.to_f))
           )
         end
+
+        peak_gain = peak - entry
+        return no_action_result if peak_gain <= 0
 
         trail_price = trail_price_for(entry: entry, peak: peak, stage: stage)
         return no_action_result if ltp > trail_price
@@ -76,7 +78,7 @@ module Risk
         snapshot = context.tracker_snapshot || {}
         qty = [context.tracker.quantity.to_i, 1].max
         hwm_peak = entry + (snapshot[:hwm_pnl].to_f / qty)
-        meta_peak = context.tracker.meta&.dig('peak_premium').to_f
+        meta_peak = context.tracker.peak_premium.to_f
         [entry, ltp, hwm_peak, meta_peak].max
       end
 
@@ -86,45 +88,53 @@ module Risk
       end
 
       def override_exit(context)
-        return supertrend_exit(context) if supertrend_flipped?(context)
-        return counter_candle_exit(context) if counter_candles?(context)
+        series = underlying_series(context, '1')
+        return supertrend_exit(context) if supertrend_flipped?(context, series)
+        return counter_candle_exit(context) if counter_candles?(context, series)
 
         nil
       end
 
-      def supertrend_flipped?(context)
+      def supertrend_flipped?(context, series)
         return false unless adaptive_config.fetch(:supertrend_flip_exit, true)
 
-        direction = context.tracker.meta&.dig('direction').to_s
-        series = underlying_series(context, '1')
+        direction = context.tracker.direction.to_s
         return false unless direction.present? && series&.candles&.any?
 
         st_cfg = AlgoConfig.fetch.dig(:signals, :supertrend) || {}
         st = Indicators::Supertrend.new(series: series, **st_cfg).call
         current = SupertrendTrend.direction(series: series, supertrend_result: st)
-        (direction == 'bullish' && current == :short) || (direction == 'bearish' && current == :long)
+        long_trade?(direction) ? current == :short : current == :long
       rescue StandardError => e
         Rails.logger.warn("[AdaptiveTrailRule] supertrend override unavailable: #{e.class} #{e.message}")
         false
       end
 
-      def counter_candles?(context)
+      def counter_candles?(context, series)
         needed = adaptive_config.fetch(:counter_candles, 3).to_i
         return false unless needed.positive?
 
-        direction = context.tracker.meta&.dig('direction').to_s
-        candles = underlying_series(context, '1')&.candles&.last(needed)
+        direction = context.tracker.direction.to_s
+        candles = series&.candles&.last(needed)
         return false unless direction.present? && candles&.size == needed
 
-        direction == 'bullish' ? candles.all?(&:bearish?) : candles.all?(&:bullish?)
+        long_trade?(direction) ? candles.all?(&:bearish?) : candles.all?(&:bullish?)
       rescue StandardError => e
         Rails.logger.warn("[AdaptiveTrailRule] counter-candle override unavailable: #{e.class} #{e.message}")
         false
       end
 
+      def long_trade?(direction)
+        LONG_DIRECTIONS.include?(direction.to_s.downcase)
+      end
+
       def underlying_series(context, interval)
+        index_key = context.tracker.index_key
         instrument = context.tracker.instrument || context.tracker.watchable
-        instrument&.candle_series(interval: interval)
+        return instrument&.candle_series(interval: interval) unless index_key
+
+        Instrument.find_by(symbol_name: index_key.to_s.upcase)&.candle_series(interval: interval) ||
+          instrument&.candle_series(interval: interval)
       end
 
       def supertrend_exit(context)

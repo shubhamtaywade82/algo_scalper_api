@@ -1,5 +1,6 @@
 import { onMount, onCleanup, createEffect, createSignal, For } from 'solid-js'
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers, ColorType } from 'lightweight-charts'
+import { istTickMarkFormatter, istTimeFormatter } from '../../lib/chartTime'
 
 // Overlay indicators are just LineSeries fed derived {time, value} arrays.
 // Add a new type by: (1) writing a compute fn here, (2) registering it in
@@ -74,6 +75,20 @@ export default function PriceChart(props) {
   const indicatorSeries = new Map() // id -> { series, config }
   let positionMarkers          // ISeriesMarkersPluginApi — entry-point arrows
   const positionLines = new Map() // id -> price line (entry price)
+  let supportLine = null
+  let resistanceLine = null
+  const radarLines = new Map()
+  let obBullHighLine = null
+  let obBullLowLine = null
+  let obBearHighLine = null
+  let obBearLowLine = null
+  const fvgLines = new Map()
+  let eqLine = null
+  let eqHighLine = null
+  let eqLowLine = null
+  let swingHighLine = null
+  let swingLowLine = null
+  let swingBosLine = null
   const [capsules, setCapsules] = createSignal([]) // floating detail cards anchored to entry-price Y
 
   // Animation state for the live (last) candle + LTP line
@@ -83,6 +98,8 @@ export default function PriceChart(props) {
   let targetBar = null       // latest known OHLC for the live bar
   let staticBars = []        // all-but-last bars, painted once via setData
   let didInitialFit = false  // only auto-zoom on the very first data load
+  let lastRenderedInterval = props.interval // track timeframe changes
+  let lastRenderedSymbol = props.symbol // track symbol changes
 
   function animate() {
     if (!chart || !candleSeries || !targetBar) {
@@ -100,12 +117,21 @@ export default function PriceChart(props) {
     // when price moved fast. The live-tick effect already extends targetBar's
     // high/low the instant a new extreme prints, so the true range is always
     // known up front — the lerp only needs to animate `close` toward it.
+    const isUp = targetBar.close >= targetBar.open
+    // Highlight the active forming candle to make it pop against historical bars.
+    // It will revert to the standard theme color when the minute rolls over and
+    // the backbone fetch replaces it via setData.
+    const highlightColor = isUp ? '#38bdf8' : '#fb923c' // Bright Blue for up, Bright Orange for down
+
     const liveBar = {
       time: targetBar.time,
       open: targetBar.open,
       high: targetBar.high,
       low: targetBar.low,
-      close: renderedClose
+      close: renderedClose,
+      color: highlightColor,
+      wickColor: highlightColor,
+      borderColor: highlightColor
     }
 
     candleSeries.update(liveBar)
@@ -323,10 +349,9 @@ export default function PriceChart(props) {
 
       const prev = entry.config
       const restyled = !prev || prev.color !== cfg.color
-      const recompute = !prev || prev.type !== cfg.type || prev.period !== cfg.period
 
       if (restyled) entry.series.applyOptions({ color: cfg.color })
-      if (recompute) entry.series.setData(computeFn(lastCandles, cfg.period))
+      entry.series.setData(computeFn(lastCandles, cfg.period))
       entry.config = { ...cfg }
     }
 
@@ -353,18 +378,25 @@ export default function PriceChart(props) {
       autoSize: !!props.fullHeight,
       // rightOffset keeps a few empty bars between the latest candle and the
       // price axis instead of pinning it flush against the edge.
-      timeScale: { timeVisible: true, secondsVisible: false, rightOffset: 5 },
+      // tickMarkFormatter forces IST rendering — candle `time` values are
+      // correct UTC seconds, but lightweight-charts' default formatter uses
+      // the browser's local timezone, which garbles the axis into the
+      // trading session's UTC-shifted hours (see lib/chartTime.js).
+      timeScale: { timeVisible: true, secondsVisible: false, rightOffset: 5, tickMarkFormatter: istTickMarkFormatter },
+      localization: { timeFormatter: istTimeFormatter },
       crosshair: { mode: 0 },
       // Built-in kinetic scroll/zoom easing — the chart's own "smooth animation" layer
       kineticScroll: { touch: true, mouse: true }
     })
 
     candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#34d399',
-      downColor: '#fb7185',
-      borderVisible: false,
-      wickUpColor: '#34d399',
-      wickDownColor: '#fb7185',
+      ...(props.theme || {
+        upColor: '#34d399',
+        downColor: '#fb7185',
+        borderVisible: false,
+        wickUpColor: '#34d399',
+        wickDownColor: '#fb7185'
+      }),
       // Built-in last-value label disabled — the `ltpSeries` LTP tail's own
       // axis label already shows current price; both together would duplicate it.
       lastValueVisible: false,
@@ -414,12 +446,86 @@ export default function PriceChart(props) {
     onCleanup(() => {
       if (rafId !== null) cancelAnimationFrame(rafId)
       ro?.disconnect()
+      if (supportLine && candleSeries) {
+        candleSeries.removePriceLine(supportLine)
+        supportLine = null
+      }
+      if (resistanceLine && candleSeries) {
+        candleSeries.removePriceLine(resistanceLine)
+        resistanceLine = null
+      }
+      for (const line of radarLines.values()) {
+        if (candleSeries) candleSeries.removePriceLine(line)
+      }
+      radarLines.clear()
+      if (obBullHighLine && candleSeries) {
+        candleSeries.removePriceLine(obBullHighLine)
+        obBullHighLine = null
+      }
+      if (obBullLowLine && candleSeries) {
+        candleSeries.removePriceLine(obBullLowLine)
+        obBullLowLine = null
+      }
+      if (obBearHighLine && candleSeries) {
+        candleSeries.removePriceLine(obBearHighLine)
+        obBearHighLine = null
+      }
+      if (obBearLowLine && candleSeries) {
+        candleSeries.removePriceLine(obBearLowLine)
+        obBearLowLine = null
+      }
+      for (const line of fvgLines.values()) {
+        if (candleSeries) candleSeries.removePriceLine(line)
+      }
+      fvgLines.clear()
+      if (eqLine && candleSeries) {
+        candleSeries.removePriceLine(eqLine)
+        eqLine = null
+      }
+      if (eqHighLine && candleSeries) {
+        candleSeries.removePriceLine(eqHighLine)
+        eqHighLine = null
+      }
+      if (eqLowLine && candleSeries) {
+        candleSeries.removePriceLine(eqLowLine)
+        eqLowLine = null
+      }
+      if (swingHighLine && candleSeries) {
+        candleSeries.removePriceLine(swingHighLine)
+        swingHighLine = null
+      }
+      if (swingLowLine && candleSeries) {
+        candleSeries.removePriceLine(swingLowLine)
+        swingLowLine = null
+      }
+      if (swingBosLine && candleSeries) {
+        candleSeries.removePriceLine(swingBosLine)
+        swingBosLine = null
+      }
       chart?.remove()
       chart = null
     })
   })
 
   createEffect(() => {
+    if (!candleSeries || !props.theme) return
+    candleSeries.applyOptions(props.theme)
+  })
+
+  // Sync historical bar data
+  createEffect(() => {
+    const symbolChanged = props.symbol !== lastRenderedSymbol
+    if (props.interval !== lastRenderedInterval || symbolChanged) {
+      didInitialFit = false
+      lastRenderedInterval = props.interval
+      lastRenderedSymbol = props.symbol
+      
+      renderedClose = null
+      targetBar = null
+      ltpTailAnchor = null
+      if (ltpSeries) ltpSeries.setData([])
+    }
+
     const candles = props.candles ? props.candles() : []
     if (!chart || !candleSeries) return
 
@@ -512,6 +618,272 @@ export default function PriceChart(props) {
     targetBar.high = Math.max(targetBar.high, ltp)
     targetBar.low = Math.min(targetBar.low, ltp)
     kickAnimation()
+  })
+
+  // Render support & resistance lines, styling them dynamically when a breakout is armed.
+  createEffect(() => {
+    if (!chart || !candleSeries) return
+    const s = props.support ? props.support() : null
+    const r = props.resistance ? props.resistance() : null
+    const isArmed = props.breakoutReady ? props.breakoutReady() : false
+    const dir = props.direction ? props.direction() : ''
+
+    // Clean up old support line
+    if (supportLine) {
+      candleSeries.removePriceLine(supportLine)
+      supportLine = null
+    }
+    // Clean up old resistance line
+    if (resistanceLine) {
+      candleSeries.removePriceLine(resistanceLine)
+      resistanceLine = null
+    }
+
+    if (s != null && Number.isFinite(s)) {
+      const isBearishArmed = isArmed && dir?.toUpperCase() === 'BEARISH'
+      supportLine = candleSeries.createPriceLine({
+        price: s,
+        color: isBearishArmed ? '#10b981' : 'rgba(16, 185, 129, 0.6)', // Bright green if armed, translucent green if not
+        lineWidth: isBearishArmed ? 2 : 1,
+        lineStyle: isBearishArmed ? 0 : 2, // Solid if armed, dashed if not
+        axisLabelVisible: true,
+        title: isBearishArmed ? 'SUPPORT (BREAKOUT ARMED!)' : 'Support'
+      })
+    }
+
+    if (r != null && Number.isFinite(r)) {
+      const isBullishArmed = isArmed && dir?.toUpperCase() === 'BULLISH'
+      resistanceLine = candleSeries.createPriceLine({
+        price: r,
+        color: isBullishArmed ? '#f43f5e' : 'rgba(244, 63, 94, 0.6)', // Bright rose if armed, translucent rose if not
+        lineWidth: isBullishArmed ? 2 : 1,
+        lineStyle: isBullishArmed ? 0 : 2, // Solid if armed, dashed if not
+        axisLabelVisible: true,
+        title: isBullishArmed ? 'RESISTANCE (BREAKOUT ARMED!)' : 'Resistance'
+      })
+    }
+  })
+
+  // Render radar strikes as horizontal reference lines
+  createEffect(() => {
+    if (!chart || !candleSeries) return
+    const strikes = props.radarStrikes ? props.radarStrikes() : []
+    const seenSids = new Set()
+
+    for (const strike of strikes) {
+      if (typeof strike !== 'object' || strike == null) continue
+      const sid = strike.security_id
+      if (!sid) continue
+      seenSids.add(sid)
+
+      const price = Number(strike.strike)
+      if (!Number.isFinite(price)) continue
+
+      const isCall = strike.type === 'CE'
+      const color = isCall ? 'rgba(56, 189, 248, 0.35)' : 'rgba(251, 146, 60, 0.35)' // Light Sky Blue for CE, Light Orange for PE
+      
+      let line = radarLines.get(sid)
+      const lineOpts = {
+        price: price,
+        color: color,
+        lineWidth: 1,
+        lineStyle: 3, // Dotted
+        axisLabelVisible: true,
+        title: `Radar ${strike.type} ${price}`
+      }
+      if (!line) {
+        line = candleSeries.createPriceLine(lineOpts)
+        radarLines.set(sid, line)
+      } else {
+        line.applyOptions(lineOpts)
+      }
+    }
+
+    // Clean up removed strikes
+    for (const [sid, line] of radarLines) {
+      if (!seenSids.has(sid)) {
+        candleSeries.removePriceLine(line)
+        radarLines.delete(sid)
+      }
+    }
+  })
+
+  // Render SMC structural elements (Order Blocks & Fair Value Gaps)
+  createEffect(() => {
+    if (!chart || !candleSeries) return
+    const ctx = props.smcContext ? props.smcContext() : null
+    
+    // Check if these indicators are enabled in props.indicators
+    const inds = props.indicators ? props.indicators() : []
+    const obEnabled = inds.find(i => i.id === 'smc_ob')?.enabled !== false
+    const fvgEnabled = inds.find(i => i.id === 'smc_fvg')?.enabled === true
+    const eqEnabled = inds.find(i => i.id === 'smc_eq')?.enabled === true
+    const swingEnabled = inds.find(i => i.id === 'smc_swing')?.enabled === true
+
+    // Clean up previous OB lines
+    if (obBullHighLine) { candleSeries.removePriceLine(obBullHighLine); obBullHighLine = null }
+    if (obBullLowLine) { candleSeries.removePriceLine(obBullLowLine); obBullLowLine = null }
+    if (obBearHighLine) { candleSeries.removePriceLine(obBearHighLine); obBearHighLine = null }
+    if (obBearLowLine) { candleSeries.removePriceLine(obBearLowLine); obBearLowLine = null }
+
+    if (ctx && obEnabled) {
+      // 1. Draw Bullish Order Block (latest unmitigated)
+      const bullOb = ctx.order_blocks?.bullish
+      if (bullOb && Number.isFinite(bullOb.high) && Number.isFinite(bullOb.low)) {
+        obBullHighLine = candleSeries.createPriceLine({
+          price: Number(bullOb.high),
+          color: 'rgba(52, 211, 153, 0.7)', // emerald-400
+          lineWidth: 1,
+          lineStyle: 1, // dotted
+          axisLabelVisible: true,
+          title: 'Bull OB (High)'
+        })
+        obBullLowLine = candleSeries.createPriceLine({
+          price: Number(bullOb.low),
+          color: 'rgba(52, 211, 153, 0.35)',
+          lineWidth: 1,
+          lineStyle: 2, // dashed
+          axisLabelVisible: true,
+          title: 'Bull OB (Low)'
+        })
+      }
+
+      // 2. Draw Bearish Order Block (latest unmitigated)
+      const bearOb = ctx.order_blocks?.bearish
+      if (bearOb && Number.isFinite(bearOb.high) && Number.isFinite(bearOb.low)) {
+        obBearHighLine = candleSeries.createPriceLine({
+          price: Number(bearOb.high),
+          color: 'rgba(251, 113, 133, 0.35)', // rose-400
+          lineWidth: 1,
+          lineStyle: 2, // dashed
+          axisLabelVisible: true,
+          title: 'Bear OB (High)'
+        })
+        obBearLowLine = candleSeries.createPriceLine({
+          price: Number(bearOb.low),
+          color: 'rgba(251, 113, 133, 0.7)',
+          lineWidth: 1,
+          lineStyle: 1, // dotted
+          axisLabelVisible: true,
+          title: 'Bear OB (Low)'
+        })
+      }
+    }
+
+    // 3. Draw active Fair Value Gaps (FVGs)
+    const activeFvgs = fvgEnabled && ctx?.fvg?.active ? ctx.fvg.active : []
+    const seenFvgKeys = new Set()
+
+    for (const fvg of activeFvgs) {
+      if (!fvg || !Number.isFinite(fvg.from) || !Number.isFinite(fvg.to)) continue
+      
+      // Create a unique key for this FVG based on type, bounds and timestamp
+      const fvgKey = `${fvg.type}-${fvg.from}-${fvg.to}-${fvg.timestamp}`
+      seenFvgKeys.add(fvgKey)
+
+      const isBull = fvg.type === 'bullish'
+      const fvgColor = isBull ? 'rgba(45, 212, 191, 0.45)' : 'rgba(244, 63, 94, 0.45)' // teal vs rose
+      
+      // Draw middle line representing the FVG gap center
+      const midPrice = (Number(fvg.from) + Number(fvg.to)) / 2
+      let line = fvgLines.get(fvgKey)
+      if (!line) {
+        line = candleSeries.createPriceLine({
+          price: midPrice,
+          color: fvgColor,
+          lineWidth: 1,
+          lineStyle: 2, // dashed
+          axisLabelVisible: true,
+          title: `${isBull ? 'Bull' : 'Bear'} FVG`
+        })
+        fvgLines.set(fvgKey, line)
+      }
+    }
+
+    // Clean up resolved/mitigated FVGs
+    for (const [key, line] of fvgLines) {
+      if (!seenFvgKeys.has(key)) {
+        candleSeries.removePriceLine(line)
+        fvgLines.delete(key)
+      }
+    }
+
+    // 4. Draw SMC Equilibrium & Premium/Discount boundaries
+    if (eqLine) { candleSeries.removePriceLine(eqLine); eqLine = null }
+    if (eqHighLine) { candleSeries.removePriceLine(eqHighLine); eqHighLine = null }
+    if (eqLowLine) { candleSeries.removePriceLine(eqLowLine); eqLowLine = null }
+
+    if (ctx && eqEnabled) {
+      const pd = ctx.premium_discount
+      if (pd && Number.isFinite(pd.equilibrium) && Number.isFinite(pd.high) && Number.isFinite(pd.low)) {
+        eqLine = candleSeries.createPriceLine({
+          price: Number(pd.equilibrium),
+          color: '#eab308', // yellow-500
+          lineWidth: 1.5,
+          lineStyle: 0, // Solid
+          axisLabelVisible: true,
+          title: 'Equilibrium (50%)'
+        })
+        eqHighLine = candleSeries.createPriceLine({
+          price: Number(pd.high),
+          color: 'rgba(239, 68, 68, 0.4)', // red-500
+          lineWidth: 1,
+          lineStyle: 2, // dashed
+          axisLabelVisible: true,
+          title: 'Premium Range High'
+        })
+        eqLowLine = candleSeries.createPriceLine({
+          price: Number(pd.low),
+          color: 'rgba(34, 197, 94, 0.4)', // green-500
+          lineWidth: 1,
+          lineStyle: 2, // dashed
+          axisLabelVisible: true,
+          title: 'Discount Range Low'
+        })
+      }
+    }
+
+    // 5. Draw SMC Swing Structure & BOS lines
+    if (swingHighLine) { candleSeries.removePriceLine(swingHighLine); swingHighLine = null }
+    if (swingLowLine) { candleSeries.removePriceLine(swingLowLine); swingLowLine = null }
+    if (swingBosLine) { candleSeries.removePriceLine(swingBosLine); swingBosLine = null }
+
+    if (ctx && swingEnabled) {
+      const ss = ctx.swing_structure
+      if (ss) {
+        if (ss.last_swing_high?.price && Number.isFinite(ss.last_swing_high.price)) {
+          swingHighLine = candleSeries.createPriceLine({
+            price: Number(ss.last_swing_high.price),
+            color: '#a855f7', // purple-500
+            lineWidth: 1,
+            lineStyle: 2, // dashed
+            axisLabelVisible: true,
+            title: 'Swing High'
+          })
+        }
+        if (ss.last_swing_low?.price && Number.isFinite(ss.last_swing_low.price)) {
+          swingLowLine = candleSeries.createPriceLine({
+            price: Number(ss.last_swing_low.price),
+            color: '#3b82f6', // blue-500
+            lineWidth: 1,
+            lineStyle: 2, // dashed
+            axisLabelVisible: true,
+            title: 'Swing Low'
+          })
+        }
+        if (ss.last_bos?.price && Number.isFinite(ss.last_bos.price)) {
+          const isBull = ss.last_bos.type === 'bullish'
+          swingBosLine = candleSeries.createPriceLine({
+            price: Number(ss.last_bos.price),
+            color: isBull ? '#10b981' : '#ef4444', // green vs red
+            lineWidth: 1.5,
+            lineStyle: 1, // dotted
+            axisLabelVisible: true,
+            title: `Last BOS (${isBull ? 'Bullish' : 'Bearish'})`
+          })
+        }
+      }
+    }
   })
 
   return (

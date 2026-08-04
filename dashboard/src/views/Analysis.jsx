@@ -8,6 +8,7 @@ import AiInsights from '../components/analysis/AiInsights'
 import HistoricalBehavior from '../components/analysis/HistoricalBehavior'
 import ExpectedValueRiskPanel from '../components/analysis/ExpectedValueRiskPanel'
 import CalibrationPanel from '../components/analysis/CalibrationPanel'
+import OptimizationPanel from '../components/analysis/OptimizationPanel'
 
 const INDEX_LTP_KEY = { NIFTY: 'nifty', SENSEX: 'sensex', BANKNIFTY: 'banknifty' }
 const DEFAULT_TAB_ORDER = ['NIFTY', 'BANKNIFTY', 'SENSEX']
@@ -24,9 +25,10 @@ export default function Analysis() {
   const dashCtx = useDashboardContext()
   const {
     liveData, isLoading, getError,
-    fetchOne, fetchAll, fetchHistorical, fetchRiskExplorer, fetchAiSnapshot, ensureAutoLoadedDetails,
+    fetchOne, fetchAll, fetchHistorical, fetchRiskExplorer, fetchAiSnapshot, runOptimization, ensureAutoLoadedDetails,
     activeIndex, historicalData, historicalLoading, riskExplorerData, riskExplorerLoading,
     snapshotLoading, snapshotData, snapshotError,
+    optimizationLoading, optimizationData, optimizationError,
   } = useAnalysis()
 
   const tabKeys = createMemo(() => watchlistTabKeys(dashCtx.subscribedIndices?.()))
@@ -151,6 +153,12 @@ export default function Analysis() {
             data={detailActiveForPanel() ? riskExplorerData() : null}
             loading={detailActiveForPanel() ? riskExplorerLoading() : false}
             onLoad={() => fetchRiskExplorer(selectedTab())}
+          />
+          <OptimizationPanel
+            data={detailActiveForPanel() ? optimizationData() : null}
+            loading={detailActiveForPanel() ? optimizationLoading() : false}
+            error={detailActiveForPanel() ? optimizationError() : null}
+            onRun={(lookback, ind) => runOptimization(selectedTab(), lookback, ind)}
           />
           <Show when={detailActiveForPanel() && historicalData()}>
             <CalibrationPanel data={historicalData()} />

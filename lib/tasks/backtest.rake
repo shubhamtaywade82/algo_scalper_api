@@ -1,11 +1,69 @@
 # lib/tasks/backtest.rake
 # frozen_string_literal: true
 
+# Wrapper class to adapt active strategies (BaseStrategy format) to BacktestService
+class ActiveStrategyBacktestWrapper
+  def initialize(series:, strategy_class:, strategy_params: {})
+    @series = series
+    @strategy_class = strategy_class
+    @strategy_params = strategy_params
+  end
+
+  def generate_signal(index)
+    return nil if index < 15 # Warmup period
+
+    truncated_series = CandleSeries.new(symbol: @series.symbol, interval: @series.interval)
+    @series.candles.first(index + 1).each { |c| truncated_series.add_candle(c) }
+
+    context = Strategies::StrategyContext.new(
+      instrument_key: @series.symbol,
+      candles: ->(_tf) { truncated_series },
+      indicators: nil,
+      session: mock_session,
+      position: mock_position,
+      params: @strategy_params,
+      clock: -> { truncated_series.candles.last.timestamp },
+      config: {},
+      logger: nil
+    )
+
+    strategy = @strategy_class.new(params: @strategy_params)
+    signal = strategy.call(context)
+
+    case signal
+    when Signals::BuyCall
+      { type: :ce, price: truncated_series.candles.last.close }
+    when Signals::BuyPut
+      { type: :pe, price: truncated_series.candles.last.close }
+    end
+  rescue StandardError
+    nil
+  end
+
+  private
+
+  def mock_session
+    @mock_session ||= Object.new.tap do |o|
+      def o.entry_allowed? = true
+      def o.market_open? = true
+      def o.seconds_until_close = 18_000
+      def o.should_force_exit? = false
+    end
+  end
+
+  def mock_position
+    @mock_position ||= Object.new.tap do |o|
+      def o.open? = false
+    end
+  end
+end
+
 namespace :backtest do
   # Ensure services are disabled during backtests
   task env: :environment do
     ENV['BACKTEST_MODE'] = '1'
   end
+
   desc 'Run backtest on an instrument'
   task :run, %i[symbol interval days] => %i[env environment] do |_t, args|
     symbol = args[:symbol] || 'NIFTY'
@@ -19,7 +77,7 @@ namespace :backtest do
       symbol: symbol,
       interval: interval,
       days_back: days,
-      strategy: SimpleMomentumStrategy
+      strategy: SupertrendBacktestStrategy
     )
 
     result.print_summary
@@ -41,7 +99,7 @@ namespace :backtest do
         symbol: symbol,
         interval: interval,
         days_back: days,
-        strategy: SimpleMomentumStrategy
+        strategy: SupertrendBacktestStrategy
       )
 
       result.print_summary
@@ -49,101 +107,53 @@ namespace :backtest do
     end
   end
 
-  # desc 'Compare both strategies (SimpleMomentum vs InsideBar)'
-  # task :compare, %i[symbol interval days] => :environment do |_t, args|
-  #   symbol = args[:symbol] || 'NIFTY'
-  #   interval = args[:interval] || '5'
-  #   days = (args[:days] || '90').to_i
-
-  #   puts "\n🔍 Comparing Strategies..."
-  #   puts "Symbol: #{symbol} | Interval: #{interval}min | Days: #{days}"
-  #   puts "\n#{'=' * 80}"
-
-  #   strategies = [
-  #     { name: 'SimpleMomentumStrategy', class: SimpleMomentumStrategy },
-  #     { name: 'InsideBarStrategy', class: InsideBarStrategy }
-  #   ]
-
-  #   results = {}
-
-  #   strategies.each do |strategy_info|
-  #     puts "\n📊 Running #{strategy_info[:name]}..."
-  #     puts '-' * 80
-
-  #     result = BacktestService.run(
-  #       symbol: symbol,
-  #       interval: interval,
-  #       days_back: days,
-  #       strategy: strategy_info[:class]
-  #     )
-
-  #     results[strategy_info[:name]] = result.summary
-  #     result.print_summary
-  #     sleep 1 # Rate limit protection
-  #   end
-
-  #   # Comparison summary
-  #   puts "\n#{'=' * 80}"
-  #   puts '📈 COMPARISON SUMMARY'
-  #   puts '=' * 80
-
-  #   strategies.each do |strategy_info|
-  #     name = strategy_info[:name]
-  #     summary = results[name]
-
-  #     next if summary.empty?
-
-  #     puts "\n#{name}:"
-  #     puts "  Total Trades:    #{summary[:total_trades]}"
-  #     puts "  Win Rate:        #{summary[:win_rate]}%"
-  #     puts "  Total P&L:       #{'+' if summary[:total_pnl_percent].positive?}#{summary[:total_pnl_percent]}%"
-  #     puts "  Expectancy:      #{'+' if summary[:expectancy].positive?}#{summary[:expectancy]}% per trade"
-  #     puts "  Avg Win:         +#{summary[:avg_win_percent]}%"
-  #     puts "  Avg Loss:        #{summary[:avg_loss_percent]}%"
-  #   end
-
-  #   # Winner determination
-  #   if results.values.all?(&:empty?)
-  #     puts "\n⚠️  No trades executed by either strategy"
-  #   else
-  #     winner = results.max_by { |_name, summary| summary[:expectancy] || -999 }
-  #     puts "\n🏆 Best Strategy: #{winner[0]} (Expectancy: #{winner[1][:expectancy]}%)"
-  #   end
-
-  #   puts "\n#{'=' * 80}"
-  # end
-
-  desc 'Compare strategies on an instrument'
-  task :compare, %i[symbol interval days] => %i[env environment] do |_t, args|
+  desc 'Compare active strategies on an instrument'
+  task :compare, %i[symbol days] => %i[env environment] do |_t, args|
     symbol = args[:symbol] || 'NIFTY'
-    interval = args[:interval] || '5'
     days = (args[:days] || '90').to_i
 
-    puts "\n🔍 Comparing Strategies..."
-    puts "Symbol: #{symbol} | Interval: #{interval}min | Days: #{days}"
+    puts "\n🔍 Comparing Active Strategies..."
+    puts "Symbol: #{symbol} | Days: #{days}"
+
+    # Load active strategies
+    load Rails.root.join('strategies/supertrend_v1/strategy.rb').to_s
+    load Rails.root.join('strategies/supertrend-adx/strategy.rb').to_s
+    load Rails.root.join('strategies/vwap-reversal/strategy.rb').to_s
 
     strategies = {
-      'SimpleMomentumStrategy' => ->(series) { SimpleMomentumStrategy.new(series: series) },
-      'InsideBarStrategy' => ->(series) { InsideBarStrategy.new(series: series) },
-      'SupertrendAdxStrategy' => lambda { |series|
-        SupertrendAdxStrategy.new(
-          series: series,
-          supertrend_cfg: AlgoConfig.fetch.dig(:signals, :supertrend) || { period: 7, multiplier: 3 },
-          adx_min_strength: AlgoConfig.fetch.dig(:signals, :adx, :min_strength) || 20
-        )
+      'SupertrendV1' => {
+        class: SupertrendV1,
+        interval: '1',
+        params: { supertrend_period: 10, supertrend_multiplier: 2.0, adx_min: 20.0 }
+      },
+      'SupertrendAdxStrategy' => {
+        class: SupertrendAdxStrategy,
+        interval: '5',
+        params: { supertrend_period: 10, supertrend_multiplier: 3.0, adx_threshold: 25, adx_period: 14 }
+      },
+      'VwapReversalStrategy' => {
+        class: VwapReversalStrategy,
+        interval: '3',
+        params: { rsi_period: 14, rsi_oversold: 30, rsi_overbought: 70, vwap_band_pct: 0.5 }
       }
     }
 
-    strategies.each do |name, strategy_lambda|
+    strategies.each do |name, details|
       puts "\n============================================================"
-      puts "📊 Running #{name}..."
+      puts "📊 Running #{name} on #{details[:interval]}m timeframe..."
       puts '--------------------------------------------------------------------------------'
 
       result = BacktestService.run(
         symbol: symbol,
-        interval: interval,
+        interval: details[:interval],
         days_back: days,
-        strategy: strategy_lambda
+        strategy: lambda { |series|
+          ActiveStrategyBacktestWrapper.new(
+            series: series,
+            strategy_class: details[:class],
+            strategy_params: details[:params]
+          )
+        }
       )
 
       result.print_summary
@@ -154,73 +164,82 @@ namespace :backtest do
     puts '================================================================================'
   end
 
-  desc 'Run comprehensive backtest on all indices and timeframes'
+  desc 'Run comprehensive backtest on all indices and timeframes for active strategies'
   task :all_indices, [:days] => %i[env environment] do |_t, args|
     days = (args[:days] || '90').to_i
     symbols = %w[NIFTY BANKNIFTY SENSEX]
-    intervals = %w[5 15]
     all_results = []
 
+    # Load active strategies
+    load Rails.root.join('strategies/supertrend_v1/strategy.rb').to_s
+    load Rails.root.join('strategies/supertrend-adx/strategy.rb').to_s
+    load Rails.root.join('strategies/vwap-reversal/strategy.rb').to_s
+
     strategies = {
-      'SimpleMomentumStrategy' => ->(series) { SimpleMomentumStrategy.new(series: series) },
-      'InsideBarStrategy' => ->(series) { InsideBarStrategy.new(series: series) },
-      'SupertrendAdxStrategy' => lambda { |series|
-        SupertrendAdxStrategy.new(
-          series: series,
-          supertrend_cfg: AlgoConfig.fetch.dig(:signals, :supertrend) || { period: 7, multiplier: 3 },
-          adx_min_strength: AlgoConfig.fetch.dig(:signals, :adx, :min_strength) || 20
-        )
+      'SupertrendV1' => {
+        class: SupertrendV1,
+        interval: '1',
+        params: { supertrend_period: 10, supertrend_multiplier: 2.0, adx_min: 20.0 }
+      },
+      'SupertrendAdxStrategy' => {
+        class: SupertrendAdxStrategy,
+        interval: '5',
+        params: { supertrend_period: 10, supertrend_multiplier: 3.0, adx_threshold: 25, adx_period: 14 }
+      },
+      'VwapReversalStrategy' => {
+        class: VwapReversalStrategy,
+        interval: '3',
+        params: { rsi_period: 14, rsi_oversold: 30, rsi_overbought: 70, vwap_band_pct: 0.5 }
       }
     }
 
     puts "\n#{'=' * 100}"
-    puts '🚀 COMPREHENSIVE BACKTEST: All Indices × All Timeframes × All Strategies'
+    puts '🚀 COMPREHENSIVE BACKTEST: All Indices × Active Strategies'
     puts '=' * 100
-    puts "Days: #{days} | Symbols: #{symbols.join(', ')} | Intervals: #{intervals.join(', ')}min"
+    puts "Days: #{days} | Symbols: #{symbols.join(', ')}"
     puts '=' * 100
 
     symbols.each do |symbol|
-      intervals.each do |interval|
-        puts "\n#{'=' * 100}"
-        puts "📊 #{symbol} - #{interval}min Timeframe"
-        puts '=' * 100
+      strategies.each do |strategy_name, details|
+        puts "\n📊 #{symbol} | Strategy: #{strategy_name} | Interval: #{details[:interval]}m"
+        puts '-' * 100
 
-        strategies.each do |strategy_name, strategy_lambda|
-          puts "\n#{'-' * 100}"
-          puts "  Strategy: #{strategy_name}"
-          puts '-' * 100
-
-          begin
-            result = BacktestService.run(
-              symbol: symbol,
-              interval: interval,
-              days_back: days,
-              strategy: strategy_lambda
-            )
-
-            summary = result.summary
-            next if summary.empty?
-
-            all_results << {
-              symbol: symbol,
-              interval: interval,
-              strategy: strategy_name,
-              summary: summary
+        begin
+          result = BacktestService.run(
+            symbol: symbol,
+            interval: details[:interval],
+            days_back: days,
+            strategy: lambda { |series|
+              ActiveStrategyBacktestWrapper.new(
+                series: series,
+                strategy_class: details[:class],
+                strategy_params: details[:params]
+              )
             }
+          )
 
-            puts "  Total Trades:    #{summary[:total_trades]}"
-            puts "  Win Rate:        #{summary[:win_rate]}%"
-            puts "  Total P&L:       #{'+' if summary[:total_pnl_percent].positive?}#{summary[:total_pnl_percent]}%"
-            puts "  Expectancy:      #{'+' if summary[:expectancy].positive?}#{summary[:expectancy]}% per trade"
-            puts "  Avg Win:         +#{summary[:avg_win_percent]}%"
-            puts "  Avg Loss:        #{summary[:avg_loss_percent]}%"
-          rescue StandardError => e
-            puts "  ❌ Error: #{e.message}"
-            Rails.logger.error("[Backtest] Failed for #{symbol}/#{interval}min/#{strategy_name}: #{e.message}")
-          end
+          summary = result.summary
+          next if summary.empty?
 
-          sleep 1 # Rate limit protection
+          all_results << {
+            symbol: symbol,
+            interval: details[:interval],
+            strategy: strategy_name,
+            summary: summary
+          }
+
+          puts "  Total Trades:    #{summary[:total_trades]}"
+          puts "  Win Rate:        #{summary[:win_rate]}%"
+          puts "  Total P&L:       #{'+' if summary[:total_pnl_percent].positive?}#{summary[:total_pnl_percent]}%"
+          puts "  Expectancy:      #{'+' if summary[:expectancy].positive?}#{summary[:expectancy]}% per trade"
+          puts "  Avg Win:         +#{summary[:avg_win_percent]}%"
+          puts "  Avg Loss:        #{summary[:avg_loss_percent]}%"
+        rescue StandardError => e
+          puts "  ❌ Error: #{e.message}"
+          Rails.logger.error("[Backtest] Failed for #{symbol}/#{details[:interval]}min/#{strategy_name}: #{e.message}")
         end
+
+        sleep 1 # Rate limit protection
       end
     end
 
@@ -257,9 +276,9 @@ namespace :backtest do
     puts '📊 Top 5 by Expectancy:'
     puts '-' * 100
     top_5 = all_results.sort_by { |r| -(r[:summary][:expectancy] || -999) }.first(5)
-    top_5.each_with_index do |result, idx|
-      puts "  #{idx + 1}. #{result[:symbol]} | #{result[:interval]}min | #{result[:strategy]}"
-      puts "     Expectancy: #{result[:summary][:expectancy]}% | P&L: #{result[:summary][:total_pnl_percent]}% | Win Rate: #{result[:summary][:win_rate]}% | Trades: #{result[:summary][:total_trades]}"
+    top_5.each_with_index do |res, idx|
+      puts "  #{idx + 1}. #{res[:symbol]} | #{res[:interval]}min | #{res[:strategy]}"
+      puts "     Expectancy: #{res[:summary][:expectancy]}% | P&L: #{res[:summary][:total_pnl_percent]}% | Win Rate: #{res[:summary][:win_rate]}% | Trades: #{res[:summary][:total_trades]}"
     end
 
     puts "\n#{'=' * 100}"
@@ -278,7 +297,7 @@ namespace :backtest do
       symbol: symbol,
       interval: interval,
       days_back: days,
-      strategy: SimpleMomentumStrategy
+      strategy: SupertrendBacktestStrategy
     )
 
     summary = result.summary

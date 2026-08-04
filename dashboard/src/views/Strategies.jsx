@@ -1,136 +1,149 @@
-import { createMemo } from 'solid-js'
-import { For, Show } from 'solid-js'
-import { useDashboardContext } from '../context/DashboardContext'
-import { expiryBadgeMeta } from '../lib/expiryBadge'
+import { createSignal, onMount, For, createMemo, Show } from 'solid-js'
+import { useNavigate } from '@solidjs/router'
+import { useStrategies } from '../stores/useStrategies'
 
 export default function Strategies() {
-  const { subscribedIndices, config } = useDashboardContext()
+  const navigate = useNavigate()
+  const { strategies, loading, error, fetchAll } = useStrategies()
+  const [activeTab, setActiveTab] = createSignal('All')
 
-  const riskParameters = createMemo(() => {
-    const r = config()?.risk || {}
-    const m = config()?.market_session || {}
-    const trailingStatus = (r.trailing?.enabled && m.config?.allow_trailing !== false) ? 'ACTIVE' : 'OFF'
-    return [
-      { label: 'Profit Floor', value: r.profit_floor?.enabled ? `${r.profit_floor.lock_pct}%` : 'OFF' },
-      { label: 'Trailing', value: trailingStatus }
-    ]
+  onMount(() => {
+    fetchAll()
   })
 
-  const signalFilters = createMemo(() => {
-    const s = config()?.signals || {}
-    const t = config()?.trading_time_restrictions || {}
-    const m = config()?.market_session || {}
-    return [
-      { label: 'ADX Filter', value: s.enable_adx_filter ? `MIN ${s.adx_min_strength || 15}` : 'OFF' },
-      { label: 'Direction Gate', value: s.enable_direction_gate ? 'ACTIVE' : 'OFF' },
-      { label: 'Runners', value: m.config?.allow_runners ? 'ALLOWED' : 'OFF' },
-      { label: 'Session Blackout', value: t.enabled ? t.avoid_periods?.[0] || '10:00-12:30' : 'OFF' }
-    ]
+  // Filter strategies based on tab selection
+  const filteredStrategies = createMemo(() => {
+    const list = strategies() || []
+    if (activeTab() === 'All') {
+      return list.filter(s => s.status !== 'archived')
+    }
+    return list.filter(s => s.status === activeTab().toLowerCase())
   })
 
-  const indicesList = createMemo(() => subscribedIndices() || [])
+  const getStatusClass = (status) => {
+    switch (status) {
+      case 'active': return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+      case 'draft': return 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+      case 'archived': return 'bg-gray-500/10 text-gray-400 border border-gray-500/20'
+      default: return 'bg-white/5 text-white/50 border border-white/5'
+    }
+  }
+
+  function expiryVariant(className) {
+    if (className.includes('text-emerald')) return 'success'
+    if (className.includes('text-red') || className.includes('text-rose')) return 'danger'
+    if (className.includes('text-amber') || className.includes('text-yellow')) return 'warning'
+    if (className.includes('text-blue') || className.includes('text-cyan')) return 'info'
+    return 'outline'
+  }
 
   return (
     <div class="space-y-6">
-      <div class="flex items-center justify-between mb-2 px-2">
-        <h2 class="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full bg-primary-500"></span>
-          Active Strategies
-        </h2>
-        <span class="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">Live Config</span>
+      {/* Header Bar */}
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Algorithmic Engine</p>
+        </div>
+        <button
+          onClick={() => navigate('/strategies/creator')}
+          class="px-5 py-2.5 bg-primary-600 hover:bg-primary-500 rounded-xl text-xs font-black uppercase tracking-wider text-white shadow-lg transition-all"
+        >
+          + Create Strategy
+        </button>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <For each={indicesList()}>
-          {(idx) => (
-            <div class="glass glass-hover p-6 rounded-2xl flex flex-col gap-4 group overflow-hidden relative min-h-[160px]">
-              <div class="absolute top-0 right-0 w-32 h-32 bg-primary-500/5 blur-3xl group-hover:bg-primary-500/10 transition-colors"></div>
-              <div class="flex items-center justify-between relative z-10 gap-2">
-                <div class="flex flex-col min-w-0">
-                  <span class="text-xl font-black text-white tracking-tight">{idx.key}</span>
-                  <span class="text-xs font-bold text-gray-500 uppercase tracking-widest mt-0.5">{idx.timeframe} Interval</span>
-                  {(() => {
-                    const b = expiryBadgeMeta(idx)
-                    return (
-                      <div class="flex flex-wrap items-center gap-1.5 mt-2">
-                        <span class={`text-[9px] font-black uppercase tracking-tight px-2 py-0.5 rounded border ${b.className}`}>
-                          {b.text}
+      {/* Filter Tabs */}
+      <div class="flex items-center justify-between border-b border-white/5 pb-2.5 gap-4">
+        <div class="flex items-center gap-2">
+          {['All', 'Active', 'Draft', 'Archived'].map(tab => (
+            <button
+              onClick={() => setActiveTab(tab)}
+              class={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                activeTab() === tab ? 'bg-primary-600/15 text-primary-400 border border-primary-500/30' : 'text-gray-400 hover:text-white border border-transparent'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+        <span class="text-[9px] font-bold text-gray-500 font-mono">
+          Showing {filteredStrategies().length} strategies
+        </span>
+      </div>
+
+      {/* Strategies Grid */}
+      <Show when={!loading()} fallback={
+        <div class="text-center py-20 text-xs font-black text-gray-500 uppercase tracking-widest animate-pulse">
+          Loading strategies...
+        </div>
+      }>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <For each={filteredStrategies()}>
+            {(s) => (
+              <div
+                onClick={() => navigate(`/strategies/${s.id}`)}
+                class="glass glass-hover p-5 rounded-2xl cursor-pointer border border-white/5 flex flex-col justify-between h-[190px] group transition-all"
+              >
+                <div>
+                  {/* Top line: Name + status */}
+                  <div class="flex items-start justify-between gap-3">
+                    <h3 class="text-xs font-black text-white group-hover:text-primary-400 transition-colors uppercase tracking-wide">
+                      {s.name}
+                    </h3>
+                    <span class={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md ${getStatusClass(s.status)}`}>
+                      {s.status}
+                    </span>
+                  </div>
+
+                  {/* Version & tags */}
+                  <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                    <span class="text-[8px] font-bold bg-white/5 text-gray-400 px-1.5 py-0.5 rounded">
+                      v{s.version}
+                    </span>
+                    <For each={s.instruments || []}>
+                      {inst => (
+                        <span class="text-[8px] font-bold bg-primary-600/10 text-primary-400 border border-primary-500/10 px-1.5 py-0.5 rounded">
+                          {inst}
                         </span>
-                        <Show when={b.sub}>
-                          <span class="text-[9px] font-bold text-gray-600">{b.sub}</span>
-                        </Show>
-                      </div>
-                    )
-                  })()}
+                      )}
+                    </For>
+                  </div>
+
+                  {/* Description */}
+                  <p class="text-[10px] text-gray-500 mt-3 line-clamp-2 leading-relaxed">
+                    {s.description || 'No description provided.'}
+                  </p>
                 </div>
-                <div class="px-3 py-1 rounded-full bg-primary-500/10 border border-primary-500/20 shrink-0">
-                  <span class="text-xs font-black text-primary-400 uppercase tracking-tighter">{idx.strategy}</span>
+
+                {/* Bottom line: Backtest results or author info */}
+                <div class="border-t border-white/5 pt-3 flex items-center justify-between text-[9px]">
+                  <div class="flex items-center gap-1 text-gray-500">
+                    <span class="font-bold">Runtime:</span>
+                    <span class="font-black text-gray-300 font-mono">{s.runtime} · {s.timeframe}</span>
+                  </div>
+
+                  {s.backtest_results?.win_rate ? (
+                    <div class="flex items-center gap-2">
+                      <span class="text-gray-500 font-bold">Win Rate:</span>
+                      <span class="text-emerald-400 font-black font-mono">{s.backtest_results.win_rate}%</span>
+                    </div>
+                  ) : (
+                    <span class="text-gray-600 font-bold uppercase tracking-wider text-[8px]">No backtest run</span>
+                  )}
                 </div>
               </div>
-              <div class="flex flex-col gap-2 mt-auto relative z-10">
-                <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-gray-600">
-                  <span>Status</span>
-                  <span class="text-emerald-500">Scoping Index</span>
-                </div>
-                <div class="w-full bg-white/5 h-1 rounded-full overflow-hidden">
-                  <div class="bg-primary-500 h-full w-2/3 animate-pulse"></div>
-                </div>
-              </div>
+            )}
+          </For>
+
+          {filteredStrategies().length === 0 && (
+            <div class="col-span-full py-16 text-center">
+              <span class="text-3xl block mb-3">🛠️</span>
+              <h4 class="text-xs font-black text-white uppercase tracking-wider">No strategies found</h4>
+              <p class="text-[10px] text-gray-500 mt-1">Get started by creating your first trading strategy.</p>
             </div>
           )}
-        </For>
-      </div>
-
-      <div class="glass p-8 rounded-3xl mt-8">
-        <h3 class="text-lg font-black text-white uppercase tracking-widest mb-4">Implementation Logic</h3>
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div class="space-y-6">
-            <p class="text-xs text-gray-400 leading-relaxed font-medium">
-              The execution engine utilizes a multi-layered validation system. Primary entries are dictated by Supertrend flips on the 1-minute interval, while ADX strength scores and 5-minute HTF alignment act as critical gateways.
-            </p>
-            <div class="flex flex-wrap gap-4">
-              <div class="px-4 py-2 rounded-xl bg-white/5 border border-white/10">
-                <span class="block text-[10px] font-black text-gray-600 uppercase mb-1">Entry Strategy</span>
-                <span class="text-xs font-bold text-white uppercase">Supertrend Trend</span>
-              </div>
-              <div class="px-4 py-2 rounded-xl bg-white/5 border border-white/10">
-                <span class="block text-[10px] font-black text-gray-600 uppercase mb-1">Exit Engine</span>
-                <span class="text-xs font-bold text-white uppercase">Dynamic ATR + SL</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div class="bg-white/5 rounded-2xl p-6 border border-white/10">
-              <h4 class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4">Risk Parameters</h4>
-              <div class="flex flex-col gap-3">
-                <For each={riskParameters()}>
-                  {(param) => (
-                    <div class="flex items-center justify-between">
-                      <span class="text-[11px] font-bold text-gray-400">{param.label}</span>
-                      <span class="text-[10px] font-black text-white uppercase tracking-tighter">{param.value}</span>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </div>
-
-            <div class="bg-white/5 rounded-2xl p-6 border border-white/10">
-              <h4 class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4">Signal Filters</h4>
-              <div class="flex flex-col gap-3">
-                <For each={signalFilters()}>
-                  {(filter) => (
-                    <div class="flex items-center justify-between">
-                      <span class="text-[11px] font-bold text-gray-400">{filter.label}</span>
-                      <span class="text-[10px] font-black text-white uppercase tracking-tighter">{filter.value}</span>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </div>
-          </div>
         </div>
-      </div>
+      </Show>
     </div>
   )
 }

@@ -85,7 +85,7 @@ RSpec.describe Live::ExitEngine do
 
         expect(result[:success]).to be true
         expect(result[:exit_price]).to eq(101.5)
-        expect(result[:reason]).to eq('stop_loss')
+        expect(result[:reason]).to start_with('stop_loss')
         expect(result[:client_order_id]).to be_present
       end
 
@@ -102,7 +102,7 @@ RSpec.describe Live::ExitEngine do
 
         tracker.reload
         expect(tracker.status).to eq('exited')
-        expect(tracker.meta['exit_reason']).to eq('take_profit')
+        expect(tracker.exit_reason).to start_with('take_profit')
       end
 
       it 'calls router exit_market' do
@@ -117,7 +117,7 @@ RSpec.describe Live::ExitEngine do
 
         tracker.reload
         expect(tracker.status).to eq('exited')
-        expect(tracker.meta['exit_reason']).to eq('paper exit')
+        expect(tracker.exit_reason).to start_with('paper exit')
         expect(result).to include(success: true, reason: 'already_exited')
       end
 
@@ -129,7 +129,7 @@ RSpec.describe Live::ExitEngine do
       end
 
       it 'returns already_exited when tracker is already exited' do
-        tracker.update!(status: 'exited', meta: { 'exit_reason' => 'previous_exit' })
+        tracker.update!(status: 'exited', exit_reason: 'previous_exit')
         result = engine.execute_exit(tracker, 'new_exit')
 
         expect(result[:success]).to be true
@@ -274,6 +274,23 @@ RSpec.describe Live::ExitEngine do
         second = engine.execute_exit(tracker, 'MANUAL_DASHBOARD_CLOSE', operator_retry: true)
         expect(second[:reason]).not_to eq('exit_lock_held')
         expect(calls).to eq(2)
+      end
+
+      it 'fails CLOSED (skips the exit) when the Redis lock cannot be acquired' do
+        fake_redis = instance_double(Redis)
+        allow(fake_redis).to receive(:set).and_raise(Redis::BaseError, 'connection refused')
+        engine.instance_variable_set(:@redis, fake_redis)
+        allow(Notifications::TelegramNotifier.instance).to receive(:notify_error)
+
+        result = engine.execute_exit(tracker, 'stop_loss')
+
+        expect(result[:success]).to be false
+        expect(result[:reason]).to eq('exit_lock_held')
+        expect(router).not_to have_received(:exit_market)
+        expect(Notifications::TelegramNotifier.instance).to have_received(:notify_error).with(
+          a_string_matching(/exit lock unavailable/i),
+          context: 'ExitEngine#acquire_exit_lock'
+        )
       end
     end
 
@@ -453,7 +470,6 @@ RSpec.describe Live::ExitEngine do
       engine.send(:normalize_exit_reason_with_final_pnl, tracker, 'MANUAL_HALT')
 
       tracker.reload
-      expect(tracker.meta['exit_reason']).to eq('MANUAL_HALT')
       expect(tracker.exit_reason).to eq('MANUAL_HALT')
     end
   end

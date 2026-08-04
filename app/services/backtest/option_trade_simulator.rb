@@ -11,10 +11,20 @@ module Backtest
     # @return [Hash, nil] position hash or nil if no option data
     def enter_position(signal, candle, index)
       signal_type = signal[:type]
-      option_data = fetch_option_series(signal_type, candle.timestamp)
-      return if option_data.blank?
+      raw_option_data = fetch_option_series(signal_type, candle.timestamp)
+      return if raw_option_data.blank?
 
-      entry_premium = fetch_premium_price(option_data, candle.timestamp)
+      # DhanHQ's expired-options "ATM" series re-resolves the strike per bar as spot drifts —
+      # it's a rolling composite of whichever strike was nearest at each instant, not one
+      # contract's continuous price (flips between adjacent strikes multiple times an hour on
+      # real data). Pin to the strike at entry and only track that strike going forward, or
+      # SL/target/trailing checks below are reading a spliced series, not the held position.
+      entry_bar = raw_option_data.min_by { |b| (b[:timestamp] - candle.timestamp).abs }
+      return if entry_bar.nil?
+
+      entry_strike = entry_bar[:strike]
+      option_data = entry_strike.nil? ? raw_option_data : raw_option_data.select { |b| b[:strike].to_i == entry_strike.to_i }
+      entry_premium = entry_bar[:close].to_f
 
       {
         signal_type: signal_type,
@@ -30,42 +40,25 @@ module Backtest
     def check_exit(position, candle, index, _series)
       current_price = fetch_premium_price(position[:option_data], candle.timestamp)
       entry_price = position[:entry_price]
-      signal_type = position[:signal_type]
 
-      pnl_percent = if signal_type == :ce
-                      ((current_price - entry_price) / entry_price * 100)
-                    else
-                      ((entry_price - current_price) / entry_price * 100)
-                    end
+      pnl_percent = ((current_price - entry_price) / entry_price * 100)
 
-      target_hit =
-        (signal_type == :ce && current_price >= position[:target]) ||
-        (signal_type == :pe && current_price <= position[:target])
+      target_hit = current_price >= position[:target]
       return build_exit_result(position, candle, index, pnl_percent, 'target') if target_hit
 
-      stop_loss_hit =
-        (signal_type == :ce && current_price <= position[:stop_loss]) ||
-        (signal_type == :pe && current_price >= position[:stop_loss])
+      stop_loss_hit = current_price <= position[:stop_loss]
       return build_exit_result(position, candle, index, pnl_percent, 'stop_loss') if stop_loss_hit
 
       if pnl_percent >= 40 && !position[:trailing_activated]
         position[:trailing_activated] = true
-        position[:trailing_stop] = current_price * (signal_type == :ce ? 0.90 : 1.10)
+        position[:trailing_stop] = current_price * 0.90
       end
 
       if position[:trailing_activated]
-        if signal_type == :ce
-          new_trailing = current_price * 0.90
-          position[:trailing_stop] = [position[:trailing_stop], new_trailing].max
-          if current_price <= position[:trailing_stop]
-            return build_exit_result(position, candle, index, pnl_percent, 'trailing_stop')
-          end
-        else
-          new_trailing = current_price * 1.10
-          position[:trailing_stop] = [position[:trailing_stop], new_trailing].min
-          if current_price >= position[:trailing_stop]
-            return build_exit_result(position, candle, index, pnl_percent, 'trailing_stop')
-          end
+        new_trailing = current_price * 0.90
+        position[:trailing_stop] = [position[:trailing_stop], new_trailing].max
+        if current_price <= position[:trailing_stop]
+          return build_exit_result(position, candle, index, pnl_percent, 'trailing_stop')
         end
       end
 
@@ -79,13 +72,7 @@ module Backtest
     def force_exit(position, candle, index, reason)
       current_price = fetch_premium_price(position[:option_data], candle.timestamp)
       entry_price = position[:entry_price]
-      signal_type = position[:signal_type]
-
-      pnl_percent = if signal_type == :ce
-                      ((current_price - entry_price) / entry_price * 100)
-                    else
-                      ((entry_price - current_price) / entry_price * 100)
-                    end
+      pnl_percent = ((current_price - entry_price) / entry_price * 100)
 
       build_exit_result(position, candle, index, pnl_percent, reason)
     end
@@ -125,20 +112,12 @@ module Backtest
       bar[:close].to_f
     end
 
-    def calculate_stop_loss(entry_price, signal_type)
-      if signal_type == :ce
-        entry_price * 0.70
-      else
-        entry_price * 1.30
-      end
+    def calculate_stop_loss(entry_price, _signal_type)
+      entry_price * 0.70
     end
 
-    def calculate_target(entry_price, signal_type)
-      if signal_type == :ce
-        entry_price * 1.50
-      else
-        entry_price * 0.50
-      end
+    def calculate_target(entry_price, _signal_type)
+      entry_price * 1.50
     end
 
     def build_exit_result(position, candle, index, pnl_percent, exit_reason)

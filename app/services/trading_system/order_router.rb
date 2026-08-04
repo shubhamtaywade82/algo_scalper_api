@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module TradingSystem
-  class OrderRouter < BaseService
+  class OrderRouter
     RETRY_COUNT = 3
     RETRY_BASE_SLEEP = 0.2
 
@@ -9,7 +9,7 @@ module TradingSystem
       @gateway = gateway
     end
 
-    # Required by BaseService (Supervisor calls start/stop)
+    # Required by Supervisor (calls start/stop)
     def start
       Rails.logger.info('[OrderRouter] ready (no-op)')
       true

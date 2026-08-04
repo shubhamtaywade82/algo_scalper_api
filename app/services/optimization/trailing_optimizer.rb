@@ -13,7 +13,7 @@ module Optimization
       @index_key = index_key.to_s.upcase
       @analytics = TradeAnalytic.joins(:position_tracker)
                                 .where(position_trackers: { status: 'exited' })
-                                .where("position_trackers.meta->>'index_key' = ?", @index_key)
+                                .where(position_trackers: { index_key: @index_key })
     end
 
     def optimize

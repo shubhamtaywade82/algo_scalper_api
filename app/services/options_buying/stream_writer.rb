@@ -19,6 +19,9 @@ module OptionsBuying
       ltp = @tick[:ltp].to_f
       return unless ltp.positive?
 
+      # Backpressure: drop ticks if stream exceeds 2x maxlen to prevent memory blowup
+      return if stream_backpressured?(security_id)
+
       ts = tick_timestamp
       payload = {
         ltp: ltp,
@@ -40,6 +43,23 @@ module OptionsBuying
     end
 
     private
+
+    def stream_backpressured?(security_id)
+      maxlen = stream_maxlen
+      return false if maxlen <= 0
+
+      current_len = StateStore.redis.xlen(StateStore.stream_key(security_id))
+      if current_len > (maxlen * 2)
+        Rails.logger.warn("[StreamWriter] Backpressure: stream for #{security_id} at #{current_len} (maxlen=#{maxlen}), dropping tick")
+        true
+      else
+        false
+      end
+    end
+
+    def stream_maxlen
+      Mode.config.dig(:streams, :maxlen).to_i
+    end
 
     def stream_only?
       Mode.config.dig(:streams, :legacy_zset_enabled) == false

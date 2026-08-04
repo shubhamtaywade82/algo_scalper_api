@@ -34,6 +34,28 @@ module Entries
           cache_key = "exposure_check_#{instrument.id}_#{side}"
           return context[cache_key] if context&.key?(cache_key)
 
+          # Rupee-based exposure check
+          index_key = context&.dig(:index_cfg, :key)
+          if index_key.present?
+            limit = max_exposure_limit_for(index_key)
+            if limit.positive?
+              current_exposure = PositionTracker.active.where(index_key: index_key).sum("quantity * entry_price").to_f
+              proposed_qty = context&.dig(:quantity).to_i
+              if proposed_qty.zero?
+                lot_size = context&.dig(:lot_size) || (defined?(Trading) ? Trading::LotCalculator.lot_size_for(index_key) : 50)
+                proposed_qty = lot_size.to_i
+              end
+              entry_price = context&.dig(:ltp).to_f
+              proposed_exposure = proposed_qty * entry_price
+
+              if current_exposure + proposed_exposure > limit
+                Rails.logger.warn("[ExposureGuard] Blocked by Rupee Exposure limit for #{index_key}: Current ₹#{current_exposure} + Proposed ₹#{proposed_exposure} > Limit ₹#{limit}")
+                context[cache_key] = false if context
+                return false
+              end
+            end
+          end
+
           max_allowed = max_same_side.to_i
           max_allowed = 1 if max_allowed <= 0
 
@@ -127,7 +149,12 @@ module Entries
         end
 
         def active_supertrend_position?(index_key)
-          PositionTracker.active.where("(meta->>'index_key') = ?", index_key.to_s).exists?
+          PositionTracker.active.by_index_key(index_key.to_s).exists?
+        end
+
+        def max_exposure_limit_for(index_key)
+          limits = AlgoConfig.fetch.dig(:risk, :max_exposure_rupees) || {}
+          (limits[index_key.to_s.upcase] || limits[:default] || 0).to_f
         end
       end
     end

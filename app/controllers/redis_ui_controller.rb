@@ -5,8 +5,13 @@
 # NOTE: Inherits from ActionController::Base (not API) to support HTML views
 # rubocop:disable Rails/ApplicationController, Metrics/ClassLength
 class RedisUiController < ActionController::Base
-  # Only allow in development
+  include Api::TokenAuthenticatable
+
+  # Only allow in development, plus an operator-token check as defense-in-depth
+  # in case RAILS_ENV is ever misconfigured on a non-development host — this
+  # controller can mutate/delete Redis keys (position/PnL cache, circuit breaker state).
   before_action :ensure_development
+  before_action :authenticate_operator_token!
   before_action :init_redis
 
   def index

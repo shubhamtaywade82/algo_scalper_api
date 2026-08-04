@@ -3,6 +3,10 @@
     "graphify": {
       "command": "graphify-mcp",
       "args": ["graphify-out/graph.json"]
+    },
+    "woods": {
+      "command": "woods-mcp",
+      "args": ["/home/nemesis/project/trading-workspace/algo_scalper_api/tmp/woods"]
     }
   }
 }

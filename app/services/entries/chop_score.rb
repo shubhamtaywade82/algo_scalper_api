@@ -112,7 +112,7 @@ module Entries
       closes = Array(series&.closes)
       return [] if line.blank? || closes.blank?
 
-      line.each_index.last(count).filter_map do |idx|
+      line.each_index.to_a.last(count).filter_map do |idx|
         next if line[idx].nil? || closes[idx].nil?
 
         closes[idx].to_f >= line[idx].to_f ? :bullish : :bearish

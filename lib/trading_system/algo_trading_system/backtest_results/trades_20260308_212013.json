@@ -1,0 +1,15 @@
+[
+  {
+    "symbol": "ATM_CALL",
+    "entry_price": 55.4,
+    "exit_price": 54.568999999999996,
+    "quantity": 451,
+    "entry_time": 1725442920,
+    "exit_time": 1725443340,
+    "pnl": -399.58,
+    "pnl_pct": -1.6,
+    "max_loss": 374.78,
+    "status": "LOSS",
+    "strike": "ATM_CALL"
+  }
+]

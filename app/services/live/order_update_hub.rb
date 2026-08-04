@@ -30,6 +30,11 @@ module Live
         @ws_client.on(:update) { |payload| handle_update(payload) }
         @ws_client.start
         @running = true
+        begin
+          Live::SystemStatusCache.instance.report_heartbeat(:ws_order_update)
+        rescue StandardError
+          nil
+        end
         @started_at = Time.current
         @connection_state = :connecting
         @last_error = nil
@@ -148,6 +153,11 @@ module Live
           sleep 5
           break unless running?
 
+          begin
+            Live::SystemStatusCache.instance.report_heartbeat(:ws_order_update)
+          rescue StandardError
+            nil
+          end
           check_connection_health!
         end
       end

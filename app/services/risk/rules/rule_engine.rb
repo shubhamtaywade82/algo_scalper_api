@@ -11,23 +11,6 @@ module Risk
         @rules = rules.sort_by(&:priority)
       end
 
-      # Add a rule to the engine
-      # @param rule [BaseRule] Rule to add
-      # @return [RuleEngine] Self for chaining
-      def add_rule(rule)
-        @rules << rule
-        @rules.sort_by!(&:priority)
-        self
-      end
-
-      # Remove a rule from the engine
-      # @param rule_class [Class] Rule class to remove
-      # @return [RuleEngine] Self for chaining
-      def remove_rule(rule_class)
-        @rules.reject! { |r| r.is_a?(rule_class) }
-        self
-      end
-
       # Evaluate all rules against the given context
       # Rules are evaluated in priority order (lower priority number = higher priority)
       # First rule that triggers an exit wins, and evaluation stops
@@ -41,7 +24,7 @@ module Risk
 
           begin
             result = rule.evaluate(context)
-            
+
             # If we should continue (no_action or skip), move to next rule
             next if result.skip? || result.continue?
 
@@ -52,7 +35,9 @@ module Risk
             Rails.logger.error(
               "[RuleEngine] Error evaluating rule #{rule.name}: #{e.class} - #{e.message}\n#{e.backtrace.first(5).join("\n")}"
             )
-            # Continue to next rule on error
+            alert_rule_error(rule, context, e)
+            # Continue to next rule on error — a broken rule must not silently disable
+            # all exit checks for a position; remaining rules still get a chance to trigger.
             next
           end
         end
@@ -73,6 +58,17 @@ module Risk
       # @return [BaseRule, nil] Found rule or nil
       def find_rule(rule_class)
         @rules.find { |r| r.is_a?(rule_class) }
+      end
+
+      private
+
+      def alert_rule_error(rule, _context, error)
+        Notifications::TelegramNotifier.instance.notify_error(
+          "RuleEngine: #{rule.name} raised #{error.class} - #{error.message} — skipped, other rules still evaluated",
+          context: 'Risk::Rules::RuleEngine#evaluate'
+        )
+      rescue StandardError => e
+        Rails.logger.error("[RuleEngine] alert_rule_error failed: #{e.message}")
       end
     end
   end

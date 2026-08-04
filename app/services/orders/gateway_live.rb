@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-require 'timeout'
-require 'net/http'
+require "timeout"
+require "net/http"
 
 module Orders
   class GatewayLive < Orders::Gateway
-    RETRY_COUNT   = 3
+    RETRY_COUNT = 3
     RETRY_BACKOFF = 0.25
-    API_TIMEOUT   = 8
+    API_TIMEOUT = 8
 
     # ------------ EXIT -----------------
     # Places an exit market order for the tracker.
@@ -15,7 +15,7 @@ module Orders
     # @param client_order_id [String, nil] deterministic idempotency key for retries
     # @return [Hash] normalized result with :success and optional :order_id/:status
     def exit_market(tracker, client_order_id: nil)
-      coid = client_order_id.presence || generate_client_order_id('EXIT', tracker.security_id)
+      coid = client_order_id.presence || generate_client_order_id("EXIT", tracker.security_id)
 
       order = Orders::Placer.exit_position!(
         seg: tracker.segment,
@@ -29,10 +29,53 @@ module Orders
     # ------------ ENTRY (BUY/SELL) -----
     def place_market(side:, segment:, security_id:, qty:, meta: {})
       validate_side!(side)
+      if side.to_s.downcase == "buy"
+        Orders::LimitChaser.place_and_chase(
+          side: side,
+          segment: segment,
+          security_id: security_id,
+          qty: qty,
+          meta: meta,
+          gateway: self
+        )
+      else
+        place_market_direct(side: side, segment: segment, security_id: security_id, qty: qty, meta: meta)
+      end
+    end
+
+    # IOC limit order — fills immediately or cancels (thin-book fallback)
+    def place_ioc_limit(side:, segment:, security_id:, qty:, price:, meta: {})
+      validate_side!(side)
+      coid = meta[:client_order_id] || generate_client_order_id("IOC", security_id)
+
+      with_retries do
+        if side.to_s.downcase == "buy"
+          Orders::Placer.buy_ioc_limit!(
+            seg: segment,
+            sid: security_id,
+            qty: qty,
+            price: price,
+            client_order_id: coid,
+            product_type: meta[:product_type]
+          )
+        else
+          Orders::Placer.sell_ioc_limit!(
+            seg: segment,
+            sid: security_id,
+            qty: qty,
+            price: price,
+            client_order_id: coid,
+            product_type: meta[:product_type]
+          )
+        end
+      end
+    end
+
+    def place_market_direct(side:, segment:, security_id:, qty:, meta: {})
       coid = meta[:client_order_id] || generate_client_order_id(side, security_id)
 
       with_retries do
-        if side.to_s.downcase == 'buy'
+        if side.to_s.downcase == "buy"
           Orders::Placer.buy_market!(
             seg: segment,
             sid: security_id,
@@ -92,7 +135,7 @@ module Orders
       Orders::Placer.exit_position!(
         seg: segment,
         sid: security_id,
-        client_order_id: generate_client_order_id('EXIT', security_id)
+        client_order_id: generate_client_order_id("EXIT", security_id)
       )
     end
 
@@ -110,13 +153,13 @@ module Orders
       ltp = tick&.ltp
 
       upnl = if entry_price && ltp && qty != 0
-               (BigDecimal(ltp.to_s) - entry_price) * qty
+        (BigDecimal(ltp.to_s) - entry_price) * qty
              else
-               BigDecimal(0)
+        BigDecimal(0)
              end
 
       product_type = pos.respond_to?(:product_type) ? pos.product_type : nil
-      position_type = pos.respond_to?(:position_type) ? pos.position_type : 'LONG'
+      position_type = pos.respond_to?(:position_type) ? pos.position_type : "LONG"
       trading_symbol = pos.respond_to?(:trading_symbol) ? pos.trading_symbol : nil
 
       {
@@ -129,7 +172,7 @@ module Orders
         exchange_segment: segment.to_s,
         position_type: position_type,
         trading_symbol: trading_symbol,
-        status: 'active'
+        status: "active"
       }
     rescue StandardError => e
       Rails.logger.error("[GatewayLive] position failed: #{e.message}")
@@ -139,7 +182,7 @@ module Orders
     private
 
     def validate_side!(side)
-      raise 'invalid side' unless %w[buy sell].include?(side.to_s)
+      raise "invalid side" unless %w[buy sell].include?(side.to_s)
     end
 
     def with_retries
@@ -186,7 +229,7 @@ module Orders
 
       return { success: true, status: :accepted, order_id: extract_order_id(order), client_order_id: client_order_id } if order.present?
 
-      { success: false, status: :failed, error: 'exit failed', client_order_id: client_order_id }
+      { success: false, status: :failed, error: "exit failed", client_order_id: client_order_id }
     end
 
     def already_closed_or_duplicate?(order)
@@ -194,18 +237,18 @@ module Orders
       # 'position not found' and 'duplicate'; re-verify these tokens on broker API changes.
       return false unless order.is_a?(Hash)
 
-      code = (order[:error_code] || order['error_code']).to_s.downcase
-      message = (order[:message] || order['message'] || order[:error] || order['error']).to_s.downcase
+      code = (order[:error_code] || order["error_code"]).to_s.downcase
+      message = (order[:message] || order["message"] || order[:error] || order["error"]).to_s.downcase
 
       [code, message].any? do |value|
-        value.include?('already') || value.include?('closed') ||
-          value.include?('position not found') || value.include?('duplicate')
+        value.include?("already") || value.include?("closed") ||
+          value.include?("position not found") || value.include?("duplicate")
       end
     end
 
     def extract_order_id(order)
       return order.order_id if order.respond_to?(:order_id)
-      return order[:order_id] || order['order_id'] if order.is_a?(Hash)
+      return order[:order_id] || order["order_id"] if order.is_a?(Hash)
 
       nil
     end

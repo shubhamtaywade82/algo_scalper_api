@@ -390,6 +390,20 @@ module Services
             - Exit levels should reference either premium prices or index spot levels (the underlying index price)
             - Use SL for stop loss, TP1/TP2 for take profit levels
 
+            CRITICAL — LONG OPTION PREMIUM DIRECTION (we are BUYING options, not selling):
+            For LONG options, TP and SL are based on OPTION PREMIUM:
+            - TP (take profit) = HIGHER premium than entry (we profit when premium rises)
+            - SL (stop loss) = LOWER premium than entry (we lose when premium falls)
+
+            For BUY CE (long call): underlying UP → premium UP → TP > entry, SL < entry
+            For BUY PE (long put): underlying DOWN → premium UP → TP > entry, SL < entry
+
+            NEVER output TP lower than entry — that would be a loss, not a profit.
+            NEVER output SL higher than entry — that would be a profit, not a loss.
+
+            Example for BUY PE at entry ₹36:
+              TP1 ₹50 (+38%), TP2 ₹63 (+75%), SL ₹25 (-31%)
+
             RECOMMENDATION FORMAT (MANDATORY):
             - "Buy CALL options at strike ₹26,300 (ATM) and ₹26,350 (ATM+1) for bullish move"
             - "Buy PUT options at strike ₹26,250 (ATM-1) and ₹26,200 (ATM-2) for bearish move"
@@ -451,16 +465,29 @@ module Services
                - How to enter (market order, limit order, specific price level)
 
             6. **Exit Strategy** (MANDATORY if trading):
-               - Stop Loss (SL): Specific premium level or index spot level to EXIT the position
-                 * Format: "SL at premium ₹X" or "SL at index spot ₹Y" (specify which)
-                 * Calculate index spot level using DELTA if providing spot levels
-               - Take Profit (TP): Use TP1, TP2 format for multiple targets
-                 * Format: "TP1 at premium ₹X" or "TP1 at index spot ₹Y"
-                 * Format: "TP2 at premium ₹X" or "TP2 at index spot ₹Y" (if applicable)
+
+               CRITICAL — LONG OPTION PREMIUM DIRECTION (we are BUYING options, not selling):
+               For LONG options, TP and SL are based on OPTION PREMIUM, not the underlying:
+               - TP (take profit) = HIGHER premium than entry (we profit when premium rises)
+               - SL (stop loss) = LOWER premium than entry (we lose when premium falls)
+
+               For BUY CE (long call): underlying UP → premium UP → TP > entry, SL < entry
+               For BUY PE (long put): underlying DOWN → premium UP → TP > entry, SL < entry
+
+               NEVER output TP lower than entry — that would be a loss, not a profit.
+               NEVER output SL higher than entry — that would be a profit, not a loss.
+
+               Example for BUY PE at entry ₹36:
+                 TP1 ₹50 (+38%), TP2 ₹63 (+75%), SL ₹25 (-31%)
+
+               - Stop Loss (SL): Specific premium level BELOW entry to EXIT the position
+                 * Format: "SL at premium ₹X" (must be LOWER than entry premium)
+               - Take Profit (TP): Use TP1, TP2 format — premiums ABOVE entry
+                 * Format: "TP1 at premium ₹X" (must be HIGHER than entry premium)
+                 * Format: "TP2 at premium ₹X" (higher than TP1)
                  * Always provide at least TP1, optionally TP2 for partial exits
                - Index Spot Levels to Watch: Provide key index levels to monitor for exit decisions
-                 * Format: "Watch index spot ₹X for TP1", "Watch index spot ₹Y for SL"
-                 * These are the underlying index price levels (NIFTY/SENSEX/BANKNIFTY spot prices)
+                 * Format: "Watch index spot ₹Y for SL" (underlying level that invalidates the trade)
                - Exit timing: When to exit (time-based, price-based, or signal-based)
                - TERMINOLOGY: Always use "EXIT" or "exit the position" - NEVER use "sell options" (we only buy options, never write/sell them)
 

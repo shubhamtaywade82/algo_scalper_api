@@ -137,27 +137,24 @@ module Live
         end
 
         coid = tracker.exit_coid.presence || deterministic_exit_coid(tracker)
-        metadata = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
-
-        metadata['exit_reason'] = reason
-        metadata['exit_triggered_at'] = Time.current
 
         snapshot = safe_pnl_snapshot(tracker)
         decision_pnl_pct = if snapshot && snapshot[:pnl_pct]
                              (snapshot[:pnl_pct].to_f * 100.0).round(2)
                            end
 
-        decision_meta = (metadata['decision'].is_a?(Hash) ? metadata['decision'].dup : {})
+        decision_meta = (tracker.decision.is_a?(Hash) ? tracker.decision.dup : {})
         decision_meta['type'] = reason.to_s
         decision_meta['path'] ||= 'unknown'
         decision_meta['decided_at'] = Time.current.iso8601
         decision_meta['pnl_pct_at_decision'] = decision_pnl_pct if decision_pnl_pct
-        metadata['decision'] = decision_meta
 
         tracker.update!(
           exit_requested_at: Time.current,
           exit_coid: coid,
-          meta: metadata
+          exit_reason: reason,
+          exit_triggered_at: Time.current,
+          decision: decision_meta
         )
       end
 
@@ -204,7 +201,7 @@ module Live
         order_no: tracker.order_no,
         reason: normalized_reason,
         exit_price: exit_price,
-        index_key: tracker.meta&.dig('index_key') || tracker.index_key
+        index_key: tracker.index_key
       })
 
       record_trade_telemetry(tracker, exit_price, normalized_reason)
@@ -244,17 +241,13 @@ module Live
 
       tracker.transaction do
         tracker.lock!
-        meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
+        execution = tracker.execution.is_a?(Hash) ? tracker.execution.dup : {}
 
-        execution_meta = (meta['execution'].is_a?(Hash) ? meta['execution'].dup : {})
-        execution_meta['type'] = reason.to_s
-        execution_meta['final_pnl_pct'] = pnl_pct_decimal.round(2)
-        execution_meta['classified_as'] = classification
-        meta['execution'] = execution_meta
+        execution['type'] = reason.to_s
+        execution['final_pnl_pct'] = pnl_pct_decimal.round(2)
+        execution['classified_as'] = classification
 
-        meta['exit_reason'] ||= reason
-
-        tracker.update!(meta: meta, exit_reason: build_final_reason(reason, execution_meta))
+        tracker.update!(execution: execution, exit_reason: build_final_reason(reason, execution))
       end
 
       tracker.exit_reason
@@ -264,14 +257,10 @@ module Live
       return if reason.blank?
 
       tracker.reload
-      meta = tracker.meta.is_a?(Hash) ? tracker.meta.deep_dup : {}
-      meta = meta.deep_stringify_keys
-      current = meta['exit_reason'].to_s.strip.presence
-      return if current.present?
+      return if tracker.exit_reason.to_s.strip.present?
 
-      meta['exit_reason'] = reason.to_s
-      col = tracker.exit_reason.to_s.strip.presence || reason.to_s
-      tracker.update!(meta: meta, exit_reason: col)
+      col = reason.to_s
+      tracker.update!(exit_reason: col)
     rescue StandardError => e
       Rails.logger.warn("[ExitEngine] ensure_exit_reason_on_meta! failed for #{tracker&.order_no}: #{e.class} - #{e.message}")
     end
@@ -323,8 +312,9 @@ module Live
       @redis ||= Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
       @redis.set(key, '1', nx: true, ex: ttl)
     rescue StandardError => e
-      Rails.logger.error("[ExitEngine] acquire_exit_lock failed for tracker=#{tracker_id}: #{e.class} - #{e.message}")
-      true
+      Rails.logger.error("[ExitEngine] acquire_exit_lock failed for tracker=#{tracker_id}: #{e.class} - #{e.message} — failing CLOSED (skipping this exit attempt)")
+      alert_exit_lock_unavailable(tracker_id, e)
+      false # fail closed: Redis outage must not allow a duplicate exit race; DB exit_sent_at is the backstop, next 5s loop retries
     end
 
     # Releases Redis exit lock immediately so the next close/exits are not blocked for the TTL window.
@@ -335,6 +325,15 @@ module Live
       @redis.del("exit_lock:#{tracker_id}")
     rescue StandardError => e
       Rails.logger.warn("[ExitEngine] release_exit_lock failed tracker=#{tracker_id}: #{e.class} - #{e.message}")
+    end
+
+    def alert_exit_lock_unavailable(tracker_id, error)
+      Notifications::TelegramNotifier.instance.notify_error(
+        "ExitEngine exit lock unavailable (Redis: #{error.message}) for tracker=#{tracker_id} — exit attempt skipped this cycle",
+        context: 'ExitEngine#acquire_exit_lock'
+      )
+    rescue StandardError => e
+      Rails.logger.error("[ExitEngine] alert_exit_lock_unavailable failed: #{e.message}")
     end
 
     def stale_exit_intent?(tracker)
@@ -395,7 +394,7 @@ module Live
       return unless tracker&.exited?
       return if TradeTelemetry.exists?(tracker_id: tracker.id)
 
-      entry_risk_rupees = tracker.meta&.dig('entry_risk_rupees')
+      entry_risk_rupees = tracker.entry_risk_rupees
       return if entry_risk_rupees.nil?
 
       entry_risk = BigDecimal(entry_risk_rupees.to_s)
@@ -409,20 +408,20 @@ module Live
 
       TradeTelemetry.create!(
         tracker_id: tracker.id,
-        index_key: tracker.meta&.dig('index_key') || tracker.index_key,
+        index_key: tracker.index_key,
         entry_time: tracker.created_at,
         exit_time: tracker.exited_at || Time.current,
         entry_tf: resolved_entry_tf(tracker),
-        htf_tf: tracker.meta&.dig('htf_tf') || '15m', # Default to 15m if missing
-        bos_age_at_entry: tracker.meta&.dig('bos_age_at_entry'),
-        retrace_pct: tracker.meta&.dig('retrace_pct'),
-        pullback_candles: tracker.meta&.dig('pullback_candles'),
-        entry_distance_r: tracker.meta&.dig('entry_distance_r'),
-        continuation_body_position: tracker.meta&.dig('continuation_body_position'),
-        time_from_bos_to_entry: tracker.meta&.dig('time_from_bos_to_entry'),
+        htf_tf: tracker.htf_tf || '15m', # Default to 15m if missing
+        bos_age_at_entry: tracker.bos_age_at_entry,
+        retrace_pct: tracker.retrace_pct,
+        pullback_candles: tracker.pullback_candles,
+        entry_distance_r: tracker.entry_distance_r,
+        continuation_body_position: tracker.continuation_body_position,
+        time_from_bos_to_entry: tracker.time_from_bos_to_entry,
         max_r_reached: max_r&.round(3),
         exit_r: exit_r&.round(3),
-        exit_path: tracker.meta&.dig('exit_path') || reason,
+        exit_path: tracker.exit_path.presence || reason,
         pnl_rupees: final_pnl,
         trade_state_at_exit: tracker.trade_state
       )
@@ -431,7 +430,7 @@ module Live
     end
 
     def resolved_entry_tf(tracker)
-      tf = tracker.meta&.dig('entry_tf') || tracker.meta&.dig('timeframe')
+      tf = tracker.entry_tf || tracker.meta&.dig('timeframe')
       return tf if tf.present?
 
       '1m'

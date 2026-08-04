@@ -10,6 +10,13 @@
 #     schedule: at 5am every day
 
 development:
+  pre_market_iv_baseline:
+    class: PreMarketIvBaselineJob
+    schedule: at 8:30am every day
+    queue_name: background
+    priority: 1
+    description: "Seeds IvRankTracker with historical ATM IV samples from expired options (pre-market baseline)"
+
   instruments_import:
     class: InstrumentsImportJob
     schedule: at 8:45am every day
@@ -23,6 +30,20 @@ development:
     queue_name: background
     priority: 2
     description: "Captures daily ATM Implied Volatility (IV) for alpha strategy history"
+
+  candles_daily_backfill:
+    class: Candles::DailyBackfillJob
+    schedule: at 8:50am every day
+    queue_name: background
+    priority: 2
+    description: "Seeds/gap-fills persisted 1m index candles (NIFTY/BANKNIFTY/SENSEX) before market open"
+
+  candles_retention:
+    class: Candles::RetentionJob
+    schedule: at 2:00am every Sunday
+    queue_name: background
+    priority: 30
+    description: "Prunes 1m index candle history beyond the 2-year retention window"
 
   portfolio_reset:
     class: PortfolioResetJob
@@ -65,6 +86,14 @@ development:
     queue_name: background
     priority: 8
     description: "Refresh option chain radar during session"
+
+  options_buying_candle_precompute:
+    class: OptionsBuying::CandlePrecomputeJob
+    schedule: every 1 minute
+    queue_name: background
+    priority: 5
+    description: "Pre-compute index candles for all strategy timeframes (1m, 5m, 15m, 60m, D) — gated internally by market hours"
+
 
   options_buying_eod_carry:
     class: OptionsBuying::EodCarryJob
@@ -138,12 +167,6 @@ development:
     priority: 25
     description: "Persists public IP last-seen (throttled); dashboard no longer writes public_ip_logs"
 
-  ai_calibration:
-    class: AiCalibrationJob
-    queue: background
-    schedule: at 7:00am every day
-    description: "Daily AI-driven trading calibration — analyzes paper trades and proposes config patches"
-
   alpha_scanner:
     class: AlphaScanJob
     schedule: every 5 minutes
@@ -151,7 +174,77 @@ development:
     priority: 10
     description: "Autonomous Alpha Strategy scanner — runs all enabled modules across NIFTY, BANKNIFTY, and SENSEX"
 
+  autonomous_optimization:
+    class: Ai::Autonomous::OptimizationJob
+    schedule: at 4:30pm every day
+    queue_name: background
+    priority: 15
+    description: "Daily self-learning optimization loop (Observe-Think-Act) for NIFTY, BANKNIFTY, and SENSEX"
+
+  research_daily_lifecycle_nifty:
+    class: Research::DailyLifecycleJob
+    args: ["NIFTY"]
+    schedule: at 9:00am every day
+    queue_name: background
+    priority: 20
+    description: "Auto-runs the prior session's premium-lifecycle board for NIFTY so research_premium_lifecycles accumulates without manual clicks"
+
+  research_daily_lifecycle_banknifty:
+    class: Research::DailyLifecycleJob
+    args: ["BANKNIFTY"]
+    schedule: at 9:00am every day
+    queue_name: background
+    priority: 20
+    description: "Auto-runs the prior session's premium-lifecycle board for BANKNIFTY so research_premium_lifecycles accumulates without manual clicks"
+
+  research_daily_lifecycle_sensex:
+    class: Research::DailyLifecycleJob
+    args: ["SENSEX"]
+    schedule: at 9:00am every day
+    queue_name: background
+    priority: 20
+    description: "Auto-runs the prior session's premium-lifecycle board for SENSEX so research_premium_lifecycles accumulates without manual clicks"
+
+  ai_trading_signal_nifty_open:
+    class: Agents::TradingSignalJob
+    args: ["NIFTY", "5"]
+    schedule: at 9:20am every day
+    queue_name: background
+    priority: 3
+    description: "AI agent pipeline open signal for NIFTY at market open (9:20 AM)"
+
+  ai_trading_signal_nifty_refresh:
+    class: Agents::TradingSignalJob
+    args: ["NIFTY", "5"]
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 8
+    description: "AI agent pipeline intraday refresh for NIFTY every 30 minutes"
+
+  ai_trading_signal_banknifty_open:
+    class: Agents::TradingSignalJob
+    args: ["BANKNIFTY", "5"]
+    schedule: at 9:22am every day
+    queue_name: background
+    priority: 3
+    description: "AI agent pipeline open signal for BANKNIFTY at market open (9:22 AM)"
+
+  ai_trading_signal_banknifty_refresh:
+    class: Agents::TradingSignalJob
+    args: ["BANKNIFTY", "5"]
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 8
+    description: "AI agent pipeline intraday refresh for BANKNIFTY every 30 minutes"
+
 production:
+  pre_market_iv_baseline:
+    class: PreMarketIvBaselineJob
+    schedule: at 8:30am every weekday
+    queue_name: background
+    priority: 1
+    description: "Seeds IvRankTracker with historical ATM IV samples from expired options (pre-market baseline)"
+
   instruments_import:
     class: InstrumentsImportJob
     schedule: at 8:45am every weekday
@@ -165,6 +258,20 @@ production:
     queue_name: background
     priority: 2
     description: "Captures daily ATM Implied Volatility (IV) for alpha strategy history"
+
+  candles_daily_backfill:
+    class: Candles::DailyBackfillJob
+    schedule: at 8:50am every day
+    queue_name: background
+    priority: 2
+    description: "Seeds/gap-fills persisted 1m index candles (NIFTY/BANKNIFTY/SENSEX) before market open"
+
+  candles_retention:
+    class: Candles::RetentionJob
+    schedule: at 2:00am every Sunday
+    queue_name: background
+    priority: 30
+    description: "Prunes 1m index candle history beyond the 2-year retention window"
 
   portfolio_reset:
     class: PortfolioResetJob
@@ -189,7 +296,7 @@ production:
 
   market_vix_gate_refresh:
     class: Market::VixGateJob
-    schedule: every 15 minutes during market hours
+    schedule: every 15 minutes
     queue_name: background
     priority: 6
     description: "Refresh India VIX gate during session (RBI/macro spikes)"
@@ -203,10 +310,18 @@ production:
 
   options_buying_chain_radar_refresh:
     class: OptionsBuying::ChainRadarJob
-    schedule: every 30 minutes during market hours
+    schedule: every 30 minutes
     queue_name: background
     priority: 8
     description: "Refresh option chain radar during session"
+
+  options_buying_candle_precompute:
+    class: OptionsBuying::CandlePrecomputeJob
+    schedule: every 1 minute
+    queue_name: background
+    priority: 5
+    description: "Pre-compute index candles for all strategy timeframes (1m, 5m, 15m, 60m, D) — gated internally by market hours"
+
 
   options_buying_eod_carry:
     class: OptionsBuying::EodCarryJob
@@ -270,13 +385,6 @@ production:
     priority: 5
     description: "AI technical analysis for SENSEX - post-close scheduled run on weekdays; intraday flow is event-driven from tick events"
 
-  weekly_options_calibration:
-    class: WeeklyCalibrationJob
-    schedule: every Sunday at 6:00 am Asia/Kolkata
-    queue_name: background
-    priority: 3
-    description: "Weekly ATM±1 options calibration — generates config patch proposal for NIFTY and SENSEX"
-
   dhan_auto_ip_sync:
     class: Dhan::AutoIpUpdaterJob
     schedule: every 30 minutes
@@ -293,7 +401,77 @@ production:
 
   alpha_scanner:
     class: AlphaScanJob
-    schedule: every 5 minutes during market hours
+    schedule: every 5 minutes
     queue_name: background
     priority: 10
     description: "Autonomous Alpha Strategy scanner — runs all enabled modules across NIFTY, BANKNIFTY, and SENSEX"
+
+  autonomous_optimization:
+    class: Ai::Autonomous::OptimizationJob
+    schedule: at 4:30pm every weekday
+    queue_name: background
+    priority: 15
+    description: "Daily self-learning optimization loop (Observe-Think-Act) for NIFTY, BANKNIFTY, and SENSEX"
+
+  weekly_options_calibration:
+    class: WeeklyCalibrationJob
+    schedule: every Sunday at 6:00am
+    queue_name: background
+    priority: 3
+    description: "Weekly ATM±1 options calibration — proposes config patches for NIFTY and SENSEX"
+
+  research_daily_lifecycle_nifty:
+    class: Research::DailyLifecycleJob
+    args: ["NIFTY"]
+    schedule: at 9:00am every weekday
+    queue_name: background
+    priority: 20
+    description: "Auto-runs the prior session's premium-lifecycle board for NIFTY so research_premium_lifecycles accumulates without manual clicks"
+
+  research_daily_lifecycle_banknifty:
+    class: Research::DailyLifecycleJob
+    args: ["BANKNIFTY"]
+    schedule: at 9:00am every weekday
+    queue_name: background
+    priority: 20
+    description: "Auto-runs the prior session's premium-lifecycle board for BANKNIFTY so research_premium_lifecycles accumulates without manual clicks"
+
+  research_daily_lifecycle_sensex:
+    class: Research::DailyLifecycleJob
+    args: ["SENSEX"]
+    schedule: at 9:00am every weekday
+    queue_name: background
+    priority: 20
+    description: "Auto-runs the prior session's premium-lifecycle board for SENSEX so research_premium_lifecycles accumulates without manual clicks"
+
+  ai_trading_signal_nifty_open:
+    class: Agents::TradingSignalJob
+    args: ["NIFTY", "5"]
+    schedule: at 9:20am every weekday
+    queue_name: background
+    priority: 3
+    description: "AI agent pipeline open signal for NIFTY at market open (9:20 AM)"
+
+  ai_trading_signal_nifty_refresh:
+    class: Agents::TradingSignalJob
+    args: ["NIFTY", "5"]
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 8
+    description: "AI agent pipeline intraday refresh for NIFTY every 30 minutes"
+
+  ai_trading_signal_banknifty_open:
+    class: Agents::TradingSignalJob
+    args: ["BANKNIFTY", "5"]
+    schedule: at 9:22am every weekday
+    queue_name: background
+    priority: 3
+    description: "AI agent pipeline open signal for BANKNIFTY at market open (9:22 AM)"
+
+  ai_trading_signal_banknifty_refresh:
+    class: Agents::TradingSignalJob
+    args: ["BANKNIFTY", "5"]
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 8
+    description: "AI agent pipeline intraday refresh for BANKNIFTY every 30 minutes"

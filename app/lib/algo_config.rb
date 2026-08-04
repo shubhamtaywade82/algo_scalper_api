@@ -4,6 +4,9 @@ class AlgoConfig
   CACHE_TTL = 30 # seconds
   ALLOWED_SIGNAL_TIERS = %i[exploratory standard selective].freeze
   SIGNAL_TIER_PRESETS_PATH = 'config/signal_tier_presets.yml'
+  TIER_PRESETS_SETTING_KEY = 'signal_tier_presets'
+  REGISTRY_SETTING_KEY = 'india_index_registry'
+  CREDENTIAL_SECTIONS = %i[dhanhq telegram ai].freeze
   # Credential-bearing sections excluded from the per-position snapshot persisted on trades.
   SENSITIVE_SECTIONS = %i[dhanhq telegram ai].freeze
 
@@ -53,6 +56,17 @@ class AlgoConfig
       @cached_config = nil
       @cache_expires_at = nil
       IndiaIndexRegistry.reset!
+    end
+
+    # Top-level keys allowed for API settings writes (excludes credential sections).
+    def permitted_settings_keys
+      yaml_keys = yaml_seed_top_level_keys
+      doc_keys = document_top_level_keys
+      (yaml_keys | doc_keys).uniq - CREDENTIAL_SECTIONS
+    end
+
+    def permitted_settings_structure
+      permitted_settings_keys.index_with { {} }
     end
 
     # Tick-triggered AI (+Smc::TickAi::AnalysisService+) or explicit event-driven mode.
@@ -129,7 +143,7 @@ class AlgoConfig
 
       return if preset.blank?
 
-      merged = deep_merge_hashes_with_arrays(config, preset)
+      merged = deep_merge_hashes_with_arrays(preset, config)
       config.replace(merged)
       Rails.logger.debug { "[AlgoConfig] signal_tier=#{tier}" }
     end
@@ -169,13 +183,35 @@ class AlgoConfig
     end
 
     def load_signal_tier_presets
+      db_raw = Setting.fetch(TIER_PRESETS_SETTING_KEY, nil, ttl: CACHE_TTL)
+      if db_raw.present?
+        parsed = JSON.parse(db_raw, symbolize_names: true)
+        return parsed if parsed.is_a?(Hash)
+      end
+
       path = Rails.root.join(SIGNAL_TIER_PRESETS_PATH)
       return {} unless File.exist?(path)
 
       YAML.load_file(path).deep_symbolize_keys
     rescue StandardError => e
-      Rails.logger.error("[AlgoConfig] Failed to load #{SIGNAL_TIER_PRESETS_PATH}: #{e.message}")
+      Rails.logger.error("[AlgoConfig] Failed to load tier presets: #{e.message}")
       {}
+    end
+
+    def document_top_level_keys
+      raw = Setting.fetch(AlgoConfig::DocumentStore::DOCUMENT_KEY, nil, ttl: CACHE_TTL)
+      return [] if raw.blank?
+
+      parsed = JSON.parse(raw, symbolize_names: true)
+      parsed.is_a?(Hash) ? parsed.keys : []
+    rescue StandardError
+      []
+    end
+
+    def yaml_seed_top_level_keys
+      YAML.load_file(Rails.root.join('config/algo.yml')).keys.map(&:to_sym)
+    rescue StandardError
+      []
     end
 
     # LIVE_TRADING env is the single switch for real broker execution (see .env.example).

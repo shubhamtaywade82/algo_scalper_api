@@ -129,7 +129,7 @@ body {
   animation: progress-loading 3s ease infinite;
 }
 
-/* Glow Pulse Utility */
+/* Glow Pulse Utilities */
 @keyframes glow-pulse-blue {
   0%, 100% { box-shadow: 0 0 12px oklch(0.57 0.15 240 / 0.2); }
   50% { box-shadow: 0 0 20px oklch(0.57 0.15 240 / 0.5); }
@@ -138,4 +138,51 @@ body {
 .glow-pulse-blue {
   animation: glow-pulse-blue 3s infinite ease-in-out;
 }
+
+@keyframes glow-pulse-green {
+  0%, 100% { box-shadow: 0 0 8px rgba(0, 255, 136, 0.15); border-color: rgba(0, 255, 136, 0.3); }
+  50% { box-shadow: 0 0 18px rgba(0, 255, 136, 0.45); border-color: rgba(0, 255, 136, 0.6); }
+}
+
+.glow-pulse-green {
+  animation: glow-pulse-green 2s infinite ease-in-out;
+}
+
+@keyframes glow-pulse-red {
+  0%, 100% { box-shadow: 0 0 8px rgba(255, 68, 68, 0.15); border-color: rgba(255, 68, 68, 0.3); }
+  50% { box-shadow: 0 0 18px rgba(255, 68, 68, 0.45); border-color: rgba(255, 68, 68, 0.6); }
+}
+
+.glow-pulse-red {
+  animation: glow-pulse-red 2s infinite ease-in-out;
+}
+
+/* Theta Warning Decay Animation */
+@keyframes pulse-theta-severe {
+  0%, 100% { background-color: rgba(255, 68, 68, 0.05); }
+  50% { background-color: rgba(255, 68, 68, 0.2); }
+}
+
+.pulse-theta-severe {
+  animation: pulse-theta-severe 1.5s infinite ease-in-out;
+  border-color: rgba(255, 68, 68, 0.7) !important;
+}
+
+/* Glass panel glow states */
+.glow-card-green {
+  box-shadow: inset 0 0 12px rgba(0, 255, 136, 0.03), 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+.glow-card-red {
+  box-shadow: inset 0 0 12px rgba(255, 68, 68, 0.03), 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Pulse indicator dot */
+.pulse-indicator-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
 

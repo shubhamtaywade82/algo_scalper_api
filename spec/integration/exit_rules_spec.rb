@@ -102,19 +102,21 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
                                             }, current_ltp: BigDecimal('105.0'), current_ltp_with_freshness_check: BigDecimal('105.0'))
 
     # Default mock for ActiveCache
-    allow(@mock_active_cache).to receive(:get_by_tracker_id).with(position_tracker.id).and_return(
-      Positions::ActiveCache::PositionData.new(
-        tracker_id: position_tracker.id,
-        security_id: '12345',
-        entry_price: 100.0,
-        current_ltp: 105.0,
-        pnl: 250.0,
-        pnl_pct: 0.05,
-        peak_profit_pct: 0.05,
-        sl_price: 70.0,
-        quantity: 50
-      )
-    )
+    allow(@mock_active_cache).to receive(:get_by_tracker_id).with(anything) do |id|
+      if id == position_tracker.id
+        Positions::ActiveCache::PositionData.new(
+          tracker_id: position_tracker.id,
+          security_id: '12345',
+          entry_price: position_tracker.entry_price&.to_f,
+          quantity: position_tracker.quantity,
+          current_ltp: 105.0,
+          pnl: 250.0,
+          pnl_pct: 0.05,
+          peak_profit_pct: 0.05,
+          sl_price: 70.0
+        )
+      end
+    end
     allow(@mock_active_cache).to receive(:update_position)
 
     # Ensure mock_exit_engine responds to execute_exit so dispatch_exit works
@@ -515,7 +517,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
       it 'handles missing entry price gracefully' do
         position_tracker.update!(entry_price: nil, avg_price: nil)
 
-        allow(PositionTracker).to receive(:active).and_return(double(find_each: [].each))
+        allow(PositionTracker).to receive(:active).and_return(double(includes: double(to_a: []), find_each: [].each))
         expect { risk_manager.send(:run_interval_enforcement_if_needed, mock_exit_engine) }.not_to raise_error
       end
     end
@@ -540,7 +542,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
 
       it 'handles zero quantity gracefully' do
         position_tracker.update!(quantity: 0)
-        allow(PositionTracker).to receive(:active).and_return(double(find_each: [].each))
+        allow(PositionTracker).to receive(:active).and_return(double(includes: double(to_a: []), find_each: [].each))
 
         expect { risk_manager.send(:run_interval_enforcement_if_needed, mock_exit_engine) }.not_to raise_error
       end

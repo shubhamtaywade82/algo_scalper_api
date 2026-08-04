@@ -10,15 +10,14 @@ module Api
     before_action :authenticate_operator_token!, only: :update_ip
     before_action :authenticate_settings!, only: %i[update_bulk update_deep_merge update_fast_entry_mode]
 
-    # Top-level keys allowed for algo config overrides (must match config/algo.yml structure)
-    PERMITTED_SETTINGS_KEYS = %i[
-      paper_trading trading_time_restrictions feature_flags indices trade_limits
-      broker_fees risk position_sizing signals chain_analyzer option_chain
-      data_freshness watchlist telegram ai
-    ].freeze
+    # Top-level keys allowed for algo config overrides (derived from document minus credentials).
+    def self.permitted_settings_keys
+      AlgoConfig.permitted_settings_keys
+    end
 
-    # Strong params: allow arbitrary nested hashes under each whitelisted top-level key only.
-    PERMITTED_SETTINGS_STRUCTURE = PERMITTED_SETTINGS_KEYS.index_with { {} }.freeze
+    def self.permitted_settings_structure
+      AlgoConfig.permitted_settings_structure
+    end
 
     # GET /api/settings
     def index
@@ -38,7 +37,7 @@ module Api
     def update_bulk
       # Permit only whitelisted top-level keys; each may carry a nested hash (full subtree replace).
       # rubocop:disable Rails/StrongParametersExpect -- require+permit keeps nesting and bad_request handling explicit
-      raw = params.require(:settings).permit(PERMITTED_SETTINGS_STRUCTURE).to_h
+      raw = params.require(:settings).permit(self.class.permitted_settings_structure).to_h
       # rubocop:enable Rails/StrongParametersExpect
       new_config = raw.deep_symbolize_keys.compact
 
@@ -73,7 +72,7 @@ module Api
     def update_deep_merge
       # Permit only whitelisted top-level keys allowing arbitrary sub-structures.
       # rubocop:disable Rails/StrongParametersExpect
-      raw_patch = params.require(:patch).permit(PERMITTED_SETTINGS_STRUCTURE).to_h
+      raw_patch = params.require(:patch).permit(self.class.permitted_settings_structure).to_h
       # rubocop:enable Rails/StrongParametersExpect
       patch_config = raw_patch.deep_symbolize_keys.compact
 
@@ -168,26 +167,6 @@ module Api
       end
     rescue StandardError => e
       render json: { success: false, error: e.message }, status: :internal_server_error
-    end
-
-    private
-
-    def authenticate_settings!
-      return if Rails.env.development?
-
-      if Rails.env.production? && ENV['SETTINGS_UPDATE_TOKEN'].blank?
-        Rails.logger.error('[SettingsController] SETTINGS_UPDATE_TOKEN must be set in production for bulk updates')
-        render json: { error: 'settings_update_unconfigured' }, status: :service_unavailable
-        return
-      end
-
-      expected = ENV['SETTINGS_UPDATE_TOKEN'].presence
-      return if expected.nil?
-
-      provided = request.headers['X-Settings-Update-Token'].presence || params[:token].presence
-      return if provided && ActiveSupport::SecurityUtils.secure_compare(provided, expected)
-
-      render json: { error: 'unauthorized' }, status: :unauthorized
     end
   end
 end

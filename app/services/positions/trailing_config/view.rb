@@ -106,10 +106,6 @@ module Positions
         sl_price_from_entry(entry_price, sl_offset_pct).round(2)
       end
 
-      def to_h
-        parsed
-      end
-
       private
 
       def build_parsed(risk)
@@ -118,8 +114,6 @@ module Positions
           direct_trailing: parse_direct_trailing(risk[:direct_trailing]),
           tiers: parse_tiers(risk[:trailing_tiers]) || TrailingConfig::DEFAULT_TIERS,
           peak_drawdown_pct: numeric_or_default(risk[:peak_drawdown_exit_pct], TrailingConfig::DEFAULT_PEAK_DRAWDOWN_PCT),
-          dynamic_drawdown_thresholds: {},
-          capital_based_thresholds: {},
           activation_profit_pct: numeric_or_default(
             risk[:peak_drawdown_activation_profit_pct],
             TrailingConfig::DEFAULT_ACTIVATION_PROFIT_PCT

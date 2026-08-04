@@ -109,7 +109,7 @@ class PositionTracker < ApplicationRecord
 
       Rails.cache.write("reentry:#{symbol}", Time.current, expires_in: 8.hours)
 
-      idx_key = meta&.dig('index_key')
+      idx_key = index_key || meta&.dig('index_key')
       return if idx_key.blank?
 
       Rails.cache.write("reentry:index:#{idx_key}", Time.current, expires_in: 8.hours)
@@ -118,10 +118,14 @@ class PositionTracker < ApplicationRecord
     def initialize_extremes_in_meta
       return if entry_price.blank?
 
-      meta = meta_hash.dup
-      meta['highest_price'] ||= entry_price.to_f
-      meta['lowest_price'] ||= entry_price.to_f
-      update!(meta: meta) if meta != meta_hash
+      updates = {}
+      updates[:highest_price] = entry_price.to_f if highest_price.blank?
+      updates[:lowest_price] = entry_price.to_f if lowest_price.blank?
+      return if updates.empty?
+
+      # rubocop:disable Rails/SkipsModelValidations
+      update_columns(updates.merge(updated_at: Time.current))
+      # rubocop:enable Rails/SkipsModelValidations
     rescue StandardError => e
       Rails.logger.debug("[PositionTracker] initialize_extremes_in_meta failed for #{order_no}: #{e.class} - #{e.message}")
     end

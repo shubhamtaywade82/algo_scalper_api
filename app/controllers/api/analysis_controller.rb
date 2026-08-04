@@ -24,9 +24,7 @@ module Api
       # Fast lookups (no cache needed — instant)
       ltp = Live::TickCache.ltp(instrument.exchange_segment, instrument.security_id)
       time_regime = safe_call('time_regime') { Live::TimeRegimeService.instance.current_regime }
-      active_positions = PositionTracker.active.where(
-        "meta->>'index_key' = ?", index_key
-      ).count
+      active_positions = PositionTracker.active.by_index_key(index_key).count
 
       market_closed = TradingSession::Service.market_closed?
       generative_ai_gated = Ai::GenerativeAiMarketGate.skip?(force: false)
@@ -103,8 +101,6 @@ module Api
       ltp    = Live::TickCache.ltp(instrument.exchange_segment, instrument.security_id)
       stored = AnalysisStore.read_all(index_key)
 
-      latest_run = CalibrationRun.where(symbol: index_key).order(created_at: :desc).first
-
       client = Services::Ai::OllamaClient.instance
       unless client.enabled?
         return render json: { error: 'AI service not configured' }, status: :service_unavailable
@@ -123,7 +119,7 @@ module Api
         ltp: ltp&.to_f,
         smc: stored[:smc]&.dig(:data),
         regime: stored[:regime]&.dig(:data),
-        calibration_stats: latest_run&.raw_stats
+        calibration_stats: nil
       )
 
       ai_response = client.chat(messages: messages, temperature: 0.3)
@@ -141,6 +137,50 @@ module Api
     rescue StandardError => e
       Rails.logger.error("[AnalysisController] ai_snapshot error: #{e.class} - #{e.message}")
       render json: { error: 'AI service unavailable' }, status: :service_unavailable
+    end
+
+    # POST /api/analysis/:index_key/optimize
+    # Runs indicator parameter sweeps or trailing stop calibrations
+    def optimize
+      index_key  = params[:index_key].to_s.upcase
+      instrument = find_instrument(index_key)
+      return render json: { error: 'Index not found' }, status: :not_found unless instrument
+
+      lookback_days = (params[:lookback_days] || 5).to_i
+      interval      = params[:interval] || '5'
+      indicator     = params[:indicator] || 'all'
+
+      results = {}
+      if %w[all trailing].include?(indicator)
+        # Run Trailing stop optimizer
+        optimizer = Optimization::TrailingOptimizer.new(index_key: index_key)
+        results[:trailing] = optimizer.optimize
+      end
+
+      if indicator == 'all' || %w[adx rsi macd supertrend].include?(indicator)
+        # Run specific technical indicator optimization
+        to_run = indicator == 'all' ? %i[adx rsi macd supertrend] : [indicator.to_sym]
+        results[:indicators] = {}
+        to_run.each do |ind|
+          optimizer = Optimization::SingleIndicatorOptimizer.new(
+            instrument: instrument,
+            interval: interval,
+            indicator: ind,
+            lookback_days: lookback_days,
+            dry_run: params[:dry_run] == 'true'
+          )
+          results[:indicators][ind] = optimizer.run
+        end
+      end
+
+      render json: {
+        index_key: index_key,
+        results: results,
+        optimized_at: Time.current.iso8601
+      }
+    rescue StandardError => e
+      Rails.logger.error("[AnalysisController] optimize error: #{e.class} - #{e.message}")
+      render json: { error: "Optimization failed: #{e.message}" }, status: :unprocessable_content
     end
 
     private

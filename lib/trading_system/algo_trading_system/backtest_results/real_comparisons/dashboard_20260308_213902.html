@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Options Backtest Report - 20260308_213902</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background: #f5f5f5; color: #333; }
+    .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; margin-bottom: 20px; }
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 25px 0; }
+    .metric { background: #fff; padding: 20px; border: 1px solid #e0e0e0; border-left: 5px solid #3498db; border-radius: 8px; transition: transform 0.2s; }
+    .metric:hover { transform: translateY(-2px); }
+    .metric-label { font-size: 13px; color: #7f8c8d; text-transform: uppercase; letter-spacing: 1px; }
+    .metric-value { font-size: 26px; font-weight: bold; color: #2c3e50; margin-top: 8px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 30px; }
+    th { background: #3498db; color: white; padding: 15px; text-align: left; font-weight: 600; }
+    td { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; }
+    tr:hover { background: #f9fbff; }
+    .win { color: #27ae60; font-weight: bold; }
+    .loss { color: #e74c3c; font-weight: bold; }
+    .summary { background: #ebf5fb; padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #d6eaf8; line-height: 1.6; }
+    .summary strong { color: #2980b9; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📊 Options Backtest Report</h1>
+    
+    <div class="summary">
+      <strong>Underlying:</strong> NIFTY |
+      <strong>Strategy:</strong> EMA_CROSSOVER |
+      <strong>Period:</strong> 2026-03-01 to 2026-03-07 |
+      <strong>Capital:</strong> ₹1000000
+    </div>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">Total Trades</div>
+        <div class="metric-value">93</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Total P&L</div>
+        <div class="metric-value">₹-36792.34</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Return %</div>
+        <div class="metric-value">-3.68%</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Strikes</div>
+        <div class="metric-value">3</div>
+      </div>
+    </div>
+
+    <h2>Trade Details</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Strike</th>
+          <th>Entry Time</th>
+          <th>Exit Time</th>
+          <th>Entry Price</th>
+          <th>Exit Price</th>
+          <th>Quantity</th>
+          <th>P&L</th>
+          <th>Return %</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-02 14:20:00</td>
+  <td>2026-03-02 14:30:00</td>
+  <td>₹28.05</td>
+  <td>₹27.63</td>
+  <td>891</td>
+  <td class="loss">₹-399.69</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-02 14:35:00</td>
+  <td>2026-03-02 14:45:00</td>
+  <td>₹51.0</td>
+  <td>₹50.24</td>
+  <td>490</td>
+  <td class="loss">₹-399.65</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-02 15:00:00</td>
+  <td>2026-03-02 15:10:00</td>
+  <td>₹13.1</td>
+  <td>₹12.9</td>
+  <td>1906</td>
+  <td class="loss">₹-399.31</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-02 15:25:00</td>
+  <td>2026-03-04 09:20:00</td>
+  <td>₹313.25</td>
+  <td>₹308.55</td>
+  <td>79</td>
+  <td class="loss">₹-395.76</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-04 13:50:00</td>
+  <td>2026-03-04 14:05:00</td>
+  <td>₹306.05</td>
+  <td>₹301.46</td>
+  <td>81</td>
+  <td class="loss">₹-396.45</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-04 14:10:00</td>
+  <td>2026-03-04 14:20:00</td>
+  <td>₹338.05</td>
+  <td>₹332.98</td>
+  <td>73</td>
+  <td class="loss">₹-394.66</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-04 14:25:00</td>
+  <td>2026-03-04 14:35:00</td>
+  <td>₹311.7</td>
+  <td>₹307.02</td>
+  <td>80</td>
+  <td class="loss">₹-398.79</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-04 15:00:00</td>
+  <td>2026-03-04 15:10:00</td>
+  <td>₹333.9</td>
+  <td>₹328.89</td>
+  <td>74</td>
+  <td class="loss">₹-395.15</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-04 15:25:00</td>
+  <td>2026-03-05 09:20:00</td>
+  <td>₹244.2</td>
+  <td>₹240.54</td>
+  <td>102</td>
+  <td class="loss">₹-398.35</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-05 09:45:00</td>
+  <td>2026-03-05 09:55:00</td>
+  <td>₹236.6</td>
+  <td>₹233.05</td>
+  <td>105</td>
+  <td class="loss">₹-397.3</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-05 10:20:00</td>
+  <td>2026-03-05 10:35:00</td>
+  <td>₹245.0</td>
+  <td>₹241.33</td>
+  <td>101</td>
+  <td class="loss">₹-395.73</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-05 10:40:00</td>
+  <td>2026-03-05 10:50:00</td>
+  <td>₹227.15</td>
+  <td>₹223.74</td>
+  <td>109</td>
+  <td class="loss">₹-395.96</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-05 10:55:00</td>
+  <td>2026-03-05 11:10:00</td>
+  <td>₹232.75</td>
+  <td>₹229.26</td>
+  <td>106</td>
+  <td class="loss">₹-394.56</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-05 11:15:00</td>
+  <td>2026-03-05 11:25:00</td>
+  <td>₹221.2</td>
+  <td>₹217.88</td>
+  <td>112</td>
+  <td class="loss">₹-396.2</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-05 11:30:00</td>
+  <td>2026-03-05 11:40:00</td>
+  <td>₹231.4</td>
+  <td>₹227.93</td>
+  <td>107</td>
+  <td class="loss">₹-395.97</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-05 11:45:00</td>
+  <td>2026-03-05 11:55:00</td>
+  <td>₹226.2</td>
+  <td>₹222.81</td>
+  <td>109</td>
+  <td class="loss">₹-394.31</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-05 12:30:00</td>
+  <td>2026-03-05 12:40:00</td>
+  <td>₹224.1</td>
+  <td>₹220.74</td>
+  <td>110</td>
+  <td class="loss">₹-394.23</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-05 12:55:00</td>
+  <td>2026-03-05 13:15:00</td>
+  <td>₹214.0</td>
+  <td>₹210.79</td>
+  <td>116</td>
+  <td class="loss">₹-397.0</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-05 13:20:00</td>
+  <td>2026-03-05 13:30:00</td>
+  <td>₹223.3</td>
+  <td>₹219.95</td>
+  <td>111</td>
+  <td class="loss">₹-396.39</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-05 13:45:00</td>
+  <td>2026-03-05 13:55:00</td>
+  <td>₹214.4</td>
+  <td>₹211.18</td>
+  <td>115</td>
+  <td class="loss">₹-394.31</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-05 14:00:00</td>
+  <td>2026-03-05 14:10:00</td>
+  <td>₹227.2</td>
+  <td>₹223.79</td>
+  <td>109</td>
+  <td class="loss">₹-396.05</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-05 14:15:00</td>
+  <td>2026-03-05 14:25:00</td>
+  <td>₹215.1</td>
+  <td>₹211.87</td>
+  <td>115</td>
+  <td class="loss">₹-395.6</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-05 14:30:00</td>
+  <td>2026-03-05 14:40:00</td>
+  <td>₹237.95</td>
+  <td>₹234.38</td>
+  <td>104</td>
+  <td class="loss">₹-395.76</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-05 14:45:00</td>
+  <td>2026-03-05 14:55:00</td>
+  <td>₹217.5</td>
+  <td>₹214.24</td>
+  <td>113</td>
+  <td class="loss">₹-393.06</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-05 15:10:00</td>
+  <td>2026-03-05 15:20:00</td>
+  <td>₹235.4</td>
+  <td>₹231.87</td>
+  <td>105</td>
+  <td class="loss">₹-395.29</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-05 15:25:00</td>
+  <td>2026-03-06 09:20:00</td>
+  <td>₹213.45</td>
+  <td>₹210.25</td>
+  <td>115</td>
+  <td class="loss">₹-392.56</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-06 09:25:00</td>
+  <td>2026-03-06 09:35:00</td>
+  <td>₹213.85</td>
+  <td>₹210.64</td>
+  <td>115</td>
+  <td class="loss">₹-393.3</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-06 09:40:00</td>
+  <td>2026-03-06 09:50:00</td>
+  <td>₹217.2</td>
+  <td>₹213.94</td>
+  <td>113</td>
+  <td class="loss">₹-392.51</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-06 09:55:00</td>
+  <td>2026-03-06 10:05:00</td>
+  <td>₹208.85</td>
+  <td>₹205.72</td>
+  <td>118</td>
+  <td class="loss">₹-394.12</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-06 10:10:00</td>
+  <td>2026-03-06 10:20:00</td>
+  <td>₹223.35</td>
+  <td>₹220.0</td>
+  <td>110</td>
+  <td class="loss">₹-392.91</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-06 10:25:00</td>
+  <td>2026-03-06 10:35:00</td>
+  <td>₹228.5</td>
+  <td>₹225.07</td>
+  <td>108</td>
+  <td class="loss">₹-394.66</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-06 10:40:00</td>
+  <td>2026-03-06 10:50:00</td>
+  <td>₹204.8</td>
+  <td>₹201.73</td>
+  <td>120</td>
+  <td class="loss">₹-393.03</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-06 10:55:00</td>
+  <td>2026-03-06 11:05:00</td>
+  <td>₹203.0</td>
+  <td>₹199.96</td>
+  <td>121</td>
+  <td class="loss">₹-392.82</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2026-03-06 11:10:00</td>
+  <td>2026-03-06 11:20:00</td>
+  <td>₹215.75</td>
+  <td>₹212.51</td>
+  <td>114</td>
+  <td class="loss">₹-393.34</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-02 14:20:00</td>
+  <td>2026-03-02 14:30:00</td>
+  <td>₹13.0</td>
+  <td>₹12.81</td>
+  <td>1923</td>
+  <td class="loss">₹-399.8</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-02 14:35:00</td>
+  <td>2026-03-02 14:45:00</td>
+  <td>₹28.55</td>
+  <td>₹28.12</td>
+  <td>875</td>
+  <td class="loss">₹-399.51</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-02 15:10:00</td>
+  <td>2026-03-02 15:20:00</td>
+  <td>₹0.25</td>
+  <td>₹0.25</td>
+  <td>99920</td>
+  <td class="loss">₹-399.49</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-04 09:20:00</td>
+  <td>2026-03-04 09:30:00</td>
+  <td>₹298.4</td>
+  <td>₹293.92</td>
+  <td>83</td>
+  <td class="loss">₹-396.09</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-04 13:10:00</td>
+  <td>2026-03-04 13:20:00</td>
+  <td>₹285.2</td>
+  <td>₹280.92</td>
+  <td>87</td>
+  <td class="loss">₹-396.81</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-04 13:35:00</td>
+  <td>2026-03-04 13:45:00</td>
+  <td>₹298.0</td>
+  <td>₹293.53</td>
+  <td>83</td>
+  <td class="loss">₹-395.56</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-04 14:00:00</td>
+  <td>2026-03-04 14:10:00</td>
+  <td>₹285.05</td>
+  <td>₹280.77</td>
+  <td>87</td>
+  <td class="loss">₹-396.6</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-04 14:35:00</td>
+  <td>2026-03-04 15:00:00</td>
+  <td>₹289.2</td>
+  <td>₹284.86</td>
+  <td>86</td>
+  <td class="loss">₹-397.75</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-04 15:15:00</td>
+  <td>2026-03-04 15:25:00</td>
+  <td>₹301.2</td>
+  <td>₹296.68</td>
+  <td>82</td>
+  <td class="loss">₹-394.99</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-05 09:15:00</td>
+  <td>2026-03-05 09:25:00</td>
+  <td>₹220.0</td>
+  <td>₹216.7</td>
+  <td>113</td>
+  <td class="loss">₹-397.57</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-05 09:30:00</td>
+  <td>2026-03-05 09:40:00</td>
+  <td>₹206.05</td>
+  <td>₹202.96</td>
+  <td>120</td>
+  <td class="loss">₹-395.43</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-05 10:05:00</td>
+  <td>2026-03-05 10:15:00</td>
+  <td>₹205.35</td>
+  <td>₹202.27</td>
+  <td>121</td>
+  <td class="loss">₹-397.37</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-05 10:20:00</td>
+  <td>2026-03-05 10:35:00</td>
+  <td>₹216.9</td>
+  <td>₹213.65</td>
+  <td>114</td>
+  <td class="loss">₹-395.44</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-05 11:10:00</td>
+  <td>2026-03-05 11:20:00</td>
+  <td>₹208.8</td>
+  <td>₹205.67</td>
+  <td>119</td>
+  <td class="loss">₹-397.37</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-05 11:25:00</td>
+  <td>2026-03-05 11:35:00</td>
+  <td>₹210.65</td>
+  <td>₹207.49</td>
+  <td>118</td>
+  <td class="loss">₹-397.52</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-05 11:40:00</td>
+  <td>2026-03-05 11:50:00</td>
+  <td>₹215.05</td>
+  <td>₹211.82</td>
+  <td>115</td>
+  <td class="loss">₹-395.51</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-05 12:05:00</td>
+  <td>2026-03-05 12:15:00</td>
+  <td>₹208.05</td>
+  <td>₹204.93</td>
+  <td>119</td>
+  <td class="loss">₹-395.94</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-05 12:20:00</td>
+  <td>2026-03-05 12:30:00</td>
+  <td>₹195.1</td>
+  <td>₹192.17</td>
+  <td>127</td>
+  <td class="loss">₹-396.26</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-05 12:35:00</td>
+  <td>2026-03-05 12:45:00</td>
+  <td>₹192.2</td>
+  <td>₹189.32</td>
+  <td>129</td>
+  <td class="loss">₹-396.51</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-05 13:20:00</td>
+  <td>2026-03-05 13:30:00</td>
+  <td>₹195.15</td>
+  <td>₹192.22</td>
+  <td>127</td>
+  <td class="loss">₹-396.36</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-05 13:35:00</td>
+  <td>2026-03-05 13:45:00</td>
+  <td>₹201.0</td>
+  <td>₹197.99</td>
+  <td>123</td>
+  <td class="loss">₹-395.38</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-05 14:10:00</td>
+  <td>2026-03-05 14:20:00</td>
+  <td>₹194.6</td>
+  <td>₹191.68</td>
+  <td>127</td>
+  <td class="loss">₹-395.24</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-05 14:35:00</td>
+  <td>2026-03-05 14:45:00</td>
+  <td>₹186.85</td>
+  <td>₹184.05</td>
+  <td>132</td>
+  <td class="loss">₹-394.44</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-05 14:50:00</td>
+  <td>2026-03-05 15:00:00</td>
+  <td>₹181.95</td>
+  <td>₹179.22</td>
+  <td>136</td>
+  <td class="loss">₹-395.74</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-05 15:15:00</td>
+  <td>2026-03-05 15:25:00</td>
+  <td>₹203.0</td>
+  <td>₹199.96</td>
+  <td>121</td>
+  <td class="loss">₹-392.82</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-06 09:35:00</td>
+  <td>2026-03-06 09:45:00</td>
+  <td>₹177.05</td>
+  <td>₹174.39</td>
+  <td>139</td>
+  <td class="loss">₹-393.57</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-06 09:50:00</td>
+  <td>2026-03-06 10:00:00</td>
+  <td>₹205.5</td>
+  <td>₹202.42</td>
+  <td>120</td>
+  <td class="loss">₹-394.38</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-06 10:05:00</td>
+  <td>2026-03-06 10:25:00</td>
+  <td>₹186.05</td>
+  <td>₹183.26</td>
+  <td>132</td>
+  <td class="loss">₹-392.75</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-06 10:50:00</td>
+  <td>2026-03-06 11:00:00</td>
+  <td>₹186.85</td>
+  <td>₹184.05</td>
+  <td>132</td>
+  <td class="loss">₹-394.44</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-06 11:05:00</td>
+  <td>2026-03-06 11:15:00</td>
+  <td>₹193.8</td>
+  <td>₹190.89</td>
+  <td>127</td>
+  <td class="loss">₹-393.62</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2026-03-06 11:20:00</td>
+  <td>2026-03-06 11:30:00</td>
+  <td>₹185.65</td>
+  <td>₹182.87</td>
+  <td>133</td>
+  <td class="loss">₹-394.88</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-02 14:30:00</td>
+  <td>2026-03-02 14:40:00</td>
+  <td>₹62.25</td>
+  <td>₹61.32</td>
+  <td>401</td>
+  <td class="loss">₹-399.21</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-02 14:55:00</td>
+  <td>2026-03-02 15:05:00</td>
+  <td>₹45.85</td>
+  <td>₹45.16</td>
+  <td>545</td>
+  <td class="loss">₹-399.62</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-04 13:10:00</td>
+  <td>2026-03-04 13:20:00</td>
+  <td>₹344.15</td>
+  <td>₹338.99</td>
+  <td>72</td>
+  <td class="loss">₹-396.27</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-04 13:25:00</td>
+  <td>2026-03-04 13:35:00</td>
+  <td>₹340.95</td>
+  <td>₹335.84</td>
+  <td>73</td>
+  <td class="loss">₹-398.04</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-04 13:40:00</td>
+  <td>2026-03-04 13:50:00</td>
+  <td>₹342.3</td>
+  <td>₹337.17</td>
+  <td>72</td>
+  <td class="loss">₹-394.14</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-04 14:05:00</td>
+  <td>2026-03-04 14:15:00</td>
+  <td>₹354.15</td>
+  <td>₹348.84</td>
+  <td>70</td>
+  <td class="loss">₹-396.46</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-04 14:30:00</td>
+  <td>2026-03-04 14:40:00</td>
+  <td>₹345.0</td>
+  <td>₹339.83</td>
+  <td>72</td>
+  <td class="loss">₹-397.25</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-04 14:55:00</td>
+  <td>2026-03-04 15:05:00</td>
+  <td>₹364.5</td>
+  <td>₹359.03</td>
+  <td>68</td>
+  <td class="loss">₹-396.39</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-04 15:10:00</td>
+  <td>2026-03-04 15:20:00</td>
+  <td>₹361.7</td>
+  <td>₹356.27</td>
+  <td>68</td>
+  <td class="loss">₹-393.35</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-05 09:20:00</td>
+  <td>2026-03-05 09:30:00</td>
+  <td>₹287.1</td>
+  <td>₹282.79</td>
+  <td>86</td>
+  <td class="loss">₹-394.86</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-05 10:05:00</td>
+  <td>2026-03-05 10:15:00</td>
+  <td>₹262.8</td>
+  <td>₹258.86</td>
+  <td>94</td>
+  <td class="loss">₹-395.07</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-05 10:20:00</td>
+  <td>2026-03-05 10:35:00</td>
+  <td>₹275.15</td>
+  <td>₹271.02</td>
+  <td>90</td>
+  <td class="loss">₹-396.03</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-05 10:40:00</td>
+  <td>2026-03-05 10:50:00</td>
+  <td>₹256.3</td>
+  <td>₹252.46</td>
+  <td>97</td>
+  <td class="loss">₹-397.59</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-05 10:55:00</td>
+  <td>2026-03-05 11:10:00</td>
+  <td>₹262.75</td>
+  <td>₹258.81</td>
+  <td>94</td>
+  <td class="loss">₹-394.99</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-05 11:15:00</td>
+  <td>2026-03-05 11:25:00</td>
+  <td>₹250.95</td>
+  <td>₹247.19</td>
+  <td>99</td>
+  <td class="loss">₹-397.32</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-05 11:30:00</td>
+  <td>2026-03-05 11:40:00</td>
+  <td>₹261.3</td>
+  <td>₹257.38</td>
+  <td>95</td>
+  <td class="loss">₹-396.99</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-05 11:45:00</td>
+  <td>2026-03-05 11:55:00</td>
+  <td>₹255.65</td>
+  <td>₹251.82</td>
+  <td>97</td>
+  <td class="loss">₹-396.58</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-05 12:50:00</td>
+  <td>2026-03-05 13:00:00</td>
+  <td>₹257.1</td>
+  <td>₹253.24</td>
+  <td>96</td>
+  <td class="loss">₹-394.72</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-05 13:25:00</td>
+  <td>2026-03-05 13:40:00</td>
+  <td>₹245.0</td>
+  <td>₹241.33</td>
+  <td>101</td>
+  <td class="loss">₹-395.73</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-05 13:45:00</td>
+  <td>2026-03-05 13:55:00</td>
+  <td>₹244.35</td>
+  <td>₹240.68</td>
+  <td>101</td>
+  <td class="loss">₹-394.68</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-05 14:00:00</td>
+  <td>2026-03-05 14:10:00</td>
+  <td>₹258.0</td>
+  <td>₹254.13</td>
+  <td>96</td>
+  <td class="loss">₹-396.1</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-05 14:15:00</td>
+  <td>2026-03-05 14:25:00</td>
+  <td>₹245.9</td>
+  <td>₹242.21</td>
+  <td>100</td>
+  <td class="loss">₹-393.26</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-05 14:30:00</td>
+  <td>2026-03-05 14:40:00</td>
+  <td>₹269.8</td>
+  <td>₹265.75</td>
+  <td>91</td>
+  <td class="loss">₹-392.64</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-05 15:05:00</td>
+  <td>2026-03-05 15:15:00</td>
+  <td>₹260.65</td>
+  <td>₹256.74</td>
+  <td>95</td>
+  <td class="loss">₹-396.0</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-06 09:25:00</td>
+  <td>2026-03-06 09:35:00</td>
+  <td>₹243.1</td>
+  <td>₹239.45</td>
+  <td>101</td>
+  <td class="loss">₹-392.67</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-06 10:10:00</td>
+  <td>2026-03-06 10:20:00</td>
+  <td>₹253.2</td>
+  <td>₹249.4</td>
+  <td>97</td>
+  <td class="loss">₹-392.78</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-06 10:25:00</td>
+  <td>2026-03-06 10:35:00</td>
+  <td>₹258.0</td>
+  <td>₹254.13</td>
+  <td>95</td>
+  <td class="loss">₹-391.98</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2026-03-06 10:50:00</td>
+  <td>2026-03-06 11:00:00</td>
+  <td>₹242.5</td>
+  <td>₹238.86</td>
+  <td>101</td>
+  <td class="loss">₹-391.7</td>
+  <td>-1.6%</td>
+</tr>
+
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

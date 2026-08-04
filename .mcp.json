@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "woods": {
+      "command": "woods-mcp-start",
+      "args": ["./tmp/woods"]
+    }
+  }
+}

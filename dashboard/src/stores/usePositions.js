@@ -164,6 +164,8 @@ export function usePositions() {
           applyPnlStale(data)
         } else if (data.type === 'keepalive') {
           // markFresh() above resets WS stale timer
+        } else if (data.type === 'position_exited') {
+          setOpen(prev => prev.filter(p => Number(p.id) !== Number(data.id)))
         } else {
           applyPnlUpdate(data)
         }

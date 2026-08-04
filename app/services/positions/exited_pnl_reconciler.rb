@@ -91,18 +91,16 @@ module Positions
     def apply_truth!(tracker, truth)
       tracker.with_lock do
         tracker.reload
-        meta = tracker.meta.is_a?(Hash) ? tracker.meta.deep_stringify_keys.dup : {}
-        execution_meta = meta['execution'].is_a?(Hash) ? meta['execution'].dup : {}
+        execution_meta = tracker.execution.is_a?(Hash) ? tracker.execution.deep_dup : {}
         display_pct = (truth[:pnl_pct].to_f * 100.0).round(2)
 
         execution_meta['final_pnl_pct'] = display_pct
         execution_meta['classified_as'] = classify_exit(display_pct)
-        meta['execution'] = execution_meta
 
         tracker.update!(
           last_pnl_rupees: truth[:pnl],
           last_pnl_pct: truth[:pnl_pct],
-          meta: meta
+          execution: execution_meta
         )
       end
     end

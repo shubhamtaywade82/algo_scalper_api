@@ -3,10 +3,11 @@
 # app/services/options/expired_fetcher.rb
 module Options
   class ExpiredFetcher < ApplicationService
-    def initialize(symbol:, expiry_flag: 'WEEK', date: Time.zone.today)
+    def initialize(symbol:, expiry_flag: 'WEEK', date: Time.zone.today, interval: '5')
       @symbol = symbol
       @expiry_flag = normalize_expiry_flag(symbol, expiry_flag)
       @date = date
+      @interval = interval.to_s
     end
 
     # Fetches CE and PE OHLC arrays
@@ -35,17 +36,20 @@ module Options
     # end
 
     def call
-      cache_key = "expired_option_data:#{@symbol}:#{@date}:#{@expiry_flag}"
+      cache_key = "expired_option_data:#{@symbol}:#{@date}:#{@expiry_flag}:#{@interval}"
 
       cached_data = Rails.cache.read(cache_key)
       return cached_data if cached_data.present?
 
       date_str = normalize_date_string(@date)
       Rails.logger.debug date_str
+      target_date = Date.parse(date_str)
+      to_date_str = (target_date + 1).strftime('%Y-%m-%d')
+
       result = { ce: 'CALL', pe: 'PUT' }.to_h do |side_key, opt_type|
         data = DhanHQ::Models::ExpiredOptionsData.fetch(
           exchange_segment: segment_for(@symbol),
-          interval: '5',
+          interval: @interval,
           security_id: security_id_for(@symbol),
           instrument: 'OPTIDX',
           expiry_flag: @expiry_flag,
@@ -54,9 +58,9 @@ module Options
           drv_option_type: opt_type,
           required_data: %w[open high low close volume oi spot strike],
           from_date: date_str,
-          to_date: date_str
+          to_date: to_date_str
         )
-        [side_key, parse_data(data, side_key)]
+        [side_key, parse_data(data, side_key, target_date)]
       end
 
       Rails.cache.write(cache_key, result, expires_in: 24.hours)
@@ -103,15 +107,19 @@ module Options
       end
     end
 
-    def parse_data(data, side_key)
+    def parse_data(data, side_key, target_date)
       # Map :ce/:pe to API keys 'ce'/'pe'
       side = side_key == :ce ? 'ce' : 'pe'
       d = data&.data&.[](side)
       return [] unless d && d['timestamp']
 
-      d['timestamp'].map.with_index do |ts, i|
-        {
-          timestamp: Time.at(ts).in_time_zone('Asia/Kolkata'),
+      parsed = []
+      d['timestamp'].each_with_index do |ts, i|
+        time = Time.at(ts).in_time_zone('Asia/Kolkata')
+        next unless time.to_date == target_date
+
+        parsed << {
+          timestamp: time,
           open: d['open'][i].to_f,
           high: d['high'][i].to_f,
           low: d['low'][i].to_f,
@@ -122,6 +130,7 @@ module Options
           strike: d['strike'][i].to_f
         }
       end
+      parsed
     end
   end
 end

@@ -52,15 +52,6 @@ module Positions
       PositionTracker.instance_variable_set(:@last_clear, Time.current)
     end
 
-    def self.rebuild_active_tracker_set!
-      ids = PositionTracker.active.pluck(:id).map(&:to_s)
-      redis = redis_client
-      redis.del(ACTIVE_TRACKER_SET_KEY)
-      redis.sadd(ACTIVE_TRACKER_SET_KEY, ids) unless ids.empty?
-    rescue StandardError => e
-      Rails.logger.warn("[Positions::IndexSync] #{e.class} - #{e.message}")
-    end
-
     def self.active_tracker_ids_from_redis
       redis_client.smembers(ACTIVE_TRACKER_SET_KEY).to_set
     rescue StandardError => e

@@ -94,6 +94,14 @@ module Live
       end
     end
 
+    def start
+      start!
+    end
+
+    def stop
+      stop!
+    end
+
     def running?
       @running
     end
@@ -460,6 +468,7 @@ module Live
       return if @last_heartbeat_at && (Time.current.to_f - @last_heartbeat_at) < 1.0
 
       @last_heartbeat_at = Time.current.to_f
+      Live::SystemStatusCache.instance.report_heartbeat(:pnl_updater)
       ActionCable.server.broadcast("dashboard", build_dashboard_stats)
     rescue StandardError => e
       @logger.debug("[PnlUpdater] heartbeat broadcast failed: #{e.message}")
@@ -485,7 +494,15 @@ module Live
         indices: {
           nifty: Live::TickCache.ltp('IDX_I', '13'),
           banknifty: Live::TickCache.ltp('IDX_I', '25'),
-          sensex: Live::TickCache.ltp('IDX_I', '51')
+          sensex: Live::TickCache.ltp('IDX_I', '51'),
+          nifty_prev_close: Live::TickCache.fetch('IDX_I', '13')&.dig(:prev_close),
+          banknifty_prev_close: Live::TickCache.fetch('IDX_I', '25')&.dig(:prev_close),
+          sensex_prev_close: Live::TickCache.fetch('IDX_I', '51')&.dig(:prev_close)
+        },
+        options_buying: {
+          nifty: build_options_buying_state('NIFTY'),
+          banknifty: build_options_buying_state('BANKNIFTY'),
+          sensex: build_options_buying_state('SENSEX')
         },
         circuit_breaker: Risk::CircuitBreaker.instance.status,
         system: Live::SystemStatusCache.instance.all_statuses.merge(
@@ -494,8 +511,30 @@ module Live
         ),
         timestamp: Time.current.iso8601
       }
-    rescue StandardError
+    rescue StandardError => e
+      @logger.error("[PnlUpdater] build_dashboard_stats failed: #{e.message}")
       { type: "stats", error: true, timestamp: Time.current.iso8601 }
+    end
+
+    def build_options_buying_state(index_key)
+      direction = if OptionsBuying::StateStore.breakout_ready?(index_key, direction: :bullish)
+                    'BULLISH'
+                  elsif OptionsBuying::StateStore.breakout_ready?(index_key, direction: :bearish)
+                    'BEARISH'
+                  end
+      {
+        regime: OptionsBuying::RegimeClassifier.detect(index_key),
+        breakout_ready: !direction.nil?,
+        direction: direction,
+        compression_armed: OptionsBuying::StateStore.compression_armed?(index_key),
+        support: OptionsBuying::StateStore.support(index_key),
+        resistance: OptionsBuying::StateStore.resistance(index_key),
+        daily_atr: OptionsBuying::StateStore.daily_atr(index_key),
+        radar_strikes: OptionsBuying::StateStore.radar_strikes(index_key)
+      }
+    rescue StandardError => e
+      @logger.warn("[PnlUpdater] failed to build options_buying state for #{index_key}: #{e.message}")
+      { regime: 'UNKNOWN', breakout_ready: false, direction: nil }
     end
 
     def safe_wallet_snapshot

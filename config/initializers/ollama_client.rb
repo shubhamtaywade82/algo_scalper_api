@@ -9,7 +9,7 @@
 #   OLLAMA_BASE_URL  — Fallback URL for both modes if the specific URL above is unset
 #   OLLAMA_HOST_URL  — Legacy local/LAN URL (local mode)
 #   OLLAMA_API_KEY   — Required when ollama_use_cloud is true (Ollama Cloud)
-#   OLLAMA_MODEL     — Default model name (e.g. "llama3.2:3b" or a cloud model slug)
+#   OLLAMA_MODEL     — Default model name (e.g. "qwen3.5:4b" or a cloud model slug)
 #   OLLAMA_TIMEOUT   — Request timeout in seconds (default: 30)
 #
 require 'ollama_client'

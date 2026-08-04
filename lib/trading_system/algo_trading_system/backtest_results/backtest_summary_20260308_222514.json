@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "created_at": "2026-03-08T22:25:14+05:30",
+    "underlying": "sensex",
+    "strategy": "rsi_macd",
+    "period": "2026-02-06 to 2026-03-08",
+    "capital": 1000000
+  },
+  "statistics": {
+    "strikes_analyzed": 3,
+    "total_trades": 251,
+    "total_pnl": "₹1754.08",
+    "pnl_percentage": "0.18%",
+    "trades_by_strike": {
+      "ATM_CALL": {
+        "trades": 80,
+        "win_rate": "7.5%",
+        "pnl": "₹201.03",
+        "pnl_pct": "0.02%"
+      },
+      "ATM+1_CALL": {
+        "trades": 85,
+        "win_rate": "7.06%",
+        "pnl": "₹-1721.8",
+        "pnl_pct": "-0.17%"
+      },
+      "ATM-1_CALL": {
+        "trades": 86,
+        "win_rate": "8.14%",
+        "pnl": "₹3274.85",
+        "pnl_pct": "0.33%"
+      }
+    }
+  }
+}

@@ -39,8 +39,8 @@ module Trading
         allow_execution_only: false,
         max_lots_by_permission: {
           execution_only: 0,
-          scale_ready: 5,
-          full_deploy: 20
+          scale_ready: 2,
+          full_deploy: 10
         }.freeze,
         holding_rules: {
           trend_minutes: (30..90),

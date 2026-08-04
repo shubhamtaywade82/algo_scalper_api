@@ -5,27 +5,28 @@ require 'rails_helper'
 RSpec.describe Risk::Rules::RuleFactory do
   let(:risk_config) do
     {
-      sl_pct: 0.10,
-      tp_pct: 0.45,
-      secure_profit_threshold_rupees: 600.0,
-      secure_profit_drawdown_pct: 0.025
+      adaptive_trailing: {
+        enabled: true,
+        supertrend_flip_exit: false,
+        counter_candles: 0
+      }
     }
   end
 
   describe '.exit_rules' do
-    it 'includes prop-desk give-back protection rules' do
+    it 'returns the registered exit rules' do
       rules = described_class.exit_rules(risk_config)
       rule_classes = rules.map(&:class)
 
-      expect(rule_classes).to include(
+      expect(rule_classes).to contain_exactly(
+        Risk::Rules::StopLossRule,
         Risk::Rules::AdaptiveTrailRule,
-        Risk::Rules::VixForceExitRule,
-        Risk::Rules::DteZeroThetaFlatExitRule,
-        Risk::Rules::GreenTradeCapRule,
-        Risk::Rules::ProfitFloorExitRule,
-        Risk::Rules::PeakDrawdownRule,
-        Risk::Rules::SecureProfitRule,
-        Risk::Rules::FastProfitLockRule
+        Risk::Rules::TakeProfitRule,
+        Risk::Rules::ZeroHwmFalseEntryRule,
+        Risk::Rules::TimeDecayRule,
+        Risk::Rules::TimeStopRule,
+        Risk::Rules::IvCollapseRule,
+        Risk::Rules::StructuralKillSwitchRule
       )
     end
   end
@@ -41,9 +42,9 @@ RSpec.describe Risk::Rules::RuleFactory do
 
     it 'passes config to all rules' do
       engine = described_class.create_engine(risk_config: risk_config)
-      sl_rule = engine.find_rule(Risk::Rules::StopLossRule)
+      trail_rule = engine.find_rule(Risk::Rules::AdaptiveTrailRule)
 
-      expect(sl_rule.config).to eq(risk_config)
+      expect(trail_rule.config).to eq(risk_config)
     end
   end
 end

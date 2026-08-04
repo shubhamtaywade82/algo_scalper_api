@@ -72,12 +72,12 @@ module Options
 
         # Fallback to ATM if it exists in chain
         atm_strike_float = atm_strike.to_f
-        if available_strikes.include?(atm_strike_float) && liquid_in_chain?(option_chain: option_chain, strike: atm_strike, side: side_sym)
+        atm_data = option_data_for(option_chain: option_chain, strike: atm_strike, side: side_sym)
+        if available_strikes.include?(atm_strike_float) && liquid_in_chain?(option_chain: option_chain, strike: atm_strike, side: side_sym, data: atm_data)
           return ok(strike: atm_strike, strike_type: :ATM, atm_strike: atm_strike)
         end
 
         # Enhanced error reporting
-        atm_data = option_data_for(option_chain: option_chain, strike: atm_strike, side: side_sym)
         if atm_data.nil?
           Rails.logger.warn("[StrikeSelector] ATM strike #{atm_strike} #{side_sym} not found in option chain for #{index}")
           return blocked('atm_strike_not_in_chain')
@@ -141,8 +141,8 @@ module Options
         { strike: atm_strike, strike_type: :ATM }
       end
 
-      def liquid_in_chain?(option_chain:, strike:, side:)
-        data = option_data_for(option_chain: option_chain, strike: strike, side: side)
+      def liquid_in_chain?(option_chain:, strike:, side:, data: nil)
+        data ||= option_data_for(option_chain: option_chain, strike: strike, side: side)
         unless data.is_a?(Hash)
           Rails.logger.debug { "[StrikeSelector] No option data found for strike #{strike} #{side}" }
           return false

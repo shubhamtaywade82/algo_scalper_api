@@ -24,15 +24,21 @@ module Positions
         exit_px = resolved_exit_price
         pnl_snapshot = resolve_final_pnl(exit_price: exit_px, cache_data: cache_data)
 
-        metadata = tracker.meta.is_a?(Hash) ? tracker.meta.deep_stringify_keys.dup : {}
-        metadata = Live::PositionRuntimeCache.instance.flush_to_meta!(metadata, tracker.id)
+        metadata = Live::PositionRuntimeCache.instance.flush_to_meta!({}, tracker.id) || {}
         resolved_reason = resolve_exit_reason_string(metadata)
-        metadata['exit_reason'] = resolved_reason
-        metadata['exit_triggered_at'] ||= Time.current
-        metadata['hwm_pnl_pct'] = cache_data[:hwm_pnl_pct] if cache_data[:hwm_pnl_pct]
-        metadata.merge!(
-          Positions::ExitAnalyticsBuilder.build(tracker: tracker, exit_price: exit_px).stringify_keys
-        )
+        exit_triggered_at = metadata["exit_triggered_at"].presence || Time.current
+
+        if resolved_reason.to_s.include?('MANUAL')
+          metadata['exit_path'] = 'manual'
+        end
+        tracker.meta = metadata
+
+        decision = Positions::ExitAnalyticsBuilder.build(tracker: tracker, exit_price: exit_px).stringify_keys
+        decision["exit_reason"] = resolved_reason
+        decision["exit_triggered_at"] = exit_triggered_at
+        if cache_data[:hwm_pnl_pct]
+          decision["hwm_pnl_pct"] = cache_data[:hwm_pnl_pct]
+        end
 
         tracker.update!(
           status: :exited,
@@ -42,13 +48,16 @@ module Positions
           last_pnl_pct: pnl_snapshot[:pnl_pct],
           high_water_mark_pnl: pnl_snapshot[:hwm_pnl],
           exit_reason: resolved_reason,
+          exit_triggered_at: exit_triggered_at,
+          hwm_pnl_pct: cache_data[:hwm_pnl_pct],
+          decision: decision,
           meta: metadata
         )
 
         # 5. Post-exit side effects
         Positions::DailyPnlRecorder.call(tracker: tracker)
         cleanup_exit_caches
-        Positions::FeedSubscription.unsubscribe(tracker: tracker)
+        tracker.unsubscribe
         register_cooldown!
         sync_final_pnl_to_database(cache_data)
         tracker.send(:broadcast_position_exited)

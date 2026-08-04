@@ -128,7 +128,7 @@ module Services
         priority = %w[
           llama3.1:8b llama3.1:8b-instruct llama3:8b llama3:8b-instruct
           mistral:7b mistral mistral:instruct
-          llama3.2:3b llama3.2:3b-instruct
+          qwen3.5:4b qwen3.5:4b-instruct
           phi3:mini phi3 phi3:medium
           qwen2.5:1.5b-instruct gemma:2b gemma
           llama3:70b llama3:70b-instruct llama3 llama3:instruct
@@ -319,7 +319,7 @@ module Services
 
         config = Ollama::Config.new
         config.base_url    = base
-        config.model       = ENV.fetch('OLLAMA_MODEL', 'llama3.2:3b')
+        config.model       = ENV.fetch('OLLAMA_MODEL', 'qwen3.5:4b')
         config.timeout     = timeout
         config.temperature = 0.2
         config.strict_json = false
@@ -340,7 +340,7 @@ module Services
         return model if model.present?
 
         fetch_and_select_model if @selected_model.nil?
-        @selected_model || ENV.fetch('OLLAMA_MODEL', 'llama3.2:3b')
+        @selected_model || ENV.fetch('OLLAMA_MODEL', 'qwen3.5:4b')
       end
 
       def with_serialization(&)

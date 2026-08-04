@@ -34,24 +34,18 @@ module Optimization
     end
 
     def run
-      Rails.logger.info("[Optimization] Starting optimization for #{@instrument.symbol_name} @ #{@interval}m (#{@lookback} days)")
-      $stdout.puts "[Optimization] Starting optimization for #{@instrument.symbol_name} @ #{@interval}m (#{@lookback} days)"
-      $stdout.flush
+      log("[Optimization] Starting optimization for #{@instrument.symbol_name} @ #{@interval}m (#{@lookback} days)")
 
       load_series!
       return { error: 'Failed to load series' } unless @series&.candles&.any?
 
-      Rails.logger.info("[Optimization] Loaded #{@series.candles.size} candles")
-      $stdout.puts "[Optimization] Loaded #{@series.candles.size} candles"
-      $stdout.flush
+      log("[Optimization] Loaded #{@series.candles.size} candles")
 
       best = { score: -Float::INFINITY, params: nil, metrics: nil }
       total_combinations = param_combinations.size
       processed = 0
 
-      Rails.logger.info("[Optimization] Testing #{total_combinations} parameter combinations...")
-      $stdout.puts "[Optimization] Testing #{total_combinations} parameter combinations..."
-      $stdout.flush
+      log("[Optimization] Testing #{total_combinations} parameter combinations...")
 
       param_combinations.each do |candidate|
         processed += 1
@@ -68,14 +62,10 @@ module Optimization
         if score > best[:score]
           best = { score: score, params: candidate, metrics: metrics }
 
-          Rails.logger.info(
-            "[Optimization] New best: Sharpe=#{score.round(3)}, " \
-            "WR=#{metrics[:win_rate]&.round(3)}, " \
-            "PnL=#{metrics[:net_pnl]&.round(2)} " \
-            "(#{processed}/#{total_combinations})"
+          log(
+            "[Optimization] New best: Sharpe=#{score.round(3)}, WR=#{metrics[:win_rate]&.round(3)}, " \
+            "PnL=#{metrics[:net_pnl]&.round(2)} (#{processed}/#{total_combinations})"
           )
-          $stdout.puts "[Optimization] New best: Sharpe=#{score.round(3)}, WR=#{metrics[:win_rate]&.round(3)}, PnL=#{metrics[:net_pnl]&.round(2)} (#{processed}/#{total_combinations})"
-          $stdout.flush
 
           persist(best)
         end
@@ -84,14 +74,10 @@ module Optimization
         next unless (processed % [total_combinations / 10, 1].max).zero?
 
         progress_pct = (processed.to_f / total_combinations * 100).round(1)
-        Rails.logger.info("[Optimization] Progress: #{progress_pct}% (#{processed}/#{total_combinations})")
-        $stdout.puts "[Optimization] Progress: #{progress_pct}% (#{processed}/#{total_combinations})"
-        $stdout.flush
+        log("[Optimization] Progress: #{progress_pct}% (#{processed}/#{total_combinations})")
       end
 
-      Rails.logger.info("[Optimization] Optimization complete. Best Sharpe: #{best[:score].round(3)}")
-      $stdout.puts "[Optimization] Optimization complete. Best Sharpe: #{best[:score].round(3)}"
-      $stdout.flush
+      log("[Optimization] Optimization complete. Best Sharpe: #{best[:score].round(3)}")
       best
     rescue StandardError => e
       Rails.logger.error("[Optimization] Optimization failed: #{e.class} - #{e.message}")
@@ -100,6 +86,12 @@ module Optimization
     end
 
     private
+
+    def log(msg)
+      Rails.logger.info(msg)
+      $stdout.puts msg
+      $stdout.flush
+    end
 
     def load_series!
       # Fetch historical data with explicit lookback period

@@ -22,22 +22,43 @@ module Orders
     def place_market(side:, segment:, security_id:, qty:, meta: {})
       order_no = meta[:client_order_id] || "PAPER-#{SecureRandom.hex(3)}"
 
-      # Simulate broker ack only; domain services own tracker persistence.
+      fill_price = resolve_fill_price(side, segment, security_id, meta)
+
       {
         success: true,
         order_id: order_no,
         paper: true,
-        status: :accepted
+        status: :accepted,
+        fill_price: fill_price
       }
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] place_market failed for #{segment}-#{security_id}: #{e.class} - #{e.message}")
       { success: false, error: e.message, paper: true }
     end
 
+    def place_ioc_limit(side:, segment:, security_id:, qty:, price:, meta: {})
+      # Paper mode: IOC always fills at the given price
+      {
+        success: true,
+        order_id: "PAPER-IOC-#{SecureRandom.hex(3)}",
+        paper: true,
+        status: :accepted,
+        fill_price: price.to_f
+      }
+    rescue StandardError => e
+      Rails.logger.error("[GatewayPaper] place_ioc_limit failed for #{segment}-#{security_id}: #{e.class} - #{e.message}")
+      { success: false, error: e.message, paper: true }
+    end
+
     # Returns unified shape: { cash:, equity:, mtm:, exposure:, utilized:, margin: }
     # cash = free balance (like broker available); utilized/exposure = premium tied in open legs.
     def wallet_snapshot
-      return Ledger::WalletReader.snapshot(mode: :paper) if ledger_wallet_enabled?
+      if ledger_wallet_enabled?
+        ledger = Ledger::WalletReader.snapshot(mode: :paper)
+        return ledger if ledger[:utilized] >= 0
+
+        Rails.logger.warn("[GatewayPaper] ledger wallet state invalid (utilized=#{ledger[:utilized]}), falling back to legacy")
+      end
 
       legacy_wallet_snapshot
     rescue StandardError => e
@@ -59,7 +80,7 @@ module Orders
       exposure = utilized
       equity = (cash + utilized + mtm).round(2)
 
-      { cash: cash, equity: equity, mtm: mtm, exposure: exposure, utilized: utilized, margin: 0, source: 'legacy' }
+      { cash: cash, equity: equity, mtm: mtm, exposure: exposure, utilized: utilized, margin: 0, source: "legacy" }
     end
 
     def cancel_order(order_id)
@@ -74,8 +95,8 @@ module Orders
       tracker = PositionTracker.paper.active.find_by(segment: segment, security_id: security_id.to_s)
       return nil unless tracker
 
-      is_long = tracker.side.to_s.upcase.start_with?('LONG') || tracker.side.to_s.upcase == 'BUY'
-      position_type = is_long ? 'LONG' : 'SHORT'
+      is_long = tracker.side.to_s.upcase.start_with?("LONG") || tracker.side.to_s.upcase == "BUY"
+      position_type = is_long ? "LONG" : "SHORT"
       ltp = Live::TickQuery.for_security(segment: segment, security_id: security_id.to_s)&.ltp
       upnl = BigDecimal((tracker.current_pnl_rupees || 0).to_s)
 
@@ -95,6 +116,27 @@ module Orders
 
     private
 
+    # Uses the guard-validated LTP (meta[:ltp]) as the primary fill price in paper
+    # mode.  Falls back to tick bid/ask only when meta[:ltp] is unavailable AND the
+    # tick data is provably fresh (so we don't accidentally fill at stale prices).
+    def resolve_fill_price(side, segment, security_id, meta)
+      return meta[:ltp].to_f if meta[:ltp].to_f.positive?
+
+      tick = Live::TickQuery.for_security(segment: segment, security_id: security_id.to_s)
+      if tick&.bid.to_f.positive? && tick&.ask.to_f.positive? && tick_fresh?(tick)
+        return side.to_s.downcase == 'buy' ? tick.ask.to_f : tick.bid.to_f
+      end
+
+      (meta[:price] || 0).to_f
+    end
+
+    def tick_fresh?(tick, max_age_seconds: 2.0)
+      age = Time.current - tick.timestamp
+      age.between?(0, max_age_seconds)
+    rescue StandardError
+      false
+    end
+
     def paper_trading_config
       AlgoConfig.fetch[:paper_trading] || {}
     end
@@ -102,13 +144,13 @@ module Orders
     def paper_realized_rupees(cfg)
       scope = cfg[:realized_scope].to_s.strip.downcase
       rel = PositionTracker.exited_paper
-      rel = rel.where(exited_at: Time.zone.today.all_day) if scope == 'daily'
+      rel = rel.where(exited_at: Time.zone.today.all_day) if scope == "daily"
 
       rel.sum(:last_pnl_rupees).to_f
     end
 
     def deployed_premium_rupees
-      sql = 'ABS(COALESCE(entry_price, 0) * COALESCE(quantity, 0))'
+      sql = "ABS(COALESCE(entry_price, 0) * COALESCE(quantity, 0))"
       PositionTracker.paper.active.sum(Arel.sql(sql)).to_f
     end
 

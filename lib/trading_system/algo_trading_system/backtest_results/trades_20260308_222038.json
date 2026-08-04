@@ -1,0 +1,80 @@
+[
+  {
+    "symbol": "ATM_CALL",
+    "entry_price": 555.0,
+    "exit_price": 546.675,
+    "quantity": 45,
+    "entry_time": 1772439300,
+    "exit_time": 1772442300,
+    "pnl": -399.41,
+    "pnl_pct": -1.6,
+    "status": "LOSS",
+    "reason": "STOP_LOSS",
+    "strike": "ATM_CALL"
+  },
+  {
+    "symbol": "ATM_CALL",
+    "entry_price": 649.9,
+    "exit_price": 640.1514999999999,
+    "quantity": 38,
+    "entry_time": 1772607000,
+    "exit_time": 1772608080,
+    "pnl": -394.95,
+    "pnl_pct": -1.6,
+    "status": "LOSS",
+    "reason": "STOP_LOSS",
+    "strike": "ATM_CALL"
+  },
+  {
+    "symbol": "ATM+1_CALL",
+    "entry_price": 538.3,
+    "exit_price": 530.2254999999999,
+    "quantity": 46,
+    "entry_time": 1772439300,
+    "exit_time": 1772440380,
+    "pnl": -396.0,
+    "pnl_pct": -1.6,
+    "status": "LOSS",
+    "reason": "STOP_LOSS",
+    "strike": "ATM+1_CALL"
+  },
+  {
+    "symbol": "ATM+1_CALL",
+    "entry_price": 624.8,
+    "exit_price": 615.428,
+    "quantity": 39,
+    "entry_time": 1772607000,
+    "exit_time": 1772607180,
+    "pnl": -389.69,
+    "pnl_pct": -1.6,
+    "status": "LOSS",
+    "reason": "STOP_LOSS",
+    "strike": "ATM+1_CALL"
+  },
+  {
+    "symbol": "ATM+1_CALL",
+    "entry_price": 610.8,
+    "exit_price": 601.6379999999999,
+    "quantity": 40,
+    "entry_time": 1772607300,
+    "exit_time": 1772609400,
+    "pnl": -390.73,
+    "pnl_pct": -1.6,
+    "status": "LOSS",
+    "reason": "STOP_LOSS",
+    "strike": "ATM+1_CALL"
+  },
+  {
+    "symbol": "ATM-1_CALL",
+    "entry_price": 625.4,
+    "exit_price": 616.019,
+    "quantity": 39,
+    "entry_time": 1772439300,
+    "exit_time": 1772439900,
+    "pnl": -390.07,
+    "pnl_pct": -1.6,
+    "status": "LOSS",
+    "reason": "STOP_LOSS",
+    "strike": "ATM-1_CALL"
+  }
+]

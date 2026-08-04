@@ -1,0 +1,268 @@
+# frozen_string_literal: true
+
+# Configuration for RubyLLM::Agents
+#
+# For more information, see: https://github.com/adham90/ruby_llm-agents
+
+RubyLLM::Agents.configure do |config|
+  # ============================================
+  # Quick Start — set ONE API key to get going
+  # ============================================
+  # Only Ollama is wired up. Do NOT point openai_api_key/openrouter_api_key at the
+  # Ollama endpoint — any agent that resolves to those providers would misauthenticate
+  # against the wrong host. Set real keys here if/when another provider is added.
+
+  # Determine base url and cloud status:
+  base_url = ENV["OLLAMA_BASE_URL"] || "http://localhost:11434"
+  is_cloud = base_url.start_with?("https://ollama.com")
+  if is_cloud && !base_url.end_with?("/v1")
+    base_url = File.join(base_url, "v1")
+  end
+  RubyLLM.config.ollama_api_base = base_url
+  RubyLLM.config.ollama_api_key = ENV["OLLAMA_API_KEY"]
+
+  # Register Ollama models dynamically
+  ollama_models = ["minimax-m2.5", "llama3.2:3b", "gpt-oss:20b", "gpt-oss:120b"]
+  ollama_models.each do |model_id|
+    unless RubyLLM.models.all.any? { |m| m.id == model_id }
+      RubyLLM.models.all << RubyLLM::Model::Info.new({
+        id: model_id,
+        name: model_id,
+        provider: "ollama",
+        capabilities: ["streaming"]
+      })
+    end
+  end
+
+  # Map default model
+  env_model = ENV["OLLAMA_MODEL"] || "llama3.2:3b"
+  resolved_model = if is_cloud && env_model == "llama3.2:3b"
+                     "minimax-m2.5"
+                   else
+                     env_model
+                   end
+
+  # Default LLM model for all agents (can be overridden per agent with `model "model-name"`)
+  config.default_model = resolved_model
+
+  # Default temperature (0.0 = deterministic, 2.0 = creative)
+  # config.default_temperature = 0.0
+
+  # Default timeout in seconds for each LLM request
+  # config.default_timeout = 60
+
+  # Enable streaming by default for all agents
+  # When enabled, agents stream responses and track time-to-first-token
+  # config.default_streaming = false
+
+  # ============================================
+  # Additional Providers (uncomment as needed)
+  # ============================================
+
+  # config.deepseek_api_key = ENV["DEEPSEEK_API_KEY"]
+  # config.openrouter_api_key = ENV["OPENROUTER_API_KEY"]
+  # config.mistral_api_key = ENV["MISTRAL_API_KEY"]
+  # config.xai_api_key = ENV["XAI_API_KEY"]
+
+
+
+  # Connection settings:
+  # config.request_timeout = 120
+  # config.max_retries = 3
+
+  # ============================================
+  # Caching
+  # ============================================
+
+  # Cache store for agent response caching (defaults to Rails.cache)
+  # config.cache_store = Rails.cache
+  # config.cache_store = ActiveSupport::Cache::MemoryStore.new
+
+  # ============================================
+  # Execution Logging
+  # ============================================
+
+  # Async logging via background job (recommended for production)
+  # Set to false to log synchronously (useful for debugging)
+  # config.async_logging = true
+
+  # Number of retry attempts for the async logging job on failure
+  # config.job_retry_attempts = 3
+
+  # ============================================
+  # Data Retention
+  # ============================================
+  #
+  # Two-tier purge of execution records. Run the retention job on a schedule
+  # (e.g. daily via cron, sidekiq-cron, or the `whenever` gem):
+  #
+  #   RubyLLM::Agents::RetentionJob.perform_later
+  #   # or: rake ruby_llm_agents:purge
+  #
+  # Soft purge: deletes prompts, responses, tool calls, attempts, and other
+  # large payloads in execution_details and tool_executions. The executions
+  # row is preserved so cost, token, and latency analytics stay intact. A
+  # truncated copy of error_message is kept in executions.metadata.
+  #
+  # Hard purge: deletes the executions row entirely (cascades remove any
+  # remaining dependents). Use a longer window — this removes the execution
+  # from analytics.
+  #
+  # Set either to nil to disable that tier. soft_purge_after must be less
+  # than hard_purge_after when both are set.
+  #
+  # config.soft_purge_after = 30.days
+  # config.hard_purge_after = 365.days
+
+  # Deprecated: retention_period is an alias for hard_purge_after. Prefer the
+  # two-tier settings above.
+  # config.retention_period = 30.days
+
+  # ============================================
+  # Anomaly Detection
+  # ============================================
+
+  # Executions exceeding these thresholds are logged as warnings
+  # config.anomaly_cost_threshold = 5.00        # dollars
+  # config.anomaly_duration_threshold = 10_000  # milliseconds
+
+  # ============================================
+  # Dashboard Authentication
+  # ============================================
+
+  # Option 1: HTTP Basic Auth (simple username/password protection)
+  # Both username and password must be set to enable Basic Auth
+  config.basic_auth_username = ENV["AGENTS_DASHBOARD_USER"]
+  config.basic_auth_password = ENV["AGENTS_DASHBOARD_PASSWORD"]
+
+  # Option 2: Custom authentication (advanced)
+  # Return true to allow access, false to deny
+  # Note: If basic_auth is set, it takes precedence over dashboard_auth
+  # config.dashboard_auth = ->(controller) { controller.current_user&.admin? }
+
+  # Parent controller for dashboard (for authentication/layout inheritance)
+  # config.dashboard_parent_controller = "ApplicationController"
+  # config.dashboard_parent_controller = "AdminController"
+
+  # ============================================
+  # Dashboard Display
+  # ============================================
+
+  # Number of records per page in dashboard listings
+  # config.per_page = 25
+
+  # Number of recent executions shown on the dashboard home
+  # config.recent_executions_limit = 10
+
+  # ============================================
+  # Reliability Defaults
+  # ============================================
+  # These defaults apply to all agents unless overridden per-agent
+
+  # Default retry configuration
+  # - max: Maximum retry attempts (0 = disabled)
+  # - backoff: Strategy (:constant or :exponential)
+  # - base: Base delay in seconds
+  # - max_delay: Maximum delay between retries
+  # - on: Additional error classes to retry on (extends defaults)
+  # config.default_retries = {
+  #   max: 2,
+  #   backoff: :exponential,
+  #   base: 0.4,
+  #   max_delay: 3.0,
+  #   on: []
+  # }
+
+  # Default fallback models (tried in order when primary model fails)
+  # config.default_fallback_models = ["gpt-4o-mini", "claude-3-haiku"]
+
+  # Default total timeout across all retry/fallback attempts (nil = no limit)
+  # config.default_total_timeout = 30
+
+  # ============================================
+  # Governance - Budget Tracking
+  # ============================================
+
+  # Budget limits for cost governance
+  # - global_daily/global_monthly: Limits across all agents
+  # - per_agent_daily/per_agent_monthly: Per-agent limits (Hash of agent name => limit)
+  # - enforcement: :none (disabled), :soft (warn only), :hard (block requests)
+  # config.budgets = {
+  #   global_daily: 25.0,
+  #   global_monthly: 500.0,
+  #   per_agent_daily: {
+  #     "ContentGeneratorAgent" => 10.0,
+  #     "SummaryAgent" => 5.0
+  #   },
+  #   per_agent_monthly: {
+  #     "ContentGeneratorAgent" => 200.0
+  #   },
+  #   enforcement: :soft
+  # }
+
+  # ============================================
+  # Governance - Alerts
+  # ============================================
+
+  # Alert handler for governance events
+  # Receives (event, payload) when important events occur:
+  #   - :budget_soft_cap - Soft budget limit reached
+  #   - :budget_hard_cap - Hard budget limit exceeded
+  #   - :breaker_open - Circuit breaker opened
+  #   - :agent_anomaly - Cost/duration anomaly detected
+  # config.on_alert = ->(event, payload) {
+  #   case event
+  #   when :budget_hard_cap
+  #     Slack::Notifier.new(ENV["SLACK_WEBHOOK"]).ping("Budget exceeded: #{payload[:total_cost]}")
+  #   when :breaker_open
+  #     Rails.logger.error("[Alert] Circuit breaker opened for #{payload[:agent_type]}")
+  #   end
+  # }
+
+  # ============================================
+  # Governance - Data Handling
+  # ============================================
+
+  # Whether to persist prompts in execution records
+  # Set to false to reduce storage or for privacy compliance
+  # config.persist_prompts = true
+
+  # Whether to persist LLM responses in execution records
+  # config.persist_responses = true
+
+  # Default retry configuration — Ollama calls can time out under load; without
+  # this a single slow request kills the whole TradingOrchestrator pipeline run.
+  config.default_retries = {
+    max: 2,
+    backoff: :exponential,
+    base: 0.5,
+    max_delay: 5.0,
+    on: [Timeout::Error]
+  }
+end
+
+# Eager-load agent/tool classes at boot. With config.eager_load = false (dev),
+# Solid Queue's multi-threaded worker races on the first Zeitwerk autoload of a
+# bare `MarketAnalystAgent`-style constant from inside `module Agents`, raising
+# a spurious "uninitialized constant" — seen repeatedly in today's trading log.
+Rails.application.config.after_initialize do
+  unless Rails.application.config.eager_load
+    Rails.autoloaders.main.eager_load_dir(Rails.root.join("app/agents"))
+    Rails.autoloaders.main.eager_load_dir(Rails.root.join("app/tools"))
+  end
+end
+
+# Monkey patch Ollama provider to use global config for ollama_api_key
+module RubyLLM
+  module Providers
+    class Ollama < OpenAI
+      def headers
+        key = RubyLLM.config.ollama_api_key
+        return {} unless key
+
+        { 'Authorization' => "Bearer #{key}" }
+      end
+    end
+  end
+end
+

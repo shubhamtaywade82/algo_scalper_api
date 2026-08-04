@@ -1,0 +1,2977 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Options Backtest Report - 20260308_230011</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background: #f5f5f5; color: #333; }
+    .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; margin-bottom: 20px; }
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 25px 0; }
+    .metric { background: #fff; padding: 20px; border: 1px solid #e0e0e0; border-left: 5px solid #3498db; border-radius: 8px; transition: transform 0.2s; }
+    .metric:hover { transform: translateY(-2px); }
+    .metric-label { font-size: 13px; color: #7f8c8d; text-transform: uppercase; letter-spacing: 1px; }
+    .metric-value { font-size: 26px; font-weight: bold; color: #2c3e50; margin-top: 8px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 30px; }
+    th { background: #3498db; color: white; padding: 15px; text-align: left; font-weight: 600; }
+    td { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; }
+    tr:hover { background: #f9fbff; }
+    .win { color: #27ae60; font-weight: bold; }
+    .loss { color: #e74c3c; font-weight: bold; }
+    .summary { background: #ebf5fb; padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #d6eaf8; line-height: 1.6; }
+    .summary strong { color: #2980b9; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📊 Options Backtest Report</h1>
+    
+    <div class="summary">
+      <strong>Underlying:</strong> NIFTY |
+      <strong>Strategy:</strong> BOLLINGER_BREAKOUT |
+      <strong>Period:</strong> 2025-05-08 to 2025-06-07 |
+      <strong>Capital:</strong> ₹1000000
+    </div>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">Total Trades</div>
+        <div class="metric-value">264</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Total P&L</div>
+        <div class="metric-value">₹155507.29</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Return %</div>
+        <div class="metric-value">15.55%</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Strikes</div>
+        <div class="metric-value">3</div>
+      </div>
+    </div>
+
+    <h2>Trade Details</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Strike</th>
+          <th>Entry Time</th>
+          <th>Exit Time</th>
+          <th>Entry Price</th>
+          <th>Exit Price</th>
+          <th>Quantity</th>
+          <th>P&L</th>
+          <th>Return %</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-09 11:30:00</td>
+  <td>2025-05-09 11:31:00</td>
+  <td>₹240.0</td>
+  <td>₹236.4</td>
+  <td>104</td>
+  <td class="loss">₹-399.17</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-09 11:35:00</td>
+  <td>2025-05-09 11:36:00</td>
+  <td>₹244.0</td>
+  <td>₹240.34</td>
+  <td>102</td>
+  <td class="loss">₹-398.02</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-12 09:15:00</td>
+  <td>2025-05-12 09:20:00</td>
+  <td>₹128.0</td>
+  <td>₹126.08</td>
+  <td>195</td>
+  <td class="loss">₹-399.17</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-12 09:25:00</td>
+  <td>2025-05-12 09:26:00</td>
+  <td>₹141.3</td>
+  <td>₹139.18</td>
+  <td>176</td>
+  <td class="loss">₹-397.71</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-12 09:30:00</td>
+  <td>2025-05-12 09:31:00</td>
+  <td>₹136.55</td>
+  <td>₹134.5</td>
+  <td>182</td>
+  <td class="loss">₹-397.45</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-12 09:35:00</td>
+  <td>2025-05-12 09:36:00</td>
+  <td>₹162.85</td>
+  <td>₹160.41</td>
+  <td>153</td>
+  <td class="loss">₹-398.47</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-12 11:30:00</td>
+  <td>2025-05-12 11:49:00</td>
+  <td>₹177.55</td>
+  <td>₹174.89</td>
+  <td>140</td>
+  <td class="loss">₹-397.53</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-12 12:35:00</td>
+  <td>2025-05-12 12:36:00</td>
+  <td>₹199.85</td>
+  <td>₹196.85</td>
+  <td>124</td>
+  <td class="loss">₹-396.32</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-12 12:40:00</td>
+  <td>2025-05-12 12:41:00</td>
+  <td>₹212.55</td>
+  <td>₹209.36</td>
+  <td>117</td>
+  <td class="loss">₹-397.71</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-12 12:45:00</td>
+  <td>2025-05-12 12:46:00</td>
+  <td>₹196.8</td>
+  <td>₹193.85</td>
+  <td>126</td>
+  <td class="loss">₹-396.56</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-12 14:20:00</td>
+  <td>2025-05-12 14:23:00</td>
+  <td>₹221.15</td>
+  <td>₹217.83</td>
+  <td>112</td>
+  <td class="loss">₹-396.12</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-12 15:00:00</td>
+  <td>2025-05-12 15:01:00</td>
+  <td>₹239.1</td>
+  <td>₹235.51</td>
+  <td>104</td>
+  <td class="loss">₹-397.68</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-12 15:20:00</td>
+  <td>2025-05-12 15:21:00</td>
+  <td>₹207.45</td>
+  <td>₹204.34</td>
+  <td>119</td>
+  <td class="loss">₹-394.8</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-14 09:20:00</td>
+  <td>2025-05-14 09:21:00</td>
+  <td>₹94.95</td>
+  <td>₹113.94</td>
+  <td>261</td>
+  <td class="win">₹4929.13</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-14 09:25:00</td>
+  <td>2025-05-14 09:28:00</td>
+  <td>₹115.95</td>
+  <td>₹114.21</td>
+  <td>215</td>
+  <td class="loss">₹-398.68</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-14 09:30:00</td>
+  <td>2025-05-14 09:31:00</td>
+  <td>₹120.9</td>
+  <td>₹119.09</td>
+  <td>206</td>
+  <td class="loss">₹-398.3</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-14 09:45:00</td>
+  <td>2025-05-14 09:46:00</td>
+  <td>₹102.8</td>
+  <td>₹101.26</td>
+  <td>242</td>
+  <td class="loss">₹-397.86</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-14 15:05:00</td>
+  <td>2025-05-14 15:11:00</td>
+  <td>₹83.55</td>
+  <td>₹82.3</td>
+  <td>298</td>
+  <td class="loss">₹-398.18</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-15 10:40:00</td>
+  <td>2025-05-15 10:42:00</td>
+  <td>₹109.5</td>
+  <td>₹107.86</td>
+  <td>227</td>
+  <td class="loss">₹-397.52</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-15 10:45:00</td>
+  <td>2025-05-15 10:46:00</td>
+  <td>₹104.35</td>
+  <td>₹102.78</td>
+  <td>239</td>
+  <td class="loss">₹-398.85</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-15 11:00:00</td>
+  <td>2025-05-15 11:01:00</td>
+  <td>₹127.3</td>
+  <td>₹125.39</td>
+  <td>195</td>
+  <td class="loss">₹-396.99</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-15 13:05:00</td>
+  <td>2025-05-15 13:06:00</td>
+  <td>₹85.95</td>
+  <td>₹103.14</td>
+  <td>289</td>
+  <td class="win">₹4940.59</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-15 13:10:00</td>
+  <td>2025-05-15 13:11:00</td>
+  <td>₹74.7</td>
+  <td>₹89.64</td>
+  <td>335</td>
+  <td class="win">₹4977.37</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-15 13:15:00</td>
+  <td>2025-05-15 13:16:00</td>
+  <td>₹79.35</td>
+  <td>₹95.22</td>
+  <td>317</td>
+  <td class="win">₹5003.12</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-15 13:20:00</td>
+  <td>2025-05-15 13:21:00</td>
+  <td>₹103.1</td>
+  <td>₹101.55</td>
+  <td>245</td>
+  <td class="loss">₹-403.96</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-15 13:25:00</td>
+  <td>2025-05-15 13:26:00</td>
+  <td>₹107.2</td>
+  <td>₹105.59</td>
+  <td>235</td>
+  <td class="loss">₹-402.88</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-15 13:35:00</td>
+  <td>2025-05-15 13:36:00</td>
+  <td>₹86.1</td>
+  <td>₹84.81</td>
+  <td>293</td>
+  <td class="loss">₹-403.45</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-16 13:30:00</td>
+  <td>2025-05-16 13:31:00</td>
+  <td>₹200.6</td>
+  <td>₹197.59</td>
+  <td>125</td>
+  <td class="loss">₹-401.01</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-16 15:10:00</td>
+  <td>2025-05-19 09:15:00</td>
+  <td>₹171.65</td>
+  <td>₹169.08</td>
+  <td>147</td>
+  <td class="loss">₹-403.53</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-19 09:25:00</td>
+  <td>2025-05-19 09:30:00</td>
+  <td>₹171.05</td>
+  <td>₹168.48</td>
+  <td>147</td>
+  <td class="loss">₹-402.12</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-20 09:20:00</td>
+  <td>2025-05-20 09:21:00</td>
+  <td>₹150.55</td>
+  <td>₹148.29</td>
+  <td>167</td>
+  <td class="loss">₹-402.08</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-21 09:35:00</td>
+  <td>2025-05-21 09:36:00</td>
+  <td>₹138.9</td>
+  <td>₹136.82</td>
+  <td>181</td>
+  <td class="loss">₹-402.07</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-21 09:40:00</td>
+  <td>2025-05-21 09:41:00</td>
+  <td>₹128.45</td>
+  <td>₹126.52</td>
+  <td>196</td>
+  <td class="loss">₹-402.63</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-21 09:45:00</td>
+  <td>2025-05-21 09:46:00</td>
+  <td>₹125.85</td>
+  <td>₹123.96</td>
+  <td>200</td>
+  <td class="loss">₹-402.53</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-21 09:50:00</td>
+  <td>2025-05-21 09:51:00</td>
+  <td>₹122.45</td>
+  <td>₹146.94</td>
+  <td>205</td>
+  <td class="win">₹4992.84</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-21 09:55:00</td>
+  <td>2025-05-21 09:56:00</td>
+  <td>₹130.55</td>
+  <td>₹128.59</td>
+  <td>193</td>
+  <td class="loss">₹-402.95</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-22 15:00:00</td>
+  <td>2025-05-22 15:01:00</td>
+  <td>₹26.8</td>
+  <td>₹26.4</td>
+  <td>944</td>
+  <td class="loss">₹-404.6</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-22 15:10:00</td>
+  <td>2025-05-22 15:11:00</td>
+  <td>₹14.3</td>
+  <td>₹14.09</td>
+  <td>1769</td>
+  <td class="loss">₹-404.56</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-23 09:25:00</td>
+  <td>2025-05-23 09:26:00</td>
+  <td>₹212.0</td>
+  <td>₹208.82</td>
+  <td>119</td>
+  <td class="loss">₹-403.46</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-23 09:35:00</td>
+  <td>2025-05-23 09:43:00</td>
+  <td>₹209.25</td>
+  <td>₹206.11</td>
+  <td>120</td>
+  <td class="loss">₹-401.57</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-23 11:00:00</td>
+  <td>2025-05-23 11:01:00</td>
+  <td>₹238.55</td>
+  <td>₹234.97</td>
+  <td>105</td>
+  <td class="loss">₹-400.58</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-26 09:20:00</td>
+  <td>2025-05-26 09:23:00</td>
+  <td>₹196.9</td>
+  <td>₹236.28</td>
+  <td>128</td>
+  <td class="win">₹5012.92</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-26 09:25:00</td>
+  <td>2025-05-26 09:26:00</td>
+  <td>₹228.0</td>
+  <td>₹224.58</td>
+  <td>111</td>
+  <td class="loss">₹-404.74</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-26 09:30:00</td>
+  <td>2025-05-26 09:32:00</td>
+  <td>₹219.0</td>
+  <td>₹215.72</td>
+  <td>115</td>
+  <td class="loss">₹-402.77</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-26 09:35:00</td>
+  <td>2025-05-26 09:36:00</td>
+  <td>₹223.65</td>
+  <td>₹220.3</td>
+  <td>113</td>
+  <td class="loss">₹-404.17</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-27 11:05:00</td>
+  <td>2025-05-27 11:07:00</td>
+  <td>₹209.45</td>
+  <td>₹206.31</td>
+  <td>121</td>
+  <td class="loss">₹-405.31</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-27 11:10:00</td>
+  <td>2025-05-27 11:11:00</td>
+  <td>₹231.4</td>
+  <td>₹227.93</td>
+  <td>109</td>
+  <td class="loss">₹-403.37</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-27 11:15:00</td>
+  <td>2025-05-27 11:18:00</td>
+  <td>₹214.95</td>
+  <td>₹211.73</td>
+  <td>117</td>
+  <td class="loss">₹-402.2</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-27 11:20:00</td>
+  <td>2025-05-27 11:21:00</td>
+  <td>₹237.45</td>
+  <td>₹233.89</td>
+  <td>106</td>
+  <td class="loss">₹-402.53</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-27 11:25:00</td>
+  <td>2025-05-27 11:27:00</td>
+  <td>₹200.0</td>
+  <td>₹240.0</td>
+  <td>126</td>
+  <td class="win">₹5012.28</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-27 11:30:00</td>
+  <td>2025-05-27 11:32:00</td>
+  <td>₹226.4</td>
+  <td>₹271.68</td>
+  <td>112</td>
+  <td class="win">₹5043.47</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-27 11:35:00</td>
+  <td>2025-05-27 11:36:00</td>
+  <td>₹258.85</td>
+  <td>₹254.97</td>
+  <td>98</td>
+  <td class="loss">₹-405.69</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-28 12:50:00</td>
+  <td>2025-05-28 12:51:00</td>
+  <td>₹155.0</td>
+  <td>₹152.68</td>
+  <td>164</td>
+  <td class="loss">₹-406.53</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-28 12:55:00</td>
+  <td>2025-05-28 12:56:00</td>
+  <td>₹160.5</td>
+  <td>₹158.09</td>
+  <td>159</td>
+  <td class="loss">₹-408.12</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-29 09:20:00</td>
+  <td>2025-05-29 09:21:00</td>
+  <td>₹62.15</td>
+  <td>₹74.58</td>
+  <td>410</td>
+  <td class="win">₹5068.27</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-29 13:00:00</td>
+  <td>2025-05-29 13:01:00</td>
+  <td>₹52.15</td>
+  <td>₹51.37</td>
+  <td>492</td>
+  <td class="loss">₹-410.33</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-29 15:05:00</td>
+  <td>2025-05-29 15:06:00</td>
+  <td>₹6.55</td>
+  <td>₹7.86</td>
+  <td>3916</td>
+  <td class="win">₹5101.75</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-29 15:10:00</td>
+  <td>2025-05-29 15:11:00</td>
+  <td>₹2.0</td>
+  <td>₹1.97</td>
+  <td>12890</td>
+  <td class="loss">₹-412.29</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-29 15:15:00</td>
+  <td>2025-05-29 15:16:00</td>
+  <td>₹3.15</td>
+  <td>₹3.1</td>
+  <td>8181</td>
+  <td class="loss">₹-412.13</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-29 15:20:00</td>
+  <td>2025-05-29 15:21:00</td>
+  <td>₹1.0</td>
+  <td>₹0.99</td>
+  <td>25760</td>
+  <td class="loss">₹-411.97</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-29 15:25:00</td>
+  <td>2025-05-29 15:26:00</td>
+  <td>₹0.2</td>
+  <td>₹0.2</td>
+  <td>128749</td>
+  <td class="loss">₹-411.8</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-30 09:15:00</td>
+  <td>2025-05-30 09:16:00</td>
+  <td>₹243.55</td>
+  <td>₹239.9</td>
+  <td>105</td>
+  <td class="loss">₹-408.97</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-30 13:35:00</td>
+  <td>2025-05-30 13:38:00</td>
+  <td>₹235.95</td>
+  <td>₹232.41</td>
+  <td>109</td>
+  <td class="loss">₹-411.3</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-05-30 14:00:00</td>
+  <td>2025-05-30 14:04:00</td>
+  <td>₹219.0</td>
+  <td>₹215.72</td>
+  <td>117</td>
+  <td class="loss">₹-409.78</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-02 12:05:00</td>
+  <td>2025-06-02 12:15:00</td>
+  <td>₹237.6</td>
+  <td>₹234.04</td>
+  <td>108</td>
+  <td class="loss">₹-410.38</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-02 12:20:00</td>
+  <td>2025-06-02 12:30:00</td>
+  <td>₹227.75</td>
+  <td>₹224.33</td>
+  <td>112</td>
+  <td class="loss">₹-407.94</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-02 12:35:00</td>
+  <td>2025-06-02 12:59:00</td>
+  <td>₹231.1</td>
+  <td>₹227.63</td>
+  <td>111</td>
+  <td class="loss">₹-410.24</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-03 10:25:00</td>
+  <td>2025-06-03 10:27:00</td>
+  <td>₹231.5</td>
+  <td>₹228.03</td>
+  <td>110</td>
+  <td class="loss">₹-407.25</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-04 12:15:00</td>
+  <td>2025-06-04 12:16:00</td>
+  <td>₹89.0</td>
+  <td>₹87.67</td>
+  <td>288</td>
+  <td class="loss">₹-409.92</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-04 13:05:00</td>
+  <td>2025-06-04 13:08:00</td>
+  <td>₹91.0</td>
+  <td>₹89.64</td>
+  <td>281</td>
+  <td class="loss">₹-408.94</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-04 13:55:00</td>
+  <td>2025-06-04 14:02:00</td>
+  <td>₹90.05</td>
+  <td>₹88.7</td>
+  <td>284</td>
+  <td class="loss">₹-409.0</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-04 14:10:00</td>
+  <td>2025-06-04 14:11:00</td>
+  <td>₹75.7</td>
+  <td>₹90.84</td>
+  <td>338</td>
+  <td class="win">₹5089.17</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-04 15:05:00</td>
+  <td>2025-06-04 15:06:00</td>
+  <td>₹73.35</td>
+  <td>₹72.25</td>
+  <td>351</td>
+  <td class="loss">₹-411.74</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-05 09:25:00</td>
+  <td>2025-06-05 09:26:00</td>
+  <td>₹36.35</td>
+  <td>₹43.62</td>
+  <td>708</td>
+  <td class="win">₹5118.85</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-05 09:30:00</td>
+  <td>2025-06-05 09:31:00</td>
+  <td>₹75.25</td>
+  <td>₹74.12</td>
+  <td>343</td>
+  <td class="loss">₹-412.78</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-05 09:35:00</td>
+  <td>2025-06-05 09:36:00</td>
+  <td>₹61.6</td>
+  <td>₹60.68</td>
+  <td>419</td>
+  <td class="loss">₹-412.77</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-05 09:40:00</td>
+  <td>2025-06-05 09:41:00</td>
+  <td>₹54.65</td>
+  <td>₹53.83</td>
+  <td>473</td>
+  <td class="loss">₹-413.4</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-05 09:45:00</td>
+  <td>2025-06-05 09:46:00</td>
+  <td>₹50.1</td>
+  <td>₹49.35</td>
+  <td>515</td>
+  <td class="loss">₹-412.63</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-05 12:05:00</td>
+  <td>2025-06-05 12:06:00</td>
+  <td>₹68.9</td>
+  <td>₹82.68</td>
+  <td>375</td>
+  <td class="win">₹5139.08</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-05 12:10:00</td>
+  <td>2025-06-05 12:11:00</td>
+  <td>₹76.5</td>
+  <td>₹75.35</td>
+  <td>339</td>
+  <td class="loss">₹-414.74</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-05 12:15:00</td>
+  <td>2025-06-05 12:16:00</td>
+  <td>₹71.05</td>
+  <td>₹69.98</td>
+  <td>365</td>
+  <td class="loss">₹-414.74</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-05 12:20:00</td>
+  <td>2025-06-05 12:21:00</td>
+  <td>₹71.8</td>
+  <td>₹70.72</td>
+  <td>361</td>
+  <td class="loss">₹-414.52</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-06 10:30:00</td>
+  <td>2025-06-06 10:38:00</td>
+  <td>₹174.15</td>
+  <td>₹171.54</td>
+  <td>148</td>
+  <td class="loss">₹-412.19</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-06 10:40:00</td>
+  <td>2025-06-06 10:42:00</td>
+  <td>₹178.65</td>
+  <td>₹214.38</td>
+  <td>145</td>
+  <td class="win">₹5152.36</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-06 10:45:00</td>
+  <td>2025-06-06 10:46:00</td>
+  <td>₹212.55</td>
+  <td>₹209.36</td>
+  <td>122</td>
+  <td class="loss">₹-414.7</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-06 10:50:00</td>
+  <td>2025-06-06 10:51:00</td>
+  <td>₹197.35</td>
+  <td>₹194.39</td>
+  <td>131</td>
+  <td class="loss">₹-413.45</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM_CALL</td>
+  <td>2025-06-06 14:20:00</td>
+  <td>2025-06-06 14:35:00</td>
+  <td>₹188.7</td>
+  <td>₹185.87</td>
+  <td>137</td>
+  <td class="loss">₹-413.44</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-09 11:30:00</td>
+  <td>2025-05-09 11:31:00</td>
+  <td>₹212.35</td>
+  <td>₹209.16</td>
+  <td>117</td>
+  <td class="loss">₹-397.33</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-09 11:35:00</td>
+  <td>2025-05-09 11:36:00</td>
+  <td>₹215.45</td>
+  <td>₹212.22</td>
+  <td>115</td>
+  <td class="loss">₹-396.24</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-12 09:15:00</td>
+  <td>2025-05-12 09:17:00</td>
+  <td>₹99.95</td>
+  <td>₹119.94</td>
+  <td>249</td>
+  <td class="win">₹4950.13</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-12 09:20:00</td>
+  <td>2025-05-12 09:22:00</td>
+  <td>₹102.8</td>
+  <td>₹123.36</td>
+  <td>244</td>
+  <td class="win">₹4989.05</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-12 09:25:00</td>
+  <td>2025-05-12 09:26:00</td>
+  <td>₹118.65</td>
+  <td>₹116.87</td>
+  <td>212</td>
+  <td class="loss">₹-402.27</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-12 09:30:00</td>
+  <td>2025-05-12 09:31:00</td>
+  <td>₹115.0</td>
+  <td>₹113.28</td>
+  <td>219</td>
+  <td class="loss">₹-402.77</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-12 09:35:00</td>
+  <td>2025-05-12 09:36:00</td>
+  <td>₹138.0</td>
+  <td>₹135.93</td>
+  <td>182</td>
+  <td class="loss">₹-401.67</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-12 11:30:00</td>
+  <td>2025-05-12 11:49:00</td>
+  <td>₹152.0</td>
+  <td>₹149.72</td>
+  <td>165</td>
+  <td class="loss">₹-401.09</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-12 12:35:00</td>
+  <td>2025-05-12 12:36:00</td>
+  <td>₹174.0</td>
+  <td>₹171.39</td>
+  <td>144</td>
+  <td class="loss">₹-400.71</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-12 12:40:00</td>
+  <td>2025-05-12 12:41:00</td>
+  <td>₹185.45</td>
+  <td>₹182.67</td>
+  <td>135</td>
+  <td class="loss">₹-400.38</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-12 12:45:00</td>
+  <td>2025-05-12 12:46:00</td>
+  <td>₹170.55</td>
+  <td>₹167.99</td>
+  <td>147</td>
+  <td class="loss">₹-400.95</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-12 14:20:00</td>
+  <td>2025-05-12 14:23:00</td>
+  <td>₹195.0</td>
+  <td>₹192.08</td>
+  <td>129</td>
+  <td class="loss">₹-402.29</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-12 15:00:00</td>
+  <td>2025-05-12 15:01:00</td>
+  <td>₹210.4</td>
+  <td>₹207.24</td>
+  <td>119</td>
+  <td class="loss">₹-400.41</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-12 15:20:00</td>
+  <td>2025-05-12 15:21:00</td>
+  <td>₹179.3</td>
+  <td>₹176.61</td>
+  <td>140</td>
+  <td class="loss">₹-401.44</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-14 09:20:00</td>
+  <td>2025-05-14 09:21:00</td>
+  <td>₹75.35</td>
+  <td>₹90.42</td>
+  <td>333</td>
+  <td class="win">₹4990.71</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-14 09:25:00</td>
+  <td>2025-05-14 09:28:00</td>
+  <td>₹94.15</td>
+  <td>₹92.74</td>
+  <td>268</td>
+  <td class="loss">₹-403.53</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-14 09:30:00</td>
+  <td>2025-05-14 09:31:00</td>
+  <td>₹99.15</td>
+  <td>₹97.66</td>
+  <td>254</td>
+  <td class="loss">₹-402.76</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-14 09:45:00</td>
+  <td>2025-05-14 09:46:00</td>
+  <td>₹82.0</td>
+  <td>₹80.77</td>
+  <td>307</td>
+  <td class="loss">₹-402.6</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-14 15:05:00</td>
+  <td>2025-05-14 15:11:00</td>
+  <td>₹64.6</td>
+  <td>₹63.63</td>
+  <td>390</td>
+  <td class="loss">₹-402.92</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-15 10:40:00</td>
+  <td>2025-05-15 10:41:00</td>
+  <td>₹79.6</td>
+  <td>₹95.52</td>
+  <td>316</td>
+  <td class="win">₹5003.05</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-15 10:45:00</td>
+  <td>2025-05-15 10:46:00</td>
+  <td>₹82.65</td>
+  <td>₹81.41</td>
+  <td>306</td>
+  <td class="loss">₹-404.46</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-15 11:00:00</td>
+  <td>2025-05-15 11:01:00</td>
+  <td>₹99.85</td>
+  <td>₹98.35</td>
+  <td>253</td>
+  <td class="loss">₹-404.0</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-15 13:05:00</td>
+  <td>2025-05-15 13:06:00</td>
+  <td>₹63.55</td>
+  <td>₹76.26</td>
+  <td>398</td>
+  <td class="win">₹5030.76</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-15 13:10:00</td>
+  <td>2025-05-15 13:11:00</td>
+  <td>₹49.15</td>
+  <td>₹58.98</td>
+  <td>517</td>
+  <td class="win">₹5054.16</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-15 13:15:00</td>
+  <td>2025-05-15 13:16:00</td>
+  <td>₹52.6</td>
+  <td>₹63.12</td>
+  <td>486</td>
+  <td class="win">₹5084.6</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-15 13:20:00</td>
+  <td>2025-05-15 13:21:00</td>
+  <td>₹69.9</td>
+  <td>₹68.85</td>
+  <td>367</td>
+  <td class="loss">₹-410.26</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-15 13:25:00</td>
+  <td>2025-05-15 13:26:00</td>
+  <td>₹74.15</td>
+  <td>₹73.04</td>
+  <td>346</td>
+  <td class="loss">₹-410.3</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-15 13:35:00</td>
+  <td>2025-05-15 13:36:00</td>
+  <td>₹52.0</td>
+  <td>₹51.22</td>
+  <td>493</td>
+  <td class="loss">₹-409.98</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-16 13:30:00</td>
+  <td>2025-05-16 13:31:00</td>
+  <td>₹173.3</td>
+  <td>₹170.7</td>
+  <td>148</td>
+  <td class="loss">₹-410.18</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-16 15:10:00</td>
+  <td>2025-05-19 09:15:00</td>
+  <td>₹147.65</td>
+  <td>₹145.44</td>
+  <td>173</td>
+  <td class="loss">₹-408.5</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-19 09:25:00</td>
+  <td>2025-05-19 09:30:00</td>
+  <td>₹147.9</td>
+  <td>₹145.68</td>
+  <td>173</td>
+  <td class="loss">₹-409.2</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-20 09:20:00</td>
+  <td>2025-05-20 09:21:00</td>
+  <td>₹125.0</td>
+  <td>₹123.13</td>
+  <td>205</td>
+  <td class="loss">₹-409.81</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-21 09:35:00</td>
+  <td>2025-05-21 09:36:00</td>
+  <td>₹114.05</td>
+  <td>₹112.34</td>
+  <td>224</td>
+  <td class="loss">₹-408.56</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-21 09:40:00</td>
+  <td>2025-05-21 09:41:00</td>
+  <td>₹105.7</td>
+  <td>₹104.11</td>
+  <td>242</td>
+  <td class="loss">₹-409.08</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-21 09:45:00</td>
+  <td>2025-05-21 09:46:00</td>
+  <td>₹103.05</td>
+  <td>₹101.5</td>
+  <td>248</td>
+  <td class="loss">₹-408.71</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-21 09:50:00</td>
+  <td>2025-05-21 09:51:00</td>
+  <td>₹101.15</td>
+  <td>₹121.38</td>
+  <td>253</td>
+  <td class="win">₹5090.04</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-21 09:55:00</td>
+  <td>2025-05-21 09:56:00</td>
+  <td>₹109.0</td>
+  <td>₹107.37</td>
+  <td>235</td>
+  <td class="loss">₹-409.65</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-22 15:00:00</td>
+  <td>2025-05-22 15:01:00</td>
+  <td>₹8.7</td>
+  <td>₹8.57</td>
+  <td>2955</td>
+  <td class="loss">₹-411.14</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-22 15:10:00</td>
+  <td>2025-05-22 15:11:00</td>
+  <td>₹0.95</td>
+  <td>₹0.94</td>
+  <td>27053</td>
+  <td class="loss">₹-411.01</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-23 09:25:00</td>
+  <td>2025-05-23 09:26:00</td>
+  <td>₹187.45</td>
+  <td>₹184.64</td>
+  <td>137</td>
+  <td class="loss">₹-410.7</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-23 09:35:00</td>
+  <td>2025-05-23 09:43:00</td>
+  <td>₹183.75</td>
+  <td>₹180.99</td>
+  <td>139</td>
+  <td class="loss">₹-408.47</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-23 11:00:00</td>
+  <td>2025-05-23 11:01:00</td>
+  <td>₹210.85</td>
+  <td>₹207.69</td>
+  <td>121</td>
+  <td class="loss">₹-408.01</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-26 09:20:00</td>
+  <td>2025-05-26 09:23:00</td>
+  <td>₹172.3</td>
+  <td>₹206.76</td>
+  <td>148</td>
+  <td class="win">₹5072.03</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-26 09:25:00</td>
+  <td>2025-05-26 09:26:00</td>
+  <td>₹200.15</td>
+  <td>₹197.15</td>
+  <td>128</td>
+  <td class="loss">₹-409.72</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-26 09:30:00</td>
+  <td>2025-05-26 09:32:00</td>
+  <td>₹192.4</td>
+  <td>₹189.51</td>
+  <td>133</td>
+  <td class="loss">₹-409.24</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-26 09:35:00</td>
+  <td>2025-05-26 09:36:00</td>
+  <td>₹196.0</td>
+  <td>₹193.06</td>
+  <td>131</td>
+  <td class="loss">₹-410.62</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-27 11:05:00</td>
+  <td>2025-05-27 11:06:00</td>
+  <td>₹178.25</td>
+  <td>₹213.9</td>
+  <td>144</td>
+  <td class="win">₹5105.37</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-27 11:10:00</td>
+  <td>2025-05-27 11:11:00</td>
+  <td>₹206.95</td>
+  <td>₹203.85</td>
+  <td>125</td>
+  <td class="loss">₹-413.71</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-27 11:15:00</td>
+  <td>2025-05-27 11:18:00</td>
+  <td>₹189.9</td>
+  <td>₹187.05</td>
+  <td>136</td>
+  <td class="loss">₹-413.03</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-27 11:20:00</td>
+  <td>2025-05-27 11:21:00</td>
+  <td>₹211.35</td>
+  <td>₹208.18</td>
+  <td>122</td>
+  <td class="loss">₹-412.36</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-27 11:25:00</td>
+  <td>2025-05-27 11:27:00</td>
+  <td>₹175.35</td>
+  <td>₹210.42</td>
+  <td>147</td>
+  <td class="win">₹5126.94</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-27 11:30:00</td>
+  <td>2025-05-27 11:32:00</td>
+  <td>₹200.8</td>
+  <td>₹240.96</td>
+  <td>129</td>
+  <td class="win">₹5152.15</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-27 11:35:00</td>
+  <td>2025-05-27 11:36:00</td>
+  <td>₹231.7</td>
+  <td>₹228.22</td>
+  <td>112</td>
+  <td class="loss">₹-415.01</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-28 12:50:00</td>
+  <td>2025-05-28 12:51:00</td>
+  <td>₹133.65</td>
+  <td>₹131.65</td>
+  <td>195</td>
+  <td class="loss">₹-416.79</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-28 12:55:00</td>
+  <td>2025-05-28 12:56:00</td>
+  <td>₹138.35</td>
+  <td>₹136.27</td>
+  <td>188</td>
+  <td class="loss">₹-415.96</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-29 09:20:00</td>
+  <td>2025-05-29 09:21:00</td>
+  <td>₹43.3</td>
+  <td>₹51.96</td>
+  <td>602</td>
+  <td class="win">₹5184.65</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-29 13:00:00</td>
+  <td>2025-05-29 13:01:00</td>
+  <td>₹34.25</td>
+  <td>₹33.74</td>
+  <td>765</td>
+  <td class="loss">₹-419.02</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-29 15:05:00</td>
+  <td>2025-05-29 15:06:00</td>
+  <td>₹1.25</td>
+  <td>₹1.5</td>
+  <td>20958</td>
+  <td class="win">₹5210.68</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-29 15:10:00</td>
+  <td>2025-05-29 15:11:00</td>
+  <td>₹0.55</td>
+  <td>₹0.54</td>
+  <td>47869</td>
+  <td class="loss">₹-421.05</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-29 15:15:00</td>
+  <td>2025-05-29 15:16:00</td>
+  <td>₹0.7</td>
+  <td>₹0.69</td>
+  <td>37596</td>
+  <td class="loss">₹-420.88</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-29 15:20:00</td>
+  <td>2025-05-29 15:21:00</td>
+  <td>₹0.4</td>
+  <td>₹0.39</td>
+  <td>65767</td>
+  <td class="loss">₹-420.71</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-29 15:25:00</td>
+  <td>2025-05-29 15:26:00</td>
+  <td>₹0.15</td>
+  <td>₹0.15</td>
+  <td>175310</td>
+  <td class="loss">₹-420.55</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-30 09:15:00</td>
+  <td>2025-05-30 09:16:00</td>
+  <td>₹217.0</td>
+  <td>₹213.75</td>
+  <td>121</td>
+  <td class="loss">₹-419.92</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-30 13:35:00</td>
+  <td>2025-05-30 13:38:00</td>
+  <td>₹210.0</td>
+  <td>₹206.85</td>
+  <td>125</td>
+  <td class="loss">₹-419.8</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-05-30 14:00:00</td>
+  <td>2025-05-30 14:03:00</td>
+  <td>₹195.85</td>
+  <td>₹192.91</td>
+  <td>134</td>
+  <td class="loss">₹-419.71</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-02 12:05:00</td>
+  <td>2025-06-02 12:15:00</td>
+  <td>₹212.75</td>
+  <td>₹209.56</td>
+  <td>123</td>
+  <td class="loss">₹-418.5</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-02 12:20:00</td>
+  <td>2025-06-02 12:30:00</td>
+  <td>₹202.9</td>
+  <td>₹199.86</td>
+  <td>129</td>
+  <td class="loss">₹-418.59</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-02 12:35:00</td>
+  <td>2025-06-02 12:59:00</td>
+  <td>₹206.3</td>
+  <td>₹203.21</td>
+  <td>127</td>
+  <td class="loss">₹-419.01</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-03 10:25:00</td>
+  <td>2025-06-03 10:27:00</td>
+  <td>₹207.15</td>
+  <td>₹204.04</td>
+  <td>126</td>
+  <td class="loss">₹-417.42</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-04 12:15:00</td>
+  <td>2025-06-04 12:16:00</td>
+  <td>₹69.45</td>
+  <td>₹68.41</td>
+  <td>377</td>
+  <td class="loss">₹-418.73</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-04 13:05:00</td>
+  <td>2025-06-04 13:08:00</td>
+  <td>₹69.35</td>
+  <td>₹68.31</td>
+  <td>377</td>
+  <td class="loss">₹-418.12</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-04 13:55:00</td>
+  <td>2025-06-04 13:56:00</td>
+  <td>₹68.45</td>
+  <td>₹67.42</td>
+  <td>382</td>
+  <td class="loss">₹-418.17</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-04 14:00:00</td>
+  <td>2025-06-04 14:01:00</td>
+  <td>₹72.05</td>
+  <td>₹70.97</td>
+  <td>363</td>
+  <td class="loss">₹-418.27</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-04 14:10:00</td>
+  <td>2025-06-04 14:11:00</td>
+  <td>₹57.8</td>
+  <td>₹69.36</td>
+  <td>452</td>
+  <td class="win">₹5196.38</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-04 15:05:00</td>
+  <td>2025-06-04 15:06:00</td>
+  <td>₹56.35</td>
+  <td>₹55.5</td>
+  <td>466</td>
+  <td class="loss">₹-419.95</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-05 09:25:00</td>
+  <td>2025-06-05 09:26:00</td>
+  <td>₹24.9</td>
+  <td>₹29.88</td>
+  <td>1055</td>
+  <td class="win">₹5225.0</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-05 09:30:00</td>
+  <td>2025-06-05 09:31:00</td>
+  <td>₹54.8</td>
+  <td>₹53.98</td>
+  <td>482</td>
+  <td class="loss">₹-422.42</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-05 09:35:00</td>
+  <td>2025-06-05 09:36:00</td>
+  <td>₹43.6</td>
+  <td>₹42.95</td>
+  <td>605</td>
+  <td class="loss">₹-421.85</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-05 09:40:00</td>
+  <td>2025-06-05 09:41:00</td>
+  <td>₹37.0</td>
+  <td>₹36.45</td>
+  <td>713</td>
+  <td class="loss">₹-421.9</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-05 09:45:00</td>
+  <td>2025-06-05 09:46:00</td>
+  <td>₹32.4</td>
+  <td>₹31.91</td>
+  <td>814</td>
+  <td class="loss">₹-421.78</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-05 12:05:00</td>
+  <td>2025-06-05 12:06:00</td>
+  <td>₹47.75</td>
+  <td>₹57.3</td>
+  <td>552</td>
+  <td class="win">₹5242.61</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-05 12:10:00</td>
+  <td>2025-06-05 12:11:00</td>
+  <td>₹54.8</td>
+  <td>₹53.98</td>
+  <td>483</td>
+  <td class="loss">₹-423.3</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-05 12:15:00</td>
+  <td>2025-06-05 12:16:00</td>
+  <td>₹48.9</td>
+  <td>₹48.17</td>
+  <td>541</td>
+  <td class="loss">₹-423.08</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-05 12:20:00</td>
+  <td>2025-06-05 12:21:00</td>
+  <td>₹48.35</td>
+  <td>₹47.62</td>
+  <td>547</td>
+  <td class="loss">₹-422.96</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-06 10:30:00</td>
+  <td>2025-06-06 10:31:00</td>
+  <td>₹150.15</td>
+  <td>₹147.9</td>
+  <td>176</td>
+  <td class="loss">₹-422.62</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-06 10:35:00</td>
+  <td>2025-06-06 10:36:00</td>
+  <td>₹160.7</td>
+  <td>₹158.29</td>
+  <td>164</td>
+  <td class="loss">₹-421.48</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-06 10:40:00</td>
+  <td>2025-06-06 10:42:00</td>
+  <td>₹153.55</td>
+  <td>₹184.26</td>
+  <td>172</td>
+  <td class="win">₹5253.07</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-06 10:45:00</td>
+  <td>2025-06-06 10:46:00</td>
+  <td>₹185.75</td>
+  <td>₹182.96</td>
+  <td>143</td>
+  <td class="loss">₹-424.8</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-06 10:50:00</td>
+  <td>2025-06-06 10:51:00</td>
+  <td>₹173.4</td>
+  <td>₹170.8</td>
+  <td>153</td>
+  <td class="loss">₹-424.28</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM+1_CALL</td>
+  <td>2025-06-06 14:20:00</td>
+  <td>2025-06-06 14:35:00</td>
+  <td>₹162.25</td>
+  <td>₹159.82</td>
+  <td>163</td>
+  <td class="loss">₹-422.95</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-09 11:30:00</td>
+  <td>2025-05-09 11:31:00</td>
+  <td>₹271.2</td>
+  <td>₹267.13</td>
+  <td>92</td>
+  <td class="loss">₹-399.02</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-09 11:35:00</td>
+  <td>2025-05-09 11:36:00</td>
+  <td>₹275.3</td>
+  <td>₹271.17</td>
+  <td>90</td>
+  <td class="loss">₹-396.25</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-12 09:15:00</td>
+  <td>2025-05-12 09:16:00</td>
+  <td>₹133.75</td>
+  <td>₹160.5</td>
+  <td>186</td>
+  <td class="win">₹4948.13</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-12 09:20:00</td>
+  <td>2025-05-12 09:22:00</td>
+  <td>₹149.4</td>
+  <td>₹179.28</td>
+  <td>168</td>
+  <td class="win">₹4992.23</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-12 09:25:00</td>
+  <td>2025-05-12 09:26:00</td>
+  <td>₹167.1</td>
+  <td>₹164.59</td>
+  <td>150</td>
+  <td class="loss">₹-400.85</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-12 09:30:00</td>
+  <td>2025-05-12 09:31:00</td>
+  <td>₹165.25</td>
+  <td>₹162.77</td>
+  <td>152</td>
+  <td class="loss">₹-401.7</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-12 09:35:00</td>
+  <td>2025-05-12 09:36:00</td>
+  <td>₹192.25</td>
+  <td>₹189.37</td>
+  <td>131</td>
+  <td class="loss">₹-402.77</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-12 11:30:00</td>
+  <td>2025-05-12 11:45:00</td>
+  <td>₹206.4</td>
+  <td>₹203.3</td>
+  <td>122</td>
+  <td class="loss">₹-402.7</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-12 12:35:00</td>
+  <td>2025-05-12 12:36:00</td>
+  <td>₹228.45</td>
+  <td>₹225.02</td>
+  <td>110</td>
+  <td class="loss">₹-401.88</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-12 12:40:00</td>
+  <td>2025-05-12 12:41:00</td>
+  <td>₹241.85</td>
+  <td>₹238.22</td>
+  <td>104</td>
+  <td class="loss">₹-402.25</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-12 12:45:00</td>
+  <td>2025-05-12 12:46:00</td>
+  <td>₹225.35</td>
+  <td>₹221.97</td>
+  <td>111</td>
+  <td class="loss">₹-400.03</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-12 14:20:00</td>
+  <td>2025-05-12 14:23:00</td>
+  <td>₹249.6</td>
+  <td>₹245.86</td>
+  <td>100</td>
+  <td class="loss">₹-399.17</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-12 15:00:00</td>
+  <td>2025-05-12 15:01:00</td>
+  <td>₹267.4</td>
+  <td>₹263.39</td>
+  <td>94</td>
+  <td class="loss">₹-401.98</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-12 15:20:00</td>
+  <td>2025-05-12 15:21:00</td>
+  <td>₹239.25</td>
+  <td>₹235.66</td>
+  <td>105</td>
+  <td class="loss">₹-401.75</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-14 09:20:00</td>
+  <td>2025-05-14 09:21:00</td>
+  <td>₹115.2</td>
+  <td>₹138.24</td>
+  <td>218</td>
+  <td class="win">₹4995.1</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-14 09:25:00</td>
+  <td>2025-05-14 09:28:00</td>
+  <td>₹141.95</td>
+  <td>₹139.82</td>
+  <td>177</td>
+  <td class="loss">₹-401.81</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-14 09:30:00</td>
+  <td>2025-05-14 09:31:00</td>
+  <td>₹147.9</td>
+  <td>₹145.68</td>
+  <td>170</td>
+  <td class="loss">₹-402.1</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-14 09:45:00</td>
+  <td>2025-05-14 09:46:00</td>
+  <td>₹126.85</td>
+  <td>₹124.95</td>
+  <td>198</td>
+  <td class="loss">₹-401.67</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-14 15:05:00</td>
+  <td>2025-05-14 15:11:00</td>
+  <td>₹106.5</td>
+  <td>₹104.9</td>
+  <td>236</td>
+  <td class="loss">₹-401.96</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-15 10:40:00</td>
+  <td>2025-05-15 10:42:00</td>
+  <td>₹132.35</td>
+  <td>₹130.36</td>
+  <td>190</td>
+  <td class="loss">₹-402.16</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-15 10:45:00</td>
+  <td>2025-05-15 10:46:00</td>
+  <td>₹134.25</td>
+  <td>₹132.24</td>
+  <td>187</td>
+  <td class="loss">₹-401.49</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-15 11:00:00</td>
+  <td>2025-05-15 11:01:00</td>
+  <td>₹153.15</td>
+  <td>₹150.85</td>
+  <td>164</td>
+  <td class="loss">₹-401.68</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-15 13:05:00</td>
+  <td>2025-05-15 13:06:00</td>
+  <td>₹107.7</td>
+  <td>₹129.24</td>
+  <td>233</td>
+  <td class="win">₹4991.22</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-15 13:10:00</td>
+  <td>2025-05-15 13:11:00</td>
+  <td>₹100.35</td>
+  <td>₹120.42</td>
+  <td>252</td>
+  <td class="win">₹5029.82</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-15 13:15:00</td>
+  <td>2025-05-15 13:16:00</td>
+  <td>₹111.35</td>
+  <td>₹133.62</td>
+  <td>228</td>
+  <td class="win">₹5049.63</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-15 13:20:00</td>
+  <td>2025-05-15 13:21:00</td>
+  <td>₹140.25</td>
+  <td>₹138.15</td>
+  <td>182</td>
+  <td class="loss">₹-408.22</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-15 13:25:00</td>
+  <td>2025-05-15 13:26:00</td>
+  <td>₹144.3</td>
+  <td>₹142.14</td>
+  <td>177</td>
+  <td class="loss">₹-408.47</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-15 13:35:00</td>
+  <td>2025-05-15 13:36:00</td>
+  <td>₹125.6</td>
+  <td>₹123.72</td>
+  <td>203</td>
+  <td class="loss">₹-407.76</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-16 13:30:00</td>
+  <td>2025-05-16 13:31:00</td>
+  <td>₹228.7</td>
+  <td>₹225.27</td>
+  <td>111</td>
+  <td class="loss">₹-405.98</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-16 15:10:00</td>
+  <td>2025-05-19 09:15:00</td>
+  <td>₹196.9</td>
+  <td>₹193.95</td>
+  <td>129</td>
+  <td class="loss">₹-406.21</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-19 09:25:00</td>
+  <td>2025-05-19 09:30:00</td>
+  <td>₹197.85</td>
+  <td>₹194.88</td>
+  <td>128</td>
+  <td class="loss">₹-405.01</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-20 09:20:00</td>
+  <td>2025-05-20 09:21:00</td>
+  <td>₹178.85</td>
+  <td>₹176.17</td>
+  <td>142</td>
+  <td class="loss">₹-406.16</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-21 09:35:00</td>
+  <td>2025-05-21 09:36:00</td>
+  <td>₹169.2</td>
+  <td>₹166.66</td>
+  <td>150</td>
+  <td class="loss">₹-405.89</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-21 09:40:00</td>
+  <td>2025-05-21 09:41:00</td>
+  <td>₹156.8</td>
+  <td>₹154.45</td>
+  <td>162</td>
+  <td class="loss">₹-406.24</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-21 09:45:00</td>
+  <td>2025-05-21 09:46:00</td>
+  <td>₹153.25</td>
+  <td>₹150.95</td>
+  <td>166</td>
+  <td class="loss">₹-406.84</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-21 09:50:00</td>
+  <td>2025-05-21 09:51:00</td>
+  <td>₹148.4</td>
+  <td>₹178.08</td>
+  <td>171</td>
+  <td class="win">₹5047.37</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-21 09:55:00</td>
+  <td>2025-05-21 09:56:00</td>
+  <td>₹156.35</td>
+  <td>₹154.0</td>
+  <td>163</td>
+  <td class="loss">₹-407.57</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-22 15:00:00</td>
+  <td>2025-05-22 15:01:00</td>
+  <td>₹68.9</td>
+  <td>₹67.87</td>
+  <td>371</td>
+  <td class="loss">₹-408.8</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-22 15:10:00</td>
+  <td>2025-05-22 15:11:00</td>
+  <td>₹62.9</td>
+  <td>₹61.96</td>
+  <td>406</td>
+  <td class="loss">₹-408.41</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-23 09:25:00</td>
+  <td>2025-05-23 09:26:00</td>
+  <td>₹244.0</td>
+  <td>₹240.34</td>
+  <td>104</td>
+  <td class="loss">₹-405.83</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-23 09:35:00</td>
+  <td>2025-05-23 09:43:00</td>
+  <td>₹236.85</td>
+  <td>₹233.3</td>
+  <td>107</td>
+  <td class="loss">₹-405.3</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-23 11:00:00</td>
+  <td>2025-05-23 11:02:00</td>
+  <td>₹267.7</td>
+  <td>₹263.68</td>
+  <td>95</td>
+  <td class="loss">₹-406.71</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-26 09:20:00</td>
+  <td>2025-05-26 09:23:00</td>
+  <td>₹222.5</td>
+  <td>₹267.0</td>
+  <td>114</td>
+  <td class="win">₹5045.1</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-26 09:25:00</td>
+  <td>2025-05-26 09:26:00</td>
+  <td>₹257.6</td>
+  <td>₹253.74</td>
+  <td>99</td>
+  <td class="loss">₹-407.85</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-26 09:30:00</td>
+  <td>2025-05-26 09:36:00</td>
+  <td>₹247.5</td>
+  <td>₹243.79</td>
+  <td>103</td>
+  <td class="loss">₹-407.69</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-27 11:05:00</td>
+  <td>2025-05-27 11:07:00</td>
+  <td>₹236.2</td>
+  <td>₹232.66</td>
+  <td>108</td>
+  <td class="loss">₹-407.96</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-27 11:10:00</td>
+  <td>2025-05-27 11:11:00</td>
+  <td>₹260.15</td>
+  <td>₹256.25</td>
+  <td>98</td>
+  <td class="loss">₹-407.72</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-27 11:15:00</td>
+  <td>2025-05-27 11:18:00</td>
+  <td>₹241.7</td>
+  <td>₹238.07</td>
+  <td>105</td>
+  <td class="loss">₹-405.87</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-27 11:20:00</td>
+  <td>2025-05-27 11:21:00</td>
+  <td>₹265.75</td>
+  <td>₹261.76</td>
+  <td>96</td>
+  <td class="loss">₹-408.0</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-27 11:25:00</td>
+  <td>2025-05-27 11:27:00</td>
+  <td>₹225.65</td>
+  <td>₹270.78</td>
+  <td>113</td>
+  <td class="win">₹5071.64</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-27 11:30:00</td>
+  <td>2025-05-27 11:33:00</td>
+  <td>₹256.95</td>
+  <td>₹253.1</td>
+  <td>100</td>
+  <td class="loss">₹-410.93</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-27 11:35:00</td>
+  <td>2025-05-27 11:36:00</td>
+  <td>₹285.95</td>
+  <td>₹281.66</td>
+  <td>89</td>
+  <td class="loss">₹-407.0</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-28 12:50:00</td>
+  <td>2025-05-28 13:09:00</td>
+  <td>₹178.9</td>
+  <td>₹176.22</td>
+  <td>143</td>
+  <td class="loss">₹-409.13</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-29 09:20:00</td>
+  <td>2025-05-29 09:21:00</td>
+  <td>₹92.05</td>
+  <td>₹110.46</td>
+  <td>279</td>
+  <td class="win">₹5108.14</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-29 13:00:00</td>
+  <td>2025-05-29 13:01:00</td>
+  <td>₹79.3</td>
+  <td>₹78.11</td>
+  <td>325</td>
+  <td class="loss">₹-412.17</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-29 15:05:00</td>
+  <td>2025-05-29 15:06:00</td>
+  <td>₹48.45</td>
+  <td>₹58.14</td>
+  <td>532</td>
+  <td class="win">₹5126.73</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-29 15:10:00</td>
+  <td>2025-05-29 15:11:00</td>
+  <td>₹20.55</td>
+  <td>₹24.66</td>
+  <td>1261</td>
+  <td class="win">₹5154.21</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-29 15:15:00</td>
+  <td>2025-05-29 15:16:00</td>
+  <td>₹33.6</td>
+  <td>₹33.1</td>
+  <td>775</td>
+  <td class="loss">₹-416.44</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-29 15:20:00</td>
+  <td>2025-05-29 15:21:00</td>
+  <td>₹31.7</td>
+  <td>₹31.22</td>
+  <td>821</td>
+  <td class="loss">₹-416.22</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-29 15:25:00</td>
+  <td>2025-05-29 15:28:00</td>
+  <td>₹32.45</td>
+  <td>₹31.96</td>
+  <td>802</td>
+  <td class="loss">₹-416.2</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-30 09:15:00</td>
+  <td>2025-05-30 09:16:00</td>
+  <td>₹280.0</td>
+  <td>₹275.8</td>
+  <td>92</td>
+  <td class="loss">₹-411.97</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-30 13:35:00</td>
+  <td>2025-05-30 13:38:00</td>
+  <td>₹263.05</td>
+  <td>₹259.1</td>
+  <td>98</td>
+  <td class="loss">₹-412.27</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-05-30 14:00:00</td>
+  <td>2025-05-30 14:04:00</td>
+  <td>₹244.55</td>
+  <td>₹240.88</td>
+  <td>106</td>
+  <td class="loss">₹-414.56</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-02 12:05:00</td>
+  <td>2025-06-02 12:15:00</td>
+  <td>₹264.5</td>
+  <td>₹260.53</td>
+  <td>98</td>
+  <td class="loss">₹-414.54</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-02 12:20:00</td>
+  <td>2025-06-02 12:30:00</td>
+  <td>₹253.4</td>
+  <td>₹249.6</td>
+  <td>102</td>
+  <td class="loss">₹-413.35</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-02 12:35:00</td>
+  <td>2025-06-02 12:59:00</td>
+  <td>₹256.15</td>
+  <td>₹252.31</td>
+  <td>101</td>
+  <td class="loss">₹-413.74</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-03 10:25:00</td>
+  <td>2025-06-03 10:27:00</td>
+  <td>₹259.0</td>
+  <td>₹255.12</td>
+  <td>100</td>
+  <td class="loss">₹-414.21</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-04 12:15:00</td>
+  <td>2025-06-04 12:16:00</td>
+  <td>₹115.6</td>
+  <td>₹113.87</td>
+  <td>224</td>
+  <td class="loss">₹-414.12</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-04 13:05:00</td>
+  <td>2025-06-04 13:08:00</td>
+  <td>₹120.25</td>
+  <td>₹118.45</td>
+  <td>215</td>
+  <td class="loss">₹-413.47</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-04 13:55:00</td>
+  <td>2025-06-04 14:02:00</td>
+  <td>₹119.75</td>
+  <td>₹117.95</td>
+  <td>216</td>
+  <td class="loss">₹-413.66</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-04 14:10:00</td>
+  <td>2025-06-04 14:11:00</td>
+  <td>₹98.8</td>
+  <td>₹118.56</td>
+  <td>262</td>
+  <td class="win">₹5148.65</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-04 15:05:00</td>
+  <td>2025-06-04 15:06:00</td>
+  <td>₹95.8</td>
+  <td>₹94.36</td>
+  <td>271</td>
+  <td class="loss">₹-415.19</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-05 09:25:00</td>
+  <td>2025-06-05 09:26:00</td>
+  <td>₹54.95</td>
+  <td>₹65.94</td>
+  <td>473</td>
+  <td class="win">₹5169.68</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-05 09:30:00</td>
+  <td>2025-06-05 09:31:00</td>
+  <td>₹101.8</td>
+  <td>₹100.27</td>
+  <td>257</td>
+  <td class="loss">₹-418.41</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-05 09:35:00</td>
+  <td>2025-06-05 09:36:00</td>
+  <td>₹86.7</td>
+  <td>₹85.4</td>
+  <td>301</td>
+  <td class="loss">₹-417.35</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-05 09:40:00</td>
+  <td>2025-06-05 09:43:00</td>
+  <td>₹79.65</td>
+  <td>₹78.46</td>
+  <td>328</td>
+  <td class="loss">₹-417.81</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-05 09:45:00</td>
+  <td>2025-06-05 09:46:00</td>
+  <td>₹76.15</td>
+  <td>₹75.01</td>
+  <td>343</td>
+  <td class="loss">₹-417.72</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-05 12:05:00</td>
+  <td>2025-06-05 12:06:00</td>
+  <td>₹91.05</td>
+  <td>₹109.26</td>
+  <td>286</td>
+  <td class="win">₹5179.42</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-05 12:10:00</td>
+  <td>2025-06-05 12:11:00</td>
+  <td>₹102.9</td>
+  <td>₹101.36</td>
+  <td>255</td>
+  <td class="loss">₹-419.64</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-05 12:15:00</td>
+  <td>2025-06-05 12:16:00</td>
+  <td>₹95.7</td>
+  <td>₹94.26</td>
+  <td>274</td>
+  <td class="loss">₹-419.35</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-05 12:20:00</td>
+  <td>2025-06-05 12:21:00</td>
+  <td>₹99.75</td>
+  <td>₹98.25</td>
+  <td>263</td>
+  <td class="loss">₹-419.55</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-06 10:30:00</td>
+  <td>2025-06-06 10:38:00</td>
+  <td>₹199.2</td>
+  <td>₹196.21</td>
+  <td>131</td>
+  <td class="loss">₹-417.33</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-06 10:40:00</td>
+  <td>2025-06-06 10:42:00</td>
+  <td>₹206.15</td>
+  <td>₹247.38</td>
+  <td>127</td>
+  <td class="win">₹5207.41</td>
+  <td>19.89%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-06 10:45:00</td>
+  <td>2025-06-06 10:46:00</td>
+  <td>₹239.4</td>
+  <td>₹235.81</td>
+  <td>110</td>
+  <td class="loss">₹-421.15</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-06 10:50:00</td>
+  <td>2025-06-06 10:51:00</td>
+  <td>₹226.35</td>
+  <td>₹222.95</td>
+  <td>116</td>
+  <td class="loss">₹-419.91</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-06 14:20:00</td>
+  <td>2025-06-06 14:21:00</td>
+  <td>₹216.55</td>
+  <td>₹213.3</td>
+  <td>121</td>
+  <td class="loss">₹-419.04</td>
+  <td>-1.6%</td>
+</tr>
+
+<tr>
+  <td>ATM-1_CALL</td>
+  <td>2025-06-06 14:25:00</td>
+  <td>2025-06-06 14:30:00</td>
+  <td>₹228.45</td>
+  <td>₹225.02</td>
+  <td>115</td>
+  <td class="loss">₹-420.15</td>
+  <td>-1.6%</td>
+</tr>
+
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

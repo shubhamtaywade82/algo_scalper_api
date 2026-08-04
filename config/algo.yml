@@ -10,9 +10,9 @@ paper_trading:
 
 # Double-entry paper ledger (financial source of truth alongside position_trackers)
 ledger:
-  enabled: false          # when true, GatewayPaper wallet reads from ledger
-  paper_enabled: false    # alias gate for paper wallet reads
-  shadow_mode: true         # post journals + keep legacy wallet for drift checks
+  enabled: true           # paper wallet + sizing read from ledger cash balance
+  paper_enabled: false    # wallet uses legacy calculation; ledger posts for reconciliation only
+  shadow_mode: true       # post journals; reconciliation job compares ledger vs legacy
   block_negative_cash: true
 
 # Realtime execution controls (tick-first architecture)
@@ -30,8 +30,8 @@ realtime:
 # Format: "HH:MM-HH:MM" (24-hour format, IST timezone)
 # Example: ["10:30-11:30", "14:00-15:00"] blocks trading from 10:30 AM to 11:30 AM and 2:00 PM to 3:00 PM
 trading_time_restrictions:
-  enabled: false # Set to true to enable time-based restrictions
-  avoid_periods: ["10:00-12:30"] # Block mid-morning churn session as per analysis
+  enabled: true # Profitability Slice 2 — midday blackout via DB/API (rollback: algo_config:rollback_slice2)
+  avoid_periods: [] # Disabled midday blackout; re-enable if churn returns
   block_exits: false # Set to true to block automated exits (SL/TP/Trailing) during blackout
   # Example based on analysis results:
   # avoid_periods:
@@ -45,6 +45,13 @@ midday_guard:
   block_after_time: "15:00"
   trending_adx_bypass: 28    # skip guard entirely when ADX >= this (trending market)
 
+# Strategies::Manager plugin platform — wires plugin signals (e.g. supertrend_v1)
+# into the real Entries::EntryGuard pipeline. Set auto_entry_enabled: false to
+# go back to shadow-only (signals persisted, no orders placed).
+strategy_platform:
+  auto_entry_enabled: true
+  min_confidence: 0.6
+
 # Options buying framework — default intraday_scalper (see docs/options_buying_intraday_spec.md)
 options_buying:
   mode: intraday_scalper          # intraday_scalper | positional
@@ -54,7 +61,7 @@ options_buying:
     max_setup_ratio: 0.30
     setup_window_end: "11:15"
   breakout:
-    enabled: true
+    enabled: false
     timeframe_minutes: 1
     volume_multiplier: 2.0
     require_oi_unwind: true
@@ -74,6 +81,19 @@ options_buying:
     min_net_edge_pct: 0.0         # block when expected edge − round-trip cost < this (DECIMAL)
     expected_edge_pct: 0.30       # fallback expected premium edge when signal injects none (DECIMAL)
     slippage_pct_per_side: 0.001  # modelled slippage per fill; charged on entry + exit
+    limit_chasing:
+      enabled: true
+      max_chase_seconds: 15
+      tick_interval_seconds: 2
+      fallback_to_market: true
+    order_slicing:
+      enabled: true
+      delay_ms: 500
+      freeze_limits:
+        NIFTY: 1800
+        BANKNIFTY: 900
+        SENSEX: 1000
+        default: 1800
   positional:
     enabled: false
     require_carry_allowed: true
@@ -93,6 +113,42 @@ options_buying:
     consumer_block_ms: 1000
     telemetry_sink_enabled: true
     legacy_zset_enabled: false
+  vix_filter:
+    enabled: true
+    vix_min_for_buying: 12.0
+    vix_max_for_buying: 30.0
+    vix_drop_max_pct: 0.05
+  gamma_wall:
+    enabled: true
+    oi_multiplier: 2.0
+    buffer_pct: 0.005
+  time_filter:
+    entry_start: "09:20"
+    entry_end: "14:30"
+  expiry:
+    prefer_monthly: true
+    min_dte: 7
+    positional_min_dte: 30
+  drawdown:
+    max_daily_drawdown_pct: 0.05
+    kill_switch_cooldown_hours: 8
+  strategies:
+    enabled:
+      - orb_breakout
+      - vcp_breakout
+      - triple_tf_alignment
+      - vix_expansion
+      - iv_percentile_confluence
+    orb_breakout:
+      period_minutes: 15
+      volume_multiplier: 1.5
+    vcp_breakout:
+      inside_bar_lookback: 5
+    triple_tf_alignment:
+      daily_ma_period: 50
+      hourly_ema_period: 20
+      pullback_rsi_range: [40, 60]
+  event_calendar: []
 
 # Expiry-week power trend mode: detects and holds high-conviction directional entries
 # during the final week before monthly expiry when ADX confirms a power trend.
@@ -107,8 +163,8 @@ expiry_week_power_trend:
 
 loss_streak_guard:
   enabled: true
-  consecutive_losses_threshold: 2
-  cooldown_minutes: 30
+  consecutive_losses_threshold: 3
+  cooldown_minutes: 20
 
 segment_expectancy_guard:
   enabled: true
@@ -150,29 +206,6 @@ feature_flags:
   enable_peak_drawdown_activation: true
   auto_paper_on_insufficient_balance: false
 
-# Calibration: historical option behaviour (weekly) and optional AI trade-based patches.
-# Auto-apply merges proposed_patch into DB algo_config_document (same as POST …/apply).
-calibration:
-  auto_apply:
-    # Master switch. When false, runs only create CalibrationRun rows for manual review.
-    enabled: true
-    # After WeeklyCalibrationJob (DhanHQ expired ATM±1 stats).
-    historical_weekly: true
-    # After AiCalibrationJob (paper-trade dataset + Ollama). Keep false until validated.
-    ai_trades: true
-    # Skip auto-apply when RegimeDetector flags a shift (volatile vs prior runs).
-    reject_on_regime_shift: true
-    # Only auto-apply while paper_trading.enabled (recommended before going live).
-    require_paper_trading: true
-    # Historical path: minimum weekly expiries present in DB (see raw_stats weeks_available).
-    min_weeks_analyzed: 4
-    # AI path: minimum paper trades in dataset_meta.total_trades.
-    min_ai_trades: 15
-    # Skip apply if this symbol had a successful apply within N days (0 = no cooldown).
-    cooldown_days_between_applies: 7
-    # Telegram: append skip reason to weekly calibration message; AI job sends a short follow-up.
-    notify_on_skip: true
-
 # DhanHQ broker settings
 dhanhq:
   enable_orders: false # Set to true for live order submission (false = dry-run logging only)
@@ -203,7 +236,7 @@ indices:
 
     premium_band:
       min: 30
-      max: 120
+      max: 160 # raised from 120 — was blocking most real ATM premiums in current price regime
 
     otm_rules:
       max_otm: 2 # ATM → +1 OTM → +2 OTM
@@ -214,7 +247,7 @@ indices:
       weak_trend_pct: 0.005
 
     trade_limits:
-      max_trades_per_day: 2
+      max_trades_per_day: 5
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
@@ -245,7 +278,7 @@ indices:
 
     premium_band:
       min: 60
-      max: 180
+      max: 650 # raised from 180 — BANKNIFTY ATM premiums were running 400-600, blocking nearly every signal
 
     otm_rules:
       max_otm: 2
@@ -256,7 +289,7 @@ indices:
       weak_trend_pct: 0.01
 
     trade_limits:
-      max_trades_per_day: 1
+      max_trades_per_day: 10
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
@@ -287,7 +320,7 @@ indices:
 
     premium_band:
       min: 40
-      max: 150
+      max: 320 # raised from 150 — SENSEX ATM premiums were running 180-300, blocking nearly every signal
 
     otm_rules:
       max_otm: 2
@@ -298,7 +331,7 @@ indices:
       weak_trend_pct: 0.01
 
     trade_limits:
-      max_trades_per_day: 2
+      max_trades_per_day: 4
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
@@ -321,7 +354,8 @@ indices:
         priority: 4
 
 trade_limits:
-  global_max_trades_per_day: 8
+  global_max_trades_per_day: 12
+  global_max_concurrent_positions: 6 # Portfolio-level cap across all indices
 
 # ============================================
 # BROKER FEES
@@ -337,9 +371,42 @@ broker_fees:
 # ============================================
 risk:
   auto_update_ip: false # Set to true to automatically update whitelisted IP on Dhan after cooldown
-  sl_pct: 0.10 # -10% base premium SL — intraday options buying (tightened from 15%)
+  max_exposure_rupees:
+    NIFTY: 500000
+    BANKNIFTY: 300000
+    SENSEX: 300000
+    default: 200000
+  # LEGACY FALLBACKS — Effective SL/TP resolved by DTE via risk.dte_parameters.by_dte
+  # These are used by risk_explorer, meta_builder as fallback when DTE resolution unavailable
+  sl_pct: 0.08 # -8% base premium SL — aligned with adaptive_trail entry_guard hard_stop
   tp_pct: 0.45 # +45% TAKE PROFIT — capture convexity outliers
   per_trade_risk_pct: 0.40
+
+  iv_vol_gate:
+    enabled: true
+    max_iv_rank: 1.0
+    min_iv_rank: 0.05
+
+  volume_velocity_gate:
+    enabled: true
+
+  chain_confirmation_gate:
+    enabled: true
+    min_oi_change: 0
+    min_iv: 8.0
+    max_iv: 45.0
+    min_delta: 0.25
+    max_delta: 0.75
+
+  momentum_gate:
+    enabled: true
+    adx_threshold: 25
+
+  regime_guard:
+    enabled: true
+    block_regimes:
+      - CHOPPY
+    bypass_adx: 25
 
   # DTE-resolved intraday parameters — pinned into config_snapshot at entry
   dte_parameters:
@@ -413,9 +480,9 @@ risk:
   profit_floor:
     enabled: true
     lock_pct: 0.03         # 3% of capital — arm floor later vs 2.5%
-    min_arm_rupees: 550    # ignore sub-₹550 spikes (was ₹350)
-    trail_pct: 0.82        # keep 82% of HWM (was 72% — less hair-trigger)
-    breakeven_at: 200      # mark breakeven when net PnL reaches ₹200
+    min_arm_rupees: 200    # ↓ was 550 — arm earlier so scalp wins get protected
+    trail_pct: 0.75        # ↓ was 0.82 — lock more of the HWM on the way up
+    breakeven_at: 100      # ↓ was 200 — mark breakeven at ₹100 net PnL
     time_kill_minutes: 35  # chop: slower stale-floor kill (was 20)
 
   # RR-Based Profit Booking (Dynamic Exit)
@@ -460,7 +527,16 @@ risk:
       BANKNIFTY: 15   # minutes
       SENSEX: 15      # minutes (raised from 10 — avg max gain 30-69%, needs time to develop)
 
+  # False Entry Fast-Exit: exit positions that never made a profit (HWM ≈ 0) within the grace period.
+  # Prevents slow-bleed losses like ID=21 (-₹6,150 over 40 min with HWM=₹0 throughout).
+  # Rule: ZeroHwmFalseEntryRule (priority 15, fires before TimeStopRule).
+  zero_hwm_false_entry:
+    enabled: true
+    min_hold_seconds: 120       # grace period — don't fire before 2 minutes
+    hwm_threshold_rupees: 0     # exit if HWM is ≤ ₹0 after grace period
+
   # Institutional Trailing System (3-Phase)
+
   # Calibrated from 16-week historical ATM intraday options data (DhanHQ)
   # Parameters derived from avg max gain, avg post-peak retracement, and session stats
   institutional_trailing:
@@ -534,10 +610,14 @@ risk:
     supertrend_flip_exit: true
     counter_candles: 3
     stages:
-      - { name: entry_guard, min_profit: 0.0, trail_behind_peak: 0.40, hard_stop: -0.30 }
+      # entry_guard: only arms once trade is 3%+ in profit (was 0%) so normal
+      # intrabar retraces at entry don't prematurely close a winning position.
+      # trail_behind_peak widened to 0.55 (was 0.40) — gives the option room to
+      # breathe before locking. hard_stop unchanged at -0.08 for catastrophic protection.
+      - { name: entry_guard,   min_profit: 0.03, trail_behind_peak: 0.55, hard_stop: -0.08 }
       - { name: momentum_ride, min_profit: 0.20, trail_behind_peak: 0.35, hard_stop: null }
-      - { name: profit_lock, min_profit: 0.60, trail_behind_peak: 0.28, hard_stop: null }
-      - { name: runner_mode, min_profit: 1.20, trail_behind_peak: 0.22, hard_stop: null }
+      - { name: profit_lock,   min_profit: 0.60, trail_behind_peak: 0.28, hard_stop: null }
+      - { name: runner_mode,   min_profit: 1.20, trail_behind_peak: 0.22, hard_stop: null }
 
   # Post-Profit Zone Management (State Machine)
   # Implements sophisticated profit zone management after ₹2k TP
@@ -593,7 +673,11 @@ risk:
   #
   # Each regime gets different SL/TP/trailing rules based on Greek behavior
   time_regimes:
-    enabled: true # Time-regime rules active — TP/SL adjust by market session
+    # Enabled based on 61-trading-day regime research (real DhanHQ index price data,
+    # 5m bars, NIFTY/BANKNIFTY/SENSEX): chop_decay confirmed worst session everywhere,
+    # close_gamma outperformed trend_continuation in every matched ADX bucket, and ADX
+    # showed a clear ceiling (not just floor) within trend_continuation specifically.
+    enabled: true
 
     # S1: OPEN EXPANSION (09:15 – 09:45)
     # Delta explodes, Gamma spikes, IV expands, Theta irrelevant
@@ -621,6 +705,16 @@ risk:
       allow_runners: true # Allow runner with trend intact (exponential drawdown logic fits here)
       allow_entries: true
       min_adx: 15.0 # Trend continuation only, pullbacks preferred, 1m + 5m alignment
+      max_adx: 35.0 # Ceiling, not just floor — very high ADX was the single worst bucket here
+                    # in regime research (late/exhaustion moves). NIFTY/SENSEX statistically
+                    # indistinguishable from each other at current sample size — kept shared.
+      # BANKNIFTY measured meaningfully different optimal cutoffs in a follow-up finer-grained
+      # pass (fav:adverse ratio bottomed at ADX 15-20 and collapsed again at ADX>=40, better
+      # in between) — given its own thresholds rather than forced to share NIFTY/SENSEX's.
+      per_index_min_adx:
+        BANKNIFTY: 20.0
+      per_index_max_adx:
+        BANKNIFTY: 40.0
       max_tp_rupees: null # No limit (runners allowed)
 
     # S3: CHOP / THETA ZONE (11:30 – 13:45) ❌ DANGER
@@ -645,10 +739,20 @@ risk:
       end: "15:15"
       sl_multiplier: 0.75 # Close gamma — tighter SL, book or cut
       tp_multiplier: 0.75 # FIXED TP (₹1.5k-₹2k)
-      allow_trailing: false # No runners after 14:45
-      allow_runners: false # Book profits aggressively
+      allow_trailing: true # Regime research: close_gamma outperformed trend_continuation's
+                           # favorable-continuation rate in every matched ADX bucket (up to
+                           # 13:1 favorable:adverse for BANKNIFTY at ADX 35+) — don't cut
+                           # winners short here on an outdated "risky window" assumption
+      allow_runners: true # See allow_trailing note above — data says let winners run here too
       allow_entries: true # ONLY continuation moves, no fresh breakouts after 14:45, ATM only
       min_adx: 18.0
+      # Follow-up finer-grained pass found ADX>=40 clearly worst for BANKNIFTY here too, so
+      # giving it a ceiling (this pass used a different Supertrend/ADX reconstruction than the
+      # one that produced the "13:1 at ADX 35+" note above — the two aren't fully reconciled,
+      # so this is a conservative ceiling above where both passes agree things degrade, not a
+      # tight one).
+      per_index_max_adx:
+        BANKNIFTY: 40.0
       max_tp_rupees: 2000 # Fixed ₹1.5k-₹2k
 
   # Global Time-Based Overrides (CRITICAL - override everything)
@@ -662,7 +766,7 @@ risk:
 
     # Override 2: IV collapse detection
     iv_collapse:
-      enabled: false # Set to true when IV data is available
+      enabled: true # Set to true when IV data is available
       collapse_threshold: 0.15 # Exit if IV drops >15% suddenly (time irrelevant)
 
     # Override 3: Price stall detection (especially after ₹2k profit)
@@ -848,13 +952,23 @@ position_sizing:
   daily_limits:
     enable: true
     per_index:
-      NIFTY: 0.02 # 2% max loss for NIFTY (already DECIMAL)
-      BANKNIFTY: 0.04 # 4% max loss for BANKNIFTY (already DECIMAL)
-      SENSEX: 0.01 # 1% max loss for SENSEX (already DECIMAL)
-    global_limit_pct: 0.04 # 4% (already DECIMAL)
+      NIFTY: 0.03 # 3% max loss for NIFTY (increased from 2%)
+      BANKNIFTY: 0.05 # 5% max loss for BANKNIFTY (increased from 4%)
+      SENSEX: 0.03 # 3% max loss for SENSEX (increased from 2%)
+    global_limit_pct: 0.06 # 6% (increased from 5%)
+    # Sanity cap on trade *count* per index per day, independent of the loss-pct caps above.
+    # 1m strategies (e.g. supertrend_v1) can legitimately re-signal many times a session —
+    # this was hardcoded to 6 and was blocking real, profitable trend entries after only a
+    # handful of trades. Raise per-index as warranted; `default` covers any index not listed.
+    max_trades_per_symbol:
+      default: 15
+      per_index:
+        NIFTY: 25
+        BANKNIFTY: 20
+        SENSEX: 20
 
   # Daily profit target: Stop trading when daily profit reaches this amount
-  max_daily_profit: 20000 # ₹20,000 daily profit target (trading stops when reached)
+  max_daily_profit: 30000 # ₹30,000 daily profit target (increased from ₹20,000)
   # Alternative config key: daily_profit_target (also supported)
 
   # Edge Failure Detector (Quality/Regime Detector - NOT a loss cap)
@@ -891,6 +1005,16 @@ position_sizing:
     session_based_pause: false # Enable session-aware pause logic
     s3_max_consecutive_sls: 2 # In S3 (11:30-13:45), pause after N consecutive SLs
     s4_start_time: "13:45" # Resume entries when S4 (close/gamma) starts (IST)
+
+# ============================================
+# KELLY CRITERION POSITION SIZING
+# ============================================
+kelly_sizing:
+  enabled: false
+  safety_factor: 0.5 # Fractional Kelly (e.g. 0.5 = Half Kelly)
+  max_capital_allocation_pct: 0.20 # Cap at 20% of capital per trade
+  default_win_rate: 0.55
+  default_payout_ratio: 1.5
 
 # ============================================
 # PORTFOLIO-LEVEL PROFIT LOCK ENGINE
@@ -956,7 +1080,7 @@ signals:
   # selective = strict gates + higher quality bar (not a profit guarantee).
   # Single source of truth: this value (DB document). SIGNAL_TIER env is ignored unless SIGNAL_TIER_FORCE=true.
   # See config/signal_tier_presets.yml
-  signal_tier: exploratory
+  signal_tier: selective # Profitability Slice 2 — was exploratory; override via SIGNAL_TIER_FORCE only
 
   # Entry strategy selection (code enforces behavior; no strategy logic in YAML)
   # primary: supertrend => Supertrend flip only; omit or use other value for legacy multi-indicator path
@@ -973,7 +1097,7 @@ signals:
   # Score 0-2 = allow, 3-4 = caution metadata, 5+ = block.
   chop_score:
     enabled: true
-    block_threshold: 5
+    block_threshold: 4
     caution_threshold: 3
     adx_threshold: 20.0
     supertrend_flip_limit: 3
@@ -1302,6 +1426,7 @@ telegram:
   include_stats_on_exit: true # Include trading stats summary in exit notifications
   notify_stats_at_market_close: true # Send daily trading stats at end of market session (3:30 PM IST)
   notify_entry_funnel_at_market_close: true # Send entry funnel summary at 3:30 PM IST (Solid Queue job)
+  notify_no_trade_sessions: true # Send summary at end of session if no trades were taken
   # SMC Alert Settings
   smc_alert_cooldown_minutes: 30 # Cooldown between duplicate alerts (same instrument+decision)
   smc_max_alerts_per_session: 2 # Max alerts per instrument per trading session (prevents overtrading)

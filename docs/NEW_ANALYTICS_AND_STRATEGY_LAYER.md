@@ -1,5 +1,12 @@
 # New Analytics & Strategy Layer — What It Is and How to Use It
 
+> **⚠️ SUPERSEDED (July 2026).** The strategy/context scaffold documented here
+> (`Strategy::Base/Registry/Orchestrator`, `Context::Builder`, `Domain::TradingContext`) was never
+> wired into the live pipeline and is slated for **delete-and-rebuild** under the `Strategies::`
+> namespace per decision **D-01.1** in the platform upgrade plan. See
+> `docs/infra-strategy-setup/README.md` (especially `04_strategy_plugin_system.md`). The analytics
+> sections below may remain accurate; the strategy-layer sections describe dead code.
+
 Reference for the files added in the strategy/analytics/context/execution layer. This doc is derived from actual code only.
 
 ---

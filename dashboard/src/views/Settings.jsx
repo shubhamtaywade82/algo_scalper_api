@@ -1,6 +1,5 @@
 import { createSignal, onMount, For, Show } from 'solid-js'
 import RecursiveFormNode from '../components/settings/RecursiveFormNode'
-import CalibrationRunsPanel from '../components/settings/CalibrationRunsPanel'
 import NetworkStatusPanel from '../components/settings/NetworkStatusPanel'
 import FastEntryModePanel from '../components/settings/FastEntryModePanel'
 
@@ -186,12 +185,6 @@ export default function Settings() {
             </div>
           </div>
         </Show>
-      </div>
-
-      <div class="mt-12 max-w-7xl mx-auto w-full space-y-6">
-        <For each={['NIFTY', 'SENSEX']}>
-          {(sym) => <CalibrationRunsPanel symbol={sym} />}
-        </For>
       </div>
     </div>
   )

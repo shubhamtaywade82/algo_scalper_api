@@ -51,11 +51,9 @@ module Backtest
           return []
         end
 
-        # If no close data and no failure status, log and return empty
-        unless response.is_a?(Hash) && (response['close'] || response[:close])
-          Rails.logger.error("[Backtest::ApiLoader] Unexpected API response for #{@symbol}: #{response.inspect}")
-          return []
-        end
+        # No close data and no failure status - log and return empty
+        Rails.logger.error("[Backtest::ApiLoader] Unexpected API response for #{@symbol}: #{response.inspect}")
+        return []
       end
 
       # Extract data hash

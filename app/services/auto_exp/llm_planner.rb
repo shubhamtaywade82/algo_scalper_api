@@ -3,7 +3,7 @@
 module AutoExp
   class LlmPlanner
     def model
-      ENV['OLLAMA_MODEL'] || "llama3.2:3b"
+      ENV['OLLAMA_MODEL'] || "qwen3.5:4b"
     end
 
     SCHEMA = {

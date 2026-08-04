@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "created_at": "2026-03-08T22:00:18+05:30",
+    "underlying": "nifty",
+    "strategy": "ema_crossover",
+    "period": "2024-09-04 to 2024-09-04",
+    "capital": 1000000
+  },
+  "statistics": {
+    "strikes_analyzed": 3,
+    "total_trades": 106,
+    "total_pnl": "₹77940.89",
+    "pnl_percentage": "7.79%",
+    "trades_by_strike": {
+      "ATM_CALL": {
+        "trades": 37,
+        "win_rate": "21.62%",
+        "pnl": "₹28820.75",
+        "pnl_pct": "2.88%"
+      },
+      "ATM+1_CALL": {
+        "trades": 36,
+        "win_rate": "22.22%",
+        "pnl": "₹29256.37",
+        "pnl_pct": "2.93%"
+      },
+      "ATM-1_CALL": {
+        "trades": 33,
+        "win_rate": "21.21%",
+        "pnl": "₹19863.77",
+        "pnl_pct": "1.99%"
+      }
+    }
+  }
+}

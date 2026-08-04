@@ -99,7 +99,6 @@ module MarketContext
       return :weak if legacy[:regime].to_s == 'INSUFFICIENT_DATA'
 
       adx = legacy.dig(:metrics, :adx_value).to_f
-      return :strong if struct_strength == :strong && adx >= 50.0
       return :strong if struct_strength == :strong && adx >= 40.0
       return :moderate if struct_strength == :moderate || adx >= 30.0
 

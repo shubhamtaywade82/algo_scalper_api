@@ -68,7 +68,9 @@ module Capital
 
       def available_cash
         wallet = Orders.config.gateway.wallet_snapshot
-        convert_to_bigdecimal(wallet.fetch(:cash, 0))
+        cash = convert_to_bigdecimal(wallet.fetch(:cash, 0))
+        cash *= 0.99 if cash > 100_000
+        cash
       rescue StandardError => e
         log_balance_fetch_error(e)
         BigDecimal(0)
@@ -94,12 +96,8 @@ module Capital
         nil
       end
 
-      def normalize_multiplier(scale_multiplier)
-        [scale_multiplier.to_i, 1].max
-      end
-
       def effective_multiplier(scale_multiplier)
-        base_multiplier = normalize_multiplier(scale_multiplier)
+        base_multiplier = [scale_multiplier.to_i, 1].max
         midday_multiplier = post_1100_multiplier
         adjusted = base_multiplier
         adjusted = (adjusted * midday_multiplier).floor if midday_multiplier < 1.0 && post_1100?
@@ -291,9 +289,26 @@ module Capital
       def calculate_max_by_risk(capital_available_f, entry_price_f, lot_size, effective_risk_pct, multiplier)
         risk_capital = capital_available_f * effective_risk_pct
         risk_capital_scaled = [risk_capital * multiplier, capital_available_f].min
-        stop_loss_per_share = entry_price_f * 0.30
+        stop_loss_per_share = entry_price_f * configured_sl_pct
 
         (risk_capital_scaled / stop_loss_per_share).floor * lot_size
+      end
+
+      # Single source of truth for stop-loss percentage, shared with
+      # Live::UnifiedExitChecker#build_exit_config so risk-based sizing is
+      # calibrated to the same stop distance the exit engine will actually use.
+      def configured_sl_pct
+        algo_cfg = AlgoConfig.fetch
+        risk_cfg = algo_cfg[:risk] || {}
+        exit_cfg = algo_cfg[:exit] || {}
+        (risk_cfg[:sl_pct] || exit_cfg.dig(:stop_loss, :value) || 0.12).to_f
+      end
+
+      def configured_tp_pct
+        algo_cfg = AlgoConfig.fetch
+        risk_cfg = algo_cfg[:risk] || {}
+        exit_cfg = algo_cfg[:exit] || {}
+        (exit_cfg[:take_profit] || risk_cfg[:tp_pct] || 0.50).to_f
       end
 
       def apply_quantity_safety_checks(quantity:, entry_price_f:, lot_size:, capital_available_f:)
@@ -327,25 +342,10 @@ module Capital
       def build_policy_with_overrides(band)
         {
           upto: band[:upto],
-          alloc_pct: allocation_percentage_with_override(band),
-          risk_per_trade_pct: risk_per_trade_with_override(band),
-          daily_max_loss_pct: daily_max_loss_with_override(band)
+          alloc_pct: band[:alloc_pct],
+          risk_per_trade_pct: band[:risk_per_trade_pct],
+          daily_max_loss_pct: band[:daily_max_loss_pct]
         }
-      end
-
-      def allocation_percentage_with_override(band)
-        # Prefer algo.yml config, ENV as fallback for testing
-        band[:alloc_pct] || ENV['ALLOC_PCT']&.to_f
-      end
-
-      def risk_per_trade_with_override(band)
-        # Prefer algo.yml config, ENV as fallback for testing
-        band[:risk_per_trade_pct] || ENV['RISK_PER_TRADE_PCT']&.to_f
-      end
-
-      def daily_max_loss_with_override(band)
-        # Prefer algo.yml config, ENV as fallback for testing
-        band[:daily_max_loss_pct] || ENV['DAILY_MAX_LOSS_PCT']&.to_f
       end
 
       def convert_to_bigdecimal(value)
@@ -475,18 +475,35 @@ module Capital
         entry_bd = BigDecimal(entry_price.to_s)
         return 0 unless entry_bd.finite? && entry_bd.positive?
 
-        # p = confidence (0.0 to 1.0)
-        p = (index_cfg[:confidence] || 0.55).to_f
-        # r = Reward-to-Risk ratio
-        risk = (entry_bd - BigDecimal((index_cfg[:stop_loss] || (entry_bd * 0.98)).to_s)).abs
-        reward = (BigDecimal((index_cfg[:target] || (entry_bd * 1.04)).to_s) - entry_bd).abs
-        r = risk.positive? ? (reward / risk).to_f : 1.0
+        # Attempt to load dynamic historical stats
+        strategy_name = index_cfg[:entry_strategy] || index_cfg[:strategy]
+        index_key = index_cfg[:key] || @index_key
+        stats = OptionsBuying::PerformanceDb.stats_for(strategy_name, index_key)
+
+        if stats
+          p = stats[:win_rate].to_f
+          r = stats[:payout_ratio].to_f
+          Rails.logger.info("[Allocator] KELLY_BASED using database stats: p=#{p.round(4)}, r=#{r.round(4)} (n=#{stats[:sample_size]})")
+        else
+          # Fallback: p = confidence (0.0 to 1.0)
+          p = (index_cfg[:confidence] || sizing_cfg[:default_win_rate] || 0.55).to_f
+          # r = Reward-to-Risk ratio. Option premiums swing far more than equity-style
+          # 2%/4% defaults, so fall back to the actual configured SL/TP percentages
+          # (same source as calculate_max_by_risk and Live::UnifiedExitChecker).
+          default_stop_price = entry_bd * (1 - configured_sl_pct)
+          default_target_price = entry_bd * (1 + configured_tp_pct)
+          risk = (entry_bd - BigDecimal((index_cfg[:stop_loss] || default_stop_price).to_s)).abs
+          reward = (BigDecimal((index_cfg[:target] || default_target_price).to_s) - entry_bd).abs
+          r = risk.positive? ? (reward / risk).to_f : (sizing_cfg[:default_payout_ratio] || 1.5).to_f
+          Rails.logger.info("[Allocator] KELLY_BASED using fallback defaults: p=#{p.round(4)}, r=#{r.round(4)}")
+        end
 
         # Calculate Kelly fraction f*
-        kelly_f = p - ((1 - p) / r)
+        kelly_f = p - ((1.0 - p) / r)
         # Apply safety factor (Half-Kelly or Fractional Kelly)
-        safety_factor = sizing_cfg[:safety_factor] || 0.5
-        f_star = [kelly_f * safety_factor, 0.20].min # Cap at 20% of capital per trade
+        safety_factor = (sizing_cfg[:safety_factor] || 0.5).to_f
+        max_alloc = (sizing_cfg[:max_capital_allocation_pct] || 0.20).to_f
+        f_star = [kelly_f * safety_factor, max_alloc].min
 
         return 0 if f_star <= 0
 
@@ -516,9 +533,11 @@ module Capital
       end
 
       def kelly_based_sizing_enabled?(index_cfg)
-        return false unless index_cfg[:confidence] # Requires signal confidence
         cfg = AlgoConfig.fetch[:kelly_sizing]
-        cfg && cfg[:enabled] == true
+        return false unless cfg && cfg[:enabled] == true
+
+        index_cfg[:confidence].present? ||
+          OptionsBuying::PerformanceDb.stats_for(index_cfg[:entry_strategy] || index_cfg[:strategy], index_cfg[:key]).present?
       end
 
       def position_sizing_config

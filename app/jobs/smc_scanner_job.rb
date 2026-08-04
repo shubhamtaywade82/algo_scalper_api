@@ -58,14 +58,8 @@ class SmcScannerJob < ApplicationJob
 
     max_days = max_expiry_days
     indices.filter_map do |idx_cfg|
-      instrument = Instrument.find_by_sid_and_segment(
-        security_id: idx_cfg[:sid].to_s,
-        segment_code: idx_cfg[:segment]
-      )
-      unless instrument
-        Rails.logger.warn("[SmcScannerJob] Instrument not found for #{idx_cfg[:key]}")
-        next
-      end
+      instrument = find_index_instrument(idx_cfg)
+      next unless instrument
 
       days = calculate_days_to_expiry(instrument)
       if days > max_days
@@ -82,17 +76,20 @@ class SmcScannerJob < ApplicationJob
 
   def indices_without_expiry_filter(indices)
     indices.filter_map do |idx_cfg|
-      instrument = Instrument.find_by_sid_and_segment(
-        security_id: idx_cfg[:sid].to_s,
-        segment_code: idx_cfg[:segment]
-      )
-      unless instrument
-        Rails.logger.warn("[SmcScannerJob] Instrument not found for #{idx_cfg[:key]}")
-        next
-      end
+      instrument = find_index_instrument(idx_cfg)
+      next unless instrument
 
       [idx_cfg, instrument]
     end
+  end
+
+  def find_index_instrument(idx_cfg)
+    instrument = Instrument.find_by_sid_and_segment(
+      security_id: idx_cfg[:sid].to_s,
+      segment_code: idx_cfg[:segment]
+    )
+    Rails.logger.warn("[SmcScannerJob] Instrument not found for #{idx_cfg[:key]}") unless instrument
+    instrument
   end
 
   def wait_between_instruments(index)

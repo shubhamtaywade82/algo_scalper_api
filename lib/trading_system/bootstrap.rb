@@ -58,7 +58,6 @@ module TradingSystem
       supervisor.register(:tick_smc_ai, Smc::TickAi::AnalysisService.new)
       supervisor.register(:options_buying_breakout, OptionsBuying::BreakoutWatcher.new)
       supervisor.register(:options_buying_stream_consumer, OptionsBuying::StreamConsumer.new)
-      supervisor.register(:signal_scheduler, Signal::Scheduler.new)
       supervisor.register(:risk_manager, Live::RiskManagerService.new(exit_engine: exit_engine))
       supervisor.register(:position_heartbeat, TradingSystem::PositionHeartbeat.new)
       supervisor.register(:order_router, router)
@@ -80,8 +79,29 @@ module TradingSystem
       supervisor.register(:reconciliation, Live::ReconciliationService.instance)
       supervisor.register(:stats_notifier, Live::StatsNotifierService.instance)
       supervisor.register(:smc_scanner, Smc::Scanner.new)
+      supervisor.register(:strategy_manager, Strategies::Manager.new)
+      supervisor.register(:pnl_updater, Live::PnlUpdaterService.instance)
+      supervisor.register(:candle_poller, Live::CandlePollerService.new)
+
+      register_chain_watch(supervisor, :chain_watch_nifty, 'NIFTY')
+      register_chain_watch(supervisor, :chain_watch_banknifty, 'BANKNIFTY')
+      register_chain_watch(supervisor, :chain_watch_sensex, 'SENSEX')
 
       supervisor
     end
+
+    # Registers a per-index ChainWatchService, tolerating an operator having
+    # disabled that index in the DB watchlist (IndexConfigLoader won't return
+    # it, and the constructor raises `unknown_index:...`). Without this
+    # rescue, one disabled index would abort build_supervisor and prevent
+    # every other service from booting too.
+    def register_chain_watch(supervisor, key, index_key)
+      service = Options::ChainWatchService.new(index_key: index_key)
+      supervisor.register(key, service)
+      Options::ChainWatchRegistry.register(index_key, service)
+    rescue StandardError => e
+      Rails.logger.warn("[Bootstrap] Skipping #{key} registration: #{e.class} - #{e.message}")
+    end
+    private :register_chain_watch
   end
 end

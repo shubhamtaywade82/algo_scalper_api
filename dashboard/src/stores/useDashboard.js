@@ -21,7 +21,16 @@ export function useDashboard(onPositionChange) {
     losers: 0
   })
   const [balance, setBalance] = createSignal({ cash: 0, equity: 0, mtm: 0, exposure: 0 })
-  const [indices, setIndices] = createSignal({ nifty: null, banknifty: null, sensex: null })
+  const [indices, setIndices] = createSignal({
+    nifty: null,
+    banknifty: null,
+    sensex: null,
+    nifty_prev_close: null,
+    banknifty_prev_close: null,
+    sensex_prev_close: null
+  })
+  const [subscribedIndices, setSubscribedIndices] = createSignal([])
+  const [optionsBuying, setOptionsBuying] = createSignal({ nifty: {}, banknifty: {}, sensex: {} })
   const [system, setSystem] = createSignal({ ws_market_feed: false, ws_order_update: false, scheduler: 'unknown' })
   const [publicIpv4, setPublicIpv4] = createSignal('Unknown')
   const [publicIpv6, setPublicIpv6] = createSignal('Unknown')
@@ -30,7 +39,6 @@ export function useDashboard(onPositionChange) {
   const [lastUpdated, setLastUpdated] = createSignal(null)
   const [recentSignals, setRecentSignals] = createSignal([])
   const [config, setConfig] = createSignal({ risk: {}, signals: {}, time_restrictions: {} })
-  const [subscribedIndices, setSubscribedIndices] = createSignal([])
   const [marketStatus, setMarketStatus] = createSignal(null)
 
   let subscription = null
@@ -88,6 +96,9 @@ export function useDashboard(onPositionChange) {
       if (src.nifty) { current.nifty = src.nifty; changed = true }
       if (src.banknifty) { current.banknifty = src.banknifty; changed = true }
       if (src.sensex) { current.sensex = src.sensex; changed = true }
+      if (src.nifty_prev_close !== undefined && src.nifty_prev_close !== null) { current.nifty_prev_close = src.nifty_prev_close; changed = true }
+      if (src.banknifty_prev_close !== undefined && src.banknifty_prev_close !== null) { current.banknifty_prev_close = src.banknifty_prev_close; changed = true }
+      if (src.sensex_prev_close !== undefined && src.sensex_prev_close !== null) { current.sensex_prev_close = src.sensex_prev_close; changed = true }
     }
 
     if (changed) {
@@ -117,6 +128,7 @@ export function useDashboard(onPositionChange) {
     if (data.recent_signals) setRecentSignals(data.recent_signals)
     if (data.config) setConfig(data.config)
     if (data.subscribed_indices) setSubscribedIndices(data.subscribed_indices)
+    if (data.options_buying) setOptionsBuying(data.options_buying)
     if (data.market_status) setMarketStatus(data.market_status)
 
     setLastUpdated(data.timestamp || new Date().toISOString())
@@ -169,7 +181,7 @@ export function useDashboard(onPositionChange) {
   })
 
   return {
-    mode, connected, isStale, stats, balance, indices, subscribedIndices, system,
+    mode, connected, isStale, stats, balance, indices, subscribedIndices, optionsBuying, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, config,
     marketStatus,
     refresh: fetchInitial

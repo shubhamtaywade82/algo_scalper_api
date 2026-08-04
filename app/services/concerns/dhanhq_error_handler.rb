@@ -2,8 +2,6 @@
 
 # Handles DhanHQ API errors, especially authentication/token expiry
 module DhanhqErrorHandler
-  extend ActiveSupport::Concern
-
   # Error codes that indicate token expiry
   TOKEN_EXPIRY_CODES = %w[DH-901 401].freeze
   TOKEN_EXPIRY_KEYWORDS = [
@@ -143,24 +141,5 @@ module DhanhqErrorHandler
   rescue StandardError => e
     Rails.logger.error("[DhanhqErrorHandler] Refresh failed: #{e.class} - #{e.message}")
     false
-  end
-
-  # For ActiveSupport::Concern compatibility - make methods available as class methods when included
-  class_methods do
-    def token_expired?(error)
-      DhanhqErrorHandler.token_expired?(error)
-    end
-
-    def notify_token_expiry(context: 'API', error: nil)
-      DhanhqErrorHandler.notify_token_expiry(context: context, error: error)
-    end
-
-    def handle_dhanhq_error(error, context: 'API')
-      DhanhqErrorHandler.handle_dhanhq_error(error, context: context)
-    end
-
-    def attempt_refresh_if_configured(context:, error:)
-      DhanhqErrorHandler.attempt_refresh_if_configured(context: context, error: error)
-    end
   end
 end

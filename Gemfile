@@ -23,6 +23,7 @@ gem 'solid_cache'
 gem 'solid_queue'
 
 gem 'concurrent-ruby'
+gem 'connection_pool', '~> 2.4'
 gem 'json', '>= 2.19.2'
 gem 'redis'
 gem 'ruby-technical-analysis'
@@ -46,7 +47,10 @@ gem 'kamal', require: false
 gem 'thruster', require: false
 
 # DhanHQ Ruby client (v2 API wrapper and WebSocket feed)
-gem 'DhanHQ', '2.8.0'
+gem 'DhanHQ', '2.8.0', require: 'dhan_hq'
+
+# MCP adapter for DhanHQ tool specs and validated routing
+gem 'dhanhq-mcp', path: '/home/nemesis/project/trading-workspace/sdk/dhanhq-mcp'
 
 # TOTP generation for Dhan TOTP auth strategy
 gem 'rotp', '~> 6.3'
@@ -99,11 +103,20 @@ group :development, :test do
   gem 'webmock', require: false
 
   # Annotate models, routes, etc.
-  gem 'annotate'
+  gem 'annotaterb'
 
   gem "debride"
+
+  # N+1 query detection
+  gem 'bullet'
+
+  # Rails codebase indexing for AI coding assistant context
+  gem 'woods'
 end
 
 gem "json_schemer", "~> 2.4"
 
-gem "rswag", "~> 2.17", groups: [:development, :test]
+gem "rswag", "~> 2.17", groups: %i[development test]
+
+# AI Multi-Agent orchestration framework
+gem 'ruby_llm-agents'

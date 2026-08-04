@@ -92,6 +92,7 @@ app/services/
     token_manager.rb               # 3-tier token: authority server → TOTP → static ENV
   adapters/
     option_chain/dhan_adapter.rb   # live option chain fetch (always wired, even in paper mode)
+  research/                        # offline research pipeline (see below) — never called from the live trading path
 
 app/jobs/
   instruments_import_job.rb        # daily DhanHQ CSV sync
@@ -131,6 +132,7 @@ Registered in `lib/trading_system/bootstrap.rb`, started by `supervisor.start_al
 | `SmcScannerJob` | Every 15 min (market hours) | SMC + AVRZ pattern detection |
 | `AiTechnicalAnalysisJob` (NIFTY) | Every 15 min (market hours) | AI-powered analysis |
 | `AiTechnicalAnalysisJob` (SENSEX) | Every 15 min (market hours) | AI-powered analysis |
+| `Research::DailyLifecycleJob` (NIFTY/BANKNIFTY/SENSEX) | Daily 9:00 AM | Auto-runs the prior session's premium-lifecycle board so `research_premium_lifecycles` accumulates without manual dashboard clicks — resolves spot from persisted candles, skips silently on non-trading days or missing candle data |
 
 Run `rails solid_queue:load_recurring` to populate the schedule after config changes.
 
@@ -161,6 +163,22 @@ Exit enforcement (5s loop):
     → Premium R-stop, trailing (tiered/direct/gamma), profit floor
     → Structure invalidation, premium momentum, R:R booking, time stop
 ```
+
+## Research Pipeline (`Research::` — offline, decoupled from live trading)
+
+A layered pipeline over Dhan's `ExpiredOptionsData` ("rollingoption") and the persisted `candles` table, for studying option premium behavior — never wired into the live entry/exit path.
+
+- `research_raw_fetches` — raw API response archive (audit/replay)
+- `research_option_bars` — normalized minute/5-min option OHLCV, keyed by contract identity (symbol/expiry_flag/option_type/strike_label/interval/ts)
+- `research_signals` — signal-time snapshot (spot/direction/timestamp), buildable manually or from a `TradingSignal`
+- `research_option_candidates` — ATM+/-N candidate strikes per signal, scored (entry/exit/MFE/MAE/return) by `Research::TradeScorer`
+- `research_premium_lifecycles` — full premium path (entry → peak → decay → end) per strike across a session, with a best-effort underlying context snapshot (ATR/ADX/RSI/MACD/VWAP, plus `Research::ContextClassifier`'s regime labels) at entry and peak via `Research::UnderlyingContextSnapshot`
+
+`Research::ContextClassifier` buckets the underlying into regime labels (market structure, trend strength, volatility regime, momentum, volume regime, time-of-day, VWAP relation, liquidity sweep, opening-range breakout, gap) — the goal being "what market context produces high-expectancy premium expansion", not single-indicator thresholds. Reuses the existing `Smc::Detectors::Structure`/`Liquidity` (pure, side-effect-free) for structure/BOS/CHoCH/sweep detection rather than re-deriving swing points. Thresholds are a documented first cut (see the class), not calibrated against historical data yet.
+
+`Research::ExpectancyReport` is the Context → Expectancy Map itself: groups persisted `research_premium_lifecycles` rows by a caller-chosen subset of their entry (or peak) regime labels and computes sample size / avg peak return / win rate / avg time-to-peak / avg drawdown per bucket, ranked best-to-worst — this is what tells you which contexts are worth trading and which aren't, rather than a single "buy when X" rule.
+
+Entry points: `Research::Pipeline.run` (single signal → ranked candidates), `Research::LifecycleRunner.run` (full ATM+/-N board → ranked lifecycles), `Research::ExpectancyReport.call` (persisted lifecycles → ranked context buckets). Rake tasks: `research:run_signal`, `research:run_board_lifecycle` (see `lib/tasks/research.rake`). Dashboard: `/research` (Signal Pipeline, Premium Lifecycle Board, and Context → Expectancy panels), backed by `/api/research/*`.
 
 ## Paper vs Live Mode
 
