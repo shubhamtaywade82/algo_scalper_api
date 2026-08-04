@@ -1,0 +1,586 @@
+FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+
+Failures:
+
+  1) Signal::Engine EPIC D — D1: Generate Directional Signals .run_for when instrument is found fetches OHLC data from DhanHQ API via VCR for both timeframes
+     Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+     NoMethodError:
+       undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::RunFor::WhenInstrumentIsFound:0x00007f963fb3fd58>
+     # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+     # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+     # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  2) Signal::Engine EPIC D — D1: Generate Directional Signals .run_for when instrument is found calls intraday_ohlc via candle_series which uses VCR cassettes
+     Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+     NoMethodError:
+       undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::RunFor::WhenInstrumentIsFound:0x00007f9640ecfdc8>
+     # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+     # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+     # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  3) Signal::Engine EPIC D — D1: Generate Directional Signals .run_for when instrument is not found logs error and returns early
+     Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+     NoMethodError:
+       undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::RunFor::WhenInstrumentIsNotFound:0x00007f963fb344a8>
+     # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+     # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+     # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  4) Signal::Engine EPIC D — D1: Generate Directional Signals .run_for when instrument is not found does not proceed with signal generation
+     Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+     NoMethodError:
+       undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::RunFor::WhenInstrumentIsNotFound:0x00007f9640ec03c8>
+     # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+     # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+     # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  5) Signal::Engine EPIC D — D1: Generate Directional Signals .run_for when Supertrend configuration is missing logs error and returns early
+     Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+     NoMethodError:
+       undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::RunFor::WhenSupertrendConfigurationIsMissing:0x00007f963fb5e618>
+     # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+     # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+     # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  6) Signal::Engine EPIC D — D1: Generate Directional Signals .run_for when entry_strategy.primary is supertrend does not call EntryGuard when SupertrendTrend returns :none
+     Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+     NoMethodError:
+       undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::RunFor::WhenEntryStrategyPrimaryIsSupertrend:0x00007f963fb59118>
+     # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+     # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+     # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  7) Signal::Engine EPIC D — D1: Generate Directional Signals .run_for when entry_strategy.primary is supertrend uses :bullish when SupertrendTrend returns :long
+     Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+     NoMethodError:
+       undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::RunFor::WhenEntryStrategyPrimaryIsSupertrend:0x00007f963f5ecc70>
+     # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+     # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+     # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  8) Signal::Engine EPIC D — D1: Generate Directional Signals .run_for when primary timeframe analysis fails logs warning and resets state tracker
+     Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+     NoMethodError:
+       undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::RunFor::WhenPrimaryTimeframeAnalysisFails:0x00007f963fb501d0>
+     # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+     # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+     # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  9) Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_timeframe when timeframe is valid fetches candle series from API via VCR
+     Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+     NoMethodError:
+       undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::AnalyzeTimeframe::WhenTimeframeIsValid:0x00007f963fb69bf8>
+     # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+     # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+     # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  10) Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_timeframe when timeframe is valid calculates Supertrend with real OHLC data from VCR
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::AnalyzeTimeframe::WhenTimeframeIsValid:0x00007f963f5ea600>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  11) Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_timeframe when timeframe is valid calculates ADX with real OHLC data from VCR
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::AnalyzeTimeframe::WhenTimeframeIsValid:0x00007f9640fb4108>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  12) Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_timeframe when timeframe is valid returns direction based on Supertrend and ADX
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::AnalyzeTimeframe::WhenTimeframeIsValid:0x00007f9640feafa0>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  13) Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_timeframe when timeframe is invalid returns error status
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::AnalyzeTimeframe::WhenTimeframeIsInvalid:0x00007f963fa76ca0>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  14) Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_timeframe when no candle data is available returns no_data status
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::AnalyzeTimeframe::WhenNoCandleDataIsAvailable:0x00007f963fa9f628>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  15) Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_timeframe when an error occurs during analysis handles error gracefully and returns error status
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::AnalyzeTimeframe::WhenAnErrorOccursDuringAnalysis:0x00007f963fa9a740>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  16) Signal::Engine EPIC D — D1: Generate Directional Signals .decide_direction when ADX is above minimum threshold returns bullish direction for bullish Supertrend
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::DecideDirection::WhenADXIsAboveMinimumThreshold:0x00007f963fa92f68>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  17) Signal::Engine EPIC D — D1: Generate Directional Signals .decide_direction when ADX is above minimum threshold returns bearish direction for bearish Supertrend
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::DecideDirection::WhenADXIsAboveMinimumThreshold:0x00007f963f5e4ca0>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  18) Signal::Engine EPIC D — D1: Generate Directional Signals .decide_direction when ADX is above minimum threshold returns avoid for neutral/unknown Supertrend trend
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::DecideDirection::WhenADXIsAboveMinimumThreshold:0x00007f963f629940>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  19) Signal::Engine EPIC D — D1: Generate Directional Signals .decide_direction when ADX is below minimum threshold returns avoid when ADX is too weak
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::DecideDirection::WhenADXIsBelowMinimumThreshold:0x00007f963f5f8228>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  20) Signal::Engine EPIC D — D1: Generate Directional Signals .decide_direction when Supertrend result is invalid returns avoid for nil Supertrend result
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::DecideDirection::WhenSupertrendResultIsInvalid:0x00007f963f5f46c8>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  21) Signal::Engine EPIC D — D1: Generate Directional Signals .decide_direction when Supertrend result is invalid returns avoid for Supertrend result without trend
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::DecideDirection::WhenSupertrendResultIsInvalid:0x00007f963f5e1e60>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  22) Signal::Engine EPIC D — D1: Generate Directional Signals .multi_timeframe_direction when both timeframes align returns bullish when both are bullish
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::MultiTimeframeDirection::WhenBothTimeframesAlign:0x00007f963f60cae8>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  23) Signal::Engine EPIC D — D1: Generate Directional Signals .multi_timeframe_direction when both timeframes align returns bearish when both are bearish
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::MultiTimeframeDirection::WhenBothTimeframesAlign:0x00007f963f66f6e8>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  24) Signal::Engine EPIC D — D1: Generate Directional Signals .multi_timeframe_direction when timeframes do not align returns avoid when directions mismatch
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::MultiTimeframeDirection::WhenTimeframesDoNotAlign:0x00007f963f6049b0>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  25) Signal::Engine EPIC D — D1: Generate Directional Signals .multi_timeframe_direction when either timeframe is avoid returns avoid when primary is avoid
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::MultiTimeframeDirection::WhenEitherTimeframeIsAvoid:0x00007f963f63eb38>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  26) Signal::Engine EPIC D — D1: Generate Directional Signals .multi_timeframe_direction when either timeframe is avoid returns avoid when confirmation is avoid
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::MultiTimeframeDirection::WhenEitherTimeframeIsAvoid:0x00007f963f61e1a8>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  27) Signal::Engine EPIC D — D1: Generate Directional Signals .multi_timeframe_direction when confirmation is nil returns primary direction when confirmation is nil
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::MultiTimeframeDirection::WhenConfirmationIsNil:0x00007f963f638058>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  28) Signal::Engine EPIC D — D1: Generate Directional Signals .normalize_interval extracts digits from timeframe string
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::NormalizeInterval:0x00007f963f631618>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  29) Signal::Engine EPIC D — D1: Generate Directional Signals .normalize_interval handles various formats
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::NormalizeInterval:0x00007f963f61b228>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  30) Signal::Engine EPIC D — D1: Generate Directional Signals .normalize_interval returns nil for invalid timeframes
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::NormalizeInterval:0x00007f963f6614a8>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  31) Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_multi_timeframe analyzes both primary and confirmation timeframes via VCR
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::AnalyzeMultiTimeframe:0x00007f963f6850d8>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  32) Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_multi_timeframe fetches OHLC data for both timeframes from API via VCR
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::AnalyzeMultiTimeframe:0x00007f963f69d020>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  33) Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_multi_timeframe when primary timeframe analysis fails returns error status
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::AnalyzeMultiTimeframe::WhenPrimaryTimeframeAnalysisFails:0x00007f963f6adf60>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  34) Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_multi_timeframe when confirmation timeframe analysis fails handles gracefully and uses primary direction
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::AnalyzeMultiTimeframe::WhenConfirmationTimeframeAnalysisFails:0x00007f963f6aa1f8>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  35) Signal::Engine EPIC D — D1: Generate Directional Signals .comprehensive_validation validates signal with all enabled checks
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::ComprehensiveValidation:0x00007f963f6a52e8>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  36) Signal::Engine EPIC D — D1: Generate Directional Signals .comprehensive_validation when validation mode is conservative runs all validation checks including IV rank and theta risk
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::ComprehensiveValidation::WhenValidationModeIsConservative:0x00007f963f6a0428>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  37) Signal::Engine EPIC D — D1: Generate Directional Signals .comprehensive_validation when ADX is too weak fails validation
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::ComprehensiveValidation::WhenADXIsTooWeak:0x00007f963f7bbcb8>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  38) Signal::Engine EPIC D — D1: Generate Directional Signals end-to-end signal generation generates signal with real OHLC data from VCR
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::EndToEndSignalGeneration:0x00007f963f7b66f0>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  39) Signal::Engine EPIC D — D1: Generate Directional Signals end-to-end signal generation logs signal generation process
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::EndToEndSignalGeneration:0x00007f963f6124e8>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  40) Signal::Engine EPIC D — D1: Generate Directional Signals end-to-end signal generation when multi-timeframe confirmation is required validates both primary and confirmation timeframes align
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::EndToEndSignalGeneration::WhenMultiTimeframeConfirmationIsRequired:0x00007f963f7ef1d0>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+  41) Signal::Engine EPIC D — D1: Generate Directional Signals end-to-end signal generation when comprehensive validation fails does not generate signal and resets state tracker
+      Failure/Error: travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
+
+      NoMethodError:
+        undefined method `travel_to' for #<RSpec::ExampleGroups::SignalEngine::EPICDD1GenerateDirectionalSignals::EndToEndSignalGeneration::WhenComprehensiveValidationFails:0x00007f963f7ebc60>
+      # ./spec/services/signal/engine_spec.rb:7:in `block (2 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.25.1/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+      # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+      # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+      # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+Finished in 0.09776 seconds (files took 2.22 seconds to load)
+41 examples, 41 failures
+
+Failed examples:
+
+rspec ./spec/services/signal/engine_spec.rb:84 # Signal::Engine EPIC D — D1: Generate Directional Signals .run_for when instrument is found fetches OHLC data from DhanHQ API via VCR for both timeframes
+rspec ./spec/services/signal/engine_spec.rb:92 # Signal::Engine EPIC D — D1: Generate Directional Signals .run_for when instrument is found calls intraday_ohlc via candle_series which uses VCR cassettes
+rspec ./spec/services/signal/engine_spec.rb:106 # Signal::Engine EPIC D — D1: Generate Directional Signals .run_for when instrument is not found logs error and returns early
+rspec ./spec/services/signal/engine_spec.rb:111 # Signal::Engine EPIC D — D1: Generate Directional Signals .run_for when instrument is not found does not proceed with signal generation
+rspec ./spec/services/signal/engine_spec.rb:127 # Signal::Engine EPIC D — D1: Generate Directional Signals .run_for when Supertrend configuration is missing logs error and returns early
+rspec ./spec/services/signal/engine_spec.rb:163 # Signal::Engine EPIC D — D1: Generate Directional Signals .run_for when entry_strategy.primary is supertrend does not call EntryGuard when SupertrendTrend returns :none
+rspec ./spec/services/signal/engine_spec.rb:181 # Signal::Engine EPIC D — D1: Generate Directional Signals .run_for when entry_strategy.primary is supertrend uses :bullish when SupertrendTrend returns :long
+rspec ./spec/services/signal/engine_spec.rb:241 # Signal::Engine EPIC D — D1: Generate Directional Signals .run_for when primary timeframe analysis fails logs warning and resets state tracker
+rspec ./spec/services/signal/engine_spec.rb:268 # Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_timeframe when timeframe is valid fetches candle series from API via VCR
+rspec ./spec/services/signal/engine_spec.rb:283 # Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_timeframe when timeframe is valid calculates Supertrend with real OHLC data from VCR
+rspec ./spec/services/signal/engine_spec.rb:299 # Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_timeframe when timeframe is valid calculates ADX with real OHLC data from VCR
+rspec ./spec/services/signal/engine_spec.rb:314 # Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_timeframe when timeframe is valid returns direction based on Supertrend and ADX
+rspec ./spec/services/signal/engine_spec.rb:329 # Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_timeframe when timeframe is invalid returns error status
+rspec ./spec/services/signal/engine_spec.rb:348 # Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_timeframe when no candle data is available returns no_data status
+rspec ./spec/services/signal/engine_spec.rb:367 # Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_timeframe when an error occurs during analysis handles error gracefully and returns error status
+rspec ./spec/services/signal/engine_spec.rb:390 # Signal::Engine EPIC D — D1: Generate Directional Signals .decide_direction when ADX is above minimum threshold returns bullish direction for bullish Supertrend
+rspec ./spec/services/signal/engine_spec.rb:401 # Signal::Engine EPIC D — D1: Generate Directional Signals .decide_direction when ADX is above minimum threshold returns bearish direction for bearish Supertrend
+rspec ./spec/services/signal/engine_spec.rb:413 # Signal::Engine EPIC D — D1: Generate Directional Signals .decide_direction when ADX is above minimum threshold returns avoid for neutral/unknown Supertrend trend
+rspec ./spec/services/signal/engine_spec.rb:429 # Signal::Engine EPIC D — D1: Generate Directional Signals .decide_direction when ADX is below minimum threshold returns avoid when ADX is too weak
+rspec ./spec/services/signal/engine_spec.rb:444 # Signal::Engine EPIC D — D1: Generate Directional Signals .decide_direction when Supertrend result is invalid returns avoid for nil Supertrend result
+rspec ./spec/services/signal/engine_spec.rb:455 # Signal::Engine EPIC D — D1: Generate Directional Signals .decide_direction when Supertrend result is invalid returns avoid for Supertrend result without trend
+rspec ./spec/services/signal/engine_spec.rb:471 # Signal::Engine EPIC D — D1: Generate Directional Signals .multi_timeframe_direction when both timeframes align returns bullish when both are bullish
+rspec ./spec/services/signal/engine_spec.rb:476 # Signal::Engine EPIC D — D1: Generate Directional Signals .multi_timeframe_direction when both timeframes align returns bearish when both are bearish
+rspec ./spec/services/signal/engine_spec.rb:483 # Signal::Engine EPIC D — D1: Generate Directional Signals .multi_timeframe_direction when timeframes do not align returns avoid when directions mismatch
+rspec ./spec/services/signal/engine_spec.rb:490 # Signal::Engine EPIC D — D1: Generate Directional Signals .multi_timeframe_direction when either timeframe is avoid returns avoid when primary is avoid
+rspec ./spec/services/signal/engine_spec.rb:495 # Signal::Engine EPIC D — D1: Generate Directional Signals .multi_timeframe_direction when either timeframe is avoid returns avoid when confirmation is avoid
+rspec ./spec/services/signal/engine_spec.rb:502 # Signal::Engine EPIC D — D1: Generate Directional Signals .multi_timeframe_direction when confirmation is nil returns primary direction when confirmation is nil
+rspec ./spec/services/signal/engine_spec.rb:510 # Signal::Engine EPIC D — D1: Generate Directional Signals .normalize_interval extracts digits from timeframe string
+rspec ./spec/services/signal/engine_spec.rb:516 # Signal::Engine EPIC D — D1: Generate Directional Signals .normalize_interval handles various formats
+rspec ./spec/services/signal/engine_spec.rb:522 # Signal::Engine EPIC D — D1: Generate Directional Signals .normalize_interval returns nil for invalid timeframes
+rspec ./spec/services/signal/engine_spec.rb:555 # Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_multi_timeframe analyzes both primary and confirmation timeframes via VCR
+rspec ./spec/services/signal/engine_spec.rb:567 # Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_multi_timeframe fetches OHLC data for both timeframes from API via VCR
+rspec ./spec/services/signal/engine_spec.rb:584 # Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_multi_timeframe when primary timeframe analysis fails returns error status
+rspec ./spec/services/signal/engine_spec.rb:610 # Signal::Engine EPIC D — D1: Generate Directional Signals .analyze_multi_timeframe when confirmation timeframe analysis fails handles gracefully and uses primary direction
+rspec ./spec/services/signal/engine_spec.rb:647 # Signal::Engine EPIC D — D1: Generate Directional Signals .comprehensive_validation validates signal with all enabled checks
+rspec ./spec/services/signal/engine_spec.rb:684 # Signal::Engine EPIC D — D1: Generate Directional Signals .comprehensive_validation when validation mode is conservative runs all validation checks including IV rank and theta risk
+rspec ./spec/services/signal/engine_spec.rb:701 # Signal::Engine EPIC D — D1: Generate Directional Signals .comprehensive_validation when ADX is too weak fails validation
+rspec ./spec/services/signal/engine_spec.rb:722 # Signal::Engine EPIC D — D1: Generate Directional Signals end-to-end signal generation generates signal with real OHLC data from VCR
+rspec ./spec/services/signal/engine_spec.rb:732 # Signal::Engine EPIC D — D1: Generate Directional Signals end-to-end signal generation logs signal generation process
+rspec ./spec/services/signal/engine_spec.rb:745 # Signal::Engine EPIC D — D1: Generate Directional Signals end-to-end signal generation when multi-timeframe confirmation is required validates both primary and confirmation timeframes align
+rspec ./spec/services/signal/engine_spec.rb:761 # Signal::Engine EPIC D — D1: Generate Directional Signals end-to-end signal generation when comprehensive validation fails does not generate signal and resets state tracker
+
+Coverage report generated for RSpec to /home/nemesis/project/trading-workspace/algo_scalper_api/coverage.
+Line Coverage: 1.31% (374 / 28590)

@@ -84,5 +84,5 @@ export function useDashboard(onPositionChange) {
     clearInterval(pollTimer)
   })
 
-  return { mode, connected, stats, balance, indices, system, publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, config }
+  return { mode, connected, stats, balance, indices, system, circuitBreaker, lastUpdated, recentSignals, config }
 }

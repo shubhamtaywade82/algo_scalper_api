@@ -13,8 +13,8 @@ class AnalysisStore
 
   # TTLs — how long each component stays valid
   TTLS = {
-    smc: 3.minutes,
-    ai: 10.minutes,
+    smc:    3.minutes,
+    ai:     10.minutes,
     regime: 2.minutes
   }.freeze
 
@@ -27,7 +27,7 @@ class AnalysisStore
       entry = Rails.cache.read(cache_key(index_key, component))
       return nil unless entry
 
-      age = Time.current - Time.zone.parse(entry[:computed_at].to_s)
+      age = Time.current - Time.parse(entry[:computed_at])
       ttl = TTLS[component.to_sym] || 5.minutes
 
       {
@@ -68,7 +68,7 @@ class AnalysisStore
 
     # Read all components for an index (used by the API)
     def read_all(index_key)
-      COMPONENTS.index_with { |c| read(index_key, c) }
+      COMPONENTS.to_h { |c| [c, read(index_key, c)] }
     end
 
     # Check if a component needs refresh
@@ -76,7 +76,7 @@ class AnalysisStore
       entry = Rails.cache.read(cache_key(index_key, component))
       return true unless entry
 
-      age = Time.current - Time.zone.parse(entry[:computed_at].to_s)
+      age = Time.current - Time.parse(entry[:computed_at])
       ttl = TTLS[component.to_sym] || 5.minutes
       age >= ttl
     rescue StandardError

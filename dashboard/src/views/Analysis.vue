@@ -10,8 +10,7 @@ import CalibrationPanel from '../components/analysis/CalibrationPanel.vue'
 const {
   currentIndex, liveData, historicalData,
   loading, historicalLoading, error,
-  fetchLive, fetchHistorical, switchIndex,
-  snapshotLoading, snapshotData, snapshotError, fetchAiSnapshot
+  fetchLive, fetchHistorical, switchIndex
 } = useAnalysis()
 
 // Real-time data from ActionCable (provided by App.vue)
@@ -95,13 +94,7 @@ const indices = ['NIFTY', 'SENSEX', 'BANKNIFTY']
     <template v-if="enrichedData">
       <MarketOverview :data="enrichedData" />
       <SmcAnalysis :smc="enrichedData.smc" />
-      <AiInsights
-        :analysis="enrichedData.ai_analysis"
-        :snapshotData="snapshotData"
-        :snapshotLoading="snapshotLoading"
-        :snapshotError="snapshotError"
-        :onSnapshot="fetchAiSnapshot"
-      />
+      <AiInsights :analysis="enrichedData.ai_analysis" />
       <HistoricalBehavior :data="historicalData" :loading="historicalLoading" @load="fetchHistorical" />
       <CalibrationPanel :data="historicalData" />
     </template>

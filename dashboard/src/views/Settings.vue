@@ -51,17 +51,6 @@
         <div class="md:col-span-1 sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2 scrollbar-thin">
           <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden shadow-lg shadow-black/50">
             <div
-              @click="activeSection = 'network_status'"
-              :class="[
-                'px-4 py-3 text-xs font-black cursor-pointer border-l-2 transition-all uppercase tracking-widest',
-                activeSection === 'network_status'
-                  ? 'bg-cyan-900/20 border-cyan-500 text-cyan-400'
-                  : 'border-transparent text-gray-500 hover:bg-gray-800/50 hover:text-gray-200'
-              ]"
-            >
-              NETWORK IDENTITY
-            </div>
-            <div
               v-for="(value, key) in configRoot"
               :key="key"
               @click="activeSection = key"
@@ -77,18 +66,10 @@
           </div>
         </div>
 
-        <!-- Main Content Area (Recursive JSON Form or Network Panel) -->
+        <!-- Main Content Area (Recursive JSON Form) -->
         <div class="md:col-span-3">
           <div
-            v-if="activeSection === 'network_status'"
-            class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden shadow-lg shadow-black/50 p-6"
-          >
-            <h2 class="text-xl font-bold text-gray-100 uppercase tracking-wide border-b border-gray-800 pb-4 mb-6">Network Identity &amp; Static IP</h2>
-            <NetworkStatusPanel />
-          </div>
-
-          <div
-            v-else-if="activeSection && configRoot[activeSection]"
+            v-if="activeSection && configRoot[activeSection]"
             class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden shadow-lg shadow-black/50 p-6"
           >
             <h2 class="text-xl font-bold text-gray-100 uppercase tracking-wide border-b border-gray-800 pb-4 mb-6">{{ String(activeSection).replace(/_/g, ' ') }}</h2>
@@ -104,25 +85,15 @@
 
       </div>
     </div>
-
-    <!-- Calibration Runs Panels -->
-    <div class="mt-12 max-w-7xl mx-auto w-full space-y-6">
-      <CalibrationRunsPanel
-        v-for="sym in ['NIFTY', 'SENSEX']"
-        :key="sym"
-        :symbol="sym"
-      />
-    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import RecursiveFormNode from '../components/settings/RecursiveFormNode.vue'
-import CalibrationRunsPanel from '../components/settings/CalibrationRunsPanel.vue'
 
 const configRoot = ref(null)
-const activeSection = ref('network_status')
+const activeSection = ref('')
 const loading = ref(true)
 const saving = ref(false)
 const saveStatus = ref(false)

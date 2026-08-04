@@ -18,6 +18,8 @@ AllCops:
     - "bin/**/*"
     - "config/**/*"
     - "lib/tasks/**/*"
+    - "run_spec_debug.rb"
+    - "trace.rb"
 
 # Overwrite or add rules to create your own house style
 #
@@ -233,9 +235,6 @@ Layout/IndentationConsistency:
 
 Layout/TrailingEmptyLines:
   Enabled: false
-
-Layout/TrailingWhitespace:
-  Enabled: true
 
 Naming/VariableNumber:
   Enabled: false

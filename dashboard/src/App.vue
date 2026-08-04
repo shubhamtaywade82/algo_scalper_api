@@ -5,15 +5,8 @@ import Header from './components/Header.vue'
 import { useDashboard } from './composables/useDashboard'
 import { usePositions } from './composables/usePositions'
 
-const {
-  open,
-  closed,
-  connected: positionsConnected,
-  isStale: positionsStale,
-  lastMessageAt: positionsLastMessageAt,
-  fetchPositions
-} = usePositions()
-const { mode, connected, stats, balance, indices, system, publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, config } =
+const { open, closed, fetchPositions } = usePositions()
+const { mode, connected, stats, balance, indices, system, circuitBreaker, lastUpdated, recentSignals, config } =
   useDashboard(() => fetchPositions())
 
 // Provide state to all view components
@@ -24,17 +17,11 @@ provide('dashboardState', {
   balance,
   indices,
   system,
-  publicIpv4,
-  publicIpv6,
-  registeredIps,
   circuitBreaker,
   lastUpdated,
   recentSignals,
   open,
   closed,
-  positionsConnected,
-  positionsStale,
-  positionsLastMessageAt,
   fetchPositions,
   config
 })

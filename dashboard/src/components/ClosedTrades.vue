@@ -112,8 +112,8 @@ function exitBadge(pos) {
               {{ sign(pos.pnl_pct) }}{{ inr(pos.pnl_pct) }}%
             </td>
             <td class="px-4 py-4 text-center">
-              <span :class="['text-[9px] font-black px-1.5 py-0.5 rounded border tracking-widest', exitBadge(pos).cls + '/20 border-' + exitBadge(pos).cls + '/10']">
-                {{ exitBadge(pos).label }}
+              <span :class="['text-[9px] font-black px-1.5 py-0.5 rounded border tracking-widest', exitBadge(pos.exit_reason).cls + '/20 border-' + exitBadge(pos.exit_reason).cls + '/10']">
+                {{ exitBadge(pos.exit_reason).label }}
               </span>
             </td>
             <td class="px-6 py-4 text-right text-gray-600 text-data text-[10px]">{{ formatTime(pos.exited_at) }}</td>

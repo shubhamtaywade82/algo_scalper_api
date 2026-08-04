@@ -106,6 +106,14 @@ Rails.application.routes.draw do
       end
     end
 
+    # Live AI analysis dashboard
+    get 'analysis/:index_key', to: 'analysis#show', as: :analysis
+    get 'analysis/:index_key/historical', to: 'analysis#historical', as: :analysis_historical
+
+    # Algo Settings
+    get    'settings',      to: 'settings#index'
+    patch  'settings/bulk', to: 'settings#update_bulk'
+
     # Circuit breaker — emergency halt
     resource :circuit_breaker, only: %i[show], controller: 'circuit_breaker' do
       post :trip, on: :member

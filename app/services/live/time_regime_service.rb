@@ -44,10 +44,13 @@ module Live
       # Get config directly to avoid recursion (regime_config calls current_regime)
       config = time_regime_config
 
-      # Check each regime in order
+      # Check each regime in order (skip non-Hash entries like 'enabled: true')
       config.each do |regime_name, regime_cfg|
+        next unless regime_cfg.is_a?(Hash)
+
         start_time = regime_cfg[:start]
         end_time = regime_cfg[:end]
+        next unless start_time && end_time
 
         return regime_name.to_sym if time_within_range?(time_str, start_time, end_time)
       end

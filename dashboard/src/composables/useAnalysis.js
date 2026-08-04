@@ -42,35 +42,10 @@ export function useAnalysis() {
     }
   }
 
-  // --- snapshot state ---
-  const snapshotLoading = ref(false)
-  const snapshotData    = ref(null)
-  const snapshotError   = ref(null)
-
-  async function fetchAiSnapshot() {
-    snapshotLoading.value = true
-    snapshotError.value   = null
-    try {
-      const res = await fetch(`/api/analysis/${currentIndex.value}/ai_snapshot`, { method: 'POST' })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || `HTTP ${res.status}`)
-      }
-      const data = await res.json()
-      snapshotData.value = data.snapshot
-    } catch (e) {
-      snapshotError.value = e.message || 'Snapshot failed'
-    } finally {
-      snapshotLoading.value = false
-    }
-  }
-
   function switchIndex(key) {
     currentIndex.value = key
     liveData.value = null
     historicalData.value = null
-    snapshotData.value = null
-    snapshotError.value = null
     fetchLive(key)
   }
 
@@ -92,10 +67,6 @@ export function useAnalysis() {
     error,
     fetchLive,
     fetchHistorical,
-    switchIndex,
-    snapshotLoading,
-    snapshotData,
-    snapshotError,
-    fetchAiSnapshot
+    switchIndex
   }
 }

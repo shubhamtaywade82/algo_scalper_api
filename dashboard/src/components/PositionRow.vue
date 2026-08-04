@@ -74,8 +74,10 @@ function dirIcon(dir) {
         <div :class="['w-1 h-3 rounded-full', Number(pos.pnl_pct) >= 0 ? 'bg-emerald-500' : 'bg-rose-500']"></div>
       </div>
     </td>
-    <td class="px-4 py-5 text-right font-black text-amber-400 text-data text-xs">
-      ₹{{ inr(pos.hwm_pnl) }}
+    <td class="px-4 py-5 text-center">
+      <span :class="['text-sm transition-transform duration-500 group-hover:scale-125 inline-block', Number(pos.pnl_pct) >= 0 ? 'text-emerald-400' : 'text-rose-400']">
+        {{ dirIcon(pos.direction) }}
+      </span>
     </td>
     <td class="px-6 py-5 text-right">
       <div class="flex flex-col items-end">

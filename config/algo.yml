@@ -31,7 +31,8 @@ realtime:
 # Example: ["10:30-11:30", "14:00-15:00"] blocks trading from 10:30 AM to 11:30 AM and 2:00 PM to 3:00 PM
 trading_time_restrictions:
   enabled: false # Set to true to enable time-based restrictions
-  avoid_periods: [] # Add time periods to avoid (e.g., ["10:30-11:30", "14:00-15:00"])
+  avoid_periods: ["10:00-12:30"] # Block mid-morning churn session as per analysis
+  block_exits: false # Set to true to block automated exits (SL/TP/Trailing) during blackout
   # Example based on analysis results:
   # avoid_periods:
   #   - "10:30-11:30"  # Morning non-profitable period
@@ -219,12 +220,12 @@ indices:
       weak_trend_pct: 0.005
 
     trade_limits:
-      max_trades_per_day: 25 # AGGRESSIVE: Increased to 25 trades per day
+      max_trades_per_day: 2
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 18 # 1m ADX threshold (70% of typical ~20)
-      confirmation_min_strength: 18 # 5m ADX threshold (70% of typical ~15.5)
+      primary_min_strength: 8 # 1m ADX threshold (strict filter for options buying)
+      confirmation_min_strength: 8 # 5m ADX threshold
 
     strategies:
       open_interest:
@@ -264,8 +265,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 18 # 1m ADX threshold (use global default)
-      confirmation_min_strength: 18 # 5m ADX threshold (70% of typical ~44)
+      primary_min_strength: 8 # 1m ADX threshold (use global default)
+      confirmation_min_strength: 8 # 5m ADX threshold (70% of typical ~44)
 
     strategies:
       open_interest:
@@ -296,17 +297,17 @@ indices:
       max_otm: 2
 
     risk_model:
-      base_risk_pct: 0.005 # 0.5% base
-      strong_trend_pct: 0.005
-      weak_trend_pct: 0.0025
+      base_risk_pct: 0.02 # 2% base risk (increased to match BankNifty and increase pos size)
+      strong_trend_pct: 0.02
+      weak_trend_pct: 0.01
 
     trade_limits:
       max_trades_per_day: 20 # AGGRESSIVE: Increased to 20 trades per day
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 18 # 1m ADX threshold (70% of typical ~25.5)
-      confirmation_min_strength: 18 # 5m ADX threshold (70% of typical ~13.5)
+      primary_min_strength: 8 # 1m ADX threshold (very strict filter for volatile Sensex)
+      confirmation_min_strength: 8 # 5m ADX threshold
 
     strategies:
       open_interest:
@@ -339,90 +340,27 @@ broker_fees:
 # RISK MODEL (NEMESIS V3)
 # ============================================
 risk:
-  auto_update_ip: false # Set to true to automatically update whitelisted IP on Dhan after cooldown
-  sl_pct: 0.10 # -10% STOP LOSS (was 6%, too tight — frequent noise stops)
-  tp_pct: 0.25 # +25% TAKE PROFIT (was 12%, cut winners too short)
-  per_trade_risk_pct: 0.40
-
-  # DTE-resolved intraday parameters — pinned into config_snapshot at entry
-  dte_parameters:
-    enabled: true
-    defaults:
-      sl_pct: 0.10
-      tp_pct: 0.45
-      trail_pct: 0.07
-      volume_velocity_multiplier: 2.0
-    by_dte:
-      "0":
-        sl_pct: 0.08
-        tp_pct: 0.25
-        trail_pct: 0.05
-        volume_velocity_multiplier: 2.5
-        max_entry_time: "12:30"
-      "1":
-        sl_pct: 0.10
-        tp_pct: 0.35
-        trail_pct: 0.08
-        volume_velocity_multiplier: 2.5
-        max_entry_time: "14:00"
-      "2":
-        sl_pct: 0.10
-        tp_pct: 0.40
-        trail_pct: 0.07
-        volume_velocity_multiplier: 2.0
-        max_entry_time: "14:30"
-
-  # 0-DTE afternoon theta-flat exit — force-close stale 0-DTE positions after cutoff
-  dte_zero_exit:
-    enabled: true
-    after_time: "14:00"           # IST — start at closing repricing (was 12:30)
-    min_pnl_pct_to_hold: 0.015    # keep if >= +1.5%; trailing owns clear winners (was 3%)
-
-  # Once trade was green, never ride back to full premium SL
-  green_trade_cap:
-    enabled: true
-    min_hwm_rupees: 300
-    max_adverse_pct: 0.08 # cap at -8% if HWM >= ₹300
-
-  fast_profit_lock:
-    enabled: true
-    tiers:
-      - { trigger_pct: 0.025, lock_pct: 0.005 } # +2.5% peak → lock +0.5%
-      - { trigger_pct: 0.04, lock_pct: 0.015 }   # +4% peak → lock +1.5%
-      - { trigger_pct: 0.06, lock_pct: 0.03 }    # +6% peak → lock +3%
-      - { trigger_pct: 0.10, lock_pct: 0.06 }    # +10% peak → lock +6%
-      - { trigger_pct: 0.15, lock_pct: 0.10 }    # +15% peak → lock +10%
+  sl_pct: 0.12 # -12% STOP LOSS
+  tp_pct: 0.25 # +25% TAKE PROFIT
+  per_trade_risk_pct: 0.15
 
   # --- New: Percentage-based PnL Exit ---
   percentage_pnl_exit:
     enabled: true
-    target_pct: 0.20 # 20% safety net for options
-
-  # Underlying-context-aware trailing exit (tick-first path)
-  # Tightens or forces trailing exit when underlying structure/trend signals reversal.
-  # Only active when trailing is already armed (position profitable >= activation_pct).
-  underlying_context_exit:
-    enabled: true
-    trend_score_threshold: 15     # trend_score below this = weak trend
-    atr_ratio_threshold: 0.65     # atr_ratio below this AND falling = collapsing
-    tightening_multiplier: 0.5    # compress allowed_dd by this factor when weakening
+    target_pct: 15.0 # Full exit when total PnL reaches 15%
 
   # Hard rupee-based stops (HIGHEST PRIORITY - checked before %-based stops)
   # Perfect for scalping: fixed ₹1k SL + ₹2k TP per trade
-  hard_rupee_sl:
-    enabled: false # Set to true to enable hard ₹ stop loss
-    max_loss_rupees: 1000 # Maximum loss per trade in rupees
 
   # Profit floor: once net PnL reaches lock_pct% of capital deployed, arms a TRAILING floor.
-  # trail_pct: on each monitor cycle, floor = max(current_floor, hwm_pnl * trail_pct).
-  # Tuned for NIFTY/SENSEX intraday: arm later, allow more give-back before locking.
+  # trail_pct: on each monitor cycle, floor = max(current_floor, hwm_pnl * trail_pct / 100).
+  # lock_pct scales with position size — ₹2k on a ₹28k BN position is only 7%, vs 18% on a ₹11k SX position.
   profit_floor:
     enabled: true
-    lock_pct: 0.03         # 3% of capital — arm floor later vs 2.5%
-    min_arm_rupees: 550    # ignore sub-₹550 spikes (was ₹350)
-    trail_pct: 0.82        # keep 82% of HWM (was 72% — less hair-trigger)
+    lock_pct: 10           # arm floor when net PnL >= 10% of capital_deployed (scales per position)
+    trail_pct: 70          # ratchet floor to 70% of HWM each cycle
     breakeven_at: 200      # mark breakeven when net PnL reaches ₹200
-    time_kill_minutes: 35  # chop: slower stale-floor kill (was 20)
+    time_kill_minutes: 30  # give trailing more time to develop
 
   # RR-Based Profit Booking (Dynamic Exit)
   # Captures profits based on R multiples (Reward / Risk)
@@ -430,41 +368,17 @@ risk:
     enabled: true
     target_rr: 2.5        # Exit fully at 2.5R (e.g., if SL is 10%, TP at 25%)
 
-  # Exit-layer overrides (optional). Price-based structure invalidation uses these when set.
-  exits:
-    structure_invalidation:
-      enabled: true           # Re-enabled with options-aware dual condition
-      min_hold_seconds: 120   # No structure exit until position age >= this (reduces churn)
-      buffer_pct: 0.004       # Legacy: require underlying to breach level by this fraction
-      underlying_move_pct: 0.01  # Underlying must move 1%+ against trade direction
-      premium_drop_pct: 0.05     # Premium must drop 5%+ from peak
-    smc_navigator_exit:
-      enabled: false           # opt-in: enforce Navigator exit signals (CHoCH, liquidity sweep)
-      min_hold_seconds: 120    # no SMC navigator exit before position age >= this
-      min_confidence: 0.65     # minimum Navigator exit confidence to trigger
-    premium_momentum_failure:
-      enabled: true
-      default_stall_minutes: 2
-      index_overrides:
-        SENSEX:
-          stall_minutes: 2
-      session_overrides:
-        chop_decay:
-          stall_minutes_add: 0  # In chop, cut dead trades fast — no extension
-        close_gamma:
-          stall_minutes_add: 1
-
   # Time Stop: Prevents holding dead trades beyond time limits
   # Previously hardcoded in Risk::Rules::TimeStopRule — now runtime-configurable
   time_stop:
     enabled: true
     scalp:
-      max_minutes: 8 # 8 mins max for scalps
-      max_candles: 8
+      max_minutes: 15
+      max_candles: 15
     trend:
-      NIFTY: 20       # minutes
-      BANKNIFTY: 15   # minutes
-      SENSEX: 15      # minutes (raised from 10 — avg max gain 30-69%, needs time to develop)
+      NIFTY: 45       # minutes
+      BANKNIFTY: 45    # minutes
+      SENSEX: 90       # minutes
 
   # Institutional Trailing System (3-Phase)
   # Calibrated from 16-week historical ATM intraday options data (DhanHQ)
@@ -475,29 +389,17 @@ risk:
     expiry_day_tightening: 0.60   # 60% of normal trail on expiry day (Thursday)
 
     nifty:
-      early_trigger: 0.03         # Phase 1: Survival (+3% profit → -8% SL)
-      early_sl_offset: -0.08
-      breakeven_trigger: 0.12     # Phase 2: Breakeven at +12% (was 7% — too early)
-      activation_trigger: 0.20    # Phase 3: HWM Trailing at +20% (was 12%)
-      trailing_distance: 0.08     # 8% from HWM (was 6%)
-      adaptive_drawdown:
-        - { min_profit: 0.03, drawdown: 0.06 }
-        - { min_profit: 0.12, drawdown: 0.05 }
-        - { min_profit: 0.25, drawdown: 0.04 }
-        - { min_profit: 0.40, drawdown: 0.03 }
+      early_trigger: 0.05         # Phase 1: Survival (+5% profit → -12% SL)
+      early_sl_offset: -0.12
+      breakeven_trigger: 0.157    # Phase 2: Breakeven at +15.7% (25% of avg 62.88% max gain)
+      activation_trigger: 0.20    # Phase 3: HWM Trailing at +20%
+      trailing_distance: 0.386    # 38.6% from HWM (80% of avg 48.3% retrace)
     sensex:
-      # SENSEX profile: CE avg max gain +30.47%, PE +69.07%, post-peak retrace ~99.8%
-      # Options decay to near-zero after peak → activate early, lock in gains quickly
-      early_trigger: 0.03         # Phase 1: Survival (+3% profit → -8% SL)
-      early_sl_offset: -0.08
-      breakeven_trigger: 0.08     # Phase 2: Breakeven at +8% (calibration: CE breakeven 7.6%)
-      activation_trigger: 0.15    # Phase 3: HWM Trailing at +15% (between CE 7.6% and PE 17.3%)
-      trailing_distance: 0.15     # 15% from HWM (wider than NIFTY — SENSEX moves are 2x larger)
-      adaptive_drawdown:
-        - { min_profit: 0.08, drawdown: 0.12 }  # At +8%: 12% drawdown room
-        - { min_profit: 0.15, drawdown: 0.10 }  # At +15%: tighten to 10%
-        - { min_profit: 0.30, drawdown: 0.08 }  # At +30% (avg CE peak): 8%
-        - { min_profit: 0.50, drawdown: 0.06 }  # At +50% (deep PE zone): 6%
+      early_trigger: 0.06         # Phase 1: Survival (+6% profit → -10% SL)
+      early_sl_offset: -0.10
+      breakeven_trigger: 0.12     # Phase 2: Breakeven at +12%
+      activation_trigger: 0.18    # Phase 3: HWM Trailing at +18%
+      trailing_distance: 0.413    # 41.3% from HWM (80% of avg 51.65% retrace)
     banknifty:
       early_trigger: 0.06         # Phase 1: Survival (+6% profit → -15% SL)
       early_sl_offset: -0.15      # Wider SL — BN is more volatile
@@ -505,31 +407,19 @@ risk:
       activation_trigger: 0.25    # Phase 3: HWM Trailing at +25%
       trailing_distance: 0.35     # 35% from HWM (conservative — last-week-only trades)
 
-    # Overrides keyed by tracker.meta strategy_profile (Trading::StrategyProfileSelector).
-    # Merged on top of nifty/sensex/banknifty symbol profile.
-    profiles:
-      trend_aggressive: {}
-      trend_controlled:
-        trailing_distance: 0.06
-      range_stand_down:
-        trailing_distance: 0.04
-        activation_trigger: 0.12
-      stand_down:
-        trailing_distance: 0.03
-        activation_trigger: 0.10
 
   # Dynamic Trailing stops
   trailing:
     enabled: true
-    activation_pct: 0.10     # 10% - let trade develop before arming (avg max gain 14.2%)
-    drawdown_pct: 0.05       # 5% - wider drawdown to survive avg retrace of 3.1%
+    activation_pct: 3.5    # Lower activation for more aggressive trailing
+    drawdown_pct: 2.5      # Tighter drawdown to capture move
 
   trailing_mode: 'direct' # Moving up only to capture profits
   direct_trailing:
     enabled: true
-    distance_pct: 0.08       # 8% - wider trail distance once active
-    activation_profit_pct: 0.10 # 10% - don't start direct trailing from entry
-    min_sl_offset_pct: -0.30 # -30% - never let SL go below -30% from entry
+    distance_pct: 3.0 # Trail at 3% distance from peak
+    activation_profit_pct: 5.0 # Start direct trailing at 5% profit
+    min_sl_offset_pct: 0.0 # Never let SL go below breakeven once direct trailing starts
 
   # Post-Profit Zone Management (State Machine)
   # Implements sophisticated profit zone management after ₹2k TP
@@ -585,11 +475,7 @@ risk:
   #
   # Each regime gets different SL/TP/trailing rules based on Greek behavior
   time_regimes:
-    # Enabled based on 61-trading-day regime research (real DhanHQ index price data,
-    # 5m bars, NIFTY/BANKNIFTY/SENSEX): chop_decay confirmed worst session everywhere,
-    # close_gamma outperformed trend_continuation in every matched ADX bucket, and ADX
-    # showed a clear ceiling (not just floor) within trend_continuation specifically.
-    enabled: true
+    enabled: true # Time-regime rules active — TP/SL adjust by market session
 
     # S1: OPEN EXPANSION (09:15 – 09:45)
     # Delta explodes, Gamma spikes, IV expands, Theta irrelevant
@@ -597,7 +483,7 @@ risk:
     open_expansion:
       start: "09:15"
       end: "09:45"
-      sl_multiplier: 0.85 # Tighter SL — fake breakouts common
+      sl_multiplier: 1.0 # Standard SL (SENSEX: ₹15-20, NIFTY: ₹8-12)
       tp_multiplier: 1.0 # Fast TP (₹2k often hits in 1-3 candles)
       allow_trailing: false # No micro trailing (gets wicked out)
       allow_runners: false # No runners (enter fast, exit fast, no greed)
@@ -635,7 +521,7 @@ risk:
     chop_decay:
       start: "11:30"
       end: "13:45"
-      sl_multiplier: 0.70 # Theta chop — cut losers faster (~7% effective SL)
+      sl_multiplier: 1.0 # Restore room to breathe
       tp_multiplier: 0.8 # SMALL TP
       allow_trailing: false # Disable trailing
       allow_runners: false # No runners allowed
@@ -649,7 +535,7 @@ risk:
     close_gamma:
       start: "13:45"
       end: "15:15"
-      sl_multiplier: 0.75 # Close gamma — tighter SL, book or cut
+      sl_multiplier: 1.0 # Restore room to breathe
       tp_multiplier: 0.75 # FIXED TP (₹1.5k-₹2k)
       allow_trailing: true # Regime research: close_gamma outperformed trend_continuation's
                            # favorable-continuation rate in every matched ADX bucket (up to
@@ -691,13 +577,13 @@ risk:
 # Formula: quantity = floor(risk_rupees / (stop_distance_rupees × lot_size)) × lot_size
 # This ensures position size is calculated to match exact ₹ risk, not percentages
 position_sizing:
-  enabled: false # Set to true to enable rupee-based position sizing
+  enabled: true # Set to true to enable rupee-based position sizing
   mode: rupee_based # Options: 'rupee_based' or 'percentage_based' (legacy)
 
   # Rupee-based sizing parameters (used when enabled: true)
-  risk_rupees: 1000 # Fixed risk per trade in rupees
-  target_rupees: 2000 # Target profit per trade in rupees (for R:R calculation)
-  stop_distance_rupees: 8 # Stop distance in rupees (typical: NIFTY ₹6-10, SENSEX ₹12-20)
+  risk_rupees: 5000 # Fixed risk per trade in rupees
+  target_rupees: 15000 # Target profit per trade in rupees (for R:R calculation)
+  stop_distance_rupees: 50 # Stop distance in rupees (updated for increased sizing)
 
   # Index-specific stop distances (override global if specified)
   index_stop_distances:
@@ -829,21 +715,8 @@ position_sizing:
   # Examples: 6.0, 6.66, 9.99, 10.0, 13.32, 15.0, 20.0
   trailing:
     enabled: true # Global trailing toggle (used by dashboard)
-    activation_pct: 0.05 # 5% - arm trailing / peak-drawdown on modest winners
-    drawdown_pct: 0.025 # 2.5% - exit if price drops this % from peak
-    spot_anchored:
-      min_adx_to_hold: 15.0  # ADX floor; below this we consider the trend weak (TrailingStopRule)
-      hard_floor_pct: 0.50   # 50% - hard loss floor even when spot trend is alive
-
-  # Greeks Decay Exit Rule: exits when the position's OWN contract greeks (fetched from
-  # the live, ~2min-cached option chain) show structural decay — theta burning a large
-  # fraction of premium per day, or delta having collapsed (option drifted OTM, thesis dead).
-  greeks_decay_exit:
-    enabled: true
-    theta_burn_pct_of_premium: 0.08    # |theta|/premium >= 8%/day → burn alarm
-    theta_burn_pnl_immunity_pct: 0.10  # positions up >=10% are immune to the theta leg
-    delta_floor: 0.20                  # |delta| below this while losing → collapse alarm
-    delta_collapse_pnl_ceiling_pct: -0.03  # only fires when pnl_pct <= this (i.e. losing)
+    activation_pct: 10.0 # Activate trailing when profit >= 10% of buy value (configurable: 6%, 6.66%, 13.32%, etc.)
+    drawdown_pct: 3.0 # Exit if price drops this % from peak (used by trailing rules)
 
   # Secure profit rule: Lock in profits above threshold while allowing positions to ride
   secure_profit_threshold_rupees: 600 # Activate tighter protection when profit >= ₹600
@@ -1017,7 +890,7 @@ signals:
   # - Blocks CE trades in bearish regime
   # - Blocks all trades in neutral regime
   # Set to false to disable DirectionGate and allow all signal directions
-  enable_direction_gate: false # Set to false to disable DirectionGate (default: true)
+  enable_direction_gate: true # Enabled to block trades in CHOPPY/RANGING markets
 
   # Permission mode (only used if enable_smc_avrz_permission is true)
   # Controls how strict the permission resolver is for allowing trades
@@ -1046,7 +919,7 @@ signals:
   # By default: 1m Supertrend signal is enabled (no config needed)
   # ADX filter and 5m confirmation are toggleable
   enable_supertrend_signal: true # Enable 1m Supertrend signal (default: true)
-  enable_adx_filter: false # Enable ADX strength filter (default: false)
+  enable_adx_filter: true # Enabled to block weak trends (win rate 16.7% for ADX < 15)
   enable_confirmation_timeframe: false # Enable 5m HTF confirmation (default: false)
 
   # Optimized Parameters Configuration
@@ -1177,8 +1050,8 @@ signals:
 
   adx:
     # Global ADX thresholds (used as fallback if per-index thresholds not specified)
-    min_strength: 18 # ADX threshold for 1m timeframe (when enabled)
-    confirmation_min_strength: 18 # ADX threshold for 5m confirmation (when enabled)
+    min_strength: 15 # ADX threshold for 1m timeframe (Loss Avoidance floor)
+    confirmation_min_strength: 15 # ADX threshold for 5m confirmation (Loss Avoidance floor)
     # Note: Per-index thresholds in indices[].adx_thresholds override these values
 
 # ============================================

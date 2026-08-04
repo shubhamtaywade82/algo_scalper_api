@@ -3,14 +3,21 @@
 module Live
   class RiskManagerService
     module ExitEnforcement
-      include Live::UnderlyingLtpResolver
-      include Live::StructureInvalidationEvaluator
+      # Lightweight struct for ETF position data (replaces OpenStruct for performance)
+      EtfPositionData = Struct.new(
+        :trend_score, :peak_trend_score, :adx, :atr_ratio,
+        :underlying_price, :vwap, :is_long?,
+        keyword_init: true
+      )
 
-      # LAYER 1: DYNAMIC TRAILING SL
-      # Purpose: Move SL up-only to capture trend moves (direct trailing)
-      def enforce_dynamic_trailing_stops(exit_engine:)
-        Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
-          enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine)
+      # Enforcement methods always accept an exit_engine keyword. They do not fetch positions from caller.
+      # If exit_engine is provided, they will delegate the actual exit to it. Otherwise they call internal execute_exit.
+
+      def enforce_early_trend_failure(exit_engine:)
+        etf_cfg = begin
+          resolved_risk_config[:etf] || {}
+        rescue StandardError
+          {}
         end
       end
 
@@ -32,32 +39,35 @@ module Live
         Rails.logger.error("[RiskManager] enforce_dynamic_trailing_stops_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
       end
 
-      # LAYER 2: STRUCTURE INVALIDATION
-      # Purpose: Exit when trade thesis is broken by market structure failure
-      def enforce_structure_invalidation(exit_engine:)
-        return unless structure_invalidation_enabled?
+      def enforce_trailing_stops(exit_engine:)
+        PositionTracker.active.find_each do |tracker|
+          next unless tracker.trade_state == 'expansion'
 
-        Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
-          enforce_structure_invalidation_for(tracker, exit_engine: exit_engine)
+          # Fetch current LTP (from cache or live feed)
+          ltp = Live::TickQuery.ltp_for(tracker)
+          next unless ltp && ltp.to_f.positive?
+
+          # PHASE-BASED INSTITUTIONAL TRAILING
+          engine = Trading::TrailingEngine.new(tracker: tracker, ltp: ltp)
+          trailing_sl = engine.call
+          next unless trailing_sl
+
+          # Enforce the calculated SL
+          if ltp.to_f <= trailing_sl
+            reason = "INSTITUTIONAL_TRAILING_STOP (SL: #{trailing_sl.round(2)}, LTP: #{ltp.to_f})"
+            exit_path = 'trailing_stop_institutional'
+
+            Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+            track_exit_path(tracker, exit_path, reason)
+            dispatch_exit(exit_engine, tracker, reason)
+          end
+        rescue StandardError => e
+          Rails.logger.error("[RiskManager] enforce_trailing_stops error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
         end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_trailing_stops method error: #{e.class} - #{e.message}")
+        Rails.logger.error("[RiskManager] Backtrace: #{e.backtrace.first(5).join(', ')}")
       end
-
-      def enforce_structure_invalidation_for(tracker, exit_engine:, position_data: nil)
-        position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
-        return unless position_data
-
-        si_cfg = (risk_config[:exits] || {})[:structure_invalidation] || {}
-
-        if si_cfg[:underlying_move_pct] && si_cfg[:premium_drop_pct]
-          return unless options_structure_invalidated_enforcement?(tracker, position_data, si_cfg)
-
-          reason = 'STRUCTURE_INVALIDATION (dual: underlying move + premium drop)'
-          exit_path = 'structure_invalidation'
-          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
-          track_exit_path(tracker, exit_path, reason)
-          dispatch_exit(exit_engine, tracker, reason)
-          return
-        end
 
         # Legacy rule-engine path
         context = Risk::Rules::RuleContext.new(
@@ -91,41 +101,6 @@ module Live
         dual_condition_met?(tracker, underlying_ltp, position_data.current_ltp.to_f, si_cfg)
       end
 
-      # LAYER 3: PREMIUM MOMENTUM FAILURE
-      # Purpose: Kill dead option trades before theta eats them
-      def enforce_premium_momentum_failure(exit_engine:)
-        return unless premium_momentum_failure_enabled?
-
-        Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
-          enforce_premium_momentum_failure_for(tracker, exit_engine: exit_engine)
-        end
-      end
-
-      def enforce_premium_momentum_failure_for(tracker, exit_engine:, position_data: nil)
-        position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
-        return unless position_data
-
-        # Build rule context
-        context = Risk::Rules::RuleContext.new(
-          position: position_data,
-          tracker: tracker,
-          risk_config: risk_config
-        )
-
-        # Evaluate PremiumMomentumFailureRule
-        rule = Risk::Rules::PremiumMomentumFailureRule.new(config: { enabled: true })
-        result = rule.evaluate(context)
-
-        if result.exit?
-          reason = result.reason || 'PREMIUM_MOMENTUM_FAILURE'
-          exit_path = 'premium_momentum_failure'
-          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
-          track_exit_path(tracker, exit_path, reason)
-          dispatch_exit(exit_engine, tracker, reason)
-        end
-      rescue StandardError => e
-        Rails.logger.error("[RiskManager] enforce_premium_momentum_failure_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
-      end
 
       # LAYER 4: TIME STOP
       # Purpose: Prevent holding dead trades - exit regardless of PnL when time limit exceeded
@@ -186,14 +161,6 @@ module Live
         # Get initial risk (SL) from tracker meta or default
         sl_pct = tracker.meta&.dig('initial_sl_pct')&.to_f
 
-        # Fallback: if premium_stop_price exists, calculate sl_pct from it
-        if sl_pct.nil? || sl_pct.zero?
-          premium_stop = tracker.meta&.dig('premium_stop_price')&.to_f
-          if premium_stop&.positive?
-            entry = tracker.entry_price.to_f
-            sl_pct = ((entry - premium_stop) / entry).abs * 100.0
-          end
-        end
 
         # Second fallback: use global default SL pct
         sl_pct ||= (pct_value(risk_config[:sl_pct] || 0.10).to_f * 100.0)
@@ -210,25 +177,52 @@ module Live
           Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
           track_exit_path(tracker, exit_path, reason)
           dispatch_exit(exit_engine, tracker, reason)
+        rescue StandardError => e
+          Rails.logger.error("[RiskManager] enforce_time_based_exit error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
         end
-      rescue StandardError => e
-        Rails.logger.error("[RiskManager] enforce_rr_profit_booking_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
       end
 
-      # LAYER 4.5: PERCENTAGE-BASED PNL EXIT
-      # Purpose: Full exit when target % PnL is reached (independent of initial risk)
-      def enforce_percentage_pnl_exit(exit_engine:)
-        cfg = risk_config[:percentage_pnl_exit] || {}
-        return unless cfg[:enabled]
+      # ============================================================
+      # NEW 5-LAYER EXIT SYSTEM ENFORCEMENT METHODS
+      # ============================================================
+
+      # LAYER 1: HARD RISK CIRCUIT BREAKER
+      # Purpose: Account protection ONLY - no trade logic
+
+      # HARD RUPEE TAKE PROFIT
+      # Purpose: Exit immediately when net PnL reaches the target rupee amount.
+      # Mirrors enforce_hard_rupee_stop_loss — same pattern, opposite direction.
 
         Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
           enforce_percentage_pnl_exit_for(tracker, exit_engine: exit_engine)
         end
       end
 
-      def enforce_percentage_pnl_exit_for(tracker, exit_engine:, position_data: nil)
-        position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
-        return unless position_data
+      # LAYER 1: DYNAMIC TRAILING SL
+      # Purpose: Move SL up-only to capture trend moves (direct trailing)
+      def enforce_dynamic_trailing_stops(exit_engine:)
+        engine = @trailing_engine ||= Live::TrailingEngine.new()
+
+        PositionTracker.active.find_each do |tracker|
+          # TrailingEngine expects PositionData from ActiveCache
+          position_data = @active_cache.get_position(tracker.id)
+          next unless position_data
+
+          # process_tick handles peak updates and SL adjustments
+          result = engine.process_tick(position_data, exit_engine: exit_engine)
+
+          if result[:exit_triggered]
+            Rails.logger.info("[RiskManager] TrailingEngine triggered exit for #{tracker.order_no}: #{result[:reason]}")
+          end
+        rescue StandardError => e
+          Rails.logger.error("[RiskManager] enforce_dynamic_trailing_stops error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        end
+      end
+
+      # LAYER 2: STRUCTURE INVALIDATION
+      # Purpose: Exit when trade thesis is broken by market structure failure
+      def enforce_structure_invalidation(exit_engine:)
+        return unless structure_invalidation_enabled?
 
         # Build rule context
         context = Risk::Rules::RuleContext.new(
@@ -262,36 +256,133 @@ module Live
         end
       end
 
-      def enforce_profit_floor_for(tracker, exit_engine:, position_data: nil)
+      # LAYER 5: RR-BASED PROFIT BOOKING
+      # Purpose: Capture profits at pre-defined R multiples (e.g., 2R, 3R)
+      def enforce_rr_profit_booking(exit_engine:)
+        return unless rr_profit_booking_enabled?
+
+        cfg = rr_profit_booking_config
+        target_rr = (cfg[:target_rr] || 2.0).to_f
+
+        PositionTracker.active.find_each do |tracker|
+          snapshot = pnl_snapshot(tracker)
+          next unless snapshot
+
+          pnl_pct = snapshot[:pnl_pct]
+          next if pnl_pct.nil?
+
+          # Get initial risk (SL) from tracker meta or default
+          sl_pct = tracker.meta&.dig('initial_sl_pct')&.to_f
+
+          # Fallback: if premium_stop_price exists, calculate sl_pct from it
+          if sl_pct.nil? || sl_pct.zero?
+            premium_stop = tracker.meta&.dig('premium_stop_price')&.to_f
+            if premium_stop && premium_stop.positive?
+              entry = tracker.entry_price.to_f
+              sl_pct = ((entry - premium_stop) / entry).abs * 100.0
+            end
+          end
+
+          # Second fallback: use global default SL pct
+          sl_pct ||= pct_value(risk_config[:sl_pct] || 10).to_f
+
+          next if sl_pct.zero?
+
+          # RR = Profit% / SL%
+          current_rr = (pnl_pct.to_f * 100.0) / sl_pct
+
+          if current_rr >= target_rr
+            reason = "RR_PROFIT_BOOKING (RR: #{current_rr.round(2)}, Target: #{target_rr}, PnL: #{(pnl_pct.to_f * 100).round(2)}%, SL: #{sl_pct.round(2)}%)"
+            exit_path = 'rr_profit_booking'
+            Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+            track_exit_path(tracker, exit_path, reason)
+            dispatch_exit(exit_engine, tracker, reason)
+          end
+        rescue StandardError => e
+          Rails.logger.error("[RiskManager] enforce_rr_profit_booking error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        end
+      end
+
+      # LAYER 4.5: PERCENTAGE-BASED PNL EXIT
+      # Purpose: Full exit when target % PnL is reached (independent of initial risk)
+      def enforce_percentage_pnl_exit(exit_engine:)
+        cfg = (risk_config[:percentage_pnl_exit] || {})
+        return unless cfg[:enabled]
+
+        PositionTracker.active.find_each do |tracker|
+          snapshot = pnl_snapshot(tracker)
+          next unless snapshot
+
+          # Build rule context
+          position_data = build_position_data_for_rule_engine(tracker, snapshot)
+          context = Risk::Rules::RuleContext.new(
+            position: position_data,
+            tracker: tracker,
+            risk_config: risk_config
+          )
+
+          # Evaluate PercentagePnlRule
+          rule = Risk::Rules::PercentagePnlRule.new(config: risk_config)
+          result = rule.evaluate(context)
+
+          if result.exit?
+            reason = result.reason || 'PERCENTAGE_PNL_EXIT'
+            exit_path = 'percentage_pnl_exit'
+            Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+            track_exit_path(tracker, exit_path, reason)
+            dispatch_exit(exit_engine, tracker, reason)
+          end
+        rescue StandardError => e
+          Rails.logger.error("[RiskManager] enforce_percentage_pnl_exit error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        end
+      end
+
+      # Profit-Floor enforcement (stateful guarantee).
+      #
+      # Guarantee (best-effort, subject to tick granularity + slippage):
+      # - Once net PnL reaches lock_rupees, we arm a floor.
+      # - If net PnL drops to floor + exit_fee, we immediately exit.
+      #
+      # This lives in the decision plane (RiskManagerService), not ExitEngine.
+      def enforce_profit_floor(exit_engine:)
         cfg = profit_floor_config
         return unless cfg[:enabled]
 
-        position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
-        return unless position_data
-
-        net_pnl = safe_big_decimal(position_data.pnl)
-        return unless net_pnl
-
         lock_pct = cfg[:lock_pct]
-        lock_rupees_static = cfg[:lock_rupees]
+        lock_rupees_static = cfg[:lock_rupees]  # fallback if lock_pct not set
         breakeven_at = cfg[:breakeven_at]
         time_kill_minutes = cfg[:time_kill_minutes]
         trail_pct = cfg[:trail_pct]
         exit_fee = BrokerFeeCalculator.fee_per_order
 
-        # Compute lock threshold
-        lock_rupees = if lock_pct
-                        capital = safe_big_decimal(position_data.capital_deployed)
-                        capital&.positive? ? (capital * BigDecimal(lock_pct.to_s)).ceil : lock_rupees_static
-                      else
-                        lock_rupees_static
-                      end
+        PositionTracker.active.find_each do |tracker|
+          snapshot = pnl_snapshot(tracker)
+          next unless snapshot
 
-        mark_breakeven_reached!(tracker, net_pnl, threshold_rupees: breakeven_at, pending_meta: pending_meta) if breakeven_at
-        if lock_rupees
-          peak_for_arm = hwm_pnl_for_arm(position_data, net_pnl)
-          arm_profit_floor!(tracker, peak_for_arm, lock_rupees: lock_rupees, trail_pct: trail_pct, pending_meta: pending_meta)
-        end
+          net_pnl = safe_big_decimal(snapshot[:pnl])
+          next unless net_pnl
+
+          # Compute lock threshold: prefer lock_pct% of capital_deployed (position-size aware),
+          # fall back to static lock_rupees if lock_pct not configured.
+          lock_rupees = if lock_pct
+                          capital = safe_big_decimal(snapshot[:capital_deployed])
+                          capital&.positive? ? (capital * BigDecimal(lock_pct.to_s) / 100).ceil : lock_rupees_static
+                        else
+                          lock_rupees_static
+                        end
+
+          mark_breakeven_reached!(tracker, net_pnl, threshold_rupees: breakeven_at) if breakeven_at
+          arm_profit_floor!(tracker, net_pnl, lock_rupees: lock_rupees) if lock_rupees
+
+          # Ratchet the floor upward as HWM PnL grows (trailing floor).
+          trail_pct = cfg[:trail_pct]
+          if trail_pct && tracker.profit_floor_rupees.present?
+            hwm_pnl = safe_big_decimal(snapshot[:hwm_pnl])
+            update_trailing_floor!(tracker, hwm_pnl, trail_pct: trail_pct)
+          end
+
+          floor = tracker.profit_floor_rupees
+          next unless floor
 
         # Ratchet the floor upward as HWM PnL grows (trailing floor).
         trail_pct = cfg[:trail_pct]
@@ -311,6 +402,36 @@ module Live
           dispatch_exit(exit_engine, tracker, reason)
           return
         end
+      end
+
+      private
+
+      # Ratchet the profit floor upward as HWM PnL grows.
+      # Monotonic — floor only moves up, never down.
+      # Called every monitor cycle once the floor is armed.
+      # @param tracker [PositionTracker]
+      # @param hwm_pnl [BigDecimal, nil] High water mark PnL from Redis snapshot
+      # @param trail_pct [Numeric] Floor as % of HWM (e.g., 70 = protect 70% of peak)
+      def update_trailing_floor!(tracker, hwm_pnl, trail_pct:)
+        return unless hwm_pnl&.positive?
+
+        dynamic_floor = (BigDecimal(hwm_pnl.to_s) * BigDecimal(trail_pct.to_s) / 100).ceil
+        current_floor = BigDecimal(tracker.profit_floor_rupees.to_s)
+        return if dynamic_floor <= current_floor
+
+        tracker.update_column(:profit_floor_rupees, dynamic_floor.to_i)
+        Rails.logger.info(
+          "[RiskManager] Trailing floor raised for #{tracker.order_no}: " \
+          "₹#{current_floor} → ₹#{dynamic_floor} (HWM: ₹#{hwm_pnl.round(2)}, trail: #{trail_pct}%)"
+        )
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] update_trailing_floor! failed for #{tracker.order_no}: #{e.message}")
+      end
+
+      def price_stalled?(tracker, stall_candles)
+        # Get recent LTP history
+        ltp_history = get_ltp_history_for_stall_check(tracker, stall_candles + 1)
+        return false if ltp_history.size < stall_candles + 1
 
         threshold = BigDecimal(floor.to_s) + BigDecimal(exit_fee.to_s)
         return unless net_pnl <= threshold
@@ -467,18 +588,29 @@ module Live
           tracker.update_column(:trade_state, 'init') # rubocop:disable Rails/SkipsModelValidations
         end
 
-        case tracker.trade_state
-        when 'init'
-          if current_r >= 1.0
-            tracker.update_columns(trade_state: 'validated', validated_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
-          end
-        when 'validated'
-          if current_r >= 2.0
-            tracker.update_columns(trade_state: 'expansion', expansion_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
-          end
-        end
+        # VWAP (simplified: use recent average price)
+        vwap = candles.any? ? candles.last(20).sum(&:close) / candles.last(20).size : underlying_price
+
+        EtfPositionData.new(
+          trend_score: trend_score,
+          peak_trend_score: peak_trend_score,
+          adx: adx_hash[:value],
+          atr_ratio: atr_ratio,
+          underlying_price: underlying_price,
+          vwap: vwap,
+          is_long?: %w[long_ce long_pe].include?(tracker.side)
+        )
       rescue StandardError => e
-        Rails.logger.error("[RiskManager] advance_trade_state_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        Rails.logger.error("[RiskManager] build_position_data_for_etf error: #{e.class} - #{e.message}")
+        EtfPositionData.new(
+          trend_score: 0,
+          peak_trend_score: 0,
+          adx: nil,
+          atr_ratio: 1.0,
+          underlying_price: tracker.entry_price.to_f,
+          vwap: tracker.entry_price.to_f,
+          is_long?: true
+        )
       end
 
       private
