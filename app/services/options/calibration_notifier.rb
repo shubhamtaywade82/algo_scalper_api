@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 module Options
+  # Sends Telegram notifications for calibration events.
+  # Failures are silently rescued — never propagate to the job.
   class CalibrationNotifier
     def self.notify(symbol, run)
       new.notify(symbol, run)
@@ -11,50 +13,43 @@ module Options
     end
 
     def notify(symbol, run)
-      return unless telegram_enabled?
-
-      Notifications::TelegramNotifier.instance.send_message(build_success_message(symbol, run))
+      text = build_success_message(symbol, run)
+      Notifications::TelegramNotifier.instance.send_message(text)
     rescue StandardError => e
-      Rails.logger.error("[CalibrationNotifier] Telegram send failed: #{e.class} - #{e.message}")
+      Rails.logger.error("[CalibrationNotifier] Telegram send failed: #{e.class} — #{e.message}")
     end
 
     def notify_error(symbol, error)
-      return unless telegram_enabled?
-
-      message = "❌ Calibration failed: #{symbol}\n#{error.class}: #{error.message}"
-      Notifications::TelegramNotifier.instance.send_message(message)
+      text = "❌ Calibration failed: #{symbol}\n#{error.class}: #{error.message}"
+      Notifications::TelegramNotifier.instance.send_message(text)
     rescue StandardError => e
-      Rails.logger.error("[CalibrationNotifier] notify_error send failed: #{e.class} - #{e.message}")
+      Rails.logger.error("[CalibrationNotifier] notify_error send failed: #{e.class} — #{e.message}")
     end
 
     private
 
-    def telegram_enabled?
-      defined?(Notifications::TelegramNotifier) &&
-        Notifications::TelegramNotifier.instance.enabled?
-    end
-
     def build_success_message(symbol, run)
-      lines = ["📊 Calibration ready: #{symbol}"]
+      lines = ["📊 *Calibration ready:* #{symbol}"]
       lines << "Weeks: #{run.weeks_analyzed} | Mode: #{run.strike_mode}"
-      lines << "⚠️ Regime shift: #{run.regime_reason}" if run.is_regime_shift
+      lines << "⚠️ *Regime shift:* #{run.regime_reason}" if run.is_regime_shift
 
       patch = run.proposed_patch
-      if patch.blank?
-        lines << 'No significant config changes (<10% deviation from current)'
+      if patch.empty?
+        lines << "_No significant config changes (<10% deviation from current)_"
       else
-        lines << 'Proposed changes:'
-        flat_patch(patch).each { |key, value| lines << "  #{key}: #{value}" }
+        lines << "*Proposed changes:*"
+        flat_patch(patch).each { |k, v| lines << "  #{k}: #{v}" }
       end
 
       lines << "Apply: POST /api/calibration_runs/#{run.id}/apply"
       lines.join("\n")
     end
 
+    # Flattens nested hash to dot-notation keys for display
     def flat_patch(hash, prefix = nil)
-      hash.flat_map do |key, value|
-        full_key = prefix ? "#{prefix}.#{key}" : key.to_s
-        value.is_a?(Hash) ? flat_patch(value, full_key) : [[full_key, value]]
+      hash.flat_map do |k, v|
+        full_key = prefix ? "#{prefix}.#{k}" : k.to_s
+        v.is_a?(Hash) ? flat_patch(v, full_key) : [[full_key, v]]
       end
     end
   end

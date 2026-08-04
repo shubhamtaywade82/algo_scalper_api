@@ -298,7 +298,7 @@ production:
     schedule: at 4:00pm every weekday
     queue_name: background
     priority: 5
-    description: "AI technical analysis for SENSEX - post-close scheduled run on weekdays; intraday flow is event-driven from tick events"
+    description: "AI technical analysis for SENSEX - market hours only, runs every 15 minutes (aligns with SMC scanner)"
 
   weekly_options_calibration:
     class: WeeklyCalibrationJob
@@ -306,10 +306,3 @@ production:
     queue_name: background
     priority: 3
     description: "Weekly ATM±1 options calibration — generates config patch proposal for NIFTY and SENSEX"
-
-  dhan_auto_ip_sync:
-    class: Dhan::AutoIpUpdaterJob
-    schedule: every 30 minutes
-    queue_name: background
-    priority: 20
-    description: "Auto-syncs local public IP with Dhan whitelisting slots when cooldown expires"

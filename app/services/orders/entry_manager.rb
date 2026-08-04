@@ -226,6 +226,23 @@ module Orders
       end
     end
 
+    # Write premium_stop_price into tracker.meta so LAYER 0 (enforce_premium_r_stop) can fire.
+    # Respects a more precise stop already set by entry_guard (BOS/Supertrend path).
+    # Only writes the -20% fallback if no stop was established at entry time.
+    def set_premium_stop_price!(tracker)
+      meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
+      return if meta['premium_stop_price'].present?
+
+      entry = tracker.entry_price.to_f
+      return unless entry.positive?
+
+      premium_stop = (entry * 0.80).round(2) # 20% fallback hard stop
+      meta['premium_stop_price'] = premium_stop
+      tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
+    rescue StandardError => e
+      Rails.logger.error("[Orders::EntryManager] set_premium_stop_price! failed for #{tracker.order_no}: #{e.message}")
+    end
+
     def default_permission_for_entry(scale_multiplier)
       mult = scale_multiplier.to_i
       return :execution_only if mult <= 1

@@ -208,24 +208,61 @@ module Live
       return if tracker_id.blank?
       return unless @redis
 
-      @redis.del("exit_lock:#{tracker_id}")
-    rescue StandardError => e
-      Rails.logger.warn("[ExitEngine] release_exit_lock failed tracker=#{tracker_id}: #{e.class} - #{e.message}")
+      unless final_pnl.present? && entry_price.present? && quantity.present? &&
+             entry_price.to_f.positive? && quantity.to_i.positive?
+        Rails.logger.warn("[ExitEngine] Cannot update exit reason for #{tracker.order_no}: final_pnl=#{final_pnl.inspect}, entry_price=#{entry_price.inspect}, quantity=#{quantity.inspect}, reason=#{reason.inspect}")
+        return reason
+      end
+
+      pnl_pct_display = ((final_pnl.to_f / (entry_price.to_f * quantity.to_i)) * 100.0)
+      classification = classify_exit(pnl_pct_display)
+
+      tracker.transaction do
+        tracker.lock!
+        meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
+
+        execution_meta = (meta['execution'].is_a?(Hash) ? meta['execution'].dup : {})
+        execution_meta['type'] = reason.to_s
+        execution_meta['final_pnl_pct'] = pnl_pct_display.round(2)
+        execution_meta['classified_as'] = classification
+        meta['execution'] = execution_meta
+
+        meta['exit_reason'] ||= reason
+
+        tracker.update!(meta: meta, exit_reason: build_final_reason(reason, execution_meta))
+      end
+
+      tracker.exit_reason
     end
 
-    def alert_exit_lock_unavailable(tracker_id, error)
-      Notifications::TelegramNotifier.instance.notify_error(
-        "ExitEngine exit lock unavailable (Redis: #{error.message}) for tracker=#{tracker_id} — exit attempt skipped this cycle",
-        context: 'ExitEngine#acquire_exit_lock'
-      )
-    rescue StandardError => e
-      Rails.logger.error("[ExitEngine] alert_exit_lock_unavailable failed: #{e.message}")
+    def classify_exit(final_pnl_pct_decimal)
+      return 'profit' if final_pnl_pct_decimal.positive?
+      return 'loss' if final_pnl_pct_decimal.negative?
+
+      'breakeven'
     end
 
-    def stale_exit_intent?(tracker)
-      return false if tracker.exit_requested_at.blank?
+    def build_final_reason(reason, execution_meta)
+      final_pct = execution_meta['final_pnl_pct']
+      classification = execution_meta['classified_as']
+      return reason unless final_pct && classification
 
-      (Time.current - tracker.exit_requested_at) >= EXIT_INTENT_RETRY_AFTER_SECONDS
+      "#{reason} (Final: #{final_pct.round(2)}%, #{classification})"
+    end
+
+    def acquire_exit_lock(tracker_id, ttl: 10)
+      key = "exit_lock:#{tracker_id}"
+      redis = Redis.current
+      redis.set(key, '1', nx: true, ex: ttl)
+    rescue StandardError => e
+      Rails.logger.error("[ExitEngine] acquire_exit_lock failed for tracker=#{tracker_id}: #{e.class} - #{e.message}")
+      true
+    end
+
+    def safe_pnl_snapshot(tracker)
+      Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
+    rescue StandardError
+      nil
     end
 
     # Broker ack persisted (exit_sent_at) but tracker still active — dashboard manual

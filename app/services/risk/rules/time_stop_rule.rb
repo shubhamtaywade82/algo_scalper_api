@@ -49,6 +49,13 @@ module Risk
 
         return skip_result unless time_limit
 
+        pnl_pct = context.pnl_pct.to_f
+
+        # Bypass time stop for all profitable trades — trailing system owns winners.
+        # PremiumMomentumFailure (2min stall) handles dead/negative trades faster and
+        # more precisely, so no hard 5-min negative-PnL override is needed here.
+        return skip_result if pnl_pct >= 0.05
+
         # Check if time limit exceeded
         entry_time = tracker.created_at
         elapsed_minutes = ((Time.current - entry_time) / 60.0).round(2)

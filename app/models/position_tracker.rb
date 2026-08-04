@@ -540,6 +540,7 @@ class PositionTracker < ApplicationRecord
       last_pnl_rupees: last_pnl_rupees,
       last_pnl_pct: last_pnl_pct,
       high_water_mark_pnl: high_water_mark_pnl,
+      exit_reason: metadata['exit_reason'],
       meta: metadata
     }.compact
 

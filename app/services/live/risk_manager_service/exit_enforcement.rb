@@ -607,17 +607,8 @@ module Live
         Rails.logger.error("[RiskManager] update_trailing_floor! failed for #{tracker.order_no}: #{e.message}")
       end
 
-      def momentum_score(candles)
-        return 0 if candles.size < 3
-        recent = candles.last(3)
-        return 0 if recent.size < 2
-        price_change = (recent.last.close - recent.first.close) / recent.first.close
-        volume_factor = if recent.last.respond_to?(:volume) && recent.last.volume
-                          [recent.last.volume / 1_000_000.0, 1.0].min
-                        else
-                          0.5
-                        end
-        (price_change.abs * 100 * volume_factor).round(2)
+      def calculate_peak_profit_pct(tracker, snapshot)
+        Risk::ProfitManager.instance.peak_profit_pct_for(tracker, snapshot)
       end
     end
   end

@@ -69,9 +69,7 @@ Rails.application.routes.draw do
     # Live AI analysis dashboard
     get  'analysis/:index_key',            to: 'analysis#show',        as: :analysis
     get  'analysis/:index_key/historical', to: 'analysis#historical',  as: :analysis_historical
-    get  'analysis/:index_key/risk_explorer', to: 'analysis#risk_explorer', as: :analysis_risk_explorer
     post 'analysis/:index_key/ai_snapshot', to: 'analysis#ai_snapshot', as: :analysis_ai_snapshot
-    post 'analysis/:index_key/optimize',    to: 'analysis#optimize',    as: :analysis_optimize
 
     # Algo Settings
     get    'settings',           to: 'settings#index'
@@ -100,6 +98,13 @@ Rails.application.routes.draw do
     get  'ledger/balance', to: 'ledger#balance'
     get  'ledger/journal', to: 'ledger#journal'
     get  'ledger/positions/:id', to: 'ledger#position'
+
+    # Calibration runs — view and apply automated config patches
+    resources :calibration_runs, only: %i[index show] do
+      member do
+        post :apply
+      end
+    end
 
     # Circuit breaker — emergency halt
     resource :circuit_breaker, only: %i[show], controller: 'circuit_breaker' do

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_07_084810) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_17_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -72,25 +72,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_07_084810) do
     t.index ["proposed_patch"], name: "index_calibration_runs_on_proposed_patch", using: :gin
     t.index ["raw_stats"], name: "index_calibration_runs_on_raw_stats", using: :gin
     t.index ["symbol", "created_at"], name: "index_calibration_runs_on_symbol_and_created_at"
-  end
-
-  create_table "candles", force: :cascade do |t|
-    t.decimal "close", precision: 12, scale: 4, null: false
-    t.datetime "created_at", null: false
-    t.string "exchange_segment", null: false
-    t.decimal "high", precision: 12, scale: 4, null: false
-    t.string "instrument_key", null: false
-    t.decimal "low", precision: 12, scale: 4, null: false
-    t.bigint "oi"
-    t.decimal "open", precision: 12, scale: 4, null: false
-    t.string "security_id", null: false
-    t.string "source", default: "live", null: false
-    t.string "timeframe", default: "1m", null: false
-    t.datetime "ts", null: false
-    t.datetime "updated_at", null: false
-    t.bigint "volume", default: 0
-    t.index ["instrument_key", "timeframe", "ts"], name: "index_candles_on_key_timeframe_ts", unique: true
-    t.index ["security_id", "timeframe", "ts"], name: "index_candles_on_security_timeframe_ts"
   end
 
   create_table "derivatives", force: :cascade do |t|

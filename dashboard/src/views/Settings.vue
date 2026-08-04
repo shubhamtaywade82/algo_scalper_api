@@ -120,7 +120,6 @@
 import { ref, onMounted } from 'vue'
 import RecursiveFormNode from '../components/settings/RecursiveFormNode.vue'
 import CalibrationRunsPanel from '../components/settings/CalibrationRunsPanel.vue'
-import NetworkStatusPanel from '../components/settings/NetworkStatusPanel.vue'
 
 const configRoot = ref(null)
 const activeSection = ref('network_status')
