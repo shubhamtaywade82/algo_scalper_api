@@ -1,0 +1,51 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'json'
+require 'shellwords'
+
+SCRIPT_DIR = File.expand_path('../.agents/skills/scripts', __dir__)
+target = ARGV[0]
+
+if target.nil? || target == '--all' || target == 'all'
+  puts "========================================================================"
+  puts "        COMPLETE REPOSITORY ARCHITECTURE ANALYSIS (ALL FILES)           "
+  puts "========================================================================"
+  puts "Repository: #{Dir.pwd}"
+  puts ""
+
+  cmd = "ruby #{File.join(SCRIPT_DIR, 'rails_repo_architecture_analyzer.rb')} #{Shellwords.escape(Dir.pwd)}"
+  output = `#{cmd}`
+
+  begin
+    parsed = JSON.parse(output)
+    puts JSON.pretty_generate(parsed)
+  rescue JSON::ParserError
+    puts output
+  end
+else
+  target_file = File.expand_path(target, Dir.pwd)
+  unless File.exist?(target_file)
+    puts "File not found: #{target_file}"
+    puts "Usage:"
+    puts "  bin/architecture_check <file_path>   # Analyze single file"
+    puts "  bin/architecture_check --all          # Analyze complete repository"
+    exit 1
+  end
+
+  puts "========================================================================"
+  puts "                RAILS ARCHITECTURE DIAGNOSIS REPORT                     "
+  puts "========================================================================"
+  puts "Target: #{target_file}"
+  puts ""
+
+  cmd = "ruby #{File.join(SCRIPT_DIR, 'rails_context_compiler.rb')} #{Shellwords.escape(target_file)}"
+  output = `#{cmd}`
+
+  begin
+    parsed = JSON.parse(output)
+    puts JSON.pretty_generate(parsed)
+  rescue JSON::ParserError
+    puts output
+  end
+end

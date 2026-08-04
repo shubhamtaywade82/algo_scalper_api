@@ -42,6 +42,18 @@ RSpec.describe Live::ReconciliationService do
         expect(exit_engine).to have_received(:execute_exit).with(tracker, 'AUTO_RECONCILED_EXIT')
         expect(Notifications::TelegramNotifier.instance).not_to have_received(:notify_error)
       end
+
+      it 'retries the exit when trading_supervisor is a TradingSystem::Supervisor instance' do
+        exit_engine = instance_double(Live::ExitEngine, execute_exit: { success: true })
+        supervisor = TradingSystem::Supervisor.new
+        supervisor.register(:exit_manager, exit_engine)
+        allow(Rails.application.config.x).to receive(:trading_supervisor).and_return(supervisor)
+
+        service.send(:fix_stuck_exit, tracker)
+
+        expect(exit_engine).to have_received(:execute_exit).with(tracker, 'AUTO_RECONCILED_EXIT')
+        expect(Notifications::TelegramNotifier.instance).not_to have_received(:notify_error)
+      end
     end
 
     context 'when no exit_engine reference is available' do

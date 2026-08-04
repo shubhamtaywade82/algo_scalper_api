@@ -58,6 +58,28 @@
 
 ## Testing Guidelines
 - Framework: RSpec (`rspec-rails`) with FactoryBot, VCR, WebMock, Shoulda Matchers.
+
+---
+
+## Rule Precedence Hierarchy (Must Follow for AI Agents & Tools)
+
+1. **User Explicit Instructions**: Directly overrides generic defaults.
+2. **Repository Project Rules (`AGENTS.md`, `CLAUDE.md`, `CODING_CONVENTIONS.md`)**: Project invariants (e.g. Solid Queue, RSpec, `AlgoConfig`, `Orders::GatewayLive`/`GatewayPaper`) supersede external domain skills.
+3. **Detected Repository Profile**: Existing architecture (PostgreSQL, Solid Queue, RSpec) overrides generic defaults.
+4. **Team Conventions**: Defined architectural patterns.
+5. **External Domain Skills (Rails-AI / GoF Patterns)**: Knowledge reference.
+
+---
+
+## Architecture & Refactoring Tools
+
+Available executable analysis scripts in `bin/` or `.agents/skills/scripts/`:
+- **Context Compiler**: `ruby .agents/skills/scripts/rails_context_compiler.rb <file_path>`
+- **Prism AST Parser**: `ruby .agents/skills/scripts/ruby_prism_ast_analyzer.rb <file_path>`
+- **Smell Detector**: `ruby .agents/skills/scripts/ruby_reek_smell_detector.rb <file_or_dir>`
+- **Pattern Advisor**: `ruby .agents/skills/scripts/ruby_pattern_advisor.rb <file_or_dir>`
+- **Project Profiler**: `ruby .agents/skills/scripts/rails_project_profiler.rb`
+
 - Test files as `*_spec.rb` mirroring code paths (`app/services/foo/bar.rb` → `spec/services/foo/bar_spec.rb`).
 - Sequential execution; no parallel assumptions.
 - Coverage via SimpleCov (`coverage/`).

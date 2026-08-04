@@ -1,0 +1,154 @@
+# Architecture Regression Gate Configuration
+# All thresholds are MAXIMUMS. Exceeding = violation.
+
+complexity:
+  method_flog_max: 45
+  class_flog_max: 120
+  method_loc_max: 40
+  class_loc_max: 300
+  method_branches_max: 8
+  max_nesting_depth: 4
+
+coupling:
+  class_fan_out_max: 10
+  class_fan_in_max: 15
+  instability_warn: 0.85
+
+smells:
+  max_reek_smells_per_file: 3
+  zero_tolerance:
+    - FeatureEnvy
+    - ControlParameter
+  warn_only:
+    - UncommunicativeVariableName
+    - TooManyStatements
+
+layers:
+  rules:
+    domain:
+      path: "app/domain/**"
+      may_depend_on: []
+      must_not_require:
+        - "active_record"
+        - "action_controller"
+        - "action_mailer"
+        - "active_job"
+        - "redis"
+        - "faraday"
+        - "net/http"
+        - "sidekiq"
+        - "rails"
+
+    strategies:
+      path: "app/strategies/**"
+      may_depend_on:
+        - "app/domain/**"
+      must_not_require:
+        - "active_record"
+        - "redis"
+        - "faraday"
+        - "net/http"
+        - "sidekiq"
+        - "app/models/**"
+        - "app/gateways/**"
+        - "app/services/**"
+
+    gateways:
+      path: "app/gateways/**"
+      may_depend_on:
+        - "app/domain/**"
+        - "lib/**"
+      must_not_require:
+        - "app/models/**"
+        - "app/services/**"
+        - "app/controllers/**"
+
+    controllers:
+      path: "app/controllers/**"
+      may_depend_on:
+        - "app/services/**"
+        - "app/domain/**"
+      must_not_require:
+        - "app/gateways/**"
+        - "app/models/**"
+
+    services:
+      path: "app/services/**"
+      may_depend_on:
+        - "app/domain/**"
+        - "app/gateways/**"
+        - "app/models/**"
+
+    models:
+      path: "app/models/**"
+      may_depend_on:
+        - "app/domain/**"
+      must_not_require:
+        - "app/services/**"
+        - "app/gateways/**"
+        - "app/controllers/**"
+
+callbacks:
+  max_callback_chain_depth: 4
+  forbid_external_in_callbacks: true
+  external_patterns:
+    - "perform_later"
+    - "perform_async"
+    - "Faraday"
+    - "Net::HTTP"
+    - "HTTParty"
+    - "Redis"
+    - "publish"
+
+domain_purity:
+  forbidden_patterns:
+    - "ActiveRecord"
+    - "ApplicationRecord"
+    - "Rails\\."
+    - "ActionController"
+    - "\\.save"
+    - "\\.create"
+    - "\\.update"
+    - "\\.destroy"
+    - "\\.find"
+    - "\\.where"
+    - "Redis"
+    - "Sidekiq"
+    - "perform_async"
+    - "perform_later"
+
+money:
+  forbidden_in:
+    - "app/domain/**"
+    - "app/services/**"
+  patterns:
+    - "\\.to_f"
+    - "Float\\("
+    - "price.*=.*\\d+\\.\\d+"
+  allowed_in:
+    - "app/gateways/**"
+    - "app/services/instruments_importer.rb"
+    - "app/services/historical_options_analyzer.rb"
+
+idempotency:
+  webhook_paths:
+    - "app/controllers/api/webhooks*"
+    - "app/jobs/*webhook*"
+    - "app/jobs/*callback*"
+  required_patterns:
+    - "find_or_create_by"
+    - "find_or_initialize_by"
+    - "create_or_find_by"
+    - "ON CONFLICT"
+    - "unique"
+
+regression:
+  compare_against: "origin/main"
+  no_increase:
+    - total_reek_smells
+    - max_flog_score
+    - total_class_loc_over_300
+    - total_method_loc_over_40
+    - circular_dependency_count
+  no_decrease:
+    - test_coverage_percent
