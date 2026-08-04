@@ -17,9 +17,6 @@ module Api
         active_positions: PositionTracker.active.count,
         scheduler: scheduler_status,
         circuit_breaker: Risk::CircuitBreaker.instance.status,
-        public_ipv4: ip_info[:public_ipv4],
-        public_ipv6: ip_info[:public_ipv6],
-        registered_ips: ip_info[:registered_ips],
         websocket: {
           market_feed_running: market_feed_status[:running],
           market_feed_connected: market_feed_status[:connected],

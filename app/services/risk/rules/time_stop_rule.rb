@@ -11,15 +11,11 @@ module Risk
     # - Dead premiums don't recover
     # - Time stops prevent "hope trades"
     #
-    # Time limits are configurable in config/algo.yml under risk.time_stop:
-    #   time_stop:
-    #     scalp:
-    #       max_minutes: 15
-    #       max_candles: 15
-    #     trend:
-    #       NIFTY: 45
-    #       BANKNIFTY: 45
-    #       SENSEX: 90
+    # Rules:
+    # - Scalps: max 15 minutes OR 15 candles
+    # - Trend trades:
+    #   - NIFTY: max 45 minutes
+    #   - SENSEX: max 90 minutes
     #
     # Exit regardless of PnL when time exceeded.
     #
@@ -30,8 +26,8 @@ module Risk
       # Default time limits (used as fallback if config is missing)
       DEFAULT_TIME_LIMITS = {
         scalp: {
-          max_minutes: 3,
-          max_candles: 2
+          max_minutes: 15,
+          max_candles: 15
         },
         trend: {
           'NIFTY' => 45,      # minutes

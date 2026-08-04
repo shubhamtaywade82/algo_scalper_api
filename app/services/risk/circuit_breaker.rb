@@ -27,9 +27,8 @@ module Risk
     def tripped?
       !!Rails.cache.read(TRIP_CACHE_KEY)
     rescue StandardError => e
-      Rails.logger.error("[CircuitBreaker] tripped? check failed: #{e.message} — failing CLOSED (blocking entries)")
-      alert_cache_unavailable(e)
-      true # fail closed: cache outage must not silently disable the kill switch
+      Rails.logger.error("[CircuitBreaker] tripped? check failed: #{e.message} — failing open")
+      false # fail open: don't block trading if cache is unavailable
     end
 
     # Trip the circuit breaker.
@@ -40,13 +39,7 @@ module Risk
       payload = { at: Time.current, reason: reason.to_s }
       Rails.cache.write(TRIP_CACHE_KEY, payload, expires_in: ttl)
       Rails.logger.error("[CircuitBreaker] *** TRIPPED *** reason=#{reason.inspect} ttl=#{ttl}")
-      current_status = status
-      begin
-        ActionCable.server.broadcast('dashboard', { type: 'circuit_breaker' }.merge(current_status))
-      rescue StandardError => e
-        Rails.logger.warn("[CircuitBreaker] broadcast failed: #{e.message}")
-      end
-      current_status
+      status
     rescue StandardError => e
       Rails.logger.error("[CircuitBreaker] trip! failed: #{e.message}")
       raise
@@ -57,12 +50,6 @@ module Risk
     def reset!
       Rails.cache.delete(TRIP_CACHE_KEY)
       Rails.logger.info('[CircuitBreaker] Reset — trading re-enabled')
-      current_status = status
-      begin
-        ActionCable.server.broadcast('dashboard', { type: 'circuit_breaker' }.merge(current_status))
-      rescue StandardError => e
-        Rails.logger.warn("[CircuitBreaker] broadcast failed: #{e.message}")
-      end
       true
     rescue StandardError => e
       Rails.logger.error("[CircuitBreaker] reset! failed: #{e.message}")
@@ -86,7 +73,7 @@ module Risk
     # @param exit_engine [Live::ExitEngine]
     # @param reason [String] exit reason recorded on each tracker
     def force_close_all!(exit_engine:, reason: 'circuit_breaker')
-      trackers = Positions::ActiveForExit.call.to_a
+      trackers = PositionTracker.active.to_a
       Rails.logger.error("[CircuitBreaker] Force-closing #{trackers.size} position(s): #{reason}")
 
       trackers.each do |tracker|
@@ -94,17 +81,6 @@ module Risk
       rescue StandardError => e
         Rails.logger.error("[CircuitBreaker] Force-close failed for #{tracker.order_no}: #{e.class} - #{e.message}")
       end
-    end
-
-    private
-
-    def alert_cache_unavailable(error)
-      Notifications::TelegramNotifier.instance.notify_error(
-        "CircuitBreaker cache read failed: #{error.message} — failing CLOSED, all entries blocked until cache recovers",
-        context: 'CircuitBreaker#tripped?'
-      )
-    rescue StandardError => e
-      Rails.logger.error("[CircuitBreaker] alert_cache_unavailable failed: #{e.message}")
     end
   end
 end

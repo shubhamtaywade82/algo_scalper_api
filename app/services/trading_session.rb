@@ -99,6 +99,8 @@ module TradingSession
       # Used to skip signal generation, entry attempts, and off-hours exit enforcement.
       # @return [Boolean]
       def market_closed?
+        return false if ENV['FORCE_MARKET_OPEN'].to_s == 'true'
+
         current_ist = current_ist_time
         hour = current_ist.hour
         minute = current_ist.min

@@ -6,6 +6,7 @@ require_relative 'bos_extractor'
 module Entries
   class EntryGuard
     ENTRY_CONTRACT = 'bos_machine_v1'
+    SUPERTREND_CONTRACT = 'supertrend_machine_v1'
     BOS_SWING_LOOKBACK = 5
     BOS_MAX_AGE_CANDLES = 8
     BOS_MAX_ENTRY_DELAY_CANDLES = 3
@@ -13,12 +14,22 @@ module Entries
 
     class << self
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
+        Rails.logger.info("[EntryGuard] Attempting entry for #{index_cfg[:key]} (#{direction})")
+
+        # Circuit breaker — highest priority, checked before everything else
+        if Risk::CircuitBreaker.instance.tripped?
+          cb = Risk::CircuitBreaker.instance.status
+          Rails.logger.error("[EntryGuard] Entry blocked — circuit breaker tripped: #{cb[:reason]} (at: #{cb[:at]})")
+          return false
+        end
+
         unless bos_contract_present?(entry_metadata)
-          Rails.logger.error(
-            "[EntryGuard] Direct entry blocked for #{index_cfg[:key]}: BOS contract missing"
+Rails.logger.error(
+            "[EntryGuard] Direct entry blocked for #{index_cfg[:key]}: BOS contract missing. Metadata: #{entry_metadata.inspect}"
           )
           return false
         end
+        Rails.logger.debug "[EntryGuard] Contract check passed for #{index_cfg[:key]}"
 
         # Time regime validation (session-aware entry rules)
         unless time_regime_allows_entry?(index_cfg: index_cfg, pick: pick, direction: direction)
@@ -26,22 +37,13 @@ module Entries
           return false
         end
 
-      def entry_guard_pipeline
-        @entry_guard_pipeline ||= EntryGuardPipeline.new
-      end
-
-      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil, signal: nil)
-        # Global Profit Protection Check
-        if Portfolio::DrawdownGuard.triggered?
-          Observability::StructuredLog.info(
-            event: 'entry_blocked',
-            payload: {
-              service: 'Entries::EntryGuard',
-              index_key: index_cfg[:key].to_s,
-              symbol: pick[:symbol].to_s,
-              stage: 'profit_protection',
-              reason: 'drawdown_guard_active'
-            }
+        # Edge failure detector (rolling PnL window, consecutive SLs, session-based)
+        edge_check = Live::EdgeFailureDetector.instance.entries_paused?(index_key: index_cfg[:key])
+        if edge_check[:paused]
+          resume_at = edge_check[:resume_at]
+          resume_str = resume_at ? resume_at.strftime('%H:%M IST') : 'manual override'
+          Rails.logger.info(
+            "[EntryGuard] Entry blocked by edge failure detector for #{index_cfg[:key]}: #{edge_check[:reason]} (resume at: #{resume_str})"
           )
           signal&.record_entry_outcome('skipped', 'drawdown_guard_active')
           return false
@@ -73,7 +75,16 @@ module Entries
         Rails.logger.info("[EntryGuard] Scale multiplier for #{index_cfg[:key]}: x#{multiplier}") if multiplier > 1
 
         side = direction == :bullish ? 'long_ce' : 'long_pe'
-        unless exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
+        is_supertrend = entry_metadata&.dig(:entry_contract).to_s == SUPERTREND_CONTRACT
+
+        # Exposure check for Supertrend: Allow only ONE active position per index to prevent over-trading
+        if is_supertrend
+          active_idx_pos = PositionTracker.active.where("(meta->>'index_key') = ?", index_cfg[:key].to_s).exists?
+          if active_idx_pos
+            Rails.logger.debug { "[EntryGuard] Supertrend exposure check failed: Active position already exists for #{index_cfg[:key]}" }
+            return false
+          end
+        elsif !exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
           Rails.logger.debug { "[EntryGuard] Exposure check failed for #{index_cfg[:key]}: #{pick[:symbol]} (side: #{side}, max_same_side: #{index_cfg[:max_same_side]})" }
           return false
         end
@@ -125,13 +136,27 @@ module Entries
           return false
         end
 
-        bos_context = enforce_structure_entry_gate(
-          index_cfg: index_cfg,
-          instrument: instrument,
-          direction: direction,
-          entry_price: ltp.to_f,
-          entry_metadata: entry_metadata
-        )
+        if entry_metadata&.dig(:entry_contract).to_s == SUPERTREND_CONTRACT
+          # Bypass BOS gate for Supertrend-only mode
+          bos_context = {
+            confirmed_at: Time.current,
+            confirmed_index: -1,
+            direction: direction,
+            bos_id: entry_metadata[:bos_id],
+            timeframe: entry_metadata[:bos_timeframe],
+            origin_swing: { price: entry_metadata[:bos_origin_price] },
+            broken_swing: { price: entry_metadata[:bos_level] },
+            entry_underlying_price: ltp.to_f
+          }
+        else
+          bos_context = enforce_structure_entry_gate(
+            index_cfg: index_cfg,
+            instrument: instrument,
+            direction: direction,
+            entry_price: ltp.to_f,
+            entry_metadata: entry_metadata
+          )
+        end
         return false unless bos_context
 
         # ===== Unified instrument profile + capital cap sizing (hard rules) =====
@@ -139,9 +164,8 @@ module Entries
         permission_sym = (permission || entry_metadata&.dig(:permission) || :scale_ready).to_s.downcase.to_sym
 
         # Weekly expiry only (hard rule) - block monthly contracts for NIFTY/SENSEX.
-        # Bypass for Supertrend testing mode or Paper trading (simulated contracts may be monthly)
-        is_paper = entry_metadata&.dig(:paper) || Rails.env.development? || Rails.env.test?
-        if !is_supertrend && !is_paper && %w[NIFTY SENSEX].include?(symbol) && !weekly_contract?(pick: pick, index_cfg: index_cfg)
+        # Bypass for Supertrend testing mode.
+        if !is_supertrend && %w[NIFTY SENSEX].include?(symbol) && !weekly_contract?(pick: pick, index_cfg: index_cfg)
           Rails.logger.info("[EntryGuard] Weekly-only expiry rule blocked #{symbol} entry for #{pick[:symbol]}")
           signal&.record_entry_outcome('blocked', 'weekly_only_expiry_rule')
           return false
@@ -166,12 +190,12 @@ module Entries
 
         if cap_lots <= 0
           Rails.logger.info(
-            "[EntryGuard] Trade blocked by sizing for #{symbol}: permission=#{permission_sym}, " \
-            "permission_cap=#{permission_cap}, lot_size=#{lot_size}, premium=#{ltp}"
+            "[EntryGuard] Trade blocked by sizing for #{symbol}: permission=#{permission_sym}, permission_cap=#{permission_cap}, lot_size=#{lot_size}, premium=#{ltp}"
           )
           signal&.record_entry_outcome('blocked', 'capital_sizing_cap_zero')
           return false
         end
+        Rails.logger.debug "[EntryGuard] Sizing check passed: #{cap_lots} lots"
 
         quantity_by_existing_allocator = Capital::Allocator.qty_for(
           index_cfg: index_cfg,
@@ -186,14 +210,13 @@ module Entries
 
         if quantity <= 0 || quantity < lot_size
           Rails.logger.warn(
-            "[EntryGuard] Quantity blocked for #{index_cfg[:key]}: #{pick[:symbol]} " \
-            "(qty=#{quantity}, cap_qty=#{quantity_by_cap}, alloc_qty=#{quantity_by_existing_allocator}, lot_size=#{lot_size}, ltp=#{ltp})"
+            "[EntryGuard] Quantity blocked for #{index_cfg[:key]}: #{pick[:symbol]} (qty=#{quantity}, cap_qty=#{quantity_by_cap}, alloc_qty=#{quantity_by_existing_allocator}, lot_size=#{lot_size}, ltp=#{ltp})"
           )
           signal&.record_entry_outcome('blocked', 'quantity_below_lot_minimum')
           return false
         end
 
-        response = Orders.config.place_market(
+        response = Orders.config.gateway.place_market(
           side: 'buy',
           segment: pick[:segment] || index_cfg[:segment],
           security_id: pick[:security_id],
@@ -407,31 +430,56 @@ module Entries
           config_snapshot: snapshot
         )
 
-        tracker
+        # For live positions, try to get from Redis PnL cache first (has pre-calculated PnL)
+        # Then fall back to calculating from tick data
+        pnl_cache = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
+        if pnl_cache && pnl_cache[:pnl]
+          # Use pre-calculated PnL from Redis
+          tracker.update!(
+            last_pnl_rupees: BigDecimal(pnl_cache[:pnl].to_s),
+            last_pnl_pct: pnl_cache[:pnl_pct] ? BigDecimal(pnl_cache[:pnl_pct].to_s) : nil,
+            high_water_mark_pnl: pnl_cache[:hwm_pnl] ? BigDecimal(pnl_cache[:hwm_pnl].to_s) : tracker.high_water_mark_pnl
+          )
+          Rails.logger.debug { "[EntryGuard] Loaded PnL from Redis cache for #{tracker.order_no}: PnL=₹#{pnl_cache[:pnl].round(2)}" }
+          return
+        end
+
+        # Fallback: Calculate from tick data if Redis PnL cache is empty
+        segment = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
+        security_id = tracker.security_id
+        return unless segment.present? && security_id.present?
+
+        # Try Redis tick cache
+        tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+        if tick
+          ltp = tick.ltp
+          entry = BigDecimal(tracker.entry_price.to_s)
+          qty = tracker.quantity.to_i
+          pnl = (ltp - entry) * qty
+          # Calculate pnl_pct as decimal (0.0573 for 5.73%) for consistent storage (matches Redis format)
+          pnl_pct = entry.positive? ? ((ltp - entry) / entry) : nil
+
+          hwm = tracker.high_water_mark_pnl || BigDecimal(0)
+          hwm = [hwm, pnl].max
+
+          tracker.update!(
+            last_pnl_rupees: pnl,
+            last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil,
+            high_water_mark_pnl: hwm
+          )
+          Rails.logger.debug { "[EntryGuard] Calculated PnL from tick data for #{tracker.order_no}: PnL=₹#{pnl.round(2)}" }
+        end
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] Failed to calculate PnL for #{tracker.order_no}: #{e.message}")
       end
 
       def build_client_order_id(index_cfg:, pick:)
         "#{index_cfg[:key]}_#{pick[:symbol]}_#{Time.current.to_i}"
       end
 
-      def find_instrument(index_cfg)
-        Instrument.find_by_sid_and_segment(
-          security_id: index_cfg[:sid],
-          segment_code: index_cfg[:segment]
-        )
-      end
-
-      def weekly_contract?(pick:, index_cfg:)
-        # Prefer derivative_id if present
-        derivative =
-          if pick[:derivative_id].present?
-            Derivative.find_by(id: pick[:derivative_id])
-          else
-            Derivative.find_by(
-              security_id: pick[:security_id].to_s,
-              segment: (pick[:segment] || index_cfg[:segment]).to_s
-            )
-          end
+        # Try WebSocket cache first
+        tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+        return tick.ltp if tick
 
         return false unless derivative
 
@@ -554,44 +602,40 @@ module Entries
         str.gsub(/[^0-9]/, '').to_i
       end
 
-      def validate_entry_price!(tracker, context)
-        return unless tracker.respond_to?(:watchable)
+      # Check if daily loss/profit limits allow entry (NOT trade frequency - we don't cap trade count)
+      def daily_limits_allow_entry?(index_cfg:)
+        return true unless daily_limits_enabled?
 
-        instrument = tracker.watchable
-        return unless instrument.respond_to?(:intraday_ohlc)
+        daily_limits = Live::DailyLimits.new
+        result = daily_limits.can_trade?(index_key: index_cfg[:key])
 
-        ohlc = instrument.intraday_ohlc(interval: '1', days: 1)
-        return if ohlc.blank?
+        unless result[:allowed]
+          reason = result[:reason]
+          # Only block on loss/profit limits, NOT trade frequency limits
+          case reason
+          when 'trade_frequency_limit_exceeded', 'global_trade_frequency_limit_exceeded'
+            # Ignore trade frequency limits - we don't cap trade count
+            return true
+          when 'daily_loss_limit_exceeded'
+            Rails.logger.warn(
+              "[EntryGuard] Daily loss limit exceeded for #{index_cfg[:key]}: ₹#{result[:daily_loss].round(2)}/₹#{result[:max_daily_loss]}"
+            )
+            return false
+          when 'global_daily_loss_limit_exceeded'
+            Rails.logger.warn(
+              "[EntryGuard] Global daily loss limit exceeded: ₹#{result[:global_daily_loss].round(2)}/₹#{result[:max_global_loss]}"
+            )
+            return false
+          when 'daily_profit_target_reached'
+            Rails.logger.info(
+              "[EntryGuard] Daily profit target reached: ₹#{result[:global_daily_profit].round(2)}/₹#{result[:max_daily_profit]}"
+            )
+            return false
+          end
+          return false
+        end
 
-        series = CandleSeries.new(symbol: instrument.symbol_name, interval: '1')
-        series.load_from_raw(ohlc)
-        current_minute = Time.current.beginning_of_minute
-        candle = series.candles.find { |c| c.timestamp == current_minute }
-        return unless candle
-
-        price = tracker.entry_price.to_f
-        return if price.between?(candle.low, candle.high)
-
-        deviation = if price > candle.high
-                      ((price - candle.high) / candle.high * 100).round(2)
-                    else
-                      ((price - candle.low) / candle.low * 100).round(2)
-                    end
-        tag = deviation.positive? ? 'above' : 'below'
-        Observability::StructuredLog.warn(
-          event: 'entry_price_outside_candle',
-          payload: {
-            tracker_id: tracker.id,
-            symbol: tracker.symbol,
-            side: tracker.side,
-            paper: tracker.paper,
-            entry_price: price,
-            candle_low: candle.low,
-            candle_high: candle.high,
-            deviation_pct: deviation,
-            deviation_tag: tag
-          }
-        )
+        true
       rescue StandardError => e
         Rails.logger.warn("[EntryGuard] validate_entry_price! failed: #{e.class} - #{e.message}")
       end
@@ -900,7 +944,8 @@ module Entries
 
       def bos_contract_present?(entry_metadata)
         return false unless entry_metadata.is_a?(Hash)
-        return false unless entry_metadata[:entry_contract].to_s == ENTRY_CONTRACT
+        contract = entry_metadata[:entry_contract].to_s
+        return false unless [ENTRY_CONTRACT, SUPERTREND_CONTRACT].include?(contract)
         return false if entry_metadata[:bos_id].blank?
         return false if entry_metadata[:bos_timeframe].blank?
         return false if entry_metadata[:bos_origin_price].blank?

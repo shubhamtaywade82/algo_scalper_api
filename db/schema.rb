@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_25_153309) do
+ActiveRecord::Schema[8.0].define(version: 2026_02_25_090000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -351,19 +351,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_25_153309) do
     t.decimal "trailing_stop_price", precision: 12, scale: 4
     t.datetime "updated_at", null: false
     t.datetime "validated_at"
-    t.decimal "vix_at_entry", precision: 8, scale: 4
-    t.bigint "watchable_id", null: false
-    t.string "watchable_type", null: false
-    t.index "((meta ->> 'index_key'::text))", name: "index_position_trackers_on_meta_index_key"
-    t.index ["carry_mode"], name: "index_position_trackers_on_carry_mode"
-    t.index ["client_order_id"], name: "index_position_trackers_on_client_order_id"
-    t.index ["created_at"], name: "index_position_trackers_on_created_at"
+    t.datetime "expansion_at"
+    t.datetime "exit_requested_at"
+    t.datetime "exit_sent_at"
+    t.string "exit_coid"
+    t.string "exit_order_id"
     t.index ["exit_coid"], name: "index_position_trackers_on_exit_coid", unique: true
-    t.index ["exit_order_id"], name: "index_position_trackers_on_exit_order_id"
     t.index ["exit_requested_at"], name: "index_position_trackers_on_exit_requested_at"
-    t.index ["exit_triggered_at"], name: "index_position_trackers_on_exit_triggered_at"
-    t.index ["exited_at", "status"], name: "index_position_trackers_on_exited_at_and_status"
-    t.index ["index_key"], name: "index_position_trackers_on_index_key"
     t.index ["instrument_id"], name: "index_position_trackers_on_instrument_id"
     t.index ["order_no"], name: "index_position_trackers_on_order_no", unique: true
     t.index ["paper"], name: "index_position_trackers_on_paper"

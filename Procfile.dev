@@ -1,4 +1,2 @@
-# Paper by default: omit LIVE_TRADING or set LIVE_TRADING=false. For live orders: LIVE_TRADING=true
-# Signal tiers: SIGNAL_TIER=exploratory|standard|selective (see config/signal_tier_presets.yml)
 web: bin/rails server -p 3001
 trading: ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
