@@ -7,7 +7,7 @@ module Research
   # it into research_option_bars keyed by contract identity + timestamp so
   # repeat fetches for the same window are idempotent.
   class OptionCandleFetcher < ApplicationService
-    REQUIRED_DATA = %w[open high low close volume oi iv spot strike].freeze
+    REQUIRED_DATA = %w[open high low close volume oi spot strike].freeze
     UNIQUE_BY = %i[underlying_symbol expiry_flag option_type strike_label interval ts].freeze
 
     def initialize(symbol:, option_type:, expiry_flag:, strike_label:, dhan_strike_param:, from_date:, to_date:,

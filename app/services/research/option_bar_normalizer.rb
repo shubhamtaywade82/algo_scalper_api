@@ -27,7 +27,6 @@ module Research
             close: raw_side_data["close"][i].to_f,
             volume: raw_side_data["volume"][i].to_i,
             oi: raw_side_data["oi"]&.[](i)&.to_i,
-            iv: raw_side_data["iv"]&.[](i)&.to_f,
             spot: raw_side_data["spot"]&.[](i)&.to_f,
             source: source
           }

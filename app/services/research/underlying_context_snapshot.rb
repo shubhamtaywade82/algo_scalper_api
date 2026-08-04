@@ -16,20 +16,11 @@ module Research
     class << self
       def at(symbol:, timestamp:, lookback_minutes: LOOKBACK_MINUTES)
         symbol = symbol.to_s.upcase
-        # Last N *trading* bars ending at timestamp, not a literal calendar
-        # window — a calendar window anchored at session open (09:15) never
-        # crosses the overnight gap, so it always came up empty right when a
-        # trade actually opens. Reaching into the prior session's close is
-        # the correct behavior here (was the underlying already trending
-        # into today's open), not a workaround.
         rows = Candles::Record
                .for_instrument(symbol)
                .for_timeframe("1m")
-               .where(ts: ..timestamp)
-               .order(ts: :desc)
-               .limit(lookback_minutes)
-               .to_a
-               .reverse
+               .between(timestamp - lookback_minutes.minutes, timestamp)
+               .order(:ts)
         return {} if rows.size < MIN_CANDLES
 
         series = build_series(symbol, rows)

@@ -6,7 +6,7 @@ module Research
   class OptionCandidate < ApplicationRecord
     self.table_name = "research_option_candidates"
 
-    STATUSES = %w[pending scored no_data failed illiquid].freeze
+    STATUSES = %w[pending scored no_data failed].freeze
 
     belongs_to :research_signal, class_name: "Research::Signal"
 

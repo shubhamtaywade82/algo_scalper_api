@@ -191,45 +191,6 @@ development:
     priority: 20
     description: "Auto-runs the prior session's premium-lifecycle board for SENSEX so research_premium_lifecycles accumulates without manual clicks"
 
-  ai_trading_signal_nifty_open:
-    class: Agents::TradingSignalJob
-    args: ["NIFTY", "5"]
-    schedule: at 9:20am every day
-    queue_name: background
-    priority: 3
-    description: "AI agent pipeline open signal for NIFTY at market open (9:20 AM)"
-
-  ai_trading_signal_nifty_refresh:
-    class: Agents::TradingSignalJob
-    args: ["NIFTY", "5"]
-    schedule: every 30 minutes
-    queue_name: background
-    priority: 8
-    description: "AI agent pipeline intraday refresh for NIFTY every 30 minutes"
-
-  ai_trading_signal_banknifty_open:
-    class: Agents::TradingSignalJob
-    args: ["BANKNIFTY", "5"]
-    schedule: at 9:22am every day
-    queue_name: background
-    priority: 3
-    description: "AI agent pipeline open signal for BANKNIFTY at market open (9:22 AM)"
-
-  ai_trading_signal_banknifty_refresh:
-    class: Agents::TradingSignalJob
-    args: ["BANKNIFTY", "5"]
-    schedule: every 30 minutes
-    queue_name: background
-    priority: 8
-    description: "AI agent pipeline intraday refresh for BANKNIFTY every 30 minutes"
-
-  alpha_scanner:
-    class: AlphaScanJob
-    schedule: every 5 minutes
-    queue_name: background
-    priority: 10
-    description: "Autonomous Alpha Strategy scanner — runs all enabled modules across NIFTY, BANKNIFTY, and SENSEX"
-
 production:
   pre_market_iv_baseline:
     class: PreMarketIvBaselineJob
@@ -384,3 +345,41 @@ production:
     queue_name: background
     priority: 10
     description: "Autonomous Alpha Strategy scanner — runs all enabled modules across NIFTY, BANKNIFTY, and SENSEX"
+
+  autonomous_optimization:
+    class: Ai::Autonomous::OptimizationJob
+    schedule: at 4:30pm every weekday
+    queue_name: background
+    priority: 15
+    description: "Daily self-learning optimization loop (Observe-Think-Act) for NIFTY, BANKNIFTY, and SENSEX"
+
+  weekly_options_calibration:
+    class: WeeklyCalibrationJob
+    schedule: every Sunday at 6:00am
+    queue_name: background
+    priority: 3
+    description: "Weekly ATM±1 options calibration — proposes config patches for NIFTY and SENSEX"
+
+  research_daily_lifecycle_nifty:
+    class: Research::DailyLifecycleJob
+    args: ["NIFTY"]
+    schedule: at 9:00am every weekday
+    queue_name: background
+    priority: 20
+    description: "Auto-runs the prior session's premium-lifecycle board for NIFTY so research_premium_lifecycles accumulates without manual clicks"
+
+  research_daily_lifecycle_banknifty:
+    class: Research::DailyLifecycleJob
+    args: ["BANKNIFTY"]
+    schedule: at 9:00am every weekday
+    queue_name: background
+    priority: 20
+    description: "Auto-runs the prior session's premium-lifecycle board for BANKNIFTY so research_premium_lifecycles accumulates without manual clicks"
+
+  research_daily_lifecycle_sensex:
+    class: Research::DailyLifecycleJob
+    args: ["SENSEX"]
+    schedule: at 9:00am every weekday
+    queue_name: background
+    priority: 20
+    description: "Auto-runs the prior session's premium-lifecycle board for SENSEX so research_premium_lifecycles accumulates without manual clicks"

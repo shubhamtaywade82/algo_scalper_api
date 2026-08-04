@@ -78,9 +78,10 @@ RSpec.describe Indicators::SupertrendIndicator do
     end
 
     it 'calculates Supertrend once and caches result' do
-      expect(Indicators::Supertrend).to receive(:new).once.and_call_original
+      allow(Indicators::Supertrend).to receive(:new).and_call_original
       indicator.calculate_at(index)
       indicator.calculate_at(index) # Second call should use cache
+      expect(Indicators::Supertrend).to have_received(:new).once
     end
 
     context 'with trading hours filter' do

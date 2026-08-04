@@ -14,18 +14,7 @@ class SupertrendBacktestStrategy
     dir_1m = SupertrendTrend.direction(series: @series, supertrend_result: st_1m)
     return nil if dir_1m == :none
 
-    if @series.respond_to?(:adx)
-      adx = @series.adx(14)
-      return nil if adx.nil? || adx < @adx_min
-    end
-
-    if @series_5m.present?
-      st_5m = Indicators::Supertrend.new(series: @series_5m, **@supertrend_cfg).call
-      dir_5m = SupertrendTrend.direction(series: @series_5m, supertrend_result: st_5m)
-      return nil unless dir_1m == dir_5m
-    end
-
-    { type: dir_1m == :long ? :ce : :pe, price: @series.candles.last.close }
+    { type: direction == :long ? :ce : :pe, price: @series.candles.last.close }
   end
 end
 
