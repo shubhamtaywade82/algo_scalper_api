@@ -1,7 +1,7 @@
 name: "Supertrend V1"
 slug: "supertrend_v1"
 class_name: "SupertrendV1"
-timeframes: ["1m", "5m"]
+timeframes: ["1m"]
 instruments: ["NIFTY", "BANKNIFTY", "SENSEX"]
 params:
   supertrend_period:

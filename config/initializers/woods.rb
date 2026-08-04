@@ -11,7 +11,6 @@
 # Presets accept a block for overrides:
 #   Woods.configure_with_preset(:local) { |c| c.max_context_tokens = 16_000 }
 
-if defined?(Woods)
 Woods.configure do |config|
   config.output_dir = Rails.root.join('tmp/woods')
 
@@ -23,5 +22,4 @@ Woods.configure do |config|
 
   config.vector_store = :in_memory
   config.metadata_store = :in_memory
-end
 end

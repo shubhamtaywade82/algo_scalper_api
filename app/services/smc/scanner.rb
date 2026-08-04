@@ -10,6 +10,7 @@ module Smc
     DEFAULT_PERIOD = 300
     INTER_INDEX_DELAY = 2.0 # seconds between processing indices
     DELAY_BETWEEN_CANDLE_FETCHES = 1.0 # seconds between candle fetches
+    STRUCTURE_EVENT_INTERVAL = '5' # matches TradingSignalContract's default timeframe
 
     def initialize(period: nil)
       @period = period || period_from_config || period_from_env || DEFAULT_PERIOD
@@ -143,6 +144,12 @@ module Smc
         if engine.ai_enabled? && %i[call put].include?(decision)
           Rails.logger.debug { "[Smc::Scanner] AI enabled for #{index_cfg[:key]} #{decision} signal - analysis will be sent via background job" }
         end
+
+        # Persist scan event for audit trail and replay capability
+        publish_scan_event(index_cfg, instrument, decision)
+
+        # Record atomic structural events (swings/BOS/CHoCH/FVG/OB/sweeps)
+        Smc::StructureEventRecorder.record!(instrument: instrument, interval: STRUCTURE_EVENT_INTERVAL)
       rescue DhanHQ::RateLimitError => e
         Rails.logger.error("[Smc::Scanner] Rate limit error for #{index_cfg[:key]}: #{e.message}")
         Rails.logger.info('[Smc::Scanner] Waiting 5 seconds before continuing...')

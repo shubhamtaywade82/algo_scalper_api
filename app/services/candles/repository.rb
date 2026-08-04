@@ -47,16 +47,15 @@ module Candles
 
         # Fall back to Redis candle cache when Solid Queue worker hasn't
         # persisted today's candles yet (the WS-tick → Redis → DB pipeline
-        # requires a separate jobs process). Auto-backfill when fewer than 60 candles are present (needed for 5m MTF Supertrend).
-        if rows.size < 60 && (instrument = find_instrument(instrument_key))
-          cached = Live::CandleSeriesCache.fetch(instrument: instrument, interval: 1, backfill: true)
+        # requires a separate jobs process).
+        if rows.empty? && (instrument = find_instrument(instrument_key))
+          cached = Live::CandleSeriesCache.fetch(instrument: instrument, interval: 1, backfill: false)
           if cached&.candles
-            cached_rows = cached.candles.reject { |c| c.timestamp.nil? || c.timestamp < from || c.timestamp > to }
-                                         .map do |c|
+            rows = cached.candles.reject { |c| c.timestamp.nil? || c.timestamp < from || c.timestamp > to }
+                                 .map do |c|
               { ts: c.timestamp, open: c.open.to_f, high: c.high.to_f,
                 low: c.low.to_f, close: c.close.to_f, volume: c.volume.to_i, oi: 0 }
             end
-            rows = cached_rows if cached_rows.size > rows.size
           end
         end
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_19_110000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_07_084810) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -706,7 +706,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_19_110000) do
     t.bigint "strategy_run_id", null: false
     t.bigint "strategy_version_id", null: false
     t.datetime "updated_at", null: false
-    t.index ["emitted_at"], name: "index_strategy_signals_on_emitted_at"
     t.index ["instrument_key", "emitted_at"], name: "index_strategy_signals_on_instrument_key_and_emitted_at"
     t.index ["position_tracker_id"], name: "index_strategy_signals_on_position_tracker_id"
     t.index ["strategy_id"], name: "index_strategy_signals_on_strategy_id"
@@ -831,6 +830,43 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_19_110000) do
     t.string "watchable_type"
     t.index ["segment", "security_id"], name: "index_watchlist_items_on_segment_and_security_id", unique: true
     t.index ["watchable_type", "watchable_id"], name: "index_watchlist_items_on_watchable_type_and_watchable_id"
+  end
+
+  create_table "woods_edges", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "relationship", null: false
+    t.bigint "source_id", null: false
+    t.bigint "target_id", null: false
+    t.string "via"
+    t.index ["source_id", "target_id", "relationship"], name: "idx_woods_edges_unique", unique: true
+    t.index ["source_id"], name: "index_woods_edges_on_source_id"
+    t.index ["target_id"], name: "index_woods_edges_on_target_id"
+  end
+
+  create_table "woods_embeddings", force: :cascade do |t|
+    t.string "chunk_type"
+    t.string "content_hash", null: false
+    t.datetime "created_at", null: false
+    t.integer "dimensions", null: false
+    t.text "embedding", null: false
+    t.bigint "unit_id", null: false
+    t.index ["content_hash"], name: "index_woods_embeddings_on_content_hash"
+    t.index ["unit_id"], name: "index_woods_embeddings_on_unit_id"
+  end
+
+  create_table "woods_units", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "file_path", null: false
+    t.string "identifier", null: false
+    t.json "metadata"
+    t.string "namespace"
+    t.text "source_code"
+    t.string "source_hash"
+    t.string "unit_type", null: false
+    t.datetime "updated_at", null: false
+    t.index ["file_path"], name: "index_woods_units_on_file_path"
+    t.index ["identifier"], name: "index_woods_units_on_identifier", unique: true
+    t.index ["unit_type"], name: "index_woods_units_on_unit_type"
   end
 
   add_foreign_key "best_indicator_params", "instruments"

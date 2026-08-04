@@ -11,7 +11,7 @@ class SignalEngine
   end
 
   def run
-    Rails.logger.info('[SignalEngine] Alpha strategies disabled — use Signal::Engine Supertrend path')
+    Rails.logger.info('[SignalEngine] Alpha strategies disabled — use Strategies::Manager path')
     []
   end
 end

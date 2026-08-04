@@ -327,38 +327,28 @@ module ServiceTestRunner
   # SIGNAL SERVICES
   # ============================================================================
 
-  def test_signal_scheduler
-    print_header('Testing Signal::Scheduler')
+  def test_strategy_manager
+    print_header('Testing Strategies::Manager')
 
-    print_section('Creating Scheduler Instance')
-    scheduler = Signal::Scheduler.new
+    print_section('Creating Manager Instance')
+    manager = Strategies::Manager.new
 
     print_section('Pre-Start Status')
-    print_info("Running: #{scheduler.running?}")
+    print_info("Healthy: #{manager.healthy?}")
 
     print_section('Starting Service')
-    scheduler.start
+    manager.start
     sleep(3)
 
     print_section('Post-Start Status')
-    print_info("Running: #{scheduler.running?}")
+    print_info("Healthy: #{manager.healthy?}")
+    print_info("Statuses: #{manager.all_statuses}")
 
-    print_section('Observing Signal Generation')
-    wait_for_logs(30)
+    print_section('Stopping Manager')
+    manager.stop
 
-    print_section('Testing Manual Signal Processing')
-    indices = %w[NIFTY BANKNIFTY]
-    indices.each do |index_key|
-      index_cfg = AlgoConfig.fetch('indices', index_key)
-      next unless index_cfg
-
-      print_info("Processing #{index_key}...")
-      # scheduler.process_index(index_cfg) # Uncomment to test
-      print_info("  Config: #{index_cfg.inspect}")
-    end
-
-    print_success('Signal::Scheduler test completed')
-    scheduler
+    print_success('Strategies::Manager test completed')
+    manager
   end
 
   # ============================================================================
@@ -533,7 +523,7 @@ module ServiceTestRunner
       { name: 'PnlUpdaterService', method: :test_pnl_updater_service },
       { name: 'PaperPnlRefresher', method: :test_paper_pnl_refresher },
       { name: 'RiskManagerService', method: :test_risk_manager_service },
-      { name: 'Signal::Scheduler', method: :test_signal_scheduler }
+      { name: 'Strategies::Manager', method: :test_strategy_manager }
     ]
 
     services_to_test.each do |service|

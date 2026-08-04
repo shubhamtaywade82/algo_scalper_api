@@ -447,6 +447,7 @@ module Live
       return if @last_heartbeat_at && (Time.current.to_f - @last_heartbeat_at) < 1.0
 
       @last_heartbeat_at = Time.current.to_f
+      Live::SystemStatusCache.instance.report_heartbeat(:pnl_updater)
       ActionCable.server.broadcast("dashboard", build_dashboard_stats)
     rescue StandardError => e
       @logger.debug("[PnlUpdater] heartbeat broadcast failed: #{e.message}")
@@ -472,7 +473,10 @@ module Live
         indices: {
           nifty: Live::TickCache.ltp('IDX_I', '13'),
           banknifty: Live::TickCache.ltp('IDX_I', '25'),
-          sensex: Live::TickCache.ltp('IDX_I', '51')
+          sensex: Live::TickCache.ltp('IDX_I', '51'),
+          nifty_prev_close: Live::TickCache.fetch('IDX_I', '13')&.dig(:prev_close),
+          banknifty_prev_close: Live::TickCache.fetch('IDX_I', '25')&.dig(:prev_close),
+          sensex_prev_close: Live::TickCache.fetch('IDX_I', '51')&.dig(:prev_close)
         },
         circuit_breaker: Risk::CircuitBreaker.instance.status,
         system: Live::SystemStatusCache.instance.all_statuses,

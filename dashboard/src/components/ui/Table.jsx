@@ -26,7 +26,10 @@ export function TableBody(props) {
 
 export function TableRow(props) {
   return (
-    <tr class={`border-b transition-colors ${props.clickable ? 'cursor-pointer hover:bg-gray-800/50' : ''} ${props.class || ''}`}>
+    <tr
+      class={`border-b transition-colors ${props.clickable ? 'cursor-pointer hover:bg-gray-800/50' : ''} ${props.class || ''}`}
+      onClick={props.onClick}
+    >
       {props.children}
     </tr>
   )

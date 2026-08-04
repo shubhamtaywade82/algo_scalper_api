@@ -81,7 +81,7 @@ export const navigationConfig = [
   {
     section: NAV_SECTIONS.PORTFOLIO,
     items: [
-      { id: 'positions', label: 'Positions', href: ROUTES.DASHBOARD, icon: 'positions' }, // Existing positions are on dashboard
+      { id: 'positions', label: 'Positions', href: ROUTES.POSITIONS, icon: 'positions' },
       { id: 'orders', label: 'Orders', href: ROUTES.LEDGER, icon: 'ledger' }, // Ledger acts as orders or trades log
       { id: 'holdings', label: 'Holdings', href: ROUTES.HOLDINGS, icon: 'holdings' },
       { id: 'funds', label: 'Funds', href: ROUTES.FUNDS, icon: 'funds' }

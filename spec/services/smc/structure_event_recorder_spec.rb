@@ -195,4 +195,33 @@ RSpec.describe Smc::StructureEventRecorder do
     end
   end
 
+  describe 'replay determinism' do
+    it 'produces a stable, sequence-ordered event history replayable via EventStore::ReplayEngine' do
+      replay_instrument = create(:instrument, symbol_name: 'BANKNIFTY')
+      series = build(:candle_series, :five_minute)
+      candles = [
+        build(:candle, high: 100, low: 90, close: 95),
+        build(:candle, high: 98, low: 85, close: 88),
+        build(:candle, high: 97, low: 86, close: 90),
+        build(:candle, high: 99, low: 87, close: 91),
+        build(:candle, high: 110, low: 88, close: 105)
+      ]
+      candles.each { |c| series.add_candle(c) }
+      allow(replay_instrument).to receive(:candles).with(interval: '5').and_return(series)
+      allow(series).to receive(:swing_high?) { |i| i == 0 }
+      allow(series).to receive(:swing_low?) { |i| i == 1 }
+
+      described_class.record!(instrument: replay_instrument, interval: '5')
+
+      replay = EventStore::ReplayEngine.new(
+        stream: Smc::StructureEventRecorder::STREAM,
+        from: 1.minute.ago,
+        to: 1.minute.from_now
+      )
+      sequences = replay.to_a.select { |e| e.correlation_id == 'SMC-STRUCT-BANKNIFTY-5' }.map(&:sequence)
+
+      expect(sequences).to eq(sequences.sort)
+      expect(sequences.uniq).to eq(sequences)
+    end
+  end
 end

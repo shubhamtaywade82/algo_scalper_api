@@ -4,6 +4,8 @@ import StatsBar from '../components/StatsBar'
 import AnimatedNumber from '../components/AnimatedNumber'
 import { useAlerts } from '../stores/useAlerts'
 import { useOrders } from '../stores/useOrders'
+import EquityCurve from '../components/charts/EquityCurve'
+import { useEquityCurve } from '../stores/useEquityCurve'
 
 const RUNNING_PEAK_KEY = 'algo_dashboard_daily_pnl_hwm'
 
@@ -42,8 +44,12 @@ export default function Dashboard() {
   const [runningPeakPnl, setRunningPeakPnl] = createSignal(loadRunningPeak())
   const { alerts: liveAlerts } = useAlerts()
   const { orders: recentOrders, fetchOrders } = useOrders()
+  const { data: equityCurveData, fetchCurve: fetchEquityCurve } = useEquityCurve()
 
-  onMount(() => { fetchOrders() })
+  onMount(() => {
+    fetchOrders()
+    fetchEquityCurve()
+  })
 
   createEffect(() => {
     const currentOpen = open() || []
@@ -126,7 +132,16 @@ export default function Dashboard() {
     <div class="space-y-6">
 
       {/* 2. Top StatsBar KPI Cards Row */}
-      <StatsBar balance={balance()} stats={liveStats()} marketStatus={marketStatus()} mode={mode()} />
+      <StatsBar
+        balance={balance()}
+        stats={liveStats()}
+        marketStatus={marketStatus()}
+        mode={mode()}
+        strategies={{
+          running: activeStrategies().filter((s) => s.status === 'Running').length,
+          total: activeStrategies().length
+        }}
+      />
 
       {/* 3. Middle Charts & Market Overview Row */}
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -137,36 +152,12 @@ export default function Dashboard() {
             <span class="text-[9px] font-bold text-gray-500 bg-white/5 px-2 py-0.5 rounded-full uppercase">Today</span>
           </div>
           <div class="flex-1 flex items-center justify-between gap-6 py-4">
-            {/* SVG Line Chart representing Equity curve */}
-            <div class="flex-1 h-full relative">
-              <svg viewBox="0 0 200 100" class="w-full h-full">
-                <defs>
-                  <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="rgb(16, 185, 129)" stop-opacity="0.2"/>
-                    <stop offset="100%" stop-color="rgb(16, 185, 129)" stop-opacity="0.0"/>
-                  </linearGradient>
-                </defs>
-                <path
-                  d="M 10 90 L 30 75 L 65 80 L 100 45 L 130 55 L 165 25 L 190 15"
-                  fill="none"
-                  stroke="rgb(16, 185, 129)"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                />
-                <path
-                  d="M 10 90 L 30 75 L 65 80 L 100 45 L 130 55 L 165 25 L 190 15 L 190 95 L 10 95 Z"
-                  fill="url(#equityGrad)"
-                />
-                {/* Horizontal reference dotted line */}
-                <line x1="10" y1="60" x2="190" y2="60" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3,3" />
-              </svg>
-              {/* Timeline labels */}
-              <div class="flex justify-between text-[8px] text-gray-600 font-bold uppercase mt-1 px-1">
-                <span>09:15</span>
-                <span>11:00</span>
-                <span>13:00</span>
-                <span>15:15</span>
-              </div>
+            <div class="flex-1 h-full relative flex items-center justify-center">
+              <Show when={equityCurveData().length > 0} fallback={
+                <span class="text-[9px] text-gray-500 animate-pulse uppercase tracking-widest font-black">Loading Equity Curve...</span>
+              }>
+                <EquityCurve data={equityCurveData} height={180} />
+              </Show>
             </div>
             {/* Legend / Metrics side list */}
             <div class="w-28 space-y-2 border-l border-white/5 pl-4 shrink-0 flex flex-col justify-center">

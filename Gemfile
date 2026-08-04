@@ -125,6 +125,9 @@ group :development, :test do
 
   # N+1 query detection
   gem 'bullet'
+
+  # Rails codebase indexing for AI coding assistant context
+  gem 'woods'
 end
 
 gem "json_schemer", "~> 2.4"

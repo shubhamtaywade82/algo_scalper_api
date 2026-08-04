@@ -1,61 +1,51 @@
 # frozen_string_literal: true
 
-# Supertrend V1 — Multi-Timeframe (1m + 5m) Supertrend + ADX strategy.
+# Supertrend V1 — the alpha logic extracted from Signal::Engine.
 #
-# Uses 1m candles for execution / signal generation and 5m candles for higher timeframe trend bias.
-# Only enters when 1m trend matches 5m trend and ADX filter on 1m passes.
+# Evaluates 1m candles and returns Signals::BuyCall / BuyPut / Hold
+# based on Supertrend direction, ADX filter, and closing-price
+# confirmation against the supertrend line.
+#
+# Platform concerns (EntryGuard, option-chain analysis, TradingSignal
+# persistence, LTP confirmation) live in the manager — this plugin is
+# a pure decision function.
 class SupertrendV1 < Strategies::Base
   class << self
-    def timeframes = %w[1m 5m]
+    def timeframes = %w[1m]
     def instruments = %w[NIFTY BANKNIFTY SENSEX]
     def params_schema
-      {
-        supertrend_period: { type: "integer", default: 10 },
-        supertrend_multiplier: { type: "float", default: 2.0 },
-        adx_min: { type: "float", default: 20.0 }
-      }
+  {
+      supertrend_period: { type: "integer", default: 10 },
+      supertrend_multiplier: { type: "float", default: 2.0 },
+      adx_min: { type: "float", default: 20.0 }
+    }
     end
   end
 
   def call(context)
-    series_1m = context.candles.call("1m")
-    series_5m = context.candles.call("5m")
-    return Signals::Hold.new(reason: "no_candle_data") unless series_1m&.candles&.any? && series_5m&.candles&.any?
+    series = context.candles.call("1m")
+    return Signals::Hold.new(reason: "no_candle_data") unless series&.candles&.any?
 
-    # 1. Higher Timeframe (5m) Bias
-    st_5m = calculate_supertrend(series_5m)
-    return Signals::Hold.new(reason: "5m_supertrend_unavailable") if st_5m[:trend].nil?
+    st = calculate_supertrend(series)
+    return Signals::Hold.new(reason: "supertrend_unavailable") if st[:trend].nil?
 
-    trend_5m = resolve_trend(series_5m, st_5m)
-    return Signals::Hold.new(reason: "5m_trend_none") if trend_5m == :none
-
-    # 2. Lower Timeframe (1m) Signal
-    st_1m = calculate_supertrend(series_1m)
-    return Signals::Hold.new(reason: "1m_supertrend_unavailable") if st_1m[:trend].nil?
-
-    trend_1m = resolve_trend(series_1m, st_1m)
-    return Signals::Hold.new(reason: "1m_trend_none") if trend_1m == :none
-
-    # 3. ADX Filter Gating (1m)
-    adx = series_1m.adx(14)
+    adx = series.adx(14)
     return Signals::Hold.new(reason: "adx_unavailable") if adx.nil?
     return Signals::Hold.new(reason: "adx_below_min(#{adx.round(1)})") if adx < params[:adx_min]
 
-    # 4. Multi-Timeframe Alignment Check
-    unless trend_1m == trend_5m
-      return Signals::Hold.new(reason: "mtf_trend_mismatch(1m:#{trend_1m},5m:#{trend_5m})")
-    end
+    trend_direction = resolve_trend(series, st)
+    return Signals::Hold.new(reason: "trend_none") if trend_direction == :none
 
-    direction = trend_1m == :long ? :bullish : :bearish
-    confidence = compute_confidence(direction, adx, st_1m)
+    direction = trend_direction == :long ? :bullish : :bearish
+    confidence = compute_confidence(direction, adx, st)
 
     case direction
     when :bullish
       Signals::BuyCall.new(confidence: confidence,
-                           reason: "mtf_supertrend_bullish_adx_#{adx.round(1)}")
+                           reason: "supertrend_bullish_adx_#{adx.round(1)}")
     when :bearish
       Signals::BuyPut.new(confidence: confidence,
-                          reason: "mtf_supertrend_bearish_adx_#{adx.round(1)}")
+                          reason: "supertrend_bearish_adx_#{adx.round(1)}")
     end
   end
 
@@ -78,9 +68,7 @@ class SupertrendV1 < Strategies::Base
   end
 
   def resolve_trend(series, st)
-    return st[:trend] == :bullish ? :long : :short if st[:trend].present?
-
-    last_valid_idx = st[:line]&.rindex { |v| !v.nil? }
+    last_valid_idx = st[:line].rindex { |v| !v.nil? }
     return :none unless last_valid_idx
 
     close = series.candles[last_valid_idx]&.close
@@ -107,4 +95,3 @@ class SupertrendV1 < Strategies::Base
     [score, 1.0].min
   end
 end
-

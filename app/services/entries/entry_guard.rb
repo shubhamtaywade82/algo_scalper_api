@@ -207,84 +207,27 @@ module Entries
           return false
         end
 
-        order_no = extract_order_no(response)
-        unless order_no
-          Rails.logger.warn("[EntryGuard] Order placement failed for #{index_cfg[:key]}: #{pick[:symbol]} (response: #{response.inspect})")
-          Observability::StructuredLog.warn(
-            event: 'entry_order_missing_order_no',
-            payload: {
-              service: 'Entries::EntryGuard',
-              index_key: index_cfg[:key].to_s,
-              symbol: pick[:symbol].to_s
-            }
-          )
-          return false
-        end
-
-        create_tracker!(
-          instrument: instrument,
-          order_no: order_no,
-          pick: pick,
-          side: side,
-          quantity: quantity,
-          index_cfg: index_cfg,
-          ltp: ltp,
-          entry_metadata: entry_metadata
-        )
-
-        Rails.logger.info("[EntryGuard] Successfully placed order #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]}")
-        Observability::StructuredLog.info(
-          event: 'entry_order_placed',
-          payload: {
-            service: 'Entries::EntryGuard',
-            index_key: index_cfg[:key].to_s,
-            symbol: pick[:symbol].to_s,
-            order_no: order_no.to_s,
-            quantity: quantity.to_i,
-            ltp: ltp.to_f
-          }
-        )
-        !!tracker
-      rescue StandardError => e
-        Rails.logger.error("EntryGuard failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
-        Observability::StructuredLog.error(
-          event: 'entry_guard_exception',
-          payload: {
-            service: 'Entries::EntryGuard',
-            index_key: index_cfg[:key].to_s,
-            symbol: pick[:symbol].to_s,
-            error_class: e.class.to_s,
-            error_message: e.message
-          }
-        )
-        false
-      end
-
-      def exposure_ok?(instrument:, side:, max_same_side:)
-        max_allowed = max_same_side.to_i
-
-        # Safety check: if max_same_side is not configured (nil or 0), default to 1
-        if max_allowed <= 0
-          Rails.logger.warn("[EntryGuard] Invalid max_same_side value: #{max_same_side.inspect}, defaulting to 1")
-          max_allowed = 1
-        end
-
-        # Check positions by underlying instrument (for derivatives, check their underlying instrument)
-        # This ensures all positions on the same index count together, regardless of strike
-        # Query by instrument_id (for direct positions) OR by watchable_type='Derivative' with instrument_id
-        active_positions = PositionTracker.active.where(side: side).where(
-          "(instrument_id = ? OR (watchable_type = 'Derivative' AND watchable_id IN (SELECT id FROM derivatives WHERE instrument_id = ?)))",
-          instrument.id, instrument.id
-        ).limit(max_allowed + 1)
-        current_count = active_positions.count
-
-        Rails.logger.debug { "[EntryGuard] Exposure check for #{instrument.symbol_name}: side=#{side}, current=#{current_count}, max=#{max_allowed}" }
-
-        # Check if we've reached the maximum allowed positions
-        if current_count >= max_allowed
-          Rails.logger.warn("[EntryGuard] Exposure limit reached for #{instrument.symbol_name}: #{current_count} >= #{max_allowed} (side: #{side})")
-          return false
-        end
+          result = entry_guard_pipeline.run(context)
+          if result != EntryGuardPipeline::PASS
+            reason = result.is_a?(Hash) ? result[:blocked] : result.to_s
+            guard_results = result.is_a?(Hash) ? result[:evaluated] : nil
+            Observability::StructuredLog.info(
+              event: 'entry_blocked',
+              payload: {
+                service: 'Entries::EntryGuard',
+                index_key: index_cfg[:key].to_s,
+                symbol: pick[:symbol].to_s,
+                reason: reason,
+                guard_results: guard_results
+              }
+            )
+            if guard_results.present?
+              signal&.record_entry_outcome('blocked', reason, extra_metadata: { 'guard_results' => guard_results })
+            else
+              signal&.record_entry_outcome('blocked', reason)
+            end
+            next false
+          end
 
           # 2. Order Execution
           execution_result = OrderExecutionService.call(context)

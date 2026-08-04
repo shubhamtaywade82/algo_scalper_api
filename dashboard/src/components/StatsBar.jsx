@@ -5,20 +5,22 @@ export default function StatsBar(props) {
   const stats = () => props.stats || {}
   const balance = () => props.balance || {}
 
-  // Derive dynamic or fallback values to match the mockup's high-fidelity look
-  const netPnl = () => stats().total_pnl_rupees || 24350
-  const netPnlPct = () => stats().total_pnl_pct || 2.48
-  const openPnl = () => stats().unrealized_pnl_rupees || 8640
-  const openPnlPct = () => stats().unrealized_pnl_pct || 0.88
-  const realizedPnl = () => stats().realized_pnl_rupees || 15710
-  const realizedPnlPct = () => stats().realized_pnl_pct || 1.60
+  const netPnl = () => stats().total_pnl_rupees ?? 0
+  const netPnlPct = () => stats().total_pnl_pct ?? 0
+  const openPnl = () => stats().unrealized_pnl_rupees ?? 0
+  const openPnlPct = () => stats().unrealized_pnl_pct ?? 0
+  const realizedPnl = () => stats().realized_pnl_rupees ?? 0
+  const realizedPnlPct = () => stats().realized_pnl_pct ?? 0
 
-  const winRate = () => stats().win_rate || 62.5
-  const winners = () => stats().winners || 25
-  const totalTrades = () => stats().total_trades || 40
+  const winRate = () => stats().win_rate ?? 0
+  const winners = () => stats().winners ?? 0
+  const totalTrades = () => stats().total_trades ?? 0
 
-  const cash = () => balance().cash || 124560
-  const marginUsed = () => balance().margin_used || 35440
+  const strategiesRunning = () => props.strategies?.running ?? 0
+  const strategiesTotal = () => props.strategies?.total ?? 0
+
+  const cash = () => balance().cash ?? 0
+  const marginUsed = () => balance().margin_used ?? 0
 
   return (
     <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-7 gap-4">
@@ -36,18 +38,7 @@ export default function StatsBar(props) {
             <AnimatedNumber value={netPnlPct()} suffix="%" showSign pnlColor />
           </span>
         </div>
-        {/* Tiny Sparkline SVG */}
-        <div class="absolute bottom-2 right-2 w-16 h-8 opacity-40 group-hover:opacity-75 transition-opacity duration-300">
-          <svg viewBox="0 0 100 50" class="w-full h-full">
-            <path
-              d="M0,45 Q20,35 40,38 T80,15 T100,5"
-              fill="none"
-              stroke="rgb(52, 211, 153)"
-              stroke-width="3.5"
-              stroke-linecap="round"
-            />
-          </svg>
-        </div>
+
       </div>
 
       {/* 2. Open P&L */}
@@ -64,18 +55,7 @@ export default function StatsBar(props) {
             <AnimatedNumber value={openPnlPct()} suffix="%" showSign pnlColor />
           </span>
         </div>
-        {/* Tiny Sparkline SVG */}
-        <div class="absolute bottom-2 right-2 w-16 h-8 opacity-40 group-hover:opacity-75 transition-opacity duration-300">
-          <svg viewBox="0 0 100 50" class="w-full h-full">
-            <path
-              d="M0,40 Q30,42 60,25 T100,12"
-              fill="none"
-              stroke="rgb(52, 211, 153)"
-              stroke-width="3.5"
-              stroke-linecap="round"
-            />
-          </svg>
-        </div>
+
       </div>
 
       {/* 3. Realized P&L */}
@@ -134,11 +114,17 @@ export default function StatsBar(props) {
         </div>
         <div>
           <div class="text-xl font-black text-white text-data">
-            3 / 5
+            {strategiesRunning()} / {strategiesTotal()}
           </div>
-          <span class="text-[10px] font-bold text-emerald-400 mt-1 flex items-center gap-1.5 uppercase tracking-wider">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Running
-          </span>
+          <Show when={strategiesRunning() > 0} fallback={
+            <span class="text-[10px] font-bold text-gray-500 mt-1 flex items-center gap-1.5 uppercase tracking-wider">
+              <span class="w-1.5 h-1.5 rounded-full bg-gray-500" /> Idle
+            </span>
+          }>
+            <span class="text-[10px] font-bold text-emerald-400 mt-1 flex items-center gap-1.5 uppercase tracking-wider">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Running
+            </span>
+          </Show>
         </div>
       </div>
 

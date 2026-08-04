@@ -18,7 +18,14 @@ export function useDashboard(onPositionChange) {
     losers: 0
   })
   const [balance, setBalance] = createSignal({ cash: 0, equity: 0, mtm: 0, exposure: 0 })
-  const [indices, setIndices] = createSignal({ nifty: null, banknifty: null, sensex: null })
+  const [indices, setIndices] = createSignal({
+    nifty: null,
+    banknifty: null,
+    sensex: null,
+    nifty_prev_close: null,
+    banknifty_prev_close: null,
+    sensex_prev_close: null
+  })
   const [subscribedIndices, setSubscribedIndices] = createSignal([])
   const [optionsBuying, setOptionsBuying] = createSignal({ nifty: {}, banknifty: {}, sensex: {} })
   const [system, setSystem] = createSignal({ ws_market_feed: false, ws_order_update: false, scheduler: 'unknown' })
@@ -38,8 +45,45 @@ export function useDashboard(onPositionChange) {
     if (data.mode != null) setMode(data.mode)
     if (data.balance) setBalance(data.balance)
     if (data.today) setStats(data.today)
-    if (data.indices) setIndices(data.indices)
-    if (data.system) setSystem(data.system)
+    else if (data.stats) setStats(data.stats)
+    else if (data.today_stats) setStats(data.today_stats)
+
+    // Flat index updates or nested updates
+    const current = { ...indices() }
+    let changed = false
+    
+    // Search top-level AND nested under 'indices' or 'market_indices'
+    const sources = [data, data.indices, data.market_indices].filter(Boolean)
+    
+    for (const src of sources) {
+      if (src.nifty) { current.nifty = src.nifty; changed = true }
+      if (src.banknifty) { current.banknifty = src.banknifty; changed = true }
+      if (src.sensex) { current.sensex = src.sensex; changed = true }
+      if (src.nifty_prev_close !== undefined && src.nifty_prev_close !== null) { current.nifty_prev_close = src.nifty_prev_close; changed = true }
+      if (src.banknifty_prev_close !== undefined && src.banknifty_prev_close !== null) { current.banknifty_prev_close = src.banknifty_prev_close; changed = true }
+      if (src.sensex_prev_close !== undefined && src.sensex_prev_close !== null) { current.sensex_prev_close = src.sensex_prev_close; changed = true }
+    }
+
+    if (changed) {
+      console.debug('📈 [Dashboard:Indices] Updated:', current)
+      setIndices(current)
+    }
+
+    if (data.system) {
+      // pnl_updater_running and ws_order_update are checked via in-process .running?
+      // in the web process — they are always false there. Only the WS heartbeat
+      // (type: "stats") comes from the trading process and has the real values.
+      // Preserve those fields across REST polls so they don't flicker to false.
+      const fromWs = !!data.type
+      setSystem(prev => {
+        const next = { ...prev, ...data.system }
+        if (!fromWs) {
+          next.pnl_updater_running = prev.pnl_updater_running
+          next.ws_order_update     = prev.ws_order_update
+        }
+        return next
+      })
+    }
     if (data.public_ipv4) setPublicIpv4(data.public_ipv4)
     if (data.public_ipv6) setPublicIpv6(data.public_ipv6)
     if (data.registered_ips !== undefined) setRegisteredIps(data.registered_ips)

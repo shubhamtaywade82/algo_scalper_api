@@ -4,6 +4,7 @@
 
 import { onMount, onCleanup, createEffect } from 'solid-js'
 import { createChart, LineSeries, AreaSeries, ColorType } from 'lightweight-charts'
+import { istTickMarkFormatter, istTimeFormatter } from '../../lib/chartTime'
 
 export default function EquityCurve(props) {
   let containerEl
@@ -23,7 +24,11 @@ export default function EquityCurve(props) {
       },
       width: containerEl.clientWidth,
       height: props.height || 300,
-      timeScale: { timeVisible: true, secondsVisible: false, rightOffset: 5 },
+      // tickMarkFormatter forces IST rendering — see lib/chartTime.js for why
+      // lightweight-charts' default (browser-local-zone) formatter garbles
+      // the axis for UTC-second `time` values representing an IST session.
+      timeScale: { timeVisible: true, secondsVisible: false, rightOffset: 5, tickMarkFormatter: istTickMarkFormatter },
+      localization: { timeFormatter: istTimeFormatter },
       rightPriceScale: {
         scaleMargins: { top: 0.05, bottom: 0.05 }
       }

@@ -9,6 +9,7 @@ export const endpoints = {
   candles: (symbol) => `/candles/${symbol}`,
 
   positions: '/positions',
+  positionDetail: (id) => `/positions/${id}`,
   closePosition: (id) => `/positions/${id}/close`,
 
   signals: '/signals',
@@ -61,5 +62,12 @@ export const endpoints = {
   orders: '/orders',
   alerts: '/alerts',
   logs: '/logs',
-  equityCurve: '/equity_curve'
+  equityCurve: '/equity_curve',
+
+  tradingStrategies: {
+    list: '/trading_strategies',
+    one: (id) => `/trading_strategies/${id}`,
+    validate: (id) => `/trading_strategies/${id}/validate`,
+    deploy: (id) => `/trading_strategies/${id}/deploy`
+  }
 }
