@@ -10,9 +10,23 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_12_05_210000) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_07_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "algo_config_change_logs", force: :cascade do |t|
+    t.string "actor"
+    t.string "changed_paths", default: [], null: false, array: true
+    t.datetime "created_at", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.jsonb "patch", default: {}, null: false
+    t.string "request_id"
+    t.string "source", null: false
+    t.datetime "updated_at", null: false
+    t.index ["changed_paths"], name: "index_algo_config_change_logs_on_paths", using: :gin
+    t.index ["created_at"], name: "index_algo_config_change_logs_on_created_at"
+    t.index ["source"], name: "index_algo_config_change_logs_on_source"
+  end
 
   create_table "best_indicator_params", force: :cascade do |t|
     t.bigint "instrument_id", null: false

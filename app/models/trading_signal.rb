@@ -105,11 +105,6 @@ class TradingSignal < ApplicationRecord
     direction == DIRECTIONS[:avoid]
   end
 
-  def effective_metadata
-    live = Signal::LiveMetadataCache.instance.fetch(id)
-    (metadata || {}).merge(live)
-  end
-
   def record_entry_outcome(outcome, reason = nil, extra_metadata: nil)
     fragment = {
       'entry_outcome' => outcome,
@@ -118,20 +113,6 @@ class TradingSignal < ApplicationRecord
     if extra_metadata.is_a?(Hash) && extra_metadata.any?
       fragment.merge!(extra_metadata.stringify_keys)
     end
-    fragment.compact!
-
-    Signal::LiveMetadataCache.instance.merge(id, fragment) if id
-
-    slim_patch = fragment.slice(
-      'entry_outcome', 'entry_blocked_reason', 'entry_skip_stage', 'entry_skip_code'
-    )
-    slim_patch.delete('entry_blocked_reason') if outcome == 'entered'
-    return if slim_patch.empty?
-
-    new_metadata = (metadata || {}).merge(slim_patch)
-    new_metadata.delete('entry_blocked_reason') if outcome == 'entered'
-    return if new_metadata == metadata
-
-    update_columns(metadata: new_metadata, updated_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
+    update!(metadata: (metadata || {}).merge(fragment).compact)
   end
 end

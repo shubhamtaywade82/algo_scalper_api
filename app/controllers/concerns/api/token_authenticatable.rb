@@ -4,9 +4,8 @@ module Api
   # Optional Bearer / X-Api-Key checks for dashboard vs operator API tiers.
   #
   # When +API_DASHBOARD_TOKEN+ or +API_OPERATOR_TOKEN+ is unset, the check is skipped
-  # only when +Rails.env.local?+ (+development+ / +test+). Staging, production, and
-  # any other env require
-  # an explicit token (503 when unset) so the API does not run effectively open.
+  # only in +development+ and +test+. Production and other environments (e.g. staging)
+  # return 503 when unset so the API does not run effectively open.
   module TokenAuthenticatable
     extend ActiveSupport::Concern
 
@@ -23,28 +22,6 @@ module Api
     def authenticate_settings!
       return if Rails.env.development?
 
-      if Rails.env.production? && ENV['SETTINGS_UPDATE_TOKEN'].blank?
-        Rails.logger.error(
-          "[#{self.class.name}] SETTINGS_UPDATE_TOKEN must be set in production for settings updates"
-        )
-        render json: { error: 'settings_update_unconfigured' }, status: :service_unavailable
-        return
-      end
-
-      expected = ENV['SETTINGS_UPDATE_TOKEN'].presence
-      return if expected.nil?
-
-      provided = request.headers['X-Settings-Update-Token'].presence || params[:token].presence
-      if provided && token_matches?(provided, expected)
-        return
-      end
-
-      render json: { error: 'unauthorized' }, status: :unauthorized
-    end
-
-    def require_api_token!(expected, tier:)
-      expected = expected.presence
-
       if expected.blank?
         unless api_token_optional_when_unset?
           Rails.logger.error(
@@ -52,7 +29,7 @@ module Api
             "(#{Rails.env})"
           )
           render json: { error: 'api_token_unconfigured', tier: tier.to_s }, status: :service_unavailable
-          return
+          return nil
         end
 
         return
@@ -80,6 +57,8 @@ module Api
     end
 
     def api_token_optional_when_unset?
+      return false if Rails.env.production?
+
       Rails.env.local?
     end
   end

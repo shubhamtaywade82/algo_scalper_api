@@ -76,7 +76,7 @@ RSpec.describe Entries::Guards::LossStreakGuard do
           paper_trading: { enabled: false },
           loss_streak_guard: {
             enabled: true,
-            consecutive_losses_threshold: 1,
+            consecutive_losses_threshold: 2,
             cooldown_minutes: 30
           }
         }
@@ -90,6 +90,15 @@ RSpec.describe Entries::Guards::LossStreakGuard do
           last_pnl_rupees: BigDecimal('-1200'),
           exit_reason: 'STOP_LOSS (Sub-second Trigger)',
           exited_at: 1.minute.ago,
+          meta: { index_key: 'SENSEX' }
+        )
+        create(
+          :position_tracker,
+          :exited,
+          segment: 'NSE_FNO',
+          last_pnl_rupees: BigDecimal('-800'),
+          exit_reason: 'PREMIUM_MOMENTUM_FAILURE (Sub-second Trigger)',
+          exited_at: Time.current,
           meta: { index_key: 'SENSEX' }
         )
       end

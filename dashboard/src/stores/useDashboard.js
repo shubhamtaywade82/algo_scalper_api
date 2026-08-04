@@ -1,4 +1,5 @@
 import { createSignal, onMount, onCleanup } from 'solid-js'
+import toast from 'solid-toast'
 import cable from '../cable'
 
 const POLL_INTERVAL_MS = 30000
@@ -71,11 +72,28 @@ export function useDashboard(onPositionChange) {
         setConnected(false)
       },
       received(data) {
-        if (data.type === 'stats') {
-          applyData(data)
-        } else if (data.type === 'position_activated' || data.type === 'position_exited') {
+        console.debug('⚡ [WS:Dashboard] Update:', data)
+        markFresh()
+        applyData(data)
+        
+        if (data.type === 'position_activated') {
+          toast.success(`Entry Taken: ${data.position.symbol} @ ₹${data.position.entry_price}`)
           onPositionChange?.()
           fetchInitial()
+        } else if (data.type === 'position_exited') {
+          const pnlText = data.position.pnl >= 0 ? `+₹${data.position.pnl}` : `-₹${Math.abs(data.position.pnl)}`
+          if (data.position.pnl >= 0) {
+            toast.success(`Position Exited: ${data.position.symbol} (${pnlText})`)
+          } else {
+            toast.error(`Position Exited: ${data.position.symbol} (${pnlText})`)
+          }
+          onPositionChange?.()
+          fetchInitial()
+        } else if (data.type === 'toast') {
+          const body = data.title ? `${data.title}\n${data.message}` : data.message
+          if (data.level === 'error') toast.error(body)
+          else if (data.level === 'warning') toast(body, { icon: '⚠️' })
+          else toast.success(body)
         } else if (data.type === 'circuit_breaker') {
           setCircuitBreaker({ tripped: data.tripped, reason: data.reason, at: data.at })
         }

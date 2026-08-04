@@ -41,8 +41,16 @@ module Options
           step: step
         )
 
-        if liquid_in_chain?(option_chain: option_chain, strike: desired[:strike], side: side_sym)
+        # Check if desired strike exists in chain before checking liquidity
+        desired_strike_float = desired[:strike].to_f
+        if available_strikes.include?(desired_strike_float) && liquid_in_chain?(option_chain: option_chain, strike: desired[:strike], side: side_sym)
           return ok(desired.merge(atm_strike: atm_strike))
+        end
+
+        # Fallback to ATM if it exists in chain
+        atm_strike_float = atm_strike.to_f
+        if available_strikes.include?(atm_strike_float) && liquid_in_chain?(option_chain: option_chain, strike: atm_strike, side: side_sym)
+          return ok(strike: atm_strike, strike_type: :ATM, atm_strike: atm_strike)
         end
 
         # Fallback to ATM.
@@ -98,8 +106,16 @@ module Options
         bid = data['top_bid_price']&.to_f
         ask = data['top_ask_price']&.to_f
 
-        return false unless ltp&.positive?
-        return false unless oi&.positive?
+        # Same liquidity gates for paper and live (both use live Dhan chain data).
+        unless ltp&.positive?
+          Rails.logger.debug { "[StrikeSelector] Strike #{strike} #{side} has invalid LTP: #{ltp.inspect}" }
+          return false
+        end
+
+        unless oi&.positive?
+          Rails.logger.debug { "[StrikeSelector] Strike #{strike} #{side} has invalid OI: #{oi.inspect}" }
+          return false
+        end
 
         # Basic spread sanity check (hard reject only for obviously broken books).
         if bid&.positive? && ask&.positive?

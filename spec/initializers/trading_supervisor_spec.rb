@@ -2,41 +2,8 @@
 
 require 'rails_helper'
 
-# Define the classes locally for testing since they're defined in the initializer
-module TradingSystem
-  class Supervisor
-    def initialize
-      @services = {}
-      @running = false
-    end
-
-    def register(name, instance)
-      @services[name] = instance
-    end
-
-    delegate :[], to: :@services
-
-    def start_all
-      return if @running
-
-      @services.each_value(&:start)
-
-      @running = true
-    end
-
-    def stop_all
-      return unless @running
-
-      @services.reverse_each do |_name, service|
-        service.stop
-      end
-
-      @running = false
-    end
-  end
-end
-
-RSpec.describe 'TradingSystem::Supervisor Market Close Behavior' do
+# rubocop:disable RSpec/SpecFilePathFormat, RSpec/MultipleExpectations, RSpec/MessageChain
+RSpec.describe TradingSystem::Daemon do
   let(:supervisor) { TradingSystem::Supervisor.new }
   let(:market_feed) { instance_double(MarketFeedHubService, start: true, stop: true) }
   let(:signal_scheduler) { instance_double(Signal::Scheduler, start: true, stop: true) }
@@ -108,4 +75,21 @@ RSpec.describe 'TradingSystem::Supervisor Market Close Behavior' do
       expect(reconciliation).to have_received(:start)
     end
   end
+
+  describe 'when trading services are explicitly disabled' do
+    before do
+      allow(ENV).to receive(:[]).with('DISABLE_TRADING_SERVICES').and_return('1')
+      allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
+    end
+
+    it 'does not start any services' do
+      expect(described_class.new(supervisor: supervisor).start(keep_alive: false, allow_in_test: true)).to be false
+
+      expect(market_feed).not_to have_received(:start)
+      expect(signal_scheduler).not_to have_received(:start)
+      expect(risk_manager).not_to have_received(:start)
+      expect(TradingSystem::Bootstrap).not_to have_received(:boot_reconciliation!)
+    end
+  end
 end
+# rubocop:enable RSpec/SpecFilePathFormat, RSpec/MultipleExpectations, RSpec/MessageChain

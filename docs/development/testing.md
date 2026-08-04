@@ -36,12 +36,30 @@ context 'when logged out' do
 end
 ```
 
-### 3. Keep Descriptions Short
-Spec descriptions should never exceed 40 characters. Split longer tests using contexts.
+### Test Tooling
 
-**Bad:**
-```ruby
-it 'has 422 status code if an unexpected params will be added' do
+- **RSpec** — test framework
+- **FactoryBot** — test data factories
+- **VCR** — records/replays DhanHQ HTTP/WebSocket interactions
+- **Timecop** — time manipulation for time-regime guards, time-stop tests
+
+---
+
+## Paper Trading Validation
+
+The primary validation approach is running with **`LIVE_TRADING` unset or false** (paper gateway forced), optional **`SIGNAL_TIER=exploratory`** for a permissive preset overlay, and `dhanhq.enable_orders: false` / no `PLACE_ORDER` while you prove the stack. All market data is real (live DhanHQ WebSocket); order execution is simulated in paper mode.
+
+### Quick Pre-Session Checks
+
+```bash
+# Verify base paper_trading block (effective mode also depends on LIVE_TRADING)
+grep -A 3 "paper_trading" config/algo.yml
+
+# Verify signal tier (env overrides signals.signal_tier)
+grep -A 2 "signal_tier" config/algo.yml
+
+# Verify risk parameters
+grep -A 10 "^risk:" config/algo.yml
 ```
 
 **Good:**
@@ -116,37 +134,21 @@ end
 ### 7. Use Subject
 Use `subject` to DRY up tests related to the same subject.
 
-**Bad:**
-```ruby
-it { expect(assigns('message')).to match /it was born in Belville/ }
-```
+## Signal Tiers And Tuning (No `run_mode`)
 
-**Good:**
-```ruby
-subject { assigns('message') }
-it { is_expected.to match /it was born in Billville/ }
-```
+`RUN_MODE`, `exit_testing`, and `config/profiles/*.yml` are **removed**. See
+`docs/development/testing_profiles.md` for the historical note.
 
-Named subject:
-```ruby
-subject(:hero) { Hero.first }
-it "carries a sword" do
-  expect(hero.equipment).to include "sword"
-end
-```
+| Goal | What to use |
+|------|-------------|
+| More permissive signal YAML overlay | `SIGNAL_TIER=exploratory` or set `signals.signal_tier: exploratory` |
+| Match `algo.yml` as merged with DB only | `SIGNAL_TIER=standard` (default when tier invalid/missing) |
+| Stricter preset overlay | `SIGNAL_TIER=selective` |
+| Stress entry or exit plumbing | Tune `signals.*`, guards, and risk blocks in YAML or DB overrides — same code path for all |
 
-### 8. Use let and let!
-Use `let` for lazy-loaded variables. Use `let!` when you need eager evaluation.
-
-**Bad:**
-```ruby
-describe '#type_id' do
-  before { @resource = FactoryBot.create :device }
-  before { @type     = Type.find @resource.type_id }
-  it 'sets the type_id field' do
-    expect(@resource.type_id).to eq(@type.id)
-  end
-end
+```bash
+# Example: exploratory tier + paper gateway (LIVE_TRADING unset)
+SIGNAL_TIER=exploratory ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
 ```
 
 **Good:**

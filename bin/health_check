@@ -292,7 +292,7 @@ class HealthChecker
     check("Services Functionality") do
       %w[
         Live::MarketFeedHub
-        Strategies::Manager
+        Signal::Engine
         Orders::Placer
       ].each(&:constantize)
 

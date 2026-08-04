@@ -22,7 +22,7 @@ exploratory:
       enabled: false
       reject_when_days_to_expiry_lte: 1
     indicator_preset: loose
-    min_confidence: 55
+    min_confidence: 50
     enable_smc_confluence_gating: false
     enable_institutional_filter: false
   option_chain:
@@ -34,13 +34,8 @@ exploratory:
     gate:
       enabled: false
   entry_quality:
-    enforce: true                    # block the worst candidates (not a free-for-all)
-    min_score: 38
-    gates:
-      min_adx: 16
-      block_choppy_regime: false     # exploratory still allows ranging
-      min_body_ratio: 0.30
-      require_momentum_confirm: false
+    enforce: false
+    min_score: 30
 
 standard: {}
 
@@ -62,14 +57,14 @@ selective:
       enabled: true
       reject_when_days_to_expiry_lte: 1
     indicator_preset: tight
-    min_confidence: 70
+    min_confidence: 72
     enable_smc_confluence_gating: false
     enable_institutional_filter: true
   option_chain:
-    min_strike_score: 125.0
+    min_strike_score: 140.0
   midday_guard:
     enabled: true
-    min_confidence: 0.74
+    min_confidence: 0.78
     min_adx: 22
     block_after_time: "15:00"
     trending_adx_bypass: 30
@@ -84,9 +79,9 @@ selective:
       require_smc_alignment: true
   entry_quality:
     enforce: true
-    min_score: 64
+    min_score: 68
     gates:
-      min_adx: 26
+      min_adx: 28
       block_choppy_regime: true
       min_body_ratio: 0.45
       require_momentum_confirm: true

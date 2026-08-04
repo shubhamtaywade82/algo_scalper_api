@@ -87,9 +87,24 @@ module TradingSystem
     end
 
     def safe_stop!
-      @supervisor&.stop_all
+      # Guard against multiple calls
+      return if @stopping
+      @stopping = true
+
+      if @market_open_thread&.alive?
+        @market_open_thread.kill
+        @market_open_thread = nil
+      end
+
+      if @supervisor
+        begin
+          @supervisor.stop_all
+        rescue StandardError => e
+          warn "[TradingDaemon] stop_all failed: #{e.class} - #{e.message}"
+        end
+      end
     rescue StandardError => e
-      Rails.logger.error("[TradingDaemon] stop_all failed: #{e.class} - #{e.message}")
+      warn "[TradingDaemon] safe_stop! failed: #{e.class} - #{e.message}"
     end
 
     def keep_process_alive!
@@ -97,4 +112,3 @@ module TradingSystem
     end
   end
 end
-

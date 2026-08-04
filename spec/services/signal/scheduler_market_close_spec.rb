@@ -7,28 +7,20 @@ RSpec.describe Signal::Scheduler do
   let(:index_cfg) { { key: 'NIFTY', segment: 'IDX_I', sid: '13' } }
 
   describe '#process_index' do
-    context 'when market is closed' do
-      before do
-        allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
-        allow(scheduler).to receive(:evaluate_supertrend_signal)
-      end
-
-      it 'returns early without processing' do
-        scheduler.send(:process_index, index_cfg)
-        expect(scheduler).not_to have_received(:evaluate_supertrend_signal)
-      end
+    before do
+      allow(Signal::Engine).to receive(:run_for)
     end
 
-    context 'when market is open' do
-      before do
-        allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
-        allow(scheduler).to receive(:evaluate_supertrend_signal).and_return(nil)
-      end
+    # Market open/closed gating happens in the scheduler loop, not inside #process_index.
+    it 'always delegates to Signal::Engine.run_for when invoked directly' do
+      allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
 
-      it 'processes the index' do
-        scheduler.send(:process_index, index_cfg)
-        expect(scheduler).to have_received(:evaluate_supertrend_signal).with(index_cfg)
-      end
+      scheduler.send(:process_index, index_cfg)
+
+      expect(Signal::Engine).to have_received(:run_for).with(
+        index_cfg,
+        regime_state: instance_of(Market::RegimeState)
+      )
     end
   end
 end

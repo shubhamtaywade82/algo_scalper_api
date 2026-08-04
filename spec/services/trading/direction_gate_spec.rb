@@ -146,19 +146,47 @@ RSpec.describe Trading::DirectionGate do
         allow(mock_15m_series).to receive(:candles)
           .and_return([{ open: 100, high: 105, low: 99, close: 102 }] * 25)
 
+        regime_detector = instance_double(MarketRegimeDetector, detect: { regime: 'TRENDING_DOWN', confidence: 80 })
+        allow(MarketRegimeDetector).to receive(:new).and_return(regime_detector)
+
+        allow(Market::Calendar).to receive(:trading_day_today?).and_return(true)
+        ist = Time.zone.parse('2026-04-06 10:30:00')
+        allow(TradingSession::Service).to receive_messages(market_closed?: false, current_ist_time: ist)
+
         # Stub AlgoConfig
         allow(AlgoConfig).to receive(:fetch).and_return(
           signals: {
+            entry_strategy: { primary: 'legacy' },
+            primary_timeframe: '5m',
+            confirmation_timeframe: nil,
+            enable_confirmation_timeframe: false,
+            halt_on_validation_failure: false,
+            enable_direction_gate: true,
             enable_index_ta: false,
+            enable_index_ta_filter: false,
             use_strategy_recommendations: false,
             supertrend: { period: 7, multiplier: 3 },
             adx: { min_strength: 20 },
-            enable_adx_filter: true
+            enable_adx_filter: true,
+            enable_smc_avrz_permission: false,
+            enable_no_trade_engine: false,
+            validation_mode: :balanced,
+            validation_modes: {
+              balanced: {
+                require_iv_rank_check: false,
+                require_theta_risk_check: false,
+                require_trend_confirmation: false,
+                adx_min_strength: 15
+              },
+              conservative: {
+                require_iv_rank_check: false,
+                require_theta_risk_check: false,
+                require_trend_confirmation: false,
+                adx_min_strength: 15
+              }
+            }
           }
         )
-
-        # Stub TradingSession to return market open
-        allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
 
         # Stub Signal::StateTracker
         allow(Signal::StateTracker).to receive(:reset)
@@ -184,7 +212,7 @@ RSpec.describe Trading::DirectionGate do
         Signal::Engine.run_for(index_cfg)
 
         expect(Rails.logger).to have_received(:info).with(
-          /DirectionGate BLOCKED.*NIFTY.*CE.*bearish/
+          /DirectionGate BLOCKED NIFTY: Counter-trend trade\. CE requested vs TRENDING_DOWN/
         )
       end
 

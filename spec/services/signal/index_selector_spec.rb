@@ -27,12 +27,12 @@ RSpec.describe Signal::IndexSelector do
     end
 
     before do
-      allow(AlgoConfig).to receive(:fetch).and_return({ indices: indices_config })
+      allow(IndexConfigLoader).to receive(:load_indices).and_return(indices_config)
     end
 
     context 'when no indices configured' do
       before do
-        allow(AlgoConfig).to receive(:fetch).and_return({ indices: [] })
+        allow(IndexConfigLoader).to receive(:load_indices).and_return([])
       end
 
       it 'returns nil' do
@@ -46,9 +46,9 @@ RSpec.describe Signal::IndexSelector do
       let(:sensex_instrument) { instance_double(Instrument, symbol_name: 'SENSEX') }
 
       before do
-        allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).with(index_key: :NIFTY).and_return(nifty_instrument)
-        allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).with(index_key: :BANKNIFTY).and_return(banknifty_instrument)
-        allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).with(index_key: :SENSEX).and_return(sensex_instrument)
+        allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).with(hash_including(key: :NIFTY)).and_return(nifty_instrument)
+        allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).with(hash_including(key: :BANKNIFTY)).and_return(banknifty_instrument)
+        allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).with(hash_including(key: :SENSEX)).and_return(sensex_instrument)
       end
 
       context 'when all indices score below minimum' do
@@ -137,14 +137,18 @@ RSpec.describe Signal::IndexSelector do
         before do
           nifty_scorer = instance_double(Signal::TrendScorer)
           banknifty_scorer = instance_double(Signal::TrendScorer)
+          sensex_scorer = instance_double(Signal::TrendScorer)
 
-          allow(Signal::TrendScorer).to receive(:new).and_return(nifty_scorer, banknifty_scorer)
+          allow(Signal::TrendScorer).to receive(:new).and_return(nifty_scorer, banknifty_scorer, sensex_scorer)
 
           allow(nifty_scorer).to receive(:compute_trend_score).and_return(
             { trend_score: 18.0, breakdown: { pa: 5, ind: 5, mtf: 5, vol: 3 } }
           )
           allow(banknifty_scorer).to receive(:compute_trend_score).and_return(
             { trend_score: 18.5, breakdown: { pa: 6, ind: 5, mtf: 5, vol: 2.5 } }
+          )
+          allow(sensex_scorer).to receive(:compute_trend_score).and_return(
+            { trend_score: 10.0, breakdown: { pa: 2, ind: 3, mtf: 3, vol: 2 } }
           )
 
           # Mock volume for tie-breaker
@@ -164,7 +168,7 @@ RSpec.describe Signal::IndexSelector do
 
     context 'when error occurs' do
       before do
-        allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).and_raise(StandardError, 'Test error')
+        allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).with(anything).and_raise(StandardError, 'Test error')
       end
 
       it 'handles errors gracefully' do
@@ -185,7 +189,7 @@ RSpec.describe Signal::IndexSelector do
       let(:scorer) { instance_double(Signal::TrendScorer) }
 
       before do
-        allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).and_return(instrument)
+        allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).with(anything).and_return(instrument)
         allow(Signal::TrendScorer).to receive(:new).and_return(scorer)
         allow(scorer).to receive(:compute_trend_score).and_return(
           { trend_score: 18.0, breakdown: { pa: 5, ind: 5, mtf: 5, vol: 3 } }

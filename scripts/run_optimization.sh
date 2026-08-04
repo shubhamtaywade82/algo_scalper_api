@@ -9,11 +9,10 @@ DAYS="${2:-30}"
 INTERVAL="${3:-1}"
 
 echo "Running optimization for $INDEX (Days: $DAYS, Interval: ${INTERVAL}min)"
-echo "Environment: SCRIPT_MODE=1 DISABLE_TRADING_SERVICES=1 BACKTEST_MODE=1"
+echo "Environment: SCRIPT_MODE=1 BACKTEST_MODE=1"
 echo ""
 
 SCRIPT_MODE=1 \
-DISABLE_TRADING_SERVICES=1 \
 BACKTEST_MODE=1 \
 rails runner scripts/optimize_indicator_parameters.rb "$INDEX" "$DAYS" "$INTERVAL"
 

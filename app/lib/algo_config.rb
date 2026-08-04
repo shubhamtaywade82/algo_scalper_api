@@ -4,11 +4,6 @@ class AlgoConfig
   CACHE_TTL = 30 # seconds
   ALLOWED_SIGNAL_TIERS = %i[exploratory standard selective].freeze
   SIGNAL_TIER_PRESETS_PATH = 'config/signal_tier_presets.yml'
-  TIER_PRESETS_SETTING_KEY = 'signal_tier_presets'
-  REGISTRY_SETTING_KEY = 'india_index_registry'
-  CREDENTIAL_SECTIONS = %i[dhanhq telegram ai].freeze
-  # Credential-bearing sections excluded from the per-position snapshot persisted on trades.
-  SENSITIVE_SECTIONS = %i[dhanhq telegram ai].freeze
 
   class << self
     def fetch
@@ -21,8 +16,6 @@ class AlgoConfig
 
       apply_signal_tier_preset!(base_config)
       apply_live_trading_env_override!(base_config)
-      apply_paper_research_overrides!(base_config)
-      apply_india_index_registry!(base_config)
 
       @cached_config = base_config
       @cache_expires_at = Time.current + CACHE_TTL
@@ -33,40 +26,10 @@ class AlgoConfig
       fetch[:mode]
     end
 
-    # Identity of the effective config at this moment — stamped on signals/positions so a
-    # trade can be tied back to the exact gates/params that were active when it was taken.
-    def version
-      {
-        hash: Digest::SHA256.hexdigest(fetch.to_json)[0, 16],
-        change_log_id: latest_change_log_id
-      }
-    end
-
-    # Effective config minus credential sections — pinned on a position at entry so its
-    # exit/trailing math stays fixed for the life of the trade (see Positions::ExitConfigResolver).
-    def position_snapshot
-      fetch.except(*SENSITIVE_SECTIONS)
-    end
-
-    def paper_trading_enabled?
-      fetch.dig(:paper_trading, :enabled) != false
-    end
-
     def reset!
       @cached_config = nil
       @cache_expires_at = nil
       IndiaIndexRegistry.reset!
-    end
-
-    # Top-level keys allowed for API settings writes (excludes credential sections).
-    def permitted_settings_keys
-      yaml_keys = yaml_seed_top_level_keys
-      doc_keys = document_top_level_keys
-      (yaml_keys | doc_keys).uniq - CREDENTIAL_SECTIONS
-    end
-
-    def permitted_settings_structure
-      permitted_settings_keys.index_with { {} }
     end
 
     # Tick-triggered AI (+Smc::TickAi::AnalysisService+) or explicit event-driven mode.
@@ -113,12 +76,6 @@ class AlgoConfig
 
     private
 
-    def latest_change_log_id
-      AlgoConfigChangeLog.maximum(:id)
-    rescue StandardError
-      nil
-    end
-
     def truthy_signal_flag?(val)
       val == true || val.to_s.strip.casecmp('true').zero?
     end
@@ -143,75 +100,37 @@ class AlgoConfig
 
       return if preset.blank?
 
-      merged = deep_merge_hashes_with_arrays(preset, config)
+      merged = deep_merge_hashes_with_arrays(config, preset)
       config.replace(merged)
       Rails.logger.debug { "[AlgoConfig] signal_tier=#{tier}" }
     end
 
-    # Single source of truth: the config document's signals.signal_tier.
-    # ENV['SIGNAL_TIER'] is honored only as an explicit emergency override (SIGNAL_TIER_FORCE=true);
-    # otherwise a divergent env value is logged and ignored.
     def resolve_signal_tier(config)
-      doc_tier = normalize_signal_tier(config.dig(:signals, :signal_tier))
-      env_tier = normalize_signal_tier(ENV.fetch('SIGNAL_TIER', nil))
-      return env_tier if env_tier && signal_tier_env_forced?
+      env_raw = ENV.fetch('SIGNAL_TIER', nil)
+      env_tier = env_raw.to_s.strip.downcase
+      if env_raw.present?
+        return env_tier if ALLOWED_SIGNAL_TIERS.include?(env_tier.to_sym)
 
-      effective = doc_tier || 'standard'
-      warn_ignored_signal_tier_env(env_tier, effective) if env_tier && env_tier != effective
-      effective
-    end
+        Rails.logger.warn("[AlgoConfig] Invalid SIGNAL_TIER=#{env_raw.inspect}; using config or standard")
+      end
 
-    def normalize_signal_tier(raw)
-      return nil if raw.blank?
+      cfg_raw = config.dig(:signals, :signal_tier)
+      cfg_tier = cfg_raw.to_s.strip.downcase
+      return cfg_tier if cfg_raw.present? && ALLOWED_SIGNAL_TIERS.include?(cfg_tier.to_sym)
 
-      tier = raw.to_s.strip.downcase
-      return tier if ALLOWED_SIGNAL_TIERS.include?(tier.to_sym)
+      Rails.logger.warn("[AlgoConfig] Invalid signals.signal_tier=#{cfg_raw.inspect}; using standard") if cfg_raw.present?
 
-      Rails.logger.warn("[AlgoConfig] Invalid signal_tier #{raw.inspect}; ignoring")
-      nil
-    end
-
-    def signal_tier_env_forced?
-      ActiveModel::Type::Boolean.new.cast(ENV.fetch('SIGNAL_TIER_FORCE', 'false'))
-    end
-
-    def warn_ignored_signal_tier_env(env_tier, effective)
-      Rails.logger.warn(
-        "[AlgoConfig] SIGNAL_TIER=#{env_tier} ignored (effective signal_tier=#{effective}); " \
-        'set SIGNAL_TIER_FORCE=true to override'
-      )
+      'standard'
     end
 
     def load_signal_tier_presets
-      db_raw = Setting.fetch(TIER_PRESETS_SETTING_KEY, nil, ttl: CACHE_TTL)
-      if db_raw.present?
-        parsed = JSON.parse(db_raw, symbolize_names: true)
-        return parsed if parsed.is_a?(Hash)
-      end
-
       path = Rails.root.join(SIGNAL_TIER_PRESETS_PATH)
       return {} unless File.exist?(path)
 
       YAML.load_file(path).deep_symbolize_keys
     rescue StandardError => e
-      Rails.logger.error("[AlgoConfig] Failed to load tier presets: #{e.message}")
+      Rails.logger.error("[AlgoConfig] Failed to load #{SIGNAL_TIER_PRESETS_PATH}: #{e.message}")
       {}
-    end
-
-    def document_top_level_keys
-      raw = Setting.fetch(AlgoConfig::DocumentStore::DOCUMENT_KEY, nil, ttl: CACHE_TTL)
-      return [] if raw.blank?
-
-      parsed = JSON.parse(raw, symbolize_names: true)
-      parsed.is_a?(Hash) ? parsed.keys : []
-    rescue StandardError
-      []
-    end
-
-    def yaml_seed_top_level_keys
-      YAML.load_file(Rails.root.join('config/algo.yml')).keys.map(&:to_sym)
-    rescue StandardError
-      []
     end
 
     # LIVE_TRADING env is the single switch for real broker execution (see .env.example).
@@ -220,30 +139,6 @@ class AlgoConfig
     def apply_live_trading_env_override!(config)
       paper = !live_trading_env_truthy?
       config[:paper_trading] = (config[:paper_trading] || {}).merge(enabled: paper)
-    end
-
-    # Paper mode: relax direction gate so ranging/choppy sessions still generate candidates.
-    # Opt back into live-like behavior with PAPER_STRICT_DIRECTION_GATE=true.
-    def apply_paper_research_overrides!(config)
-      return if paper_strict_direction_gate?
-      return unless config.dig(:paper_trading, :enabled)
-
-      signals = (config[:signals] || {}).dup
-      signals[:enable_direction_gate] = false
-      config[:signals] = signals
-    end
-
-    def apply_india_index_registry!(config)
-      indices = Array(config[:indices])
-      return if indices.empty?
-
-      config[:indices] = IndiaIndexRegistry.merge_indices!(indices)
-    rescue StandardError => e
-      Rails.logger.error("[AlgoConfig] Failed to apply india_index_registry: #{e.class} - #{e.message}")
-    end
-
-    def paper_strict_direction_gate?
-      ActiveModel::Type::Boolean.new.cast(ENV.fetch('PAPER_STRICT_DIRECTION_GATE', 'false'))
     end
 
     def live_trading_env_truthy?

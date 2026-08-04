@@ -1,7 +1,17 @@
 # frozen_string_literal: true
 
 module Options
-  # Derives algo config patch overrides from weighted calibration stats or trailing params.
+  # Derives algo.yml-compatible config overrides from weighted calibration stats.
+  #
+  # Input stats are in percentage POINTS (e.g. avg_gain: 14.2 means 14.2%).
+  # Formulas divide by 100 to produce decimal config values (e.g. 0.064).
+  #
+  # Only emits keys where the proposed value differs from the current active
+  # config by ≥10%, to avoid noisy patches that change nothing meaningful.
+  #
+  # Returns a string-keyed Hash safe for deep_merge into +algo_config_document+.
+  # adaptive_drawdown is deliberately excluded — it is an array-of-hashes
+  # that cannot be safely deep-merged with plain Hash#deep_merge.
   class CalibrationConfigPatchBuilder
     CHANGE_THRESHOLD = 0.10
 

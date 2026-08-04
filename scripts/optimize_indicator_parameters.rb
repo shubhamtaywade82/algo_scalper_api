@@ -7,7 +7,6 @@
 
 # Disable trading services and WebSocket connections during optimization
 ENV['SCRIPT_MODE'] = '1'
-ENV['DISABLE_TRADING_SERVICES'] = '1'
 ENV['BACKTEST_MODE'] = '1'
 
 require 'csv'

@@ -104,29 +104,6 @@ RSpec.describe AlgoConfig::DocumentStore do
       expect { described_class.apply_deep_merge_patch!([], source: 'test') }
         .to raise_error(ArgumentError, /must be a Hash/)
     end
-
-    it 'rejects an out-of-range gate value without persisting' do
-      expect do
-        described_class.apply_deep_merge_patch!(
-          { entry_quality: { gates: { min_adx: -5 } } },
-          source: 'test'
-        )
-      end.to raise_error(AlgoConfig::ValidationError, /min_adx/)
-
-      doc = JSON.parse(Setting.find_by!(key: doc_key).value)
-      expect(doc.dig('entry_quality', 'gates', 'min_adx')).to be_nil
-    end
-
-    it 'does not write a change log when validation fails' do
-      expect do
-        expect do
-          described_class.apply_deep_merge_patch!(
-            { signals: { signal_tier: 'wild' } },
-            source: 'test'
-          )
-        end.to raise_error(AlgoConfig::ValidationError)
-      end.not_to change(AlgoConfigChangeLog, :count)
-    end
   end
 
   describe '.force_bootstrap!' do

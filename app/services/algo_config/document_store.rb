@@ -127,12 +127,6 @@ class AlgoConfig
       def build_bootstrap_document
         yaml_hash = yaml_seed_hash
         legacy_raw = Setting.find_by(key: LEGACY_OVERRIDES_KEY)&.value
-        if legacy_raw.present?
-          Rails.logger.warn(
-            '[AlgoConfig::DocumentStore] legacy algo_config_overrides found during bootstrap — ' \
-            'run algo_config:migrate_legacy_overrides after bootstrap'
-          )
-        end
         return yaml_hash if legacy_raw.blank?
 
         legacy = JSON.parse(legacy_raw, symbolize_names: true)
@@ -151,7 +145,6 @@ class AlgoConfig
       end
 
       def persist!(document, source:, patch:, changed_paths:, actor: nil, request_id: nil, metadata: {})
-        AlgoConfig::Validator.validate!(document, changed_paths: changed_paths)
         Setting.put(DOCUMENT_KEY, document.deep_stringify_keys.to_json)
         AlgoConfigChangeLog.create!(
           source: source,
@@ -162,8 +155,6 @@ class AlgoConfig
           metadata: metadata.deep_stringify_keys
         )
         AlgoConfig.reset!
-        Signal::FastEntryMode.reset!
-        AlgoConfig::CacheBroadcaster.publish!(source: source)
         Rails.logger.info(
           "[AlgoConfig::DocumentStore] persisted #{DOCUMENT_KEY} source=#{source} " \
           "paths=#{Array(changed_paths).join(',')}"

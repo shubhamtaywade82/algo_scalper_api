@@ -17,6 +17,16 @@ module Options
     def initialize(tick_cache: nil, premium_filter: nil)
       @tick_cache = tick_cache || Live::TickCache
       @premium_filter_class = premium_filter || PremiumFilter
+      @momentum = momentum
+    end
+
+    def strike_type
+      return :skip if @momentum.nil?
+      return :atm if @momentum > 0.60  # score >= 2/3: strong momentum → ATM+OTM allowed
+      return :atm if @momentum > 0.25  # score >= 1/3: moderate momentum → ATM only (was :itm, now :atm)
+
+      # score == 0: no momentum confirmation → skip
+      :skip
     end
 
     # Select best strike for given index & direction

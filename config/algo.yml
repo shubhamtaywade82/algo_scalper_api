@@ -1,6 +1,22 @@
+# Paper vs live: same strategy/guards; only execution differs (GatewayPaper vs GatewayLive).
+# Effective mode is set by ENV LIVE_TRADING last-wins over YAML/DB: unset/false => paper (default for
+# ./bin/dev). LIVE_TRADING=true => live broker path (real money risk — also set dhanhq.enable_orders).
 paper_trading:
   enabled: true
   balance: 100000
+  # Wallet realized PnL: cumulative = all-time paper exits (carry capital day to day).
+  # daily = only exits on the current calendar day (legacy ₹1L + today’s closes).
+  realized_scope: cumulative
+
+# Realtime execution controls (tick-first architecture)
+realtime:
+  tick_first_enabled: true         # Evaluate exits from tick-driven Redis state first
+  fallback_enabled: true           # Run interval scanners only when tick stream is stale
+  tick_stale_after_seconds: 3      # Consider feed stale after this many seconds without tick-driven PnL event
+  min_enforcement_gap_ms: 250      # Debounce full rule-chain evaluation per tracker in event-driven path
+  db_sync_interval_seconds: 30      # Throttled DB sync cadence for active positions
+  # Option legs often lag the index; REST snapshot is accepted when ticks are stale (see LtpResolutionGuard).
+  entry_ltp_max_age_seconds: 10     # WebSocket tick must be at least this fresh when using cache path
 
 # Trading time restrictions based on profitability analysis
 # Use analyze_positions_by_time_intervals.rb to identify non-profitable periods
@@ -22,6 +38,33 @@ feature_flags:
   enable_underlying_aware_exits: false
   enable_peak_drawdown_activation: false
   auto_paper_on_insufficient_balance: false
+
+# Calibration: historical option behaviour (weekly) and optional AI trade-based patches.
+# Auto-apply merges proposed_patch into DB algo_config_document (same as POST …/apply).
+calibration:
+  auto_apply:
+    # Master switch. When false, runs only create CalibrationRun rows for manual review.
+    enabled: false
+    # After WeeklyCalibrationJob (DhanHQ expired ATM±1 stats).
+    historical_weekly: true
+    # After AiCalibrationJob (paper-trade dataset + Ollama). Keep false until validated.
+    ai_trades: false
+    # Skip auto-apply when RegimeDetector flags a shift (volatile vs prior runs).
+    reject_on_regime_shift: true
+    # Only auto-apply while paper_trading.enabled (recommended before going live).
+    require_paper_trading: true
+    # Historical path: minimum weekly expiries present in DB (see raw_stats weeks_available).
+    min_weeks_analyzed: 4
+    # AI path: minimum paper trades in dataset_meta.total_trades.
+    min_ai_trades: 15
+    # Skip apply if this symbol had a successful apply within N days (0 = no cooldown).
+    cooldown_days_between_applies: 7
+    # Telegram: append skip reason to weekly calibration message; AI job sends a short follow-up.
+    notify_on_skip: true
+
+# DhanHQ broker settings
+dhanhq:
+  enable_orders: false # Set to true for live order submission (false = dry-run logging only)
 
 # ============================================
 # INDEX CONFIG (TREND-SCORE DRIVEN)
@@ -521,6 +564,16 @@ position_sizing:
 # SIGNAL SETTINGS
 # ============================================
 signals:
+  # exploratory = most permissive (research/paper). standard = use algo.yml as written (no tier overlay).
+  # selective = strict gates + higher quality bar (not a profit guarantee). Override: SIGNAL_TIER env.
+  # See config/signal_tier_presets.yml
+  signal_tier: exploratory
+
+  # Entry strategy selection (code enforces behavior; no strategy logic in YAML)
+  # primary: supertrend => Supertrend flip only; omit or use other value for legacy multi-indicator path
+  entry_strategy:
+    primary: supertrend
+
   primary_timeframe: "1m"
   confirmation_timeframe: "5m"
 
@@ -554,6 +607,38 @@ signals:
   # Set to false to disable SMC decision alignment check (but keep permission checks)
   enable_smc_decision_alignment: true # Set to false to disable SMC decision alignment (default: true)
 
+  # SMC EventStore: persist every scan decision to smc_events for audit/replay
+  smc_event_store_publish: true
+
+  # Pine-parity SMC confluence (delta_exchange_bot SmcConfluence::Engine) — advisory MTF digest in BiasEngine#details
+  enable_smc_confluence_digest: true
+  # Optional: block entries unless LTF last bar fires long_signal (bullish) / short_signal (bearish)
+  enable_smc_confluence_gating: false
+  # Dhan interval minutes; defaults match Smc::BiasEngine HTF/MTF/LTF
+  smc_confluence_intervals:
+    htf: "60"
+    mtf: "15"
+    ltf: "5"
+
+  # Event-driven intraday AI (see AlgoConfig.event_driven_intraday_ai?): tick throttle + defer 15m jobs.
+  # Optional second flag (both are OR’d). DB JSON may send "true" as a string — that still counts.
+  # event_driven_ai_alerts: true
+
+  # Tick-triggered MTF SMC confluence + optional index TA → Ollama → Telegram (trading daemon only).
+  # Hot path: Redis throttle on tick; job: TickAiDigestJob, rising-edge on LTF flags, then AiAnalyzer.
+  # When true (or event_driven_ai_alerts): open-session AiTechnicalAnalysisJob + SmcScannerJob skip;
+  # BiasEngine Telegram from the daemon SMC loop is suppressed (tick/SMC AI alerts only on edges).
+  tick_ai_analysis_enabled: true
+  tick_ai_min_interval_seconds: 15
+  tick_ai_include_index_ta: true
+  tick_ai_notify_telegram: true
+  tick_ai_candle_fetch_delay_seconds: 1.0
+
+  # SMC Navigator overlay (LTF tactical gate; additive to PermissionResolver — not a replacement)
+  enable_smc_navigator_overlay: false
+  smc_navigator_min_confidence: 0.6
+  smc_navigator_exit_advisory: true
+
   # DirectionGate Configuration
   # DirectionGate blocks trades that go against the market regime:
   # - Blocks PE trades in bullish regime
@@ -570,6 +655,20 @@ signals:
   #   - bypass: Completely bypasses SMC+AVRZ checks - always returns execution_only (testing only!)
   # See docs/PERMISSION_SYSTEM_CONFIGURATION.md for details
   permission_mode: lenient # Options: strict, lenient, bypass (default: strict)
+
+  # Trading context gate: regime score, stability, and :chop blocking (see Domain::TradingContext).
+  # strict: production defaults; relaxed: allow signals on expiry/chop/low score (temporary / paper).
+  enable_trading_context_gate: true
+  trading_context_strictness: relaxed # strict | relaxed
+
+  # Option pick must show favorable premium change vs prev_close (Signal::MomentumValidator).
+  enable_option_premium_momentum_gate: false
+
+  # After strike selection: PropStrike-style score floor (see option_chain.min_strike_score).
+  enable_strike_score_floor_gate: false
+
+  # After strike selection: expected-move vs premium hard check (ExpectedMoveValidator).
+  enable_expected_move_strike_gate: false
 
   # Supertrend+ADX Strategy Configuration
   # By default: 1m Supertrend signal is enabled (no config needed)
@@ -650,31 +749,55 @@ signals:
     min_trend_score: 14
     mtf_enabled: true
 
+  # Presets for comprehensive_validation + options IV/theta thresholds (via effective_validation_mode).
+  validation_modes:
+    conservative:
+      adx_min_strength: 25
+      adx_confirmation_min_strength: 30
+      iv_rank_max: 0.6
+      iv_rank_min: 0.15
+      theta_risk_cutoff_hour: 14
+      theta_risk_cutoff_minute: 0
+      require_trend_confirmation: true
+      require_iv_rank_check: true
+      require_theta_risk_check: true
+    balanced:
+      adx_min_strength: 18
+      adx_confirmation_min_strength: 20
+      iv_rank_max: 0.8
+      iv_rank_min: 0.1
+      theta_risk_cutoff_hour: 14
+      theta_risk_cutoff_minute: 30
+      require_trend_confirmation: true
+      require_iv_rank_check: true
+      require_theta_risk_check: true
+    aggressive:
+      adx_min_strength: 15
+      adx_confirmation_min_strength: 18
+      iv_rank_max: 0.9
+      iv_rank_min: 0.05
+      theta_risk_cutoff_hour: 15
+      theta_risk_cutoff_minute: 0
+      require_trend_confirmation: false
+      require_iv_rank_check: true
+      require_theta_risk_check: false
+
   validation_mode: balanced
 
-  # Enhanced Signal Validation Configuration
-  enhanced_validation:
-    enabled: true # Enable multi-factor validation
+  # When enabled, failed IV-rank / theta checks from options analysis block strike pick + entry.
+  # IV rank here is still the index candle volatility proxy (not option IV percentile).
+  options_analysis_gate:
+    enabled: false
+    block_on_iv_rank_failure: true
+    block_on_theta_risk_failure: true
 
-    direction:
-      min_agreement: 2 # Minimum factors that must agree (1-6)
-      htf_timeframe: "15m" # Higher timeframe for confirmation
-      adx_thresholds:
-        NIFTY: 15
-        BANKNIFTY: 20
-        SENSEX: 15
+  # When true, comprehensive_validation failure stops the pipeline before context/quality gates.
+  halt_on_validation_failure: false
 
-    momentum:
-      min_confirmations: 1 # Minimum momentum confirmations (1-3)
-      body_expansion_threshold: 1.2 # Minimum body expansion ratio
-      premium_speed_thresholds:
-        NIFTY: 0.25
-        BANKNIFTY: 0.35
-        SENSEX: 0.20
-
-    volatility:
-      min_atr_ratio: 0.65 # Minimum ATR ratio vs historical
-      compression_bars: 4 # Minimum bars for compression detection
+  # Block new signals when nearest series expiry is too soon (0 = expiry day, 1 = tomorrow, etc.).
+  entry_dte_guard:
+    enabled: true
+    reject_when_days_to_expiry_lte: 0
 
   supertrend:
     period: 10
@@ -704,10 +827,11 @@ chain_analyzer:
     volume: 0.15
 
 option_chain:
-  min_iv: 10
+  min_iv: 5.0          # Relaxed from 10 — LOW_VOL regime options often have IV < 10
   max_iv: 60
   min_oi: 50000
   max_spread_pct: 3.0
+  min_strike_score: 80.0  # PropStrikeSelector scores 0–1 (×100 = 0–100); 140 default was unreachable
 
 data_freshness:
   disable_ohlc_caching: false

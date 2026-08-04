@@ -88,10 +88,13 @@ skip_ws = Rails.env.test? ||
 
 Rails.application.configure do
   config.x.dhanhq = ActiveSupport::InheritableOptions.new(
-    enabled: !Rails.env.test? && !skip_ws,  # Disable in test environment or script mode
-    ws_enabled: !skip_ws,  # Disable WebSocket in test environment or script mode
-    order_ws_enabled: !skip_ws,  # Disable order WebSocket in test environment or script mode
-    enable_order_logging: ENV["ENABLE_ORDER"] == "true",  # Order payload logging
+    enabled: !Rails.env.test? && !skip_ws, # Disable in test environment or script mode
+    # Market and order WebSockets are always enabled at the app layer; test.rb forces off.
+    # Runtime still skips feeds when credentials are missing, paper mode (order hub), or
+    # MarketFeedHub#enabled? guards (BACKTEST_MODE, SCRIPT_MODE, etc.).
+    ws_enabled: true,
+    order_ws_enabled: true,
+    enable_order_logging: ENV["ENABLE_ORDER"] == "true", # Order payload logging
     ws_mode: (ENV["DHANHQ_WS_MODE"] || "quote").to_sym,
     ws_watchlist: ENV.fetch("DHANHQ_WS_WATCHLIST", nil),
     order_ws_url: ENV.fetch("DHANHQ_WS_ORDER_URL", nil),

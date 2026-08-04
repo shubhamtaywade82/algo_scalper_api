@@ -1,5 +1,6 @@
 import { createSignal, createMemo, onMount } from 'solid-js'
 import { For, Show } from 'solid-js'
+import SignalsSidebar from '../components/signals/SignalsSidebar'
 
 function formatTime(timestamp) {
   if (!timestamp) return '—'
@@ -191,8 +192,9 @@ export default function Signals() {
   })
 
   return (
-    <div class="flex flex-col gap-6">
-      {/* Title */}
+    <div class="flex flex-col lg:flex-row gap-6">
+      <div class="flex flex-col gap-6 w-full lg:w-3/4">
+        {/* Title */}
       <div class="flex items-center justify-between px-2">
         <h2 class="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
           <span class="w-2 h-2 rounded-full bg-amber-500"></span>
@@ -473,6 +475,10 @@ export default function Signals() {
             </div>
           </div>
         </Show>
+      </div>
+      </div>
+      <div class="w-full lg:w-1/4">
+        <SignalsSidebar />
       </div>
     </div>
   )

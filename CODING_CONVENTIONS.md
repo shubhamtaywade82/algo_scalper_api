@@ -957,7 +957,6 @@ end
 ```ruby
 # spec/rails_helper.rb
 ENV['DHANHQ_ENABLED'] ||= 'false'
-ENV['DHANHQ_WS_ENABLED'] ||= 'false'
 ```
 
 **DON'T:**

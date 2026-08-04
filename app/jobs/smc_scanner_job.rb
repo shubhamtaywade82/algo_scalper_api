@@ -11,14 +11,20 @@ class SmcScannerJob < ApplicationJob
   retry_on StandardError, wait: ->(executions) { 2**executions }, attempts: 3
 
   def perform
+    if AlgoConfig.scheduled_smc_scanner_job_deferred?
+      Rails.logger.info(
+        '[SmcScannerJob] Skipped intraday scheduled scan: event-driven AI ' \
+        '(event_driven_ai_alerts or tick_ai_analysis_enabled). Use trading daemon + tick path; ' \
+        'SCHEDULED_SMC_SCANNER=true forces this job.'
+      )
+      return
+    end
+
     Rails.logger.info('[SmcScannerJob] Starting SMC scan...')
 
     indices = IndexConfigLoader.load_indices
-    Rails.logger.info("[SmcScannerJob] Loaded #{indices.size} indices from config...")
-
-    # Filter indices by expiry (only analyze indices with expiry <= 7 days)
-    filtered_indices = filter_indices_by_expiry(indices)
-    Rails.logger.info("[SmcScannerJob] Scanning #{filtered_indices.size} indices (after expiry filter)...")
+    indices_with_instruments = build_indices_with_instruments(indices)
+    Rails.logger.info("[SmcScannerJob] Scanning #{indices_with_instruments.size} indices...")
 
     success_count = 0
     error_count = 0
@@ -87,57 +93,89 @@ class SmcScannerJob < ApplicationJob
 
   private
 
-  # Delay between API calls to avoid rate limits (DH-904)
-  def delay_between_instruments
-    2.0 # seconds
+  def log_market_closed_status
+    target_date = Market::Calendar.next_trading_day.strftime('%Y-%m-%d')
+    session = Live::TimeRegimeService.closed_session_label
+    Rails.logger.debug do
+      "[SmcScannerJob] Running while market closed (session=#{session}, target=#{target_date})"
+    end
   end
 
-  def delay_between_candle_fetches
-    1.0 # seconds
-  end
+  # One DB lookup per index: load instrument once, then apply expiry filter.
+  def build_indices_with_instruments(indices)
+    return [] if indices.empty?
 
-  # Filter indices by expiry - only keep indices with expiry <= max_expiry_days (default: 7 days)
-  def filter_indices_by_expiry(indices)
-    return indices if indices.empty?
-
-    max_expiry_days = self.max_expiry_days
-    Time.zone.today
-    filtered = []
-
-    indices.each do |idx_cfg|
+    max_days = max_expiry_days
+    indices.filter_map do |idx_cfg|
       instrument = Instrument.find_by_sid_and_segment(
         security_id: idx_cfg[:sid].to_s,
         segment_code: idx_cfg[:segment]
       )
-
       unless instrument
-        Rails.logger.warn("[SmcScannerJob] Instrument not found for #{idx_cfg[:key]} - skipping expiry check")
-        # Include if instrument not found (let it fail later with proper error)
-        filtered << idx_cfg
+        Rails.logger.warn("[SmcScannerJob] Instrument not found for #{idx_cfg[:key]}")
         next
       end
 
-      days_to_expiry = calculate_days_to_expiry(instrument)
-
-      if days_to_expiry > max_expiry_days
-        Rails.logger.info(
-          "[SmcScannerJob] Skipping #{idx_cfg[:key]} - expiry in #{days_to_expiry} days " \
-          "(> #{max_expiry_days} days limit)"
-        )
+      days = calculate_days_to_expiry(instrument)
+      if days > max_days
+        Rails.logger.info("[SmcScannerJob] Skipping #{idx_cfg[:key]}: expiry in #{days} days (> #{max_days})")
         next
       end
 
-      filtered << idx_cfg
+      [idx_cfg, instrument]
     end
-
-    filtered
   rescue StandardError => e
-    Rails.logger.error("[SmcScannerJob] Error filtering indices by expiry: #{e.class} - #{e.message}")
-    # Return all indices if filtering fails (fail-safe)
-    indices
+    Rails.logger.error("[SmcScannerJob] Error building index list: #{e.message}")
+    indices_without_expiry_filter(indices)
   end
 
-  # Calculate days to expiry for an instrument
+  def indices_without_expiry_filter(indices)
+    indices.filter_map do |idx_cfg|
+      instrument = Instrument.find_by_sid_and_segment(
+        security_id: idx_cfg[:sid].to_s,
+        segment_code: idx_cfg[:segment]
+      )
+      unless instrument
+        Rails.logger.warn("[SmcScannerJob] Instrument not found for #{idx_cfg[:key]}")
+        next
+      end
+
+      [idx_cfg, instrument]
+    end
+  end
+
+  def wait_between_instruments(index)
+    return unless index.positive?
+    sleep(2.0) # Delay between instruments to avoid rate limits
+  end
+
+  def process_index(idx_cfg, instrument)
+    engine = Smc::BiasEngine.new(instrument, delay_seconds: 1.0)
+    decision = engine.decision
+    Rails.logger.info("[SmcScannerJob] #{idx_cfg[:key]}: #{decision}")
+
+    process_ai_analysis(engine, idx_cfg, decision) if engine.ai_enabled?
+    true
+  rescue DhanHQ::RateLimitError => e
+    Rails.logger.error("[SmcScannerJob] Rate limit for #{idx_cfg[:key]}: #{e.message}")
+    sleep(5)
+    false
+  rescue StandardError => e
+    Rails.logger.error("[SmcScannerJob] Error processing #{idx_cfg[:key]}: #{e.class} - #{e.message}")
+    false
+  end
+
+  def process_ai_analysis(engine, idx_cfg, decision)
+    Rails.logger.info("[SmcScannerJob] Getting AI analysis for #{idx_cfg[:key]}...")
+    ai_analysis = engine.analyze_with_ai
+
+    if ai_analysis.present?
+      send_ai_analysis_telegram_notification(idx_cfg[:key], decision, ai_analysis)
+    else
+      Rails.logger.warn("[SmcScannerJob] AI analysis empty for #{idx_cfg[:key]}")
+    end
+  end
+
   def calculate_days_to_expiry(instrument)
     expiry_list = instrument.expiry_list
     return 999 unless expiry_list&.any?
@@ -152,7 +190,7 @@ class SmcScannerJob < ApplicationJob
       when String
         begin
           Date.parse(raw)
-        rescue ArgumentError
+        rescue ArgumentError, TypeError
           nil
         end
       end
@@ -183,14 +221,14 @@ class SmcScannerJob < ApplicationJob
   def send_ai_analysis_telegram_notification(index_key, decision, ai_analysis)
     return unless telegram_enabled?
 
-    # Format message with index, decision, and AI analysis
+    safe_analysis = ERB::Util.html_escape(ai_analysis.to_s)
     message = <<~MESSAGE
-      🤖 <b>SMC AI Analysis: #{index_key}</b>
+      🤖 <b>SMC AI Analysis: #{ERB::Util.html_escape(index_key)}</b>
 
-      <b>Decision:</b> #{decision.to_s.upcase}
+      <b>Decision:</b> #{ERB::Util.html_escape(decision.to_s.upcase)}
 
       <b>AI Analysis:</b>
-      #{ai_analysis}
+      #{safe_analysis}
     MESSAGE
 
     begin
