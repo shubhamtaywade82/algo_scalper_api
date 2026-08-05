@@ -6,6 +6,8 @@ require 'singleton'
 class TickCache
   include Singleton
 
+  MEMORY_TTL = 1.5 # seconds
+
   def initialize
     @map = Concurrent::Map.new
   end
@@ -45,6 +47,7 @@ class TickCache
 
       # Restore previous LTP if missing
       new_hash[:ltp] = previous_ltp if new_hash[:ltp].nil? && previous_ltp
+      new_hash[:cached_at] = Time.current
 
       new_hash
     end
@@ -65,16 +68,16 @@ class TickCache
   def fetch(segment, security_id)
     key = cache_key(segment, security_id)
 
-    # Try memory first
-    # mem = @map[key]
-    # return mem if mem.present?
+    mem = @map[key]
+    return mem if mem && mem[:cached_at] && (Time.current - mem[:cached_at]) < MEMORY_TTL
 
     # Then fallback to Redis
     redis_tick = Live::RedisTickCache.instance.fetch_tick(segment, security_id)
 
     return nil if redis_tick.empty?
 
-    # Hydrate memory so next calls are fast
+    # Hydrate memory so next calls (within MEMORY_TTL) skip Redis
+    redis_tick[:cached_at] = Time.current
     @map[key] = redis_tick
 
     redis_tick
