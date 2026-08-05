@@ -14,6 +14,7 @@ module Entries
 
     class << self
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
+        Entries::AdvisoryLock.with_index_lock(index_cfg[:key]) do
         Rails.logger.info("[EntryGuard] Attempting entry for #{index_cfg[:key]} (#{direction})")
 
         # Circuit breaker — highest priority, checked before everything else
@@ -246,6 +247,7 @@ Rails.logger.error(
 
         Rails.logger.info("[EntryGuard] Successfully placed order #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]}")
         !!tracker
+        end
       rescue StandardError => e
         signal&.record_entry_outcome('blocked', "exception: #{e.class}")
         bt = e.backtrace&.first(12)&.join("\n")
