@@ -17,8 +17,7 @@ module Positions
         pnl: net_pnl.round(2),
         pnl_pct: net_pnl_pct(net_pnl, entry, qty),
         hwm_pnl: (cache[:hwm_pnl] || tracker.high_water_mark_pnl.to_f).round(2),
-        sl_price: sl_price&.to_f&.round(2),
-        tp_price: tp_price&.to_f&.round(2),
+        sl_price: sl_price(tracker)&.to_f&.round(2),
         entry_strategy: tracker.entry_strategy,
         time_in_position_sec: cache[:time_in_position_sec]
       )
@@ -159,6 +158,11 @@ module Positions
       return 0.0 unless entry.positive? && current.positive?
 
       (((current - entry) / entry) * 100).round(2)
+    end
+
+    # Tightest active stop, for display only — not the exit engine's decision path.
+    def sl_price(tracker)
+      tracker.secured_sl_price || tracker.trailing_stop_price || tracker.premium_stop_price
     end
   end
 end

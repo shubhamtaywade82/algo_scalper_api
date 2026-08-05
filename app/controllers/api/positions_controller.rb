@@ -32,16 +32,46 @@ module Api
     private
 
     def open_positions
-      PositionTracker.active.includes(:watchable, :instrument).map { |tracker| serialize_open(tracker) }
+      PositionTracker
+        .active
+        .includes(:watchable, :instrument)
+        .map { |tracker| Positions::Serializer.open(tracker) }
     end
 
     def closed_positions
-      today = Time.zone.today
-      PositionTracker.exited
-                     .where(exited_at: today.all_day)
-                     .includes(:watchable, :instrument)
-                     .order(exited_at: :desc)
-                     .map { |tracker| serialize_closed(tracker) }
+      scope = PositionTracker.exited.includes(:watchable, :instrument)
+
+      # Date filter (defaults to today)
+      scope = scope.where(exited_at: filter_date.all_day)
+
+      # Index key filter (stored in meta JSONB)
+      scope = scope.where("meta->>'index_key' = ?", params[:index_key].upcase) if params[:index_key].present?
+
+      # Option type: CE or PE suffix on symbol
+      if params[:option_type].present?
+        type = params[:option_type].upcase
+        scope = scope.where("symbol ILIKE ?", "%#{type}") if %w[CE PE].include?(type)
+      end
+
+      # Outcome filter based on last_pnl_rupees
+      case params[:outcome]
+      when "profit"
+        scope = scope.where("last_pnl_rupees > 0")
+      when "loss"
+        scope = scope.where("last_pnl_rupees < 0")
+      when "breakeven"
+        scope = scope.where("last_pnl_rupees BETWEEN -1 AND 1")
+      end
+
+      # Side filter (BUY/SELL)
+      scope = scope.where(side: params[:side].upcase) if params[:side].present?
+
+      # Sorting
+      col = ALLOWED_SORT_COLS.include?(params[:sort_by]) ? params[:sort_by] : "exited_at"
+      dir = params[:sort_dir] == "asc" ? :asc : :desc
+      scope = scope.order(col => dir)
+
+      scope.map { |tracker| Positions::Serializer.closed(tracker) }
     end
 
     # Unique trade dates, newest first. Capped at 90 days for the dropdown.
@@ -58,32 +88,24 @@ module Api
       [Positions::IstScope.today_start.to_date.to_s]
     end
 
-    def serialize_closed(tracker)
-      entry = tracker.entry_price.to_f
-      exit_p = tracker.exit_price.to_f
-
-      base_attributes(tracker).merge(
-        entry_price: entry.round(2),
-        exit_price: exit_p.round(2),
-        pnl: tracker.last_pnl_rupees.to_f.round(2),
-        pnl_pct: pnl_pct(entry, exit_p),
-        hwm_pnl: tracker.high_water_mark_pnl.to_f.round(2),
-        exit_reason: tracker.exit_reason || tracker.meta&.dig('exit_reason'),
-        exited_at: tracker.exited_at&.iso8601
-      )
+    # Day-level summary (ignores secondary filters — always for the full selected date).
+    def filter_summary
+      base = PositionTracker.exited.where(exited_at: filter_date.all_day)
+      {
+        date:         filter_date.to_s,
+        total:        base.count,
+        profit_count: base.where("last_pnl_rupees > 0").count,
+        loss_count:   base.where("last_pnl_rupees < 0").count,
+        total_pnl:    base.sum(:last_pnl_rupees).to_f.round(2)
+      }
     end
 
     def filter_date
-      @filter_date ||= Positions::IstScope.today_start.to_date
-    end
-
-    def assign_filter_date!
-      if params[:date].blank?
-        @filter_date = Positions::IstScope.today_start.to_date
-        return
+      @filter_date ||= begin
+        Date.parse(params[:date].to_s)
+      rescue ArgumentError, TypeError
+        Positions::IstScope.today_start.to_date
       end
-
-      (((current - entry) / entry) * 100).round(2)
     end
   end
 end

@@ -651,6 +651,7 @@ module Options
       # @param momentum_score [Integer] Momentum score (0-3)
       # @return [Array<Hash>] Array with a single qualified pick, or [] if blocked
       def pick_strikes_with_qualification(index_cfg:, direction:, permission:, expected_spot_move:, momentum_score: nil)
+        key = index_cfg[:key]
         instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
         unless instrument
           Rails.logger.warn("[Options] No instrument found for #{key}") if defined?(Rails)

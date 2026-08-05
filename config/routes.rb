@@ -29,6 +29,14 @@ Rails.application.routes.draw do
     get    'settings/change_logs',  to: 'settings#change_logs'
     patch  'settings/bulk',         to: 'settings#update_bulk'
 
+    get 'dashboard', to: 'dashboard#show'
+    get 'orders', to: 'orders#index'
+    get 'equity_curve', to: 'equity_curve#index'
+    resources :positions, only: %i[index show] do
+      post :close, on: :member
+    end
+    resources :alerts, only: %i[index create update destroy]
+
     # Circuit breaker — emergency halt
     # GET    /api/circuit_breaker        → status (unauthenticated)
     # POST   /api/circuit_breaker/trip   → trip   (requires X-Circuit-Breaker-Token)

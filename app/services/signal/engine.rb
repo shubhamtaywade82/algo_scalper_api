@@ -462,7 +462,7 @@ module Signal
 
         execution_permission = effective_execution_permission(permission)
 
-        picks = Options::ChainAnalyzer.pick_strikes_with_qualification(
+        strike_result = Options::ChainAnalyzer.pick_strikes_with_qualification(
           index_cfg: index_cfg,
           direction: final_direction,
           permission: execution_permission,
@@ -471,8 +471,10 @@ module Signal
         )
         # ===== END STRIKE QUALIFICATION LAYER =====
 
+        picks = strike_result.picks
         if picks.blank?
-          Rails.logger.warn("[Signal] No suitable option strikes found for #{index_cfg[:key]} #{final_direction}")
+          skip_reason = strike_result.failure_reason.presence || 'No suitable option strikes'
+          Rails.logger.warn("[Signal] No suitable option strikes found for #{index_cfg[:key]} #{final_direction}: #{skip_reason}")
           return
         end
 

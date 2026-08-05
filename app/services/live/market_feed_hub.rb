@@ -61,7 +61,6 @@ module Live
         true
       rescue StandardError => e
         Rails.logger.error("Failed to start DhanHQ market feed: #{e.class} - #{e.message}")
-        release_budget!("market_feed_hub")
         stop!
         false
       end
@@ -80,7 +79,6 @@ module Live
 
     def stop!
       @lock.synchronize do
-        release_budget!("market_feed_hub")
         @running = false
         @connection_state = :disconnected
         return unless @ws_client

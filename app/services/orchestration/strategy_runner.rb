@@ -42,7 +42,7 @@ module Orchestration
         permission: :scale_ready, # Default permission for runner
         expected_spot_move: series.atr(14).to_f,
         momentum_score: momentum_result.score
-      )
+      ).picks
 
       if picks.blank?
         Rails.logger.info("[StrategyRunner] #{@symbol} no qualifying strikes found")
