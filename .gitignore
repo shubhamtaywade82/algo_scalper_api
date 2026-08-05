@@ -1,2 +1,4 @@
 log
 tmp
+coverage
+spec/failed_examples.txt
