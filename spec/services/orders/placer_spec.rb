@@ -18,6 +18,7 @@ RSpec.describe Orders::Placer do
       order_double
     end
     # Enable order placement for tests
+    allow(ENV).to receive(:[])
     allow(ENV).to receive(:[]).with("PLACE_ORDER").and_return("true")
     # Bypass rate limiting in tests so specs don't block on token bucket
     allow(described_class).to receive(:with_order_rate_limit).and_yield

@@ -21,7 +21,7 @@ module Orders
     ].freeze
 
     class << self
-      def buy_market!(seg:, sid:, qty:, client_order_id:, product_type: "NORMAL", price: nil,
+      def buy_market!(seg:, sid:, qty:, client_order_id:, product_type: "INTRADAY", price: nil,
                       target_price: nil, stop_loss_price: nil, trailing_jump: nil)
         normalized_id = normalize_client_order_id(client_order_id)
         return nil if duplicate?(normalized_id)
@@ -62,6 +62,7 @@ module Orders
           Rails.logger.warn('[Orders::Placer] BUY blocked because PLACE_ORDER is not enabled')
           nil
         end
+        order
       ensure
         remember(normalized_id)
       end
@@ -120,18 +121,18 @@ module Orders
         remember(normalized_id)
       end
 
-      def buy_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "NORMAL")
+      def buy_ioc_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "NORMAL")
         normalized_id = normalize_client_order_id(client_order_id)
         return nil if duplicate?(normalized_id)
 
-        if order_placement_enabled?
-          order = with_order_rate_limit(context: "orders.sell_market") do
-            DhanHQ::Models::Order.create(payload)
-          end
-          Rails.logger.info("[Orders::Placer] SELL response: #{order.inspect}") if order
-        else
-          Rails.logger.warn("[Orders::Placer] SELL blocked because PLACE_ORDER is not enabled")
-          nil
+        unless seg && sid && qty && price && normalized_id
+          Rails.logger.error("[Orders::Placer] Missing required parameters for buy_ioc_limit!: seg=#{seg}, sid=#{sid}, qty=#{qty}, price=#{price}, client_order_id=#{client_order_id}")
+          return nil
+        end
+
+        unless segment_tradable?(seg)
+          Rails.logger.error("[Orders::Placer] Segment #{seg} is not tradable.")
+          return nil
         end
 
         nil
@@ -396,25 +397,38 @@ module Orders
         nil
       end
 
-      def with_token_auto_heal(context:)
+      def with_order_rate_limit(context: nil, &)
+        rate_limiter.consume!(&)
+      rescue TokenBucket::RateLimited => e
+        Rails.logger.warn("[Orders::Placer] rate limited: #{e.message}")
+        nil
+      end
+
+      def rate_limiter
+        @rate_limiter ||= TokenBucket.new(rate: 10, per: 1.second)
+      end
+
+      def with_token_auto_heal(context:, &)
         retried = false
-        yield
-      rescue StandardError => e
-        Rails.logger.error("[Orders::Placer] #{context} failed: #{e.class} - #{e.message}")
+        begin
+          with_order_rate_limit(context: context, &)
+        rescue StandardError => e
+          Rails.logger.error("[Orders::Placer] #{context} failed: #{e.class} - #{e.message}")
 
-        unless DhanhqErrorHandler.token_expired?(e)
-          return nil
+          unless DhanhqErrorHandler.token_expired?(e)
+            return nil
+          end
+
+          if retried
+            Rails.logger.error("[Orders::Placer] #{context} retry failed: #{e.class} - #{e.message}")
+            return nil
+          end
+
+          Rails.logger.warn("[Orders::Placer] #{context} unauthorized; refreshing token and retrying once")
+          Dhan::TokenManager.refresh! if defined?(Dhan::TokenManager)
+          retried = true
+          retry
         end
-
-        if retried
-          Rails.logger.error("[Orders::Placer] #{context} retry failed: #{e.class} - #{e.message}")
-          return nil
-        end
-
-        Rails.logger.warn("[Orders::Placer] #{context} unauthorized; refreshing token and retrying once")
-        Dhan::TokenManager.refresh! if defined?(Dhan::TokenManager)
-        retried = true
-        retry
       end
 
       def order_placement_enabled?
@@ -443,6 +457,59 @@ module Orders
         digest = Digest::SHA1.hexdigest(value)[0, 6]
         base = value[0, 23]
         "#{base}-#{digest}"
+      end
+
+      def place_order_with_slicing(sid:, qty:, client_order_id:, &block)
+        index_key = resolve_index_key(sid)
+        slices = Slicer.slice_quantity(index_key: index_key, total_quantity: qty)
+
+        if slices.size <= 1
+          return yield(qty, client_order_id)
+        end
+
+        Rails.logger.info("[Orders::Placer] Slicing quantity #{qty} into #{slices.inspect} for index=#{index_key} (limit=#{Slicer.freeze_limit_for(index_key)})")
+
+        last_order = nil
+        filled_qty = 0
+        slices.each_with_index do |slice_qty, index|
+          slice_coid = "#{client_order_id}_#{index + 1}"
+
+          # Sleep between slices (except first)
+          sleep(Slicer.delay_seconds) if index.positive?
+
+          last_order = yield(slice_qty, slice_coid)
+
+          if last_order.nil?
+            alert_partial_slice_failure(
+              client_order_id: client_order_id,
+              filled_qty: filled_qty,
+              total_qty: qty,
+              failed_slice_number: index + 1,
+              total_slices: slices.size
+            )
+            break
+          end
+
+          filled_qty += slice_qty
+        end
+
+        last_order
+      end
+
+      def alert_partial_slice_failure(client_order_id:, filled_qty:, total_qty:, failed_slice_number:, total_slices:)
+        message = "[Orders::Placer] Slice #{failed_slice_number}/#{total_slices} failed for #{client_order_id}: " \
+                  "filled #{filled_qty}/#{total_qty} before failure — position is PARTIAL, no further slices will be sent"
+        Rails.logger.error(message)
+        Notifications::TelegramNotifier.instance.notify_error(message, context: 'Orders::Placer#place_order_with_slicing')
+      rescue StandardError => e
+        Rails.logger.error("[Orders::Placer] alert_partial_slice_failure failed: #{e.message}")
+      end
+
+      def resolve_index_key(sid)
+        instrument = Instrument.find_by(security_id: sid.to_s)
+        instrument&.underlying_symbol || 'default'
+      rescue StandardError
+        'default'
       end
 
       def segment_tradable?(segment)

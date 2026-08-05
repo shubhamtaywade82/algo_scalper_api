@@ -7,7 +7,6 @@ module Api
     include Api::TokenAuthenticatable
 
     before_action :authenticate_dashboard_token!, only: :index
-    before_action :authenticate_operator_token!, only: :update_ip
     before_action :authenticate_settings!, only: :update_bulk
 
     # Top-level keys allowed for algo config overrides (must match config/algo.yml structure)
@@ -56,6 +55,25 @@ module Api
       render json: { error: e.message }, status: :bad_request
     rescue StandardError => e
       Rails.logger.error("[SettingsController] update_bulk error: #{e.class} - #{e.message}")
+      render json: { error: e.message }, status: :internal_server_error
+    end
+
+    # GET /api/settings/change_logs — paginated audit trail.
+    def change_logs
+      limit = (params[:limit] || 50).to_i.clamp(1, 200)
+      offset = [params[:offset].to_i, 0].max
+      total = AlgoConfigChangeLog.count
+      rows = AlgoConfigChangeLog.recent_first.limit(limit).offset(offset)
+
+      render json: {
+        success: true,
+        total: total,
+        limit: limit,
+        offset: offset,
+        change_logs: rows.as_json(only: %i[id source actor request_id patch changed_paths metadata created_at])
+      }
+    rescue StandardError => e
+      Rails.logger.error("[SettingsController] change_logs error: #{e.class} - #{e.message}")
       render json: { error: e.message }, status: :internal_server_error
     end
 

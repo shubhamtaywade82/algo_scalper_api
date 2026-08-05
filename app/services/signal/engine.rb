@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 # rubocop:disable Metrics/BlockNesting
 
 # rubocop:disable Metrics/BlockNesting
@@ -348,7 +349,7 @@ module Signal
         )
 
         # 9. Options Analysis
-        options_analysis = execute_options_analysis(index_cfg, instrument, final_direction, primary_series, effective_validation_mode)
+        execute_options_analysis(index_cfg, instrument, final_direction, primary_series, effective_validation_mode)
 
         # 10. Metadata Building
         entry_path = build_entry_path_identifier(
@@ -523,7 +524,6 @@ module Signal
         Rails.logger.error("[Signal] Backtrace: #{e.backtrace.first(5).join(', ')}")
       end
 
-
       def tradable_session?(index_cfg)
         if defined?(TradingSession::Service) && TradingSession::Service.respond_to?(:market_closed?) && TradingSession::Service.market_closed?
           Rails.logger.debug { "[Signal] Market closed - skipping analysis for #{index_cfg[:key]}" }
@@ -624,7 +624,6 @@ module Signal
         ta_analysis = ta_analyzer.call(timeframes: ta_timeframes, days_back: ta_days_back)
         ta_analysis[:success] ? ta_analyzer.result : nil
       end
-
 
       def analyze_timeframe(index_cfg:, instrument:, timeframe:, supertrend_cfg:, adx_min_strength:)
         interval = normalize_interval(timeframe)
@@ -746,9 +745,6 @@ module Signal
         { status: :error, message: e.message }
       end
 
-
-
-
       def multi_timeframe_direction(primary_direction, confirmation_direction)
         # If no confirmation timeframe, use primary direction
         return primary_direction if confirmation_direction.nil?
@@ -762,7 +758,6 @@ module Signal
         # Directions don't match
         :avoid
       end
-
 
       def validate_trend_confirmation(supertrend_result, series)
         trend = supertrend_result[:trend]
@@ -834,7 +829,6 @@ module Signal
         total_confidence = base_confidence + adx_factor + confirmation_factor + validation_factor + supertrend_factor
         [total_confidence, 1.0].min # Cap at 1.0
       end
-
 
       def analyze_with_recommended_strategy(index_cfg:, instrument:, timeframe:, strategy_recommendation:)
         interval = normalize_interval(timeframe)
@@ -1158,7 +1152,11 @@ module Signal
           signal = strategy.generate_signal(series.size - 1)
 
           # Map MultiIndicatorStrategy result to Engine's expected format
-          direction = signal ? (signal[:type] == :ce ? :bullish : :bearish) : :avoid
+          direction = if signal
+                        signal[:type] == :ce ? :bullish : :bearish
+                      else
+                        :avoid
+                      end
 
           # Extract important indicator values for metadata/logic
           st_indicator = strategy.indicators.find { |i| i.is_a?(Indicators::SupertrendIndicator) }
@@ -1380,7 +1378,11 @@ module Signal
         zone = get_smc_zone(index_cfg)
         return true if zone == :equilibrium
 
-        zone_override_adx = AlgoConfig.fetch.dig(:signals, :smc, :zone_filter_adx_override).to_f rescue 30.0
+        zone_override_adx = begin
+                              AlgoConfig.fetch.dig(:signals, :smc, :zone_filter_adx_override).to_f
+        rescue StandardError
+                              30.0
+        end
 
         if direction == :bullish && zone == :premium
           return adx_value.to_f >= zone_override_adx
@@ -1478,7 +1480,6 @@ module Signal
       end
 
       private
-
 
       def get_smc_decision(index_cfg, instrument, signals_cfg, signal_direction)
         # Check if SMC decision alignment is enabled
@@ -1819,7 +1820,6 @@ module Signal
         optimized_min
       end
 
-
       def trading_context_blocked?(index_cfg, primary_series, primary_analysis, regime_result, regime_state, exit_testing_mode, signals_cfg)
         return false unless signals_cfg.fetch(:enable_trading_context_gate, true)
         return false if !regime_state || exit_testing_mode
@@ -1843,7 +1843,7 @@ module Signal
         end
         Rails.logger.debug do
           "[Signal] TradingContext PASSED #{index_cfg[:key]}: #{context.day_type}/#{context.session}/#{context.regime} " \
-          "score=#{context.score} stability=#{context.stability}"
+            "score=#{context.score} stability=#{context.stability}"
         end
         false
       end

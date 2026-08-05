@@ -27,15 +27,18 @@ class AlgoConfig
       merged
     end
 
-    # Merge two arrays of hashes by matching on :key attribute
+    # Merge two arrays of hashes by matching on :key or :name attribute
     def self.merge_arrays(base_arr, override_arr)
       return override_arr unless base_arr.is_a?(Array) && override_arr.is_a?(Array)
+      return override_arr unless override_arr.all? { |item| item.is_a?(Hash) && (item[:key] || item[:name]) }
 
       merged = base_arr.dup
       override_arr.each do |override_item|
-        next unless override_item.is_a?(Hash) && override_item[:key]
+        match_key = override_item[:key] || override_item[:name]
 
-        base_idx = merged.find_index { |item| item.is_a?(Hash) && item[:key] == override_item[:key] }
+        base_idx = merged.find_index do |item|
+          item.is_a?(Hash) && (item[:key] || item[:name]) == match_key
+        end
         if base_idx
           merged[base_idx] = deep_merge_hashes_with_arrays(merged[base_idx], override_item)
         else
@@ -68,6 +71,10 @@ class AlgoConfig
           Rails.logger.error("[AlgoConfig] Failed to parse algo_config_overrides: #{e.message}")
         end
       end
+
+      # 4. Merge the DB-canonical document (seeded from algo.yml + legacy overrides,
+      #    patched via /api/settings/bulk, calibration runs, profitability slices).
+      base_config = deep_merge_hashes_with_arrays(base_config, DocumentStore.current_mutable_document)
 
       @cached_config = base_config
       @cache_expires_at = Time.current + CACHE_TTL
