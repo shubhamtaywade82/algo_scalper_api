@@ -1,4 +1,4 @@
-import { Router, Route } from '@solidjs/router'
+import { Router, Route, Navigate } from '@solidjs/router'
 import { Show, lazy } from 'solid-js'
 import { DashboardContext } from './context/DashboardContext'
 import { Toaster } from 'solid-toast'
@@ -131,6 +131,7 @@ export default function App() {
           <Route path="/option-chain" component={OptionChain} />
           <Route path="/analysis" component={Analysis} />
           <Route path="/ledger" component={Ledger} />
+          <Route path="/orders" component={Ledger} />
           <Route path="/settings" component={Settings} />
           <Route path="/backtester" component={Backtester} />
           <Route path="/replay" component={Replay} />
@@ -143,6 +144,7 @@ export default function App() {
           <Route path="/alerts" component={Alerts} />
           <Route path="/scheduler" component={Scheduler} />
           <Route path="/logs" component={Logs} />
+          <Route path="*" component={() => <Navigate href="/" />} />
         </Route>
       </Route>
 

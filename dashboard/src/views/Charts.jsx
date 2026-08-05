@@ -54,7 +54,7 @@ export default function Charts() {
   const initialSymbol = (searchParams.symbol || localStorage.getItem('chart_symbol') || 'NIFTY').toUpperCase()
   const [indexKey, setIndexKey] = createSignal(initialSymbol)
   
-  const { liveUpdates, optionsBuying } = useDashboard()
+  const { optionsBuying } = useDashboard()
   const { liveData } = useAnalysis()
 
   const buyingState = createMemo(() => optionsBuying() ? optionsBuying()[indexKey().toLowerCase()] : null)

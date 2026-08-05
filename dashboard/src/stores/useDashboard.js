@@ -157,6 +157,7 @@ export function useDashboard(onPositionChange) {
 
   return {
     mode, connected, isStale, stats, balance, indices, subscribedIndices, system,
+    optionsBuying,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, strategiesSummary, config,
     marketStatus: () => {
       const sys = system()
