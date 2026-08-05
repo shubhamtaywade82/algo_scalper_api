@@ -179,4 +179,42 @@ RSpec.describe Live::MarketFeedHub do
       hub.send(:check_connection_health!)
     end
   end
+
+  describe '#start! failure handling' do
+    it 'returns false and does not report success when the WS client fails to start' do
+      hub = described_class.instance
+      allow(hub).to receive(:enabled?).and_return(true)
+      allow(hub).to receive(:running?).and_return(false)
+      allow(hub).to receive(:load_watchlist).and_return([])
+      broken_client = instance_double(DhanHQ::WS::Client)
+      allow(hub).to receive(:build_client).and_return(broken_client)
+      allow(broken_client).to receive(:on)
+      allow(broken_client).to receive(:start).and_raise('connection refused')
+      allow(hub).to receive(:stop!)
+
+      result = hub.start!
+
+      expect(result).to be false
+      expect(hub).to have_received(:stop!)
+    end
+  end
+
+  describe '#healthy?' do
+    it 'delegates to the WS client healthy? when available' do
+      hub = described_class.instance
+      allow(hub).to receive(:running?).and_return(true)
+      client = instance_double(DhanHQ::WS::Client, healthy?: true)
+      hub.instance_variable_set(:@ws_client, client)
+
+      expect(hub.healthy?).to be true
+      expect(client).to have_received(:healthy?).with(stale_after: 45)
+    end
+
+    it 'is false when not running' do
+      hub = described_class.instance
+      allow(hub).to receive(:running?).and_return(false)
+
+      expect(hub.healthy?).to be false
+    end
+  end
 end

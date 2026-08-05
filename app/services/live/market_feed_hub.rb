@@ -33,19 +33,21 @@ module Live
         return true
       end
 
-      @lock.synchronize do
-        return true if running?
+      started = @lock.synchronize do
+        next true if running?
 
         @watchlist = load_watchlist || []
         refresh_watchlist_keys!
         Rails.logger.info("[MarketFeedHub] Loaded watchlist: #{@watchlist.count} instruments")
 
         @ws_client = build_client
-
-        @ws_client = build_client
         setup_connection_handlers
 
         @ws_client.on(:tick) { |tick| handle_tick(tick) }
+        @ws_client.on(:reconnect) { |info| handle_reconnect(info) }
+        @ws_client.on(:open) { Rails.logger.info('[MarketFeedHub] WebSocket opened') }
+        @ws_client.on(:close) { Rails.logger.warn('[MarketFeedHub] WebSocket closed') }
+        @ws_client.on(:error) { |e| Rails.logger.error("[MarketFeedHub] WebSocket error: #{e}") }
         @ws_client.start
         Rails.logger.info('[MarketFeedHub] WebSocket client started')
 
@@ -55,15 +57,15 @@ module Live
         @last_error = nil
 
         start_watchdog!
-        subscribe_watchlist
 
-        Rails.logger.info("[MarketFeedHub] DhanHQ market feed started (watchlist=#{@watchlist.count} instruments)")
         true
       rescue StandardError => e
         Rails.logger.error("Failed to start DhanHQ market feed: #{e.class} - #{e.message}")
         stop!
         false
       end
+
+      return false unless started
 
       # Subscribe to watchlist OUTSIDE the lock to avoid deadlock
       # (subscribe_many calls ensure_running! which might try to acquire the lock)
@@ -118,6 +120,21 @@ module Live
       end
     rescue StandardError => _e
       # Rails.logger.warn("Error checking WebSocket connection: #{_e.message}")
+      false
+    end
+
+    # Delegates to the gem's native health check (frame staleness, not just socket
+    # state) where available; falls back to connected? otherwise.
+    def healthy?(stale_after: 45)
+      return false unless running?
+      return false unless @ws_client
+
+      if @ws_client.respond_to?(:healthy?)
+        @ws_client.healthy?(stale_after: stale_after)
+      else
+        connected?
+      end
+    rescue StandardError
       false
     end
 
@@ -450,6 +467,13 @@ module Live
       end
     end
 
+    def handle_reconnect(info)
+      Rails.logger.warn("[MarketFeedHub] WebSocket reconnected (attempt=#{info[:attempt]})")
+      resubscribe_active_positions_after_reconnect
+    rescue StandardError => e
+      Rails.logger.error("[MarketFeedHub] handle_reconnect failed: #{e.class} - #{e.message}")
+    end
+
     def update_market_caches!(tick, ltp)
       # TickCache handles both ticker (LTP) and prev_close ticks
       Live::TickCache.put(tick) if ltp.positive? || tick[:prev_close].to_f.positive?
@@ -694,20 +718,9 @@ module Live
     end
 
     def setup_connection_handlers
-      # DhanHQ WebSocket client only supports :tick events
-      # Connection/disconnection monitoring is handled via tick activity tracking
-      # and connection state is inferred from tick reception
-
-      # NOTE: The DhanHQ client handles reconnection internally
-      # We track connection state via:
-      # - Tick reception (sets @connection_state = :connected)
-      # - Time-based fallback (connected? checks if ticks received recently)
-      # - Explicit stop! calls (sets @connection_state = :disconnected)
-
-      # Connection will be marked as :connected when first tick is received
-      # in handle_tick method
-
-      # Rails.logger.debug('[MarketFeedHub] Connection handlers: Using tick-based connection monitoring')
+      # Lifecycle hooks (on :tick/:reconnect/:open/:close/:error) are wired directly
+      # in start! above. This method is kept as an extension point for any future
+      # per-connection setup that needs to run before @ws_client.start.
     end
 
     def config
