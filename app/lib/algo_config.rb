@@ -82,7 +82,11 @@ class AlgoConfig
     end
 
     def mode
-      fetch[:mode]
+      if ENV.key?('LIVE_TRADING')
+        ENV['LIVE_TRADING'].to_s == 'true' ? :live : :paper
+      else
+        paper_trading_enabled? ? :paper : :live
+      end
     end
 
     def run_mode

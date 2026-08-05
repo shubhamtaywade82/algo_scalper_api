@@ -6,8 +6,6 @@ module Api
 
     before_action :authenticate_dashboard_token!
 
-    PAPER_INITIAL_CAPITAL = 250_000.00
-
     def index
       paper_mode = paper_enabled?
 

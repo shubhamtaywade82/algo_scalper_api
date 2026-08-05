@@ -95,7 +95,7 @@ module Smc
 
       return nil if qty.to_i <= 0
 
-      spot = series.close_last
+      spot = series.closes.last
 
       # SL and TP defined in spot terms. Runner will translate to option-price based stop if appropriate.
       sl_spot = compute_sp_sl(bos: bos, ob: ob, kind: kind)
@@ -165,7 +165,7 @@ module Smc
 
     # Compute spot-based stop loss conservative rules
     def compute_sp_sl(bos:, ob:, kind:)
-      spot = series.close_last
+      spot = series.closes.last
       if ob
         if ob[:type] == :bull_ob
           [ob[:low] - tick_buffer, bos[:level] * 0.995].compact.min

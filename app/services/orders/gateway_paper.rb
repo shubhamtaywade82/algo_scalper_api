@@ -29,24 +29,12 @@ module Orders
       { success: false, error: e.message, paper: true }
     end
 
-    # Returns unified shape: { cash:, equity:, mtm:, exposure:, utilized:, margin: }
+    # Paper wallet is the double-entry ledger (Ledger::WalletReader) — single
+    # source of truth: seed + all-time realized PnL - brokerage - premium locked
+    # in open positions. (Legacy derived snapshot only counted today's PnL.)
     def wallet_snapshot
-      base = (AlgoConfig.fetch.dig(:paper_trading, :balance) || 100_000).to_f
-
-      # Realized P&L: today's closed paper positions only (daily paper session)
-      today = Time.zone.today
-      realized = PositionTracker.paper.exited
-                                .where(exited_at: today.all_day)
-                                .sum(:last_pnl_rupees).to_f
-
-      # Unrealized P&L: active positions read from Redis cache for live values
-      unrealized = PositionTracker.paper.active.sum { |t| t.current_pnl_rupees.to_f }
-
-      cash   = (base + realized).round(2)
-      mtm    = unrealized.round(2)
-      equity = (cash + mtm).round(2)
-
-      { cash: cash, equity: equity, mtm: mtm, exposure: 0, utilized: 0, margin: 0 }
+      Ledger::WalletReader.snapshot(mode: :paper)
+                          .slice(:cash, :equity, :mtm, :exposure, :utilized, :margin)
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] wallet_snapshot failed: #{e.class} - #{e.message}")
       { cash: 100_000, equity: 100_000, mtm: 0, exposure: 0, utilized: 0, margin: 0 }

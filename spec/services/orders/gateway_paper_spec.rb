@@ -164,45 +164,38 @@ RSpec.describe Orders::GatewayPaper do
   end
 
   describe '#wallet_snapshot' do
-    it 'returns wallet hash with configured balance' do
-      result = gateway.wallet_snapshot
-
-      expect(result).to eq(
-        cash: 100_000,
-        equity: 100_000,
-        mtm: 0,
-        exposure: 0
-      )
-    end
-
-    it 'uses default balance when not configured' do
-      allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: {} })
-
-      result = gateway.wallet_snapshot
-
-      expect(result[:cash]).to eq(100_000)
-      expect(result[:equity]).to eq(100_000)
-    end
-
-    it 'handles AlgoConfig.fetch errors gracefully' do
-      allow(AlgoConfig).to receive(:fetch).and_raise(StandardError.new('Config error'))
+    it 'delegates to Ledger::WalletReader for the paper snapshot' do
+      ledger_snapshot = {
+        cash: 119_820.0, equity: 119_820.0, mtm: 0.0, exposure: 0.0,
+        utilized: 0.0, margin: 0, realized_pnl: 25_460.0, brokerage_expense: 5_640.0, source: 'ledger'
+      }
+      allow(Ledger::WalletReader).to receive(:snapshot).with(mode: :paper).and_return(ledger_snapshot)
 
       result = gateway.wallet_snapshot
 
       expect(result).to eq(
-        cash: 100_000,
-        equity: 100_000,
-        mtm: 0,
-        exposure: 0
+        cash: 119_820.0, equity: 119_820.0, mtm: 0.0,
+        exposure: 0.0, utilized: 0.0, margin: 0
       )
     end
 
-    it 'logs errors' do
-      allow(AlgoConfig).to receive(:fetch).and_raise(StandardError.new('Config error'))
+    it 'falls back to the default shape when the ledger errors' do
+      allow(Ledger::WalletReader).to receive(:snapshot).and_raise(StandardError.new('Ledger error'))
 
-      expect(Rails.logger).to receive(:error).with(/GatewayPaper.*wallet_snapshot failed/)
+      result = gateway.wallet_snapshot
+
+      expect(result).to eq(
+        cash: 100_000, equity: 100_000, mtm: 0, exposure: 0, utilized: 0, margin: 0
+      )
+    end
+
+    it 'logs ledger errors' do
+      allow(Ledger::WalletReader).to receive(:snapshot).and_raise(StandardError.new('Ledger error'))
+      allow(Rails.logger).to receive(:error).with(/GatewayPaper.*wallet_snapshot failed/)
 
       gateway.wallet_snapshot
+
+      expect(Rails.logger).to have_received(:error).with(/GatewayPaper.*wallet_snapshot failed/)
     end
   end
 

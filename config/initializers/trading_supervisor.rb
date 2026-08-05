@@ -13,21 +13,17 @@ end
 # Trading services are started by a separate process:
 #   ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
 #
-# The web server should not auto-start long-running threads.
+# The web server, Solid Queue workers and runners must not auto-start
+# long-running threads (each one would open its own DhanHQ WS connection,
+# exhausting the 5-connection budget and triggering 429s).
 if Rails.env.test? ||
   defined?(Rails::Console) ||
   (defined?(Rails::Generators) && Rails::Generators.const_defined?(:Base))
  return
 end
 
-# bin/dev uses Puma, not Rails::Server
-# is_web_process =
-#  $PROGRAM_NAME.include?("puma") ||
-#  $PROGRAM_NAME.include?("rails") ||
-#  ENV["WEB_CONCURRENCY"].present?
-
-# Running inside worker, not web
-is_worker = ENV["WORKER_MODE"].to_s == "true"
+# Only the trading daemon process runs the supervisor.
+is_worker = ENV['ENABLE_TRADING_SERVICES'].to_s == 'true'
 return unless is_worker
 
 # return unless is_web_process
