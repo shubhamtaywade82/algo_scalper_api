@@ -173,15 +173,17 @@ module Live
     def fix_stuck_exit(tracker)
       Rails.logger.warn("[ReconciliationService] Auto-correcting stuck exit for #{tracker.order_no}")
 
-      # Try the standard ExitEngine path first to ensure proper routing
-      exit_engine = Rails.application.config.x.trading_supervisor&.dig(:exit_manager)
+      exit_engine = Rails.application.config.x.trading_supervisor&.[](:exit_manager)
 
       if exit_engine
         # The engine will check stale_exit_intent? and allow a retry
-        exit_engine.execute_exit(tracker, tracker.meta['exit_reason'] || 'AUTO_RECONCILED_EXIT')
+        exit_engine.execute_exit(tracker, 'AUTO_RECONCILED_EXIT')
       else
-        # Fallback if supervisor/engine isn't available
-        tracker.mark_exited!(exit_reason: tracker.meta['exit_reason'] || 'AUTO_RECONCILED_EXIT')
+        Rails.logger.error("[ReconciliationService] CANNOT confirm broker fill for #{tracker.order_no} - exit_manager unreachable, position stays flagged as stuck")
+        Notifications::TelegramNotifier.instance.notify_error(
+          "CANNOT confirm broker fill for stuck exit on #{tracker.order_no} - exit_manager unreachable, retrying next cycle",
+          context: 'Live::ReconciliationService#fix_stuck_exit'
+        )
       end
     rescue StandardError => e
       Rails.logger.error("[ReconciliationService] Failed to auto-correct stuck exit for #{tracker.order_no}: #{e.class} - #{e.message}")
