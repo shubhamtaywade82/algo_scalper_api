@@ -17,7 +17,8 @@ module Api
         public_ipv4: ip_info[:public_ipv4],
         public_ipv6: ip_info[:public_ipv6],
         registered_ips: ip_info[:registered_ips],
-        recent_signals: TradingSignal.order(created_at: :desc).limit(10).as_json(methods: [:confidence_level]),
+        recent_signals: recent_signals_payload,
+        strategies_summary: strategies_summary_payload,
         circuit_breaker: Risk::CircuitBreaker.instance.status,
         system: Live::SystemStatusCache.instance.all_statuses.merge(
           ws_order_update: Live::OrderUpdateHub.instance.running?,
@@ -133,6 +134,24 @@ module Api
       Orders.config.gateway.wallet_snapshot
     rescue StandardError
       { cash: Capital::Allocator.paper_trading_balance.to_f, equity: 0, mtm: 0, exposure: 0 }
+    end
+
+    def recent_signals_payload
+      ::Strategies::Signal.order(emitted_at: :desc).limit(10).map do |s|
+        {
+          timestamp: s.emitted_at&.strftime('%H:%M:%S'),
+          strategy: s.strategy_record&.slug,
+          signal: s.action&.upcase,
+          symbol: s.instrument_key,
+          confidence_level: s.confidence
+        }
+      end
+    end
+
+    def strategies_summary_payload
+      ::Strategies::Record.order(:slug).pluck(:slug, :status).map do |slug, status|
+        { name: slug, status: status == 'running' ? 'Running' : status.to_s.capitalize }
+      end
     end
 
     def build_market_status

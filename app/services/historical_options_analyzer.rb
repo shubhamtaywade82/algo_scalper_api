@@ -107,7 +107,7 @@ class HistoricalOptionsAnalyzer
   def expiry_windows(weeks)
     today = Time.zone.today
     current_expiry = last_thursday(today)
-    Array.new(weeks) do |i|
+    windows = Array.new(weeks) do |i|
       expiry = current_expiry - (i * 7).days
       { expiry: expiry, from: expiry - 6.days, to: expiry }
     end

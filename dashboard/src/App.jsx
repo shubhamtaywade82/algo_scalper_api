@@ -55,22 +55,16 @@ function AppShell(props) {
   const {
     mode, connected, isStale: dashboardStale, stats, balance, indices, subscribedIndices, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker,
-    lastUpdated, recentSignals, config,
+    lastUpdated, recentSignals, strategiesSummary, config,
     marketStatus
   } = useDashboard(() => fetchPositions())
 
   const { sidebarCollapsed, toggleSidebar } = useUIStore()
 
-  async function closePositionAndRefresh(positionId) {
-    const result = await closeOpenPosition(positionId)
-    if (result?.ok) refreshDashboard()
-    return result
-  }
-
   const ctx = {
     mode, connected, dashboardStale, stats, balance, indices, subscribedIndices, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker,
-    lastUpdated, recentSignals, config,
+    lastUpdated, recentSignals, strategiesSummary, config,
     open, closed,
     positionsConnected, positionsStale, positionsLastMessageAt,
     fetchPositions,
@@ -79,22 +73,22 @@ function AppShell(props) {
 
   return (
     <DashboardContext.Provider value={ctx}>
-      <div class="min-h-screen bg-transparent text-gray-100 font-sans selection:bg-primary-500/30">
+      <div class="min-h-screen bg-transparent text-gray-100 font-sans selection:bg-primary-500/30 flex">
         <Toaster position="bottom-right" gutter={8} toastOptions={{ className: '!bg-gray-800 !text-gray-100 !border !border-white/10 !rounded-xl !shadow-2xl' }} />
-        <Header
-          mode={mode()}
-          indices={indices()}
-          subscribedIndices={subscribedIndices()}
-          system={system()}
-          connected={connected()}
-          isStale={dashboardStale()}
-          marketStatus={marketStatus()}
-          onToggleSidebar={toggleSidebar}
-          sidebarCollapsed={sidebarCollapsed()}
-        />
-        <div class="flex">
-          <Sidebar collapsed={sidebarCollapsed()} />
-          <main class={`flex-1 transition-all duration-300 pt-1 pb-20 ${sidebarCollapsed() ? 'ml-16' : 'ml-56'}`}>
+        <Sidebar collapsed={sidebarCollapsed()} />
+        <div class="flex-1 flex flex-col min-w-0">
+          <Header
+            mode={mode()}
+            indices={indices()}
+            subscribedIndices={subscribedIndices()}
+            system={system()}
+            connected={connected()}
+            isStale={dashboardStale()}
+            marketStatus={marketStatus()}
+            onToggleSidebar={toggleSidebar}
+            sidebarCollapsed={sidebarCollapsed()}
+          />
+          <main class="flex-1 pt-1 pb-20">
             <div class="px-8 pt-3 pb-6 w-full">
               {props.children}
 

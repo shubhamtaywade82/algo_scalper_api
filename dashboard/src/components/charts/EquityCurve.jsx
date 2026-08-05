@@ -50,6 +50,7 @@ export default function EquityCurve(props) {
       lineStyle: 2,
       lastValueVisible: false,
       priceLineVisible: false,
+      crosshairMarkerVisible: false,
       title: 'Peak (HWM)'
     })
 

@@ -74,6 +74,14 @@ export function usePositions() {
     return live
   }
 
+  function scheduleStaleCheck() {
+    clearStaleTimer()
+    staleTimer = setTimeout(() => {
+      setIsStale(true)
+      startBackfill()
+    }, WS_STALE_AFTER_MS)
+  }
+
   function markFresh() {
     setLastMessageAt(new Date().toISOString())
     setIsStale(false)

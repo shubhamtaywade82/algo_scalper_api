@@ -38,7 +38,7 @@ function saveRunningPeak(n) {
 export default function Dashboard() {
   const {
     balance, stats, open, circuitBreaker, positionsConnected, positionsStale,
-    closeOpenPosition, closingPositionId, marketStatus, mode, indices, recentSignals, system
+    closeOpenPosition, closingPositionId, marketStatus, mode, indices, recentSignals, strategiesSummary, system
   } = useDashboardContext()
 
   const [runningPeakPnl, setRunningPeakPnl] = createSignal(loadRunningPeak())
@@ -88,14 +88,7 @@ export default function Dashboard() {
     return (Number(val) || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })
   }
 
-  const activeStrategies = () => {
-    const sys = system()
-    const list = []
-    if (sys?.scheduler && sys.scheduler !== 'unknown') {
-      list.push({ name: 'Scheduler', status: sys.scheduler === 'running' ? 'Running' : 'Stopped', pnl: null })
-    }
-    return list
-  }
+  const activeStrategies = () => strategiesSummary() || []
 
   const signalsFeed = createMemo(() => {
     return (recentSignals() || []).slice(0, 5)

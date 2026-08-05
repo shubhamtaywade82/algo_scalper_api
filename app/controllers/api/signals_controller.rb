@@ -22,7 +22,7 @@ module Api
     # (strategy_signals table) — the legacy Signal::Engine → TradingSignal
     # pipeline was removed in b3a8f30 and no longer writes new rows.
     def index
-      scope = TradingSignal.order(signal_timestamp: :desc).limit(100)
+      scope = ::Strategies::Signal.order(emitted_at: :desc).limit(100)
       scope = apply_filters(scope)
       total = scope.count
       scope = apply_sort(scope)

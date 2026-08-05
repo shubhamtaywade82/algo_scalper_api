@@ -1,36 +1,38 @@
 import { createSignal, onMount, onCleanup } from 'solid-js'
 
+const INDICES = ['NIFTY', 'SENSEX', 'BANKNIFTY']
 const POLL_INTERVAL_MS = 30000
 
 export function useAnalysis() {
   // Per-index state maps: { NIFTY: signal, SENSEX: signal, BANKNIFTY: signal }
   const liveData = Object.fromEntries(INDICES.map(k => [k, createSignal(null)]))
-  const loadingMap   = Object.fromEntries(INDICES.map(k => [k, createSignal(false)]))
-  const errors    = Object.fromEntries(INDICES.map(k => [k, createSignal(null)]))
+  const loadingMap = Object.fromEntries(INDICES.map(k => [k, createSignal(false)]))
+  const errors = Object.fromEntries(INDICES.map(k => [k, createSignal(null)]))
 
   // Historical / snapshot follow the selected Analysis tab (auto-loaded once per index per visit)
   const [activeIndex, setActiveIndex] = createSignal(null)
   const [historicalData, setHistoricalData] = createSignal(null)
   const [historicalLoading, setHistoricalLoading] = createSignal(false)
-  const [error, setError] = createSignal(null)
   const [snapshotLoading, setSnapshotLoading] = createSignal(false)
   const [snapshotData, setSnapshotData] = createSignal(null)
   const [snapshotError, setSnapshotError] = createSignal(null)
   const [autoHistoricalLoadedForIndex, setAutoHistoricalLoadedForIndex] = createSignal({})
   const [autoSnapshotLoadedForIndex, setAutoSnapshotLoadedForIndex] = createSignal({})
 
-  let pollTimer = null
+  async function fetchOne(index) {
+    if (!INDICES.includes(index)) return
+    const [, setLoading] = loadingMap[index]
+    const [, setError] = errors[index]
+    const [, setData] = liveData[index]
 
-  async function fetchLive(index) {
-    const key = index || currentIndex()
     try {
       setLoading(true)
       setError(null)
-      const res = await fetch(`/api/analysis/${key}`)
+      const res = await fetch(`/api/analysis/${index}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      setLiveData(await res.json())
+      setData(await res.json())
     } catch (e) {
-      console.error(`[Analysis] live fetch failed for ${key}:`, e)
+      console.error(`[Analysis] live fetch failed for ${index}:`, e)
       setError(e.message)
     } finally {
       setLoading(false)
@@ -50,7 +52,7 @@ export function useAnalysis() {
     setActiveIndex(index)
     try {
       setHistoricalLoading(true)
-      const res = await fetch(`/api/analysis/${currentIndex()}/historical?weeks=${weeks}`)
+      const res = await fetch(`/api/analysis/${index}/historical?weeks=${weeks}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setHistoricalData(await res.json())
     } catch (e) {
@@ -84,7 +86,7 @@ export function useAnalysis() {
     setSnapshotLoading(true)
     setSnapshotError(null)
     try {
-      const res = await fetch(`/api/analysis/${currentIndex()}/ai_snapshot`, { method: 'POST' })
+      const res = await fetch(`/api/analysis/${index}/ai_snapshot`, { method: 'POST' })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         const msg = data.message || data.error || `HTTP ${res.status}`
@@ -99,29 +101,18 @@ export function useAnalysis() {
     }
   }
 
-  function switchIndex(key) {
-    setCurrentIndex(key)
-    setLiveData(null)
-    setHistoricalData(null)
-    setSnapshotData(null)
-    setSnapshotError(null)
-    fetchLive(key)
-  }
-
+  let pollTimer = null
   onMount(() => {
-    fetchLive()
-    pollTimer = setInterval(() => fetchLive(), POLL_INTERVAL_MS)
+    fetchAll()
+    pollTimer = setInterval(() => fetchAll(), POLL_INTERVAL_MS)
   })
-
-  onCleanup(() => {
-    clearInterval(pollTimer)
-  })
+  onCleanup(() => clearInterval(pollTimer))
 
   return {
     INDICES,
-    liveData:        (idx) => liveData[idx][0](),
-    isLoading:       (idx) => loadingMap[idx][0](),
-    getError:        (idx) => errors[idx][0](),
+    liveData: (idx) => liveData[idx][0](),
+    isLoading: (idx) => loadingMap[idx][0](),
+    getError: (idx) => errors[idx][0](),
     fetchOne,
     fetchAll,
     fetchHistorical,

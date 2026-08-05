@@ -4,6 +4,11 @@ import { useFlash } from '../stores/useFlash'
 import AnimatedNumber from './AnimatedNumber'
 import { TableRow, TableCell } from './ui/Table'
 
+function inr(val, dec = 2) {
+  if (val == null) return '—'
+  return Number(val).toLocaleString('en-IN', { minimumFractionDigits: dec, maximumFractionDigits: dec })
+}
+
 function formatDuration(secs) {
   if (!secs) return '—'
   const m = Math.floor(secs / 60)
@@ -17,6 +22,7 @@ export default function PositionRow(props) {
 
   const ltpFlash = useFlash(() => pos()?.ltp)
   const pnlFlash = useFlash(() => pos()?.pnl)
+  const isClosing = createMemo(() => props.closingId != null && props.closingId === pos()?.id)
 
   return (
     <TableRow class={`border-l-2 transition-all duration-300 ${
@@ -78,12 +84,12 @@ export default function PositionRow(props) {
         </div>
       </TableCell>
       <TableCell class="px-4 py-5 text-center align-middle">
-        <Show when={typeof onClose === 'function'}>
+        <Show when={typeof props.onClose === 'function'}>
           <button
             type="button"
             class="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border border-rose-500/30 text-rose-300 bg-rose-500/10 hover:bg-rose-500/25 hover:border-rose-500/50 shadow-[0_0_10px_rgba(239,68,68,0.05)] hover:shadow-[0_0_15px_rgba(239,68,68,0.2)] transition-all cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
             disabled={isClosing()}
-            onClick={() => onClose(pos().id)}
+            onClick={() => props.onClose(pos().id)}
             aria-label={`Close position ${pos().symbol}`}
           >
             {isClosing() ? '…' : 'Close'}

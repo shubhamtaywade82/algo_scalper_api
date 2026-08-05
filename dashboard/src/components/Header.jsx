@@ -12,7 +12,10 @@ function SidebarToggle(props) {
       class="p-2 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/[0.05] transition-all duration-200 mr-2"
       title={props.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
     >
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg
+        class={`w-5 h-5 transition-transform duration-300 ${props.collapsed ? '' : 'rotate-180'}`}
+        fill="none" stroke="currentColor" viewBox="0 0 24 24"
+      >
         <path d="M9 18l6-6-6-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </button>

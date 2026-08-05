@@ -36,6 +36,7 @@ export function useDashboard(onPositionChange) {
   const [circuitBreaker, setCircuitBreaker] = createSignal({})
   const [lastUpdated, setLastUpdated] = createSignal(null)
   const [recentSignals, setRecentSignals] = createSignal([])
+  const [strategiesSummary, setStrategiesSummary] = createSignal([])
   const [config, setConfig] = createSignal({ risk: {}, signals: {}, time_restrictions: {} })
 
   let subscription = null
@@ -89,6 +90,7 @@ export function useDashboard(onPositionChange) {
     if (data.registered_ips !== undefined) setRegisteredIps(data.registered_ips)
     if (data.circuit_breaker) setCircuitBreaker(data.circuit_breaker)
     if (data.recent_signals) setRecentSignals(data.recent_signals)
+    if (data.strategies_summary) setStrategiesSummary(data.strategies_summary)
     if (data.config) setConfig(data.config)
     if (data.subscribed_indices) setSubscribedIndices(data.subscribed_indices)
 
@@ -120,7 +122,7 @@ export function useDashboard(onPositionChange) {
       },
       received(data) {
         console.debug('⚡ [WS:Dashboard] Update:', data)
-        markFresh()
+        setIsStale(false)
         applyData(data)
         
         if (data.type === 'position_activated') {
@@ -155,7 +157,7 @@ export function useDashboard(onPositionChange) {
 
   return {
     mode, connected, isStale, stats, balance, indices, subscribedIndices, system,
-    publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, config,
+    publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, strategiesSummary, config,
     marketStatus: () => {
       const sys = system()
       if (sys?.market_status) return sys.market_status

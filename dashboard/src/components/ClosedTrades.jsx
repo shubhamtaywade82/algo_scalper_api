@@ -1,6 +1,10 @@
 import { createSignal, createMemo, onMount, createEffect } from 'solid-js'
 import { Show, For } from 'solid-js'
 import { useDashboardContext } from '../context/DashboardContext'
+import Button from './ui/Button'
+import Badge from './ui/Badge'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './ui/Table'
+import { exitBadge } from '../lib/exitBadge'
 
 function inr(val, dec = 2) {
   if (val == null) return '—'

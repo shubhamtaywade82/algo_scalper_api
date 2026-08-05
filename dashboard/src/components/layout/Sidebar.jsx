@@ -116,7 +116,8 @@ function NavItem(props) {
     <A
       href={props.item.href}
       end={props.item.end}
-      class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-200 group"
+      title={props.collapsed ? props.item.label : undefined}
+      class={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-200 group ${props.collapsed ? 'justify-center px-0' : ''}`}
       activeClass="bg-primary-500/15 text-primary-300 border border-primary-500/25 shadow-[0_0_15px_rgba(59,130,246,0.1)]"
       inactiveClass="text-gray-500 hover:text-gray-300 hover:bg-white/[0.03] border border-transparent"
     >
@@ -136,13 +137,13 @@ export default function Sidebar(props) {
   const user = () => auth.user()
 
   return (
-    <aside class={`fixed left-0 top-14 bottom-0 bg-gray-900/80 backdrop-blur-xl border-r border-white/5 transition-all duration-300 z-40 flex flex-col justify-between overflow-hidden ${collapsed() ? 'w-16' : 'w-56'}`}>
-      <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-4">
+    <aside class={`sticky top-0 h-screen shrink-0 bg-gray-900/80 backdrop-blur-xl border-r border-white/5 transition-all duration-300 z-40 flex flex-col justify-between ${collapsed() ? 'w-16' : 'w-56'}`}>
+      <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-4 scrollbar-thin">
         <For each={navigationConfig}>
-          {(section) => (
+          {(section, i) => (
             <div>
-              <Show when={!collapsed()}>
-                <div class="px-3 py-1.5 text-[8px] font-black text-gray-600 uppercase tracking-[0.2em]">
+              <Show when={!collapsed()} fallback={<Show when={i() > 0}><div class="mx-3 mb-2 border-t border-white/5" /></Show>}>
+                <div class="px-3 py-1.5 text-[8px] font-black text-gray-500 uppercase tracking-[0.2em]">
                   {section.section.label}
                 </div>
               </Show>

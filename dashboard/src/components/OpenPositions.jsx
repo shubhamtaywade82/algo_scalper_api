@@ -1,5 +1,5 @@
 import { createMemo } from 'solid-js'
-import { Show, For } from 'solid-js'
+import { Show, For, Index } from 'solid-js'
 import PositionRow from './PositionRow'
 import { Table, TableHeader, TableBody, TableRow, TableHead } from './ui/Table'
 

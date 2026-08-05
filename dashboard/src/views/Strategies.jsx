@@ -1,10 +1,22 @@
-import { createMemo } from 'solid-js'
+import { createMemo, createSignal, onMount } from 'solid-js'
 import { For, Show } from 'solid-js'
+import { useNavigate } from '@solidjs/router'
 import { useDashboardContext } from '../context/DashboardContext'
+import { useStrategies } from '../stores/useStrategies'
 import { expiryBadgeMeta } from '../lib/expiryBadge'
 
+function getStatusClass(status) {
+  if (status === 'running') return 'bg-emerald-500/10 text-emerald-400'
+  if (status === 'stopped') return 'bg-gray-500/10 text-gray-400'
+  if (status === 'errored') return 'bg-rose-500/10 text-rose-400'
+  return 'bg-white/5 text-gray-500'
+}
+
 export default function Strategies() {
+  const navigate = useNavigate()
   const { subscribedIndices, config } = useDashboardContext()
+  const { strategies, fetchAll, loading } = useStrategies()
+  const [activeTab] = createSignal('All')
 
   onMount(() => {
     fetchAll()
