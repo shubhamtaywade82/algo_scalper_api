@@ -3,7 +3,7 @@
 require 'rails_helper'
 require_relative '../../../app/services/positions/hybrid_atr_calculator'
 
-RSpec.describe Positions::HybridAtrCalculator do
+RSpec.describe Positions::HybridATRCalculator do
   describe '.acceleration_factor' do
     it 'returns 1.00 for profit < 15%' do
       expect(described_class.acceleration_factor(0.10)).to eq(1.00)

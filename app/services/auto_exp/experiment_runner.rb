@@ -11,7 +11,7 @@ require_relative "results_store"
 module AutoExp
   class ExperimentRunner
     def initialize
-      @planner = AutoExp::LlmPlanner.new
+      @planner = AutoExp::LLMPlanner.new
       @applier = AutoExp::ConfigApplier.new
       @executor = AutoExp::BacktestExecutor.new
       @evaluator = AutoExp::Evaluator.new

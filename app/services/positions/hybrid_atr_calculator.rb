@@ -2,7 +2,7 @@
 
 module Positions
   # Calculates dynamic ATR Chandelier trailing stop loss prices with profit acceleration.
-  class HybridAtrCalculator
+  class HybridATRCalculator
     DEFAULT_BASE_MULTIPLIER = 2.0
     DEFAULT_ACTIVATION_PROFIT_PCT = 0.15 # 15%
     DEFAULT_MIN_SL_OFFSET_PCT = -0.15 # -15% from entry

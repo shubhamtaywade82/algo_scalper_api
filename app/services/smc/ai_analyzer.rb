@@ -291,23 +291,15 @@ module Smc
                             '{}'
                           end
 
-      {
-        count: candles.size,
-        latest: {
-          timestamp: candles.last.timestamp,
-          open: candles.last.open,
-          high: candles.last.high,
-          low: candles.last.low,
-          close: candles.last.close,
-          volume: candles.last.volume
-        },
-        summary: {
-          high: candles.map(&:high).max,
-          low: candles.map(&:low).min,
-          avg_volume: (candles.sum(&:volume).to_f / candles.size).round(2)
-        }
-      }
-    end
+            {
+              'id' => tc_hash['id'] || tc_hash[:id],
+              'type' => 'function',
+              'function' => {
+                'name' => func_name,
+                'arguments' => args_string
+              }
+            }
+          end
 
           @messages << {
             role: 'assistant',
@@ -621,14 +613,6 @@ module Smc
         end
       end
 
-      append_tick_ai_extras(prompt_parts)
-
-      # Add option chain data if available
-      if @prefetched_data[:option_chain]&.dig(:options)&.any?
-        prompt_parts << build_option_chain_section(@prefetched_data[:option_chain], atm_strike, trend_direction)
-        prompt_parts << ''
-      end
-
       # Pattern 2: {"tool": "tool_name", "arguments": {...}} (alternative format)
       text.scan(/\{"tool"\s*:\s*"([^"]+)"\s*,\s*"arguments"\s*:\s*(\{[^}]*\})\s*\}/m) do |tool, args|
         next if seen_tools.include?(tool) # Avoid duplicates
@@ -682,6 +666,9 @@ module Smc
           Rails.logger.debug { "[Smc::AiAnalyzer] Failed to parse tool call array: #{e.message}" }
         end
       end
+
+      tool_calls
+    end
 
     def append_tick_ai_extras(prompt_parts)
       if @initial_data[:tick_trigger].present?

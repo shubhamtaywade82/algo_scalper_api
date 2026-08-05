@@ -22,10 +22,10 @@ RSpec.describe Live::RiskManagerService::ExitEnforcement do
       let(:tracker) do
         instance_double(PositionTracker, entry_price: 100.0, quantity: 100)
       end
-      let(:snapshot) { { hwm_pnl: 500.0 } } # 500 / 10000 = 5% > 2.5%
+      let(:position_data) { instance_double(Positions::PositionData, high_water_mark: 500.0) } # 500 / 10000 = 5% > 2.5%
 
       it 'returns true' do
-        expect(harness.send(:trailing_armed_for?, tracker, snapshot)).to be true
+        expect(harness.send(:trailing_armed_for?, tracker, position_data)).to be true
       end
     end
 
@@ -33,10 +33,10 @@ RSpec.describe Live::RiskManagerService::ExitEnforcement do
       let(:tracker) do
         instance_double(PositionTracker, entry_price: 100.0, quantity: 100)
       end
-      let(:snapshot) { { hwm_pnl: 100.0 } } # 100 / 10000 = 1% < 2.5%
+      let(:position_data) { instance_double(Positions::PositionData, high_water_mark: 100.0) } # 100 / 10000 = 1% < 2.5%
 
       it 'returns false' do
-        expect(harness.send(:trailing_armed_for?, tracker, snapshot)).to be false
+        expect(harness.send(:trailing_armed_for?, tracker, position_data)).to be false
       end
     end
 
@@ -50,10 +50,10 @@ RSpec.describe Live::RiskManagerService::ExitEnforcement do
       let(:tracker) do
         instance_double(PositionTracker, entry_price: 100.0, quantity: 100)
       end
-      let(:snapshot) { { hwm_pnl: 500.0 } }
+      let(:position_data) { instance_double(Positions::PositionData, high_water_mark: 500.0) }
 
       it 'returns false' do
-        expect(harness.send(:trailing_armed_for?, tracker, snapshot)).to be false
+        expect(harness.send(:trailing_armed_for?, tracker, position_data)).to be false
       end
     end
 
@@ -61,10 +61,10 @@ RSpec.describe Live::RiskManagerService::ExitEnforcement do
       let(:tracker) do
         instance_double(PositionTracker, entry_price: 0.0, quantity: 0)
       end
-      let(:snapshot) { { hwm_pnl: 500.0 } }
+      let(:position_data) { instance_double(Positions::PositionData, high_water_mark: 500.0) }
 
       it 'returns false (safe default)' do
-        expect(harness.send(:trailing_armed_for?, tracker, snapshot)).to be false
+        expect(harness.send(:trailing_armed_for?, tracker, position_data)).to be false
       end
     end
   end

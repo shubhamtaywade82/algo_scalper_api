@@ -2,7 +2,7 @@
 
 module OptionsBuying
   # Calculates VWAP using minute ticks for the current session.
-  class VwapCalculator
+  class VWAPCalculator
     def initialize(index_key)
       @index_key = index_key.to_s.upcase
     end

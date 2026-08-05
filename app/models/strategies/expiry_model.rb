@@ -25,9 +25,7 @@ module Strategies
       return false if s == :closed
 
       # Institutional rule: On expiry days, avoid trading during midday decay period
-      if expiry_day?(symbol) && (s == :midday)
-        return false
-      end
+      return false if expiry_day?(symbol) && (s == :midday)
 
       true
     end
