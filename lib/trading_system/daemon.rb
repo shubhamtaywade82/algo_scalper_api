@@ -10,6 +10,7 @@ module TradingSystem
   # opens; a background thread then starts the remaining services automatically.
   class Daemon
     MARKET_OPEN_POLL_INTERVAL = 60 # seconds
+    HEALTH_CHECK_INTERVAL = 30 # seconds (keep_process_alive! loop runs at 1s cadence)
 
     def self.start(...)
       new.start(...)
@@ -93,22 +94,6 @@ module TradingSystem
       TradingSystem::Bootstrap.boot_market_gates!
     end
 
-    def start_market_open_poller!
-      @market_open_thread = Thread.new do
-        Thread.current.name = 'daemon-market-open-poller'
-        loop do
-          sleep MARKET_OPEN_POLL_INTERVAL
-          next if TradingSession::Service.market_closed?
-
-          Rails.logger.info('[TradingDaemon] Market opened - starting remaining services')
-          @supervisor.start_all
-          subscribe_active_positions!
-          Rails.logger.info('[TradingDaemon] Full services started')
-          break
-        end
-      end
-    end
-
     def subscribe_active_positions!
       active_pairs = Live::PositionIndex.instance.all_keys.map do |k|
         seg, sid = k.split(':', 2)
@@ -141,6 +126,8 @@ module TradingSystem
     end
 
     def safe_stop!
+      alert_open_positions!
+
       if @market_open_thread&.alive?
         @market_open_thread.kill
         @market_open_thread = nil
@@ -150,14 +137,52 @@ module TradingSystem
       warn "[TradingDaemon] safe_stop! failed: #{e.class} - #{e.message}"
     end
 
+    def alert_open_positions!
+      count = PositionTracker.active.count
+      return if count.zero?
+
+      Notifications::TelegramNotifier.instance.notify_error(
+        "Daemon shutting down with #{count} open position(s) - they will be UNMONITORED until restart",
+        context: 'TradingSystem::Daemon#safe_stop!'
+      )
+    rescue StandardError => e
+      warn "[TradingDaemon] alert_open_positions! failed: #{e.class} - #{e.message}"
+    end
+
     def keep_process_alive!
+      ticks_since_health_check = 0
+
       loop do
         if @shutdown_requested
           Rails.logger.info("[TradingDaemon] Received #{@shutdown_requested}, shutting down...")
           safe_stop!
           break
         end
+
+        ticks_since_health_check += 1
+        if ticks_since_health_check >= HEALTH_CHECK_INTERVAL
+          ticks_since_health_check = 0
+          check_service_health!
+        end
+
         sleep 1
+      end
+    end
+
+    def check_service_health!
+      return unless @supervisor
+
+      @supervisor.health_check.each do |name, healthy|
+        next if healthy
+
+        Rails.logger.error("[TradingDaemon] Service #{name} reported unhealthy - restarting")
+        Notifications::TelegramNotifier.instance.notify_error(
+          "Service #{name} unhealthy, restarting",
+          context: 'TradingSystem::Daemon#check_service_health!'
+        )
+        @supervisor.restart_service(name)
+      rescue StandardError => e
+        Rails.logger.error("[TradingDaemon] Failed to restart #{name}: #{e.class} - #{e.message}")
       end
     end
   end
