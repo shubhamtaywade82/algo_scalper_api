@@ -80,4 +80,24 @@ RSpec.describe Orders::LimitChaser do
       end
     end
   end
+
+  describe "Placer.buy_limit! real implementation (not stubbed)" do
+    it "does not raise NameError when called with valid arguments" do
+      allow(DhanHQ::Models::Order).to receive(:create!) do |_attributes|
+        double("order", order_id: "ORD-1", id: "ORD-1")
+      end
+      allow(ENV).to receive(:[]).and_call_original
+      allow(ENV).to receive(:[]).with("PLACE_ORDER").and_return("true")
+
+      expect do
+        Orders::Placer.buy_limit!(
+          seg: "NSE_FNO",
+          sid: "123456",
+          qty: 50,
+          price: 100.5,
+          client_order_id: "LIMIT-TEST-1"
+        )
+      end.not_to raise_error
+    end
+  end
 end

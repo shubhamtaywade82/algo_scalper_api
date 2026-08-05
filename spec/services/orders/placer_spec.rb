@@ -13,7 +13,7 @@ RSpec.describe Orders::Placer do
   before do
     allow(Rails.cache).to receive(:read).and_return(nil)
     allow(Rails.cache).to receive(:write)
-    allow(DhanHQ::Models::Order).to receive(:create) do |attributes|
+    allow(DhanHQ::Models::Order).to receive(:create!) do |attributes|
       captured_attrs << attributes
       order_double
     end
@@ -62,7 +62,7 @@ RSpec.describe Orders::Placer do
       described_class.sell_market!(seg: segment, sid: security_id, qty: quantity, client_order_id: long_id)
       described_class.sell_market!(seg: segment, sid: security_id, qty: quantity, client_order_id: long_id)
 
-      expect(DhanHQ::Models::Order).to have_received(:create).once
+      expect(DhanHQ::Models::Order).to have_received(:create!).once
     end
   end
 
@@ -88,7 +88,7 @@ RSpec.describe Orders::Placer do
         target_price: target
       )
 
-      expect(DhanHQ::Models::Order).to have_received(:create)
+      expect(DhanHQ::Models::Order).to have_received(:create!)
       expect(captured_attrs.last).to include(
         transaction_type: DhanHQ::Constants::TransactionType::BUY,
         order_type: DhanHQ::Constants::OrderType::MARKET,
@@ -166,7 +166,7 @@ RSpec.describe Orders::Placer do
 
         expect(Rails.logger).to have_received(:error).with(/Missing required parameters/)
         expect(result).to be_nil
-        expect(DhanHQ::Models::Order).not_to have_received(:create)
+        expect(DhanHQ::Models::Order).not_to have_received(:create!)
       end
 
       it "logs order placement with correct parameters" do
@@ -184,6 +184,66 @@ RSpec.describe Orders::Placer do
         # The important thing is that it doesn't raise an error
         expect(result).to eq(order_double).or be_nil
       end
+    end
+
+    describe "broker-rejected orders" do
+      let(:client_order_id) { "REJECT-TEST-#{Time.current.to_i}" }
+
+      it "returns nil when the broker rejects the order, not a truthy unsaved Order" do
+        allow(DhanHQ::Models::Order).to receive(:create!).and_raise(
+          DhanHQ::OrderError.new("Order#create failed: insufficient margin")
+        )
+
+        result = described_class.buy_market!(
+          seg: segment,
+          sid: security_id,
+          qty: quantity,
+          client_order_id: client_order_id
+        )
+
+        expect(result).to be_nil
+      end
+    end
+  end
+
+  describe ".buy_limit!" do
+    let(:client_order_id) { "TEST-BUY-LIMIT-#{Time.current.to_i}" }
+    let(:price) { BigDecimal("100.50") }
+
+    it "creates correct payload for a limit buy order" do
+      described_class.buy_limit!(
+        seg: segment,
+        sid: security_id,
+        qty: quantity,
+        price: price,
+        client_order_id: client_order_id
+      )
+
+      expect(captured_attrs.last).to match(hash_including(
+        transaction_type: DhanHQ::Constants::TransactionType::BUY,
+        exchange_segment: segment,
+        security_id: security_id,
+        quantity: quantity,
+        order_type: DhanHQ::Constants::OrderType::LIMIT,
+        price: 100.5,
+        validity: DhanHQ::Constants::Validity::DAY
+      ))
+    end
+
+    it "validates required parameters" do
+      allow(Rails.logger).to receive(:error)
+
+      result = described_class.buy_limit!(
+        seg: nil,
+        sid: security_id,
+        qty: quantity,
+        price: price,
+        client_order_id: client_order_id
+      )
+
+      expect(Rails.logger).to have_received(:error).with(/Missing required parameters/)
+      expect(result).to be_nil
+      expect(DhanHQ::Models::Order).not_to have_received(:create!)
     end
   end
 
@@ -239,7 +299,7 @@ RSpec.describe Orders::Placer do
 
         expect(Rails.logger).to have_received(:error).with(/Missing required parameters/)
         expect(result).to be_nil
-        expect(DhanHQ::Models::Order).not_to have_received(:create)
+        expect(DhanHQ::Models::Order).not_to have_received(:create!)
       end
 
       it "logs order placement with correct parameters" do
@@ -313,7 +373,7 @@ RSpec.describe Orders::Placer do
       )
 
       expect(result).to be_nil
-      expect(DhanHQ::Models::Order).to have_received(:create).once
+      expect(DhanHQ::Models::Order).to have_received(:create!).once
     end
 
     it "stores order ID in cache for 20 minutes" do
@@ -487,7 +547,7 @@ RSpec.describe Orders::Placer do
       call_count = 0
       allow(DhanhqErrorHandler).to receive(:token_expired?).and_return(true)
       allow(Dhan::TokenManager).to receive(:refresh!)
-      allow(DhanHQ::Models::Order).to receive(:create) do
+      allow(DhanHQ::Models::Order).to receive(:create!) do
         call_count += 1
         raise "unauthorized" if call_count == 1
 

@@ -55,7 +55,7 @@ module Orders
 
         if order_placement_enabled?
           order = with_token_auto_heal(context: 'orders.buy_market') do
-            DhanHQ::Models::Order.create(payload)
+            DhanHQ::Models::Order.create!(payload)
           end
           Rails.logger.info("[Orders::Placer] BUY response: #{order.inspect}") if order
         else
@@ -108,7 +108,7 @@ module Orders
 
           if order_placement_enabled?
             slice_order = with_token_auto_heal(context: "orders.sell_market") do
-              DhanHQ::Models::Order.create(payload)
+              DhanHQ::Models::Order.create!(payload)
             end
             Rails.logger.info("[Orders::Placer] SELL response: #{slice_order.inspect}") if slice_order
             slice_order
@@ -154,7 +154,7 @@ module Orders
 
           if order_placement_enabled?
             slice_order = with_token_auto_heal(context: "orders.buy_ioc_limit") do
-              DhanHQ::Models::Order.create(payload)
+              DhanHQ::Models::Order.create!(payload)
             end
             Rails.logger.info("[Orders::Placer] BUY IOC LIMIT response: #{slice_order.inspect}") if slice_order
             slice_order
@@ -216,7 +216,7 @@ module Orders
 
           if order_placement_enabled?
             slice_order = with_token_auto_heal(context: "orders.sell_ioc_limit") do
-              DhanHQ::Models::Order.create(payload)
+              DhanHQ::Models::Order.create!(payload)
             end
             Rails.logger.info("[Orders::Placer] SELL IOC LIMIT response: #{slice_order.inspect}") if slice_order
             slice_order
@@ -262,7 +262,7 @@ module Orders
 
           if order_placement_enabled?
             slice_order = with_token_auto_heal(context: "orders.sell_limit") do
-              DhanHQ::Models::Order.create(payload)
+              DhanHQ::Models::Order.create!(payload)
             end
             Rails.logger.info("[Orders::Placer] SELL LIMIT response: #{slice_order.inspect}") if slice_order
             slice_order
@@ -289,32 +289,35 @@ module Orders
           return nil
         end
 
-        payload = {
-          transaction_type: DhanHQ::Constants::TransactionType::SELL,
-          exchange_segment: position ? position[:exchange_segment] : seg,
-          security_id: sid.to_s,
-          quantity: actual_qty.to_i,
-          order_type: DhanHQ::Constants::OrderType::MARKET,
-          product_type: position ? position[:product_type] : product_type,
-          validity: DhanHQ::Constants::Validity::DAY,
-          disclosed_quantity: 0,
-          correlation_id: normalized_id
-        }
+        place_order_with_slicing(sid: sid, qty: qty, client_order_id: normalized_id) do |slice_qty, slice_coid|
+          payload = {
+            transaction_type: DhanHQ::Constants::TransactionType::BUY,
+            exchange_segment: seg,
+            security_id: sid.to_s,
+            quantity: slice_qty.to_i,
+            order_type: DhanHQ::Constants::OrderType::LIMIT,
+            product_type: product_type,
+            price: price.to_f.round(2),
+            validity: DhanHQ::Constants::Validity::DAY,
+            correlation_id: slice_coid,
+            disclosed_quantity: 0
+          }
 
-        Rails.logger.info("[Orders::Placer] BUY LIMIT payload: #{payload.inspect}")
+          Rails.logger.info("[Orders::Placer] BUY LIMIT payload: #{payload.inspect}")
 
-        if order_placement_enabled?
-          order = with_token_auto_heal(context: 'orders.sell_market') do
-            DhanHQ::Models::Order.create(payload)
+          if order_placement_enabled?
+            slice_order = with_token_auto_heal(context: "orders.buy_limit") do
+              DhanHQ::Models::Order.create!(payload)
+            end
+            Rails.logger.info("[Orders::Placer] BUY LIMIT response: #{slice_order.inspect}") if slice_order
+            slice_order
+          else
+            Rails.logger.warn("[Orders::Placer] BUY LIMIT blocked because PLACE_ORDER is not enabled")
+            OpenStruct.new(order_id: "MOCK_LIMIT_#{SecureRandom.hex(4).upcase}", status: "success")
           end
-          Rails.logger.info("[Orders::Placer] SELL response: #{order.inspect}") if order
-        else
-          Rails.logger.warn('[Orders::Placer] SELL blocked because PLACE_ORDER is not enabled')
-          order = nil
         end
-
+      ensure
         remember(normalized_id)
-        order
       end
 
       def exit_position!(seg:, sid:, client_order_id:)
@@ -365,7 +368,7 @@ module Orders
 
         if order_placement_enabled?
           order = with_token_auto_heal(context: 'orders.exit_position') do
-            DhanHQ::Models::Order.create(payload)
+            DhanHQ::Models::Order.create!(payload)
           end
           Rails.logger.info("[Orders::Placer] EXIT response: #{order.inspect}") if order
         else
