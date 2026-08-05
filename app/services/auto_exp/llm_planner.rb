@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module AutoExp
-  class LlmPlanner
+  class LLMPlanner
     def model
       ENV['OLLAMA_MODEL'] || "llama3.2:3b"
     end
