@@ -50,7 +50,7 @@ gem 'thruster', require: false
 gem 'DhanHQ', '~> 3.0'
 
 # Telegram bot for notifications
-gem 'telegram-bot-ruby', '~> 0.19'
+gem 'telegram-bot-ruby', '~> 2.8'
 
 gem 'ollama-client', '~> 1.1'
 gem 'ruby_llm', '~> 1.16'
