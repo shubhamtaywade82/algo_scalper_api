@@ -3,6 +3,8 @@
 class AlgoConfig
   CACHE_TTL = 30 # seconds
   PROFILES_DIR = 'config/profiles'
+  TIER_PRESETS_SETTING_KEY = 'signal_tier_presets'
+  REGISTRY_SETTING_KEY = 'india_index_registry'
   # Credential-bearing sections excluded from the per-position snapshot persisted on trades.
   SENSITIVE_SECTIONS = %i[dhanhq telegram ai].freeze
 

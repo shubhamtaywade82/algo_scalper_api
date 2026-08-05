@@ -63,7 +63,7 @@ module Positions
         return nil unless hybrid_atr_enabled?
 
         options = parsed[:hybrid_atr] || {}
-        Positions::HybridAtrCalculator.calculate_sl_price(
+        Positions::HybridATRCalculator.calculate_sl_price(
           current_price: current_price,
           entry_price: entry_price,
           peak_price: peak_price,

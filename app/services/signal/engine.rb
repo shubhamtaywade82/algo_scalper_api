@@ -2113,6 +2113,8 @@ module Signal
       end
 
       def expiry_trade_allowed?(symbol)
+        return true if exit_testing_mode?
+
         expiry_model = "Strategies::ExpiryModel".safe_constantize
         return true unless expiry_model
 

@@ -460,6 +460,14 @@ class IndexTechnicalAnalyzer < ApplicationService
     defined?(TA) && TA.const_defined?(:TechnicalAnalysis)
   end
 
+  def ensure_dhanhq_ta_loaded
+    return if defined?(TA) && TA.const_defined?(:TechnicalAnalysis)
+
+    require 'dhan_hq/ta'
+  rescue LoadError => e
+    log_warn("Failed to load dhan_hq/ta: #{e.message}")
+  end
+
   def dhanhq_analysis_available?
     defined?(DhanHQ) && DhanHQ.const_defined?(:Analysis) &&
       DhanHQ::Analysis.const_defined?(:MultiTimeframeAnalyzer)
