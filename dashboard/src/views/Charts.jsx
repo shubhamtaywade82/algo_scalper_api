@@ -4,7 +4,6 @@ import { dashboardApiHeaders } from '../lib/dashboardApi'
 import { useDashboard } from '../stores/useDashboard'
 import { usePositions } from '../stores/usePositions'
 import PriceChart from '../components/charts/PriceChart'
-import { useAnalysis } from '../stores/useAnalysis'
 
 const INDICES = ['NIFTY', 'BANKNIFTY', 'SENSEX']
 const LTP_KEY = { NIFTY: 'nifty', BANKNIFTY: 'banknifty', SENSEX: 'sensex' }
@@ -17,8 +16,9 @@ const INTERVALS = [
 ]
 
 // Default indicator catalog — each entry is a self-contained config the
-// PriceChart consumes directly. Add a new overlay by appending here AND
-// registering its compute fn in PriceChart's INDICATOR_COMPUTE map.
+// PriceChart consumes directly. Overlay entries (smc_*/ict_*/pa_*/setup_scan)
+// gate the local SMC/ICT/PA canvas detectors ported from the dhanhq-charts
+// engine; sma/ema are LineSeries overlays.
 const DEFAULT_INDICATORS = [
   { id: 'sma20', type: 'sma', label: 'SMA', period: 20, color: '#fbbf24', enabled: true },
   { id: 'sma50', type: 'sma', label: 'SMA', period: 50, color: '#a78bfa', enabled: true },
@@ -26,7 +26,17 @@ const DEFAULT_INDICATORS = [
   { id: 'smc_ob', type: 'smc_ob', label: 'SMC Order Blocks', color: '#10b981', enabled: true },
   { id: 'smc_fvg', type: 'smc_fvg', label: 'SMC Fair Value Gaps', color: '#2dd4bf', enabled: false },
   { id: 'smc_eq', type: 'smc_eq', label: 'SMC Equilibrium & Zones', color: '#eab308', enabled: false },
-  { id: 'smc_swing', type: 'smc_swing', label: 'SMC Swing Structure (BOS)', color: '#a855f7', enabled: false }
+  { id: 'smc_swing', type: 'smc_swing', label: 'SMC Swing Structure (BOS)', color: '#a855f7', enabled: false },
+  { id: 'smc_liquidity', type: 'smc_liquidity', label: 'SMC Liquidity Pools', color: '#22d3ee', enabled: false },
+  { id: 'ict_sessions', type: 'ict_sessions', label: 'ICT Kill Zones', color: '#9333ea', enabled: false },
+  { id: 'ict_sb', type: 'ict_sb', label: 'Silver Bullet Windows', color: '#fbbf24', enabled: false },
+  { id: 'ict_ote', type: 'ict_ote', label: 'OTE Zone', color: '#22d3ee', enabled: false },
+  { id: 'ict_judas', type: 'ict_judas', label: 'Judas Swings', color: '#fb7185', enabled: false },
+  { id: 'ict_amd', type: 'ict_amd', label: 'AMD Power of 3', color: '#fb923c', enabled: false },
+  { id: 'pa_sd', type: 'pa_sd', label: 'Supply & Demand Zones', color: '#34d399', enabled: false },
+  { id: 'pa_tl', type: 'pa_tl', label: 'Trendline Liquidity', color: '#34d399', enabled: false },
+  { id: 'pa_cp', type: 'pa_cp', label: 'Candle Patterns', color: '#fbbf24', enabled: false },
+  { id: 'setup_scan', type: 'setup_scan', label: 'Setup Scanner (CE/PE)', color: '#a3e635', enabled: false }
 ]
 
 const THEMES = [
@@ -55,21 +65,8 @@ export default function Charts() {
   const [indexKey, setIndexKey] = createSignal(initialSymbol)
   
   const { optionsBuying } = useDashboard()
-  const { liveData } = useAnalysis()
 
   const buyingState = createMemo(() => optionsBuying() ? optionsBuying()[indexKey().toLowerCase()] : null)
-  
-  const smcContext = createMemo(() => {
-    const data = liveData(indexKey())
-    const smc = data?.smc
-    if (!smc || !smc.timeframes) return null
-    
-    const currentIval = interval()
-    if (currentIval === '1' || currentIval === '5') return smc.timeframes.ltf?.context
-    if (currentIval === '15' || currentIval === '25') return smc.timeframes.mtf?.context
-    if (currentIval === '60') return smc.timeframes.htf?.context
-    return null
-  })
   
   const savedInterval = localStorage.getItem('chart_interval') || '5'
   const [interval, setInterval_] = createSignal(savedInterval)
@@ -328,7 +325,6 @@ export default function Charts() {
               radarStrikes={() => buyingState()?.radar_strikes || []}
               breakoutReady={() => buyingState()?.breakout_ready}
               direction={() => buyingState()?.direction}
-              smcContext={smcContext}
               height={null}
               fullHeight
             />
