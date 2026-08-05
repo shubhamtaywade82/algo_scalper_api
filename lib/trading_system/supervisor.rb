@@ -84,6 +84,22 @@ module TradingSystem
       end
     end
 
+    # Best-effort health snapshot for use by API health endpoints.
+    # Returns a hash keyed by service name with boolean statuses.
+    def health_check
+      @services.transform_values do |svc|
+        if svc.respond_to?(:healthy?)
+          svc.healthy?
+        elsif svc.respond_to?(:running?)
+          svc.running?
+        else
+          true
+        end
+      rescue StandardError
+        false
+      end
+    end
+
     private
 
     def start_one(name)
@@ -100,22 +116,6 @@ module TradingSystem
       Rails.logger.info("[Supervisor] stopped #{name}")
     rescue StandardError => e
       Rails.logger.error("[Supervisor] error stopping #{name}: #{e.class} - #{e.message}")
-    end
-
-    # Best-effort health snapshot for use by API health endpoints.
-    # Returns a hash keyed by service name with boolean statuses.
-    def health_check
-      @services.transform_values do |svc|
-        if svc.respond_to?(:healthy?)
-          svc.healthy?
-        elsif svc.respond_to?(:running?)
-          svc.running?
-        else
-          true
-        end
-      rescue StandardError
-        false
-      end
     end
   end
 end
