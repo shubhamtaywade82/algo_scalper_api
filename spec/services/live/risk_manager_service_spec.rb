@@ -218,7 +218,7 @@ RSpec.describe Live::RiskManagerService do
       let(:active_cache) { instance_double(Positions::ActiveCache) }
       let(:position_data) do
         instance_double(
-          Positions::ActiveCache::PositionData,
+          Positions::PositionData,
           tracker_id: tracker.id,
           valid?: true
         )
@@ -286,7 +286,7 @@ RSpec.describe Live::RiskManagerService do
     describe 'Caching optimizations' do
       let(:active_cache) { instance_double(Positions::ActiveCache) }
       let(:position_data) do
-        Positions::ActiveCache::PositionData.new(
+        Positions::PositionData.new(
           tracker_id: tracker.id,
           security_id: tracker.security_id,
           segment: tracker.segment,
@@ -348,7 +348,7 @@ RSpec.describe Live::RiskManagerService do
           )
         end
         let(:position_data2) do
-          Positions::ActiveCache::PositionData.new(
+          Positions::PositionData.new(
             tracker_id: tracker2.id,
             security_id: tracker2.security_id,
             segment: tracker2.segment,
@@ -514,7 +514,7 @@ RSpec.describe Live::RiskManagerService do
       let(:exit_engine) { instance_double(Live::ExitEngine) }
       let(:active_cache) { instance_double(Positions::ActiveCache) }
       let(:position_data) do
-        Positions::ActiveCache::PositionData.new(
+        Positions::PositionData.new(
           tracker_id: tracker.id,
           security_id: tracker.security_id,
           segment: tracker.segment,
@@ -1383,7 +1383,7 @@ RSpec.describe Live::RiskManagerService do
 
     describe '#ensure_position_snapshot' do
       let(:position_data) do
-        Positions::ActiveCache::PositionData.new(
+        Positions::PositionData.new(
           tracker_id: tracker.id,
           security_id: tracker.security_id,
           segment: tracker.segment,
@@ -1436,7 +1436,7 @@ RSpec.describe Live::RiskManagerService do
 
     describe '#recalculate_position_metrics' do
       let(:position_data) do
-        Positions::ActiveCache::PositionData.new(
+        Positions::PositionData.new(
           tracker_id: tracker.id,
           security_id: tracker.security_id,
           segment: tracker.segment,
@@ -1938,7 +1938,7 @@ RSpec.describe Live::RiskManagerService do
 
     describe '#structure_break_against_position?' do
       let(:position_data) do
-        Positions::ActiveCache::PositionData.new(
+        Positions::PositionData.new(
           tracker_id: tracker.id,
           security_id: tracker.security_id,
           segment: tracker.segment,
@@ -1993,7 +1993,7 @@ RSpec.describe Live::RiskManagerService do
 
     describe '#normalized_position_direction' do
       let(:position_data) do
-        Positions::ActiveCache::PositionData.new(
+        Positions::PositionData.new(
           tracker_id: tracker.id,
           security_id: tracker.security_id,
           segment: tracker.segment,

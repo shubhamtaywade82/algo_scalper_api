@@ -291,7 +291,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
 
         # Ensure ActiveCache has profitable state
         allow(@mock_active_cache).to receive(:get_by_tracker_id).with(position_tracker.id).and_return(
-          Positions::ActiveCache::PositionData.new(
+          Positions::PositionData.new(
             tracker_id: position_tracker.id,
             security_id: '12345',
             entry_price: 100.0,
@@ -326,7 +326,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
       it 'activates trailing stop only after 10% profit' do
         # Position with 5% profit (below 10% threshold)
         allow(Positions::ActiveCache.instance).to receive(:get_by_tracker_id).with(position_tracker.id).and_return(
-          Positions::ActiveCache::PositionData.new(
+          Positions::PositionData.new(
             tracker_id: position_tracker.id,
             security_id: '12345',
             entry_price: 100.0,

@@ -16,7 +16,7 @@ RSpec.describe 'Trailing Activation Percentage Rule' do
 
   describe 'RuleContext#trailing_activation_pct' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 75,
@@ -105,7 +105,7 @@ RSpec.describe 'Trailing Activation Percentage Rule' do
 
   describe 'RuleContext#trailing_activated?' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 75,
@@ -192,7 +192,7 @@ RSpec.describe 'Trailing Activation Percentage Rule' do
 
   describe 'TrailingStopRule with activation threshold' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 75,
@@ -265,7 +265,7 @@ RSpec.describe 'Trailing Activation Percentage Rule' do
 
   describe 'PeakDrawdownRule with activation threshold' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 75,
@@ -323,7 +323,7 @@ RSpec.describe 'Trailing Activation Percentage Rule' do
   describe 'Real-world scenarios' do
     context 'Scenario A: 10% activation, Entry ₹100, Lot 75' do
       let(:position_data) do
-        Positions::ActiveCache::PositionData.new(
+        Positions::PositionData.new(
           tracker_id: tracker.id,
           entry_price: 100.0,
           quantity: 300, # 4 lots × 75
@@ -359,7 +359,7 @@ RSpec.describe 'Trailing Activation Percentage Rule' do
 
     context 'Scenario B: 6% activation, Entry ₹100, Lot 75' do
       let(:position_data) do
-        Positions::ActiveCache::PositionData.new(
+        Positions::PositionData.new(
           tracker_id: tracker.id,
           entry_price: 100.0,
           quantity: 300,
@@ -390,7 +390,7 @@ RSpec.describe 'Trailing Activation Percentage Rule' do
 
     context 'Scenario C: 6.66% activation' do
       let(:position_data) do
-        Positions::ActiveCache::PositionData.new(
+        Positions::PositionData.new(
           tracker_id: tracker.id,
           entry_price: 100.0,
           quantity: 300,
@@ -421,7 +421,7 @@ RSpec.describe 'Trailing Activation Percentage Rule' do
 
     context 'Scenario D: 13.32% activation' do
       let(:position_data) do
-        Positions::ActiveCache::PositionData.new(
+        Positions::PositionData.new(
           tracker_id: tracker.id,
           entry_price: 100.0,
           quantity: 300,

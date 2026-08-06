@@ -13,7 +13,7 @@ RSpec.describe Risk::Rules::SessionEndRule do
     )
   end
   let(:position_data) do
-    Positions::ActiveCache::PositionData.new(
+    Positions::PositionData.new(
       tracker_id: tracker.id,
       entry_price: 100.0,
       current_ltp: 110.0,

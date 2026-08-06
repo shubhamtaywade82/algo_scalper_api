@@ -23,7 +23,7 @@ RSpec.describe Live::RiskManagerService, 'Underlying and Structure Exits' do
     )
   end
   let(:position_data) do
-    Positions::ActiveCache::PositionData.new(
+    Positions::PositionData.new(
       tracker_id: tracker.id,
       security_id: tracker.security_id,
       segment: tracker.segment,

@@ -14,7 +14,7 @@ RSpec.describe Risk::Rules::StopLossRule do
     )
   end
   let(:position_data) do
-    Positions::ActiveCache::PositionData.new(
+    Positions::PositionData.new(
       tracker_id: tracker.id,
       entry_price: 100.0,
       quantity: 10,

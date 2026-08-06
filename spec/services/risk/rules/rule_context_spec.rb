@@ -18,7 +18,7 @@ RSpec.describe Risk::Rules::RuleContext do
     )
   end
   let(:position_data) do
-    Positions::ActiveCache::PositionData.new(
+    Positions::PositionData.new(
       tracker_id: tracker.id,
       security_id: '50074',
       segment: 'NSE_FNO',
