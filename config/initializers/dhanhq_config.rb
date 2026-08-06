@@ -151,8 +151,45 @@ def fetch_authority_token!
       )
     end
 
+    # Try to fetch new token from authority service (including backup fallback for API errors)
+    # First try the token authority if configured
+    if token_url.present? && authority_token.present?
+      begin
+        response = Faraday.get(token_url) do |req|
+          req.headers["Authorization"] = "Bearer #{authority_token}"
+        end
+
+        if response.success?
+          data = JSON.parse(response.body)
+          if data["access_token"].present?
+            return data["access_token"]
+          end
+        end
+
+        log_token_authority_fallback_once!(key: "scalper:token_authority_failed_http", message: "[SCALPER] Token authority HTTP failed (#{response.status}), trying TOTP refresh...")
+      rescue Faraday::ConnectionFailed, Faraday::TimeoutError, Errno::ECONNREFUSED
+        log_token_authority_fallback_once!(key: "scalper:token_authority_connection_failed", message: "[SCALPER] Token authority connection failed, trying TOTP refresh...")
+      rescue StandardError => e
+        log_token_authority_fallback_once!(key: "scalper:token_authority_error", message: "[SCALPER] Token authority error: #{e.message}, trying TOTP refresh...")
+      end
+    end
+
+    # Final fallback to environment variables if token authority service is not working
     env_token = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
-    raise "Token authority unreachable and no ENV['DHAN_ACCESS_TOKEN'] found" if env_token.blank?
+
+    # Check if either credential is available before attempting validation
+    if env_token.blank?
+      missing_creds = []
+      missing_creds << "DHAN_ACCESS_TOKEN or ACCESS_TOKEN" unless (ENV['DHAN_ACCESS_TOKEN'] || ENV['ACCESS_TOKEN']).present?
+
+      error_msg = if missing_creds.any?
+        "[SCALPER] Token authority unreachable and no ENV[#{missing_creds.join(' or ')}] found"
+      else
+        "[SCALPER] Token authority unreachable but fallback credentials available; fetch failed"
+      end
+
+      raise error_msg
+    end
 
     env_token
   end
