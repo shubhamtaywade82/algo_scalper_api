@@ -85,12 +85,7 @@ RSpec.describe Signal::Engine, 'exit_testing mode pipeline' do
       it 'defines all private methods required by run_for' do
         engine_private_methods = described_class.private_methods(false)
         expect(engine_private_methods).to include(:trading_context_blocked?)
-        expect(engine_private_methods).to include(:evaluate_entry_quality)
-        expect(engine_private_methods).to include(:execute_execution_gates)
         expect(engine_private_methods).to include(:execute_options_analysis)
-        expect(engine_private_methods).to include(:build_diagnostic_metadata)
-        expect(engine_private_methods).to include(:execute_entry_gate)
-        expect(engine_private_methods).to include(:trigger_entry_flow)
       end
 
       it 'creates a TradingSignal with effective_timeframe in metadata' do

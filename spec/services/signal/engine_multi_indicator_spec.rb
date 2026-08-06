@@ -294,7 +294,6 @@ RSpec.describe Signal::Engine, :vcr do
     before do
       allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
       allow(AlgoConfig).to receive(:fetch).and_return({ signals: signals_cfg })
-      allow(described_class).to receive(:perform_standard_ta).and_return({})
       empty_strikes = Options::ChainAnalyzer::StrikePickResult.new(
         [],
         'strike_selector_blocked',

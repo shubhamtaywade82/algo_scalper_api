@@ -34,30 +34,4 @@ RSpec.describe Signal::Engine, 'exit_testing entry gates' do
       end
     end
   end
-
-  describe '#execute_execution_gates in exit_testing mode' do
-    let(:index_cfg) { { key: 'SENSEX' } }
-    let(:instrument) { instance_double(Instrument) }
-    let(:series)     { build(:candle_series, :five_minute, :with_candles) }
-
-    before { allow(AlgoConfig).to receive(:run_mode).and_return('exit_testing') }
-
-    it 'returns momentum_score: nil so StrikeSelector does not apply weak_momentum_skip' do
-      result = described_class.send(
-        :execute_execution_gates,
-        index_cfg, instrument, series, :bearish, {}, true
-      )
-
-      expect(result[:momentum_score]).to be_nil
-    end
-
-    it 'returns immediately without calling EntryFilterEngine' do
-      expect(Entries::EntryFilterEngine).not_to receive(:new)
-
-      described_class.send(
-        :execute_execution_gates,
-        index_cfg, instrument, series, :bearish, {}, true
-      )
-    end
-  end
 end

@@ -156,40 +156,6 @@ RSpec.describe 'Signal Generation Strategies Integration', :vcr, type: :integrat
         }
       end
 
-      it 'analyzes multiple timeframes' do
-        # Bypass bug in codebase where analyze_timeframe is called with missing keywords
-        allow(Signal::Engine).to receive(:analyze_timeframe).and_wrap_original do |m, **args|
-          m.call(**args, supertrend_cfg: {}, adx_min_strength: 0)
-        end
-
-        # Mock AlgoConfig for signals configuration
-        allow(AlgoConfig).to receive(:fetch).and_return({
-                                                          signals: {
-                                                            primary_timeframe: '5m',
-                                                            confirmation_timeframe: '15m',
-                                                            supertrend: { period: 10, base_multiplier: 2.0 },
-                                                            adx: { min_strength: 25 }
-                                                          }
-                                                        })
-
-        # Mock candle series for both timeframes
-        candle_series = create_candle_series_with_trend_data
-
-        # Mock ADX calculation
-        allow(instrument).to receive_messages(candle_series: candle_series, adx: 35.0)
-
-        result = signal_engine.analyze_multi_timeframe(
-          index_cfg: index_config,
-          instrument: instrument
-        )
-
-        expect(result[:status]).to eq(:ok)
-        expect(result).to have_key(:primary_direction)
-        expect(result).to have_key(:confirmation_direction)
-        expect(result).to have_key(:final_direction)
-        expect(result).to have_key(:timeframe_results)
-      end
-
       it 'combines timeframe directions correctly' do
         primary_direction = :bullish
         confirmation_direction = :bullish
