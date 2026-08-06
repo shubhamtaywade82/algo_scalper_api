@@ -51,8 +51,10 @@ module TradingSystem
     end
 
     def setup_supervisor!
-      @supervisor ||= Rails.application.config.x.trading_supervisor
-      @supervisor ||= TradingSystem::Bootstrap.build_supervisor
+      existing = Rails.application.config.x.trading_supervisor
+      existing = nil unless existing.is_a?(TradingSystem::Supervisor)
+
+      @supervisor ||= existing || TradingSystem::Bootstrap.build_supervisor
 
       Rails.application.config.x.trading_supervisor = @supervisor
     end
