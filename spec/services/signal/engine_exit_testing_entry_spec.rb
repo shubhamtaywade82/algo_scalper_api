@@ -15,7 +15,7 @@ RSpec.describe Signal::Engine, 'exit_testing entry gates' do
         allow(Market::ExpiryChecker).to receive(:expiry_today?).and_return(true)
         allow(Strategies::ExpiryModel).to receive(:session).and_return(:midday)
 
-        result = described_class.send(:expiry_trade_allowed?, 'NIFTY')
+        result = Signal::ExpiryGate.expiry_trade_allowed?('NIFTY')
 
         expect(result).to be true
       end
@@ -28,7 +28,7 @@ RSpec.describe Signal::Engine, 'exit_testing entry gates' do
         allow(Market::ExpiryChecker).to receive(:expiry_today?).and_return(true)
         allow(Strategies::ExpiryModel).to receive(:session).and_return(:midday)
 
-        result = described_class.send(:expiry_trade_allowed?, 'NIFTY')
+        result = Signal::ExpiryGate.expiry_trade_allowed?('NIFTY')
 
         expect(result).to be false
       end
