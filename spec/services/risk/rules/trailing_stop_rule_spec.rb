@@ -2,6 +2,9 @@
 
 require 'rails_helper'
 
+# rubocop:disable RSpec/AnyInstance -- Orders::Analyzer is instantiated internally
+# inside TrailingStopRule's delegated UnifiedExitChecker.trailing_stop_hit? call,
+# not injected, so there's no seam to pass a double through instead.
 RSpec.describe Risk::Rules::TrailingStopRule do
   let(:instrument) { create(:instrument, :nifty_future) }
   let(:tracker) do
@@ -157,3 +160,4 @@ RSpec.describe Risk::Rules::TrailingStopRule do
     end
   end
 end
+# rubocop:enable RSpec/AnyInstance
