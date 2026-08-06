@@ -16,6 +16,17 @@ module Entries
         new(context).call
       end
 
+      def self.enforce_structure_gate(index_cfg:, instrument:, direction:, entry_price:, entry_metadata:)
+        context = {
+          index_cfg: index_cfg,
+          instrument: instrument,
+          direction: direction,
+          ltp: entry_price,
+          entry_metadata: entry_metadata
+        }
+        new(context).send(:enforce_structure_gate)
+      end
+
       def initialize(context)
         @context = context
         @index_cfg = context[:index_cfg]

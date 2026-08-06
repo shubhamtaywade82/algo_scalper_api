@@ -4,21 +4,22 @@ require 'rails_helper'
 
 RSpec.describe Entries::EntryGuard do
   let(:index_cfg) { { key: 'NIFTY', segment: 'NSE_FNO', cooldown_sec: 0 } }
-  let(:pick) { { symbol: 'NIFTY24MAR22000CE', security_id: '12345', segment: 'NSE_FNO' } }
+  let(:pick) { { symbol: 'NIFTY24MAR22000CE', security_id: '12345', segment: 'NSE_FNO', ltp: BigDecimal('150.0') } }
   let(:direction) { 'LONG' }
-  let(:signal) { double('Signal', record_entry_outcome: true) }
-  let(:instrument) { instance_double(Instrument, id: 1, symbol_name: 'NIFTY', exchange_segment: 'NSE_IDX') }
+  let(:signal) { double(record_entry_outcome: true) } # rubocop:disable RSpec/VerifiedDoubles
+  let(:instrument) { create(:instrument, symbol_name: 'NIFTY', exchange: 'NSE', segment: 'index', security_id: '13') }
   let(:ltp) { BigDecimal('150.0') }
 
-  before do
-    # Generic pipeline pass
-    allow(described_class.entry_guard_pipeline).to receive(:run).and_return(Entries::EntryGuardPipeline::PASS)
-
-    # Mock order execution
-    allow(Entries::OrderExecutionService).to receive(:call).and_return(instance_double(PositionTracker))
-  end
-
   describe '.try_enter' do
+    before do
+      instrument
+      # Generic pipeline pass
+      allow(described_class.entry_guard_pipeline).to receive(:run).and_return(Entries::EntryGuardPipeline::PASS)
+
+      # Mock order execution
+      allow(Entries::OrderExecutionService).to receive(:call).and_return(instance_double(PositionTracker))
+    end
+
     context 'when pipeline fails' do
       let(:blocked_reason) { 'pipeline_reason' }
 
@@ -61,19 +62,19 @@ RSpec.describe Entries::EntryGuard do
       end
     end
   end
-end
 
-RSpec.describe Entries::Guards::ExposureGuard do
-  describe '.exposure_ok?' do
-    let(:db_instrument) { create(:instrument) }
+  describe Entries::Guards::ExposureGuard do
+    describe '.exposure_ok?' do
+      let(:db_instrument) { create(:instrument) }
 
-    it 'returns true when under limit' do
-      expect(described_class.exposure_ok?(instrument: db_instrument, side: 'long_ce', max_same_side: 3)).to be true
-    end
+      it 'returns true when under limit' do
+        expect(described_class.exposure_ok?(instrument: db_instrument, side: 'long_ce', max_same_side: 3)).to be true
+      end
 
-    it 'returns false when at limit' do
-      create_list(:position_tracker, 2, instrument: db_instrument, status: 'active', side: 'long_ce', segment: 'NSE_FNO', security_id: '999')
-      expect(described_class.exposure_ok?(instrument: db_instrument, side: 'long_ce', max_same_side: 2)).to be false
+      it 'returns false when at limit' do
+        create_list(:position_tracker, 2, instrument: db_instrument, status: 'active', side: 'long_ce', segment: 'NSE_FNO', security_id: '999')
+        expect(described_class.exposure_ok?(instrument: db_instrument, side: 'long_ce', max_same_side: 2)).to be false
+      end
     end
   end
 end

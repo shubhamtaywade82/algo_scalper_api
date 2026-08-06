@@ -8,7 +8,7 @@ RSpec.describe Entries::Guards::SegmentExpectancyGuard do
     let(:index_key) { 'NIFTY' }
     let(:algo_config) { instance_double(AlgoConfig::Configuration) }
     let(:time_regime_service) { instance_double(Live::TimeRegimeService) }
-    let(segment_expectancy_analyzer) { instance_double(Trading::SegmentExpectancyAnalyzer) }
+    let(:segment_expectancy_analyzer) { instance_double(Trading::SegmentExpectancyAnalyzer) }
 
     before do
       allow(AlgoConfig).to receive(:fetch).and_return(algo_config)

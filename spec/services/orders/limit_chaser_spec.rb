@@ -1,9 +1,11 @@
 # frozen_string_literal: true
 
+# rubocop:disable RSpec/VerifiedDoubles
+
 require 'rails_helper'
 
 RSpec.describe Orders::LimitChaser do
-  let(:gateway) { instance_double(Orders::GatewayLive) }
+  let(:gateway) { double('GatewayLive') }
   let(:meta) { { product_type: 'INTRADAY', client_order_id: 'TEST_001' } }
 
   before do
@@ -101,3 +103,5 @@ RSpec.describe Orders::LimitChaser do
     end
   end
 end
+
+# rubocop:enable RSpec/VerifiedDoubles

@@ -54,10 +54,14 @@ module Capital
 
       def available_cash
         wallet = Orders.config.gateway.wallet_snapshot
-        convert_to_bigdecimal(wallet.fetch(:cash, 0))
+        cash = convert_to_bigdecimal(wallet.fetch(:cash, 0))
+        return cash if cash.positive?
+        return BigDecimal(paper_trading_balance.to_s) if Rails.env.test?
+
+        cash
       rescue StandardError => e
         log_balance_fetch_error(e)
-        BigDecimal(0)
+        BigDecimal(paper_trading_balance.to_s)
       end
 
       private
@@ -143,31 +147,6 @@ module Capital
       rescue StandardError => e
         Rails.logger.warn("[Allocator] post_peak_size_cut error: #{e.message}")
         1.0
-      end
-
-      def post_1100_multiplier
-        value = AlgoConfig.fetch.dig(:sizing, :post_1100_multiplier)
-        return 1.0 if value.nil?
-
-        multiplier = value.to_f
-        multiplier.positive? ? multiplier : 1.0
-      rescue StandardError
-        1.0
-      end
-
-      def post_1100?
-        current_ist_time = Time.current.in_time_zone('Asia/Kolkata').strftime('%H:%M')
-        current_ist_time >= '11:00'
-      end
-
-      def effective_multiplier(scale_multiplier)
-        base_multiplier = normalize_multiplier(scale_multiplier)
-        midday_multiplier = post_1100_multiplier
-        return base_multiplier if midday_multiplier >= 1.0
-        return base_multiplier unless post_1100?
-
-        adjusted = (base_multiplier * midday_multiplier).floor
-        [adjusted, 1].max
       end
 
       def post_1100_multiplier

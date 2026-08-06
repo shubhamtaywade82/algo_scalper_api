@@ -19,46 +19,9 @@ RSpec.describe "Entries::EntryGuard Integration" do
     Rails.cache.clear
   end
 
-  describe '.weekly_contract?' do
-    it 'returns true for weekly derivatives' do
-      expect(Entries::EntryGuard.weekly_contract?(pick: pick, index_cfg: index_cfg)).to be true
-    end
-
-    it 'returns false for monthly derivatives' do
-      derivative.update(expiry_flag: 'MONTHLY')
-      expect(Entries::EntryGuard.weekly_contract?(pick: pick, index_cfg: index_cfg)).to be false
-    end
-  end
-
-  describe '.exposure_ok? (Pyramiding)' do
-    it 'allows first position' do
-      expect(Entries::EntryGuard.exposure_ok?(instrument: instrument, side: 'LONG', max_same_side: 2)).to be true
-    end
-
-    context 'with one existing position' do
-      let!(:first_pos) { create(:position_tracker, :active, instrument: instrument, side: 'LONG', segment: 'NSE_FNO', entry_price: 100, quantity: 50) }
-
-      it 'blocks second position if first is in loss' do
-        # Mock PnL to be negative
-        allow_any_instance_of(PositionTracker).to receive(:last_pnl_rupees).and_return(-100)
-        expect(Entries::EntryGuard.exposure_ok?(instrument: instrument, side: 'LONG', max_same_side: 2)).to be false
-      end
-
-      it 'allows second position if first is in profit and old enough' do
-        # Mock PnL to be positive
-        allow_any_instance_of(PositionTracker).to receive(:last_pnl_rupees).and_return(500)
-        # Mock updated_at to be old enough
-        first_pos.update_columns(updated_at: 10.minutes.ago)
-        expect(Entries::EntryGuard.exposure_ok?(instrument: instrument, side: 'LONG', max_same_side: 2)).to be true
-      end
-
-      it 'blocks second position if first is in profit but too fresh' do
-        allow_any_instance_of(PositionTracker).to receive(:last_pnl_rupees).and_return(500)
-        first_pos.update_columns(updated_at: 1.minute.ago)
-        expect(Entries::EntryGuard.exposure_ok?(instrument: instrument, side: 'LONG', max_same_side: 2)).to be false
-      end
-    end
-  end
+  # .weekly_contract? and .exposure_ok?/pyramiding logic moved to
+  # Guards::WeeklyExpiryGuard and Guards::ExposureGuard respectively —
+  # see weekly_expiry_guard_spec.rb and exposure_guard_spec.rb for coverage.
 
   describe '.banknifty_last_week?' do
     let(:bn_instrument) { create(:instrument, symbol_name: 'BANKNIFTY', exchange: :nse, segment: :index) }
