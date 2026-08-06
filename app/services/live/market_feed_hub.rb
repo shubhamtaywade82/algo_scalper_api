@@ -423,11 +423,17 @@ module Live
       return false if ENV['BACKTEST_MODE'] == '1' || ENV['SCRIPT_MODE'] == '1' || ENV['DISABLE_TRADING_SERVICES'] == '1'
       return false if defined?($PROGRAM_NAME) && $PROGRAM_NAME.include?('runner') # rubocop:disable Style/GlobalVars
 
-      # Always enabled - just check for credentials
-      # Support both naming conventions: CLIENT_ID/DHAN_CLIENT_ID and ACCESS_TOKEN/DHAN_ACCESS_TOKEN
+      # Support both static ENV credentials and dynamic 3-tier token providers
       client_id = ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
-      access    = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+      access    = resolved_access_token.presence
       client_id.present? && access.present?
+    end
+
+    def resolved_access_token
+      ENV['DHAN_ACCESS_TOKEN'].presence ||
+        ENV['ACCESS_TOKEN'].presence ||
+        (defined?(DhanHQ) && DhanHQ.configuration.access_token.presence) ||
+        (defined?(Dhan::TokenManager) && Dhan::TokenManager.current_token.presence)
     end
 
     def ensure_running!

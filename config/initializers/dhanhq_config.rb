@@ -121,6 +121,7 @@ end
 
 def fetch_authority_token!
   Rails.cache.fetch("scalper:dhan_token", expires_in: 60.seconds) do
+    # Tier 1: External Token Authority Server
     token_url = token_authority_url
     authority_token = ENV["DHAN_TOKEN_ACCESS_TOKEN"].presence
 
@@ -132,66 +133,56 @@ def fetch_authority_token!
 
         if response.success?
           data = JSON.parse(response.body)
-          return data["access_token"] if data["access_token"].present?
-        end
-
-        Rails.logger.warn "[SCALPER] Token authority unreachable (#{response.status}), trying TOTP refresh..."
-      rescue StandardError => e
-        Rails.logger.error "[SCALPER] Token authority fetch failed: #{e.message}, trying TOTP refresh..."
-      end
-    elsif token_url.present?
-      log_token_authority_fallback_once!(
-        key: "scalper:token_authority_missing_bearer",
-        message: "[SCALPER] Token authority token missing (DHAN_TOKEN_ACCESS_TOKEN), trying TOTP refresh..."
-      )
-    else
-      log_token_authority_fallback_once!(
-        key: "scalper:token_authority_invalid_url",
-        message: "[SCALPER] Token authority URL invalid/missing (TRADER_API_BASE_URL), trying TOTP refresh..."
-      )
-    end
-
-    # Try to fetch new token from authority service (including backup fallback for API errors)
-    # First try the token authority if configured
-    if token_url.present? && authority_token.present?
-      begin
-        response = Faraday.get(token_url) do |req|
-          req.headers["Authorization"] = "Bearer #{authority_token}"
-        end
-
-        if response.success?
-          data = JSON.parse(response.body)
           if data["access_token"].present?
+            Rails.logger.info "[SCALPER] Token resolved via Tier 1 (Token Authority)"
             return data["access_token"]
           end
         end
 
-        log_token_authority_fallback_once!(key: "scalper:token_authority_failed_http", message: "[SCALPER] Token authority HTTP failed (#{response.status}), trying TOTP refresh...")
-      rescue Faraday::ConnectionFailed, Faraday::TimeoutError, Errno::ECONNREFUSED
-        log_token_authority_fallback_once!(key: "scalper:token_authority_connection_failed", message: "[SCALPER] Token authority connection failed, trying TOTP refresh...")
+        log_token_authority_fallback_once!(
+          key: "scalper:token_authority_failed_http",
+          message: "[SCALPER] Tier 1 (Token authority) HTTP failed (#{response.status}), trying Tier 2 (TOTP refresh)..."
+        )
       rescue StandardError => e
-        log_token_authority_fallback_once!(key: "scalper:token_authority_error", message: "[SCALPER] Token authority error: #{e.message}, trying TOTP refresh...")
+        log_token_authority_fallback_once!(
+          key: "scalper:token_authority_error",
+          message: "[SCALPER] Tier 1 (Token authority) error: #{e.message}, trying Tier 2 (TOTP refresh)..."
+        )
+      end
+    elsif token_url.present?
+      log_token_authority_fallback_once!(
+        key: "scalper:token_authority_missing_bearer",
+        message: "[SCALPER] Tier 1 token missing (DHAN_TOKEN_ACCESS_TOKEN), trying Tier 2 (TOTP refresh)..."
+      )
+    end
+
+    # Tier 2: Automated TOTP Refresh (Dhan::TokenManager)
+    if defined?(Dhan::TokenManager)
+      begin
+        totp_token = Dhan::TokenManager.current_token!
+        if totp_token.present?
+          Rails.logger.info "[SCALPER] Token resolved via Tier 2 (TOTP refresh)"
+          return totp_token
+        end
+
+        Rails.logger.warn "[SCALPER] Tier 2 (TOTP refresh) returned no token, trying Tier 3 (Static ENV)..."
+      rescue StandardError => e
+        Rails.logger.warn "[SCALPER] Tier 2 (TOTP refresh) error: #{e.message}, trying Tier 3 (Static ENV)..."
       end
     end
 
-    # Final fallback to environment variables if token authority service is not working
+    # Tier 3: Static Environment Variable Fallback
     env_token = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
-
-    # Check if either credential is available before attempting validation
-    if env_token.blank?
-      missing_creds = []
-      missing_creds << "DHAN_ACCESS_TOKEN or ACCESS_TOKEN" unless (ENV['DHAN_ACCESS_TOKEN'] || ENV['ACCESS_TOKEN']).present?
-
-      error_msg = if missing_creds.any?
-        "[SCALPER] Token authority unreachable and no ENV[#{missing_creds.join(' or ')}] found"
-      else
-        "[SCALPER] Token authority unreachable but fallback credentials available; fetch failed"
-      end
-
-      raise error_msg
+    if env_token.present?
+      Rails.logger.info "[SCALPER] Token resolved via Tier 3 (Static ENV)"
+      return env_token
     end
 
-    env_token
+    # Stop: All 3 tiers failed
+    raise "[SCALPER] DhanHQ authentication failed across all tiers:\n  " \
+          "- Tier 1 (Token Authority): Unreachable or unconfigured\n  " \
+          "- Tier 2 (TOTP Auto-Refresh): Failed or missing credentials (DHAN_CLIENT_ID, DHAN_PIN, DHAN_TOTP_SECRET)\n  " \
+          "- Tier 3 (Static ENV): ENV[DHAN_ACCESS_TOKEN or ACCESS_TOKEN] not set"
   end
 end
 

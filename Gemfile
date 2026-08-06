@@ -25,7 +25,7 @@ gem 'solid_queue'
 gem 'concurrent-ruby'
 gem 'connection_pool', '~> 3.0'
 gem 'json', '>= 2.19.2'
-gem 'redis'
+gem 'redis', '~> 5.3'
 gem 'ruby-technical-analysis'
 gem 'technical-analysis'
 
