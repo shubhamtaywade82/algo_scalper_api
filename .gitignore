@@ -2,6 +2,10 @@ log/
 tmp/
 coverage/
 spec/failed_examples.txt
+/failed_examples*.txt
+/rspec_out*.txt
+/spec_failure.txt
+/temp_rspec_output.txt
 .env
 .env*.local
 
