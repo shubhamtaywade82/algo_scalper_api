@@ -7,6 +7,12 @@ export function startAnalytics(client: DhanClient): void {
     return;
   }
 
+  // Unhandled "error" events crash the process (Node EventEmitter default) — reconnects on
+  // token rotation (see auth.ts) fire these; must be caught, not left to propagate.
+  client.ws.market.on("error", (e: any) => {
+    console.error("[Analytics] WebSocket market error:", e);
+  });
+
   client.ws.market.on("tick", async (tick: any) => {
     try {
       if (!tick || !tick.securityId || !tick.ltp) return;

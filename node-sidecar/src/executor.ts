@@ -18,6 +18,10 @@ export async function startExecutor(client: DhanClient): Promise<void> {
 
   // Set up WebSocket listeners if available
   if (client.ws) {
+    // Unhandled "error" events crash the process (Node EventEmitter default) — reconnects on
+    // token rotation (see auth.ts) fire these; must be caught, not left to propagate.
+    client.ws.orders?.on("error", (e: any) => console.error("[Executor] Orders WS error:", e));
+    client.ws.market?.on("error", (e: any) => console.error("[Executor] Market WS error:", e));
     client.ws.orders?.on("order", (state: any) => tracker.onOrderUpdate(state));
     client.ws.market?.on("tick", (tick: any) => monitor.onTick(tick));
   }

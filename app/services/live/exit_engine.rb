@@ -118,82 +118,19 @@ module Live
       )
     end
 
-    # Finalizes tracker state and notifications once broker accepts exit order.
-    # @param tracker [PositionTracker]
-    # @param exit_price [BigDecimal, Float, nil]
-    # @param reason [String]
-    # @return [Hash]
-    def finalize_exit!(tracker, exit_price:, reason:)
-      tracker.with_lock do
-        tracker.reload
-        return { success: true, exit_price: tracker.exit_price, reason: tracker.exit_reason || reason } if tracker.exited?
+    # Determine if router result indicates success.
+    # Handles various return formats: boolean true, hash with success: true/1/"true"/"yes".
+    def success?(result)
+      return true if result == true
+      return false unless result.is_a?(Hash)
 
-        tracker.mark_exited!(
-          exit_price: exit_price,
-          exit_reason: reason
-        )
-      end
+      success_value = result[:success]
+      return true if success_value == true
+      return true if success_value == 1
+      return true if success_value.to_s.downcase == 'true'
+      return true if success_value.to_s.downcase == 'yes'
 
-      tracker.reload
-      normalized_reason = normalize_exit_reason_with_final_pnl(tracker, reason)
-
-      Rails.logger.info("[ExitEngine] Exit executed #{tracker.order_no}: #{normalized_reason} (coid: #{tracker.exit_coid})")
-
-      record_trade_telemetry(tracker, exit_price, normalized_reason)
-      notify_telegram_exit(tracker, normalized_reason, exit_price)
-
-      { success: true, exit_price: exit_price, reason: normalized_reason, client_order_id: tracker.exit_coid }
-    rescue StandardError => e
-      tracker.reload
-      if tracker.exited?
-        Rails.logger.info("[ExitEngine] Tracker already exited (likely by OrderUpdateHandler): #{tracker.order_no}")
-        { success: true, exit_price: tracker.exit_price, reason: tracker.exit_reason || reason, client_order_id: tracker.exit_coid }
-      else
-        Rails.logger.error("[ExitEngine] Order placed but tracker update failed: #{tracker.order_no}: #{e.class} - #{e.message}")
-        raise
-      end
-    end
-
-    # Ensures displayed exit reason reflects final net PnL percentage.
-    # @param tracker [PositionTracker]
-    # @param reason [String]
-    # @return [String]
-    def normalize_exit_reason_with_final_pnl(tracker, reason)
-      final_pnl = tracker.last_pnl_rupees
-      entry_price = tracker.entry_price
-      quantity = tracker.quantity
-
-      unless final_pnl.present? && entry_price.present? && quantity.present? &&
-             entry_price.to_f.positive? && quantity.to_i.positive? && reason.present? && reason.include?('%')
-        Rails.logger.warn("[ExitEngine] Cannot update exit reason for #{tracker.order_no}: final_pnl=#{final_pnl.inspect}, entry_price=#{entry_price.inspect}, quantity=#{quantity.inspect}, reason=#{reason.inspect}")
-        return reason
-      end
-
-      pnl_pct_display = ((final_pnl.to_f / (entry_price.to_f * quantity.to_i)) * 100.0).round(2)
-      base_reason = reason.split(/\s+-?\d+\.?\d*%/).first&.strip || reason.split('%').first&.strip || reason
-      updated_reason = "#{base_reason} #{pnl_pct_display}%"
-      return reason if reason == updated_reason
-
-      Rails.logger.info("[ExitEngine] Updating exit reason for #{tracker.order_no}: '#{reason}' -> '#{updated_reason}' (PnL: ₹#{final_pnl}, PnL%: #{pnl_pct_display}%)")
-      meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
-      meta['exit_reason'] = updated_reason
-      tracker.update_column(:meta, meta)
-      updated_reason
-    end
-
-    # Generates a deterministic, broker-safe correlation id for exits.
-    # @param tracker [PositionTracker]
-    # @return [String]
-    def deterministic_exit_coid(tracker)
-      seed = "exit-#{tracker.id}-#{tracker.order_no}-#{tracker.security_id}"
-      "AS-EXIT-#{Digest::SHA256.hexdigest(seed)[0, 20]}"
-    end
-
-    # Resolve LTP via the market-data query boundary
-    def safe_ltp(tracker)
-      Live::TickQuery.ltp_for(tracker)
-    rescue StandardError
-      nil
+      false
     end
 
     # Finalizes tracker state and notifications once broker accepts exit order.
