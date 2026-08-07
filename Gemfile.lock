@@ -553,7 +553,7 @@ GEM
       net-ssh (>= 2.8.0)
       ostruct
     technical-analysis (0.2.4)
-    telegram-bot-ruby (2.8.0)
+    telegram-bot-ruby (2.8.1)
       dry-struct (~> 1.6)
       faraday (~> 2.0)
       faraday-multipart (~> 1.0)
