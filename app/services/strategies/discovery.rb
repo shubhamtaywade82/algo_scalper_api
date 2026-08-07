@@ -115,7 +115,13 @@ module Strategies
                   )
                 end
 
-      strategy_record.update!(current_version: version, name: plugin[:name]) if strategy_record.name != plugin[:name]
+      # Always advance current_version to the version just synced/found — Manager (manager.rb:157)
+      # and backtest strategy resolution both key off this to pick which version to run. Previously
+      # gated on `name != plugin[:name]`, but find_or_create_by!'s block already sets the name at
+      # creation time, so that condition was always false on first sync and current_version never
+      # got set for a freshly-discovered strategy.
+      strategy_record.update!(name: plugin[:name]) if strategy_record.name != plugin[:name]
+      strategy_record.update!(current_version: version) if strategy_record.current_version_id != version.id
       version
     rescue ActiveRecord::RecordInvalid => e
       raise PluginError, e.message
