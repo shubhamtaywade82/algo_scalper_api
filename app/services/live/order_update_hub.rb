@@ -17,6 +17,7 @@ module Live
       @watchdog_thread = nil
       @restarting = false
       @started_at = nil
+      @reconnect_attempts = 0
     end
 
     def start!
@@ -57,7 +58,13 @@ module Live
         return unless @ws_client
 
         begin
-          @ws_client.stop
+          if ws_client.respond_to?(:disconnect!)
+            ws_client.disconnect!
+          elsif ws_client.respond_to?(:stop)
+            ws_client.stop
+          elsif ws_client.respond_to?(:close)
+            ws_client.close
+          end
         rescue StandardError => e
           Rails.logger.warn("[OrderUpdateHub] Error while stopping DhanHQ order update feed: #{e.message}")
         ensure
@@ -114,6 +121,7 @@ module Live
       normalized = normalize(payload)
       @last_update_at = Time.current
       @connection_state = :connected
+      @reconnect_attempts = 0
 
       begin
         Live::FeedHealthService.instance.mark_success!(:order_updates)
@@ -187,8 +195,12 @@ module Live
       return unless running?
 
       @restarting = true
+      @reconnect_attempts = (@reconnect_attempts || 0) + 1
+      backoff = [2**[@reconnect_attempts, 6].min, 60].min
+
+      Rails.logger.info("[OrderUpdateHub] Restarting order update feed (attempt ##{@reconnect_attempts}, backoff #{backoff}s)...")
       stop!
-      sleep 1
+      sleep backoff
       start!
     ensure
       @restarting = false

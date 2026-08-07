@@ -69,6 +69,18 @@ services:
     ports:
       - "3000:80"
 
+  sidecar:
+    build:
+      context: ./node-sidecar
+      dockerfile: Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      TRADING_MODE: paper
+    depends_on:
+      - redis
+      - web
+
 volumes:
   pg_data_v15:
   redis_data:
+

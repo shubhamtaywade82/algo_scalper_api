@@ -78,6 +78,7 @@ module Dhan
           persist_token(access_token, expiry_time)
           cache_token(access_token, expiry_time)
           apply_token_to_runtime!(access_token)
+          broadcast_token_to_redis(access_token, expiry_time)
           restart_websocket!
 
           access_token
@@ -223,6 +224,21 @@ module Dhan
 
         Time.current < @totp_refresh_cooldown_until
       end
+
+      def broadcast_token_to_redis(access_token, expiry_time)
+        redis = Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
+        client_id = creds[:client_id]
+
+        redis.set('dhan:auth:access_token', access_token)
+        redis.set('dhan:auth:client_id', client_id) if client_id.present?
+        redis.set('dhan:auth:expiry', expiry_time.to_i)
+
+        payload = { token: access_token, client_id: client_id, expires_at: expiry_time.iso8601 }.to_json
+        redis.publish('dhan:auth:rotated', payload)
+      rescue StandardError => e
+        Rails.logger.error("[DHAN] Redis token broadcast failed: #{e.class} - #{e.message}")
+      end
     end
   end
 end
+

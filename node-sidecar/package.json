@@ -1,0 +1,26 @@
+{
+  "name": "algo-scalper-node-sidecar",
+  "version": "0.4.1",
+  "description": "Node.js Execution & Analytics Sidecar for DhanHQ v2 using @shubhamtaywade82/dhanhq-ts",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "ts-node src/index.ts",
+    "dev": "ts-node-dev --respawn src/index.ts",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@shubhamtaywade82/dhanhq-ts": "^0.4.1",
+    "dotenv": "^16.4.5",
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.14.9",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.5",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.5.2"
+  }
+}

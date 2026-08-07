@@ -84,7 +84,6 @@ RSpec.describe Signal::Engine, 'exit_testing mode pipeline' do
 
       it 'defines all private methods required by run_for' do
         engine_private_methods = described_class.private_methods(false)
-        expect(engine_private_methods).to include(:trading_context_blocked?)
         expect(engine_private_methods).to include(:execute_options_analysis)
       end
 

@@ -569,7 +569,7 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
       end
 
       it 'validates signal with all enabled checks' do
-        result = described_class.comprehensive_validation(
+        result = Signal::ValidationGates.comprehensive_validation(
           index_cfg,
           :bullish,
           series,
@@ -606,7 +606,7 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
         end
 
         it 'runs all validation checks including IV rank and theta risk' do
-          result = described_class.comprehensive_validation(
+          result = Signal::ValidationGates.comprehensive_validation(
             index_cfg,
             :bullish,
             series,
@@ -623,7 +623,7 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
         let(:weak_adx) { { value: 15.0 } }
 
         it 'fails validation' do
-          result = described_class.comprehensive_validation(
+          result = Signal::ValidationGates.comprehensive_validation(
             index_cfg,
             :bullish,
             series,
@@ -677,7 +677,7 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
 
       context 'when comprehensive validation fails' do
         before do
-          allow(described_class).to receive(:comprehensive_validation).and_return(
+          allow(Signal::ValidationGates).to receive(:comprehensive_validation).and_return(
             { valid: false, reason: 'Test validation failure' }
           )
         end

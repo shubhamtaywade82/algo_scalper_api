@@ -1,5 +1,21 @@
-log
-tmp
-coverage
+log/
+tmp/
+coverage/
 spec/failed_examples.txt
 .env
+.env*.local
+
+# Node sidecar
+node-sidecar/node_modules/
+node-sidecar/dist/
+node-sidecar/.env
+
+# Next.js dashboard
+dashboard/node_modules/
+dashboard/.next/
+dashboard/out/
+
+# System and editor files
+.DS_Store
+*.swp
+*.swo

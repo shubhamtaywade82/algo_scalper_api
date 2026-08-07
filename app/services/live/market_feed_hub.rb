@@ -20,6 +20,7 @@ module Live
       @started_at = nil
       @subscribed_keys = Concurrent::Set.new # Track subscribed segment:security_id pairs
       @watchlist_keys = Concurrent::Set.new
+      @reconnect_attempts = 0
     end
 
     def start!
@@ -45,7 +46,10 @@ module Live
 
         @ws_client.on(:tick) { |tick| handle_tick(tick) }
         @ws_client.on(:reconnect) { |info| handle_reconnect(info) }
-        @ws_client.on(:open) { Rails.logger.info('[MarketFeedHub] WebSocket opened') }
+        @ws_client.on(:open) do
+          @reconnect_attempts = 0
+          Rails.logger.info('[MarketFeedHub] WebSocket opened')
+        end
         @ws_client.on(:close) { Rails.logger.warn('[MarketFeedHub] WebSocket closed') }
         @ws_client.on(:error) { |e| Rails.logger.error("[MarketFeedHub] WebSocket error: #{e}") }
         @ws_client.start
@@ -90,7 +94,13 @@ module Live
 
         begin
           # Attempt graceful disconnect
-          ws_client.disconnect! if ws_client.respond_to?(:disconnect!)
+          if ws_client.respond_to?(:disconnect!)
+            ws_client.disconnect!
+          elsif ws_client.respond_to?(:stop)
+            ws_client.stop
+          elsif ws_client.respond_to?(:close)
+            ws_client.close
+          end
         rescue StandardError => e
           Rails.logger.warn("[MarketFeedHub] Error during disconnect: #{e.message}") if defined?(Rails.logger)
         end
@@ -462,6 +472,7 @@ module Live
       was_connected = @connection_state == :connected
       @last_tick_at = Time.current
       @connection_state = :connected
+      @reconnect_attempts = 0
 
       resubscribe_active_positions_after_reconnect unless was_connected
 
@@ -493,11 +504,6 @@ module Live
       # puts tick  # Uncomment only for debugging - very noisy!
       # Log every tick (segment:security_id and LTP) for verification during development
       # # Rails.logger.info("[WS tick] #{tick[:segment]}:#{tick[:security_id]} ltp=#{tick[:ltp]} kind=#{tick[:kind]}")
-
-      # Store in in-memory cache (primary)
-      # Update TickCache for both ticker (with LTP) and prev_close (with prev_close) ticks
-      # TickCache.put() handles merging of both types
-      Live::TickCache.put(tick) if tick[:ltp].to_f.positive? || tick[:prev_close].to_f.positive?
 
       # Integrated Institutional Market Data Cache
       if tick[:ltp].to_f.positive?
@@ -618,8 +624,12 @@ module Live
       return unless running?
 
       @restarting = true
+      @reconnect_attempts = (@reconnect_attempts || 0) + 1
+      backoff = [2**[@reconnect_attempts, 6].min, 60].min
+
+      Rails.logger.info("[MarketFeedHub] Restarting WebSocket client (attempt ##{@reconnect_attempts}, backoff #{backoff}s)...")
       stop!
-      sleep 1
+      sleep backoff
       start!
     ensure
       @restarting = false
