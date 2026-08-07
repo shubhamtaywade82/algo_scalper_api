@@ -79,6 +79,10 @@ Rails.application.routes.draw do
     post 'backtests', to: 'backtests#create'
     post 'replays', to: 'replays#create'
 
+    resources :backtest_runs, only: %i[create index show] do
+      get :download_csv, on: :member
+    end
+
     resources :calibration_runs, only: %i[index show] do
       post :apply, on: :member
     end

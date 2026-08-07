@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_07_065516) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_07_075821) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -52,6 +52,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_07_065516) do
     t.datetime "updated_at", null: false
     t.index ["created_at"], name: "index_audit_logs_on_created_at"
     t.index ["event_type"], name: "index_audit_logs_on_event_type"
+  end
+
+  create_table "backtest_runs", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "days_back", default: 90, null: false
+    t.string "entry_interval", default: "5", null: false
+    t.text "error_message"
+    t.datetime "finished_at"
+    t.decimal "max_drawdown", precision: 12, scale: 4
+    t.jsonb "params", default: {}, null: false
+    t.jsonb "results", default: {}, null: false
+    t.datetime "started_at"
+    t.string "status", default: "pending", null: false
+    t.string "symbol", null: false
+    t.decimal "total_pnl", precision: 12, scale: 4
+    t.integer "total_trades"
+    t.string "trading_type", default: "options", null: false
+    t.datetime "updated_at", null: false
+    t.decimal "win_rate", precision: 8, scale: 4
+    t.index ["created_at"], name: "index_backtest_runs_on_created_at"
+    t.index ["status"], name: "index_backtest_runs_on_status"
   end
 
   create_table "best_indicator_params", force: :cascade do |t|
@@ -104,6 +125,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_07_065516) do
     t.bigint "volume", default: 0
     t.index ["instrument_key", "timeframe", "ts"], name: "index_candles_on_key_timeframe_ts", unique: true
     t.index ["security_id", "timeframe", "ts"], name: "index_candles_on_security_timeframe_ts"
+  end
+
+  create_table "data_quality_daily_metrics", force: :cascade do |t|
+    t.decimal "candle_alignment_accuracy_pct", precision: 8, scale: 4
+    t.datetime "created_at", null: false
+    t.integer "expired_instrument_count", default: 0, null: false
+    t.decimal "instrument_mapping_accuracy_pct", precision: 8, scale: 4
+    t.jsonb "meta", default: {}, null: false
+    t.integer "missing_candle_count", default: 0, null: false
+    t.decimal "tick_staleness_rate_pct", precision: 8, scale: 4
+    t.date "trading_date", null: false
+    t.datetime "updated_at", null: false
+    t.index ["trading_date"], name: "index_data_quality_daily_metrics_on_trading_date", unique: true
   end
 
   create_table "derivatives", force: :cascade do |t|
@@ -1185,7 +1219,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_07_065516) do
   create_table "trading_strategies", force: :cascade do |t|
     t.string "author", default: "System"
     t.jsonb "backtest_results", default: {}
-    t.jsonb "checks", default: {"risk"=>"not_run", "logic"=>"not_run", "syntax"=>"not_run", "backtest"=>"not_run"}
+    t.jsonb "checks", default: {"risk" => "not_run", "logic" => "not_run", "syntax" => "not_run", "backtest" => "not_run"}
     t.text "code", default: ""
     t.datetime "created_at", null: false
     t.text "description"

@@ -541,12 +541,11 @@ module Backtest
 
     # ── Option Data ────────────────────────────────────────────────────────
 
-    def fetch_option_data(signal_type, timestamp, interval: '1')
+    def fetch_option_data(signal_type, timestamp)
       Options::ExpiredFetcher.call(
         symbol: @symbol,
         expiry_flag: 'WEEK',
-        date: timestamp.to_date,
-        interval: interval
+        date: timestamp.to_date
       )[signal_type]
     rescue StandardError => e
       $stdout.puts "  ⚠️  Option data error for #{timestamp.to_date}: #{e.message}"

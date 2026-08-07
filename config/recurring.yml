@@ -90,6 +90,20 @@ development:
     priority: 6
     description: "Persists live-mode daily KPI rollup after market close"
 
+  tick_staleness_sampler:
+    class: DataQuality::TickStalenessSamplerJob
+    schedule: every 1 minute
+    queue_name: background
+    priority: 15
+    description: "Samples Live::FeedHealthService's tick-staleness check once a minute to accumulate a daily rate"
+
+  data_quality_daily_check:
+    class: DataQuality::DailyCheckJob
+    schedule: at 3:40pm every day
+    queue_name: background
+    priority: 15
+    description: "Section 9 data quality KPIs: candle gaps/alignment, instrument mapping accuracy, expired-instrument catalog check"
+
 production:
   instruments_import:
     class: InstrumentsImportJob
@@ -159,3 +173,32 @@ production:
     queue_name: background
     priority: 4
     description: "Cancels live entry orders DhanHQ never confirmed filled/rejected within the check window"
+
+  daily_close_paper:
+    class: Ledger::DailyCloseJob
+    schedule: at 3:35pm every weekday
+    queue_name: background
+    priority: 6
+    description: "Persists paper-mode daily KPI rollup (net PnL, win rate, expectancy, profit factor) after market close"
+
+  daily_close_live:
+    class: Ledger::DailyCloseJob
+    args: [{ mode: 'live' }]
+    schedule: at 3:36pm every weekday
+    queue_name: background
+    priority: 6
+    description: "Persists live-mode daily KPI rollup after market close"
+
+  tick_staleness_sampler:
+    class: DataQuality::TickStalenessSamplerJob
+    schedule: every 1 minute between 9:15am and 3:30pm on weekdays
+    queue_name: background
+    priority: 15
+    description: "Samples Live::FeedHealthService's tick-staleness check once a minute to accumulate a daily rate"
+
+  data_quality_daily_check:
+    class: DataQuality::DailyCheckJob
+    schedule: at 3:40pm every weekday
+    queue_name: background
+    priority: 15
+    description: "Section 9 data quality KPIs: candle gaps/alignment, instrument mapping accuracy, expired-instrument catalog check"
