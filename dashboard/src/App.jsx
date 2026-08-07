@@ -49,7 +49,9 @@ function AppShell(props) {
     connected: positionsConnected,
     isStale: positionsStale,
     lastMessageAt: positionsLastMessageAt,
-    fetchPositions
+    fetchPositions,
+    closeOpenPosition,
+    closingPositionId
   } = usePositions()
 
   const {
@@ -68,8 +70,11 @@ function AppShell(props) {
     open, closed,
     positionsConnected, positionsStale, positionsLastMessageAt,
     fetchPositions,
+    closeOpenPosition,
+    closingPositionId,
     marketStatus
   }
+
 
   return (
     <DashboardContext.Provider value={ctx}>

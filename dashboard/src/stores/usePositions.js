@@ -1,4 +1,5 @@
 import { createSignal, onMount, onCleanup } from 'solid-js'
+import toast from 'solid-toast'
 import cable from '../cable'
 
 const WS_STALE_AFTER_MS = 3000
@@ -10,6 +11,7 @@ export function usePositions() {
   const [connected, setConnected] = createSignal(false)
   const [isStale, setIsStale] = createSignal(true)
   const [lastMessageAt, setLastMessageAt] = createSignal(null)
+  const [closingPositionId, setClosingPositionId] = createSignal(null)
 
   let subscription = null
   let staleTimer = null
@@ -23,6 +25,27 @@ export function usePositions() {
       setClosed(data.closed || [])
     } catch (e) {
       console.error('[Positions] fetch failed:', e)
+    }
+  }
+
+  async function closeOpenPosition(id) {
+    if (!id) return
+    setClosingPositionId(id)
+    try {
+      const res = await fetch(`/api/positions/${id}/close`, { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success(`Position #${id} close requested`)
+        setOpen(prev => prev.filter(p => Number(p.id) !== Number(id)))
+        fetchPositions()
+      } else {
+        toast.error(data.error || 'Failed to close position')
+      }
+    } catch (e) {
+      console.error('Failed to close position:', e)
+      toast.error('Failed to close position')
+    } finally {
+      setClosingPositionId(null)
     }
   }
 
@@ -60,20 +83,6 @@ export function usePositions() {
     backfillTimer = setInterval(fetchPositions, BACKFILL_INTERVAL_MS)
   }
 
-  // Only carry forward the real-time fields that WS updates provide.
-  // Everything else is authoritative from the server.
-  function pickLiveFields(pos) {
-    const live = {}
-    if (pos.ltp != null)       live.ltp       = pos.ltp
-    if (pos.pnl != null)       live.pnl       = pos.pnl
-    if (pos.pnl_pct != null)   live.pnl_pct   = pos.pnl_pct
-    if (pos.hwm_pnl != null)   live.hwm_pnl   = pos.hwm_pnl
-    if (pos.ltp_stale != null) live.ltp_stale = pos.ltp_stale
-    if (pos.sl_price != null)  live.sl_price  = pos.sl_price
-    if (pos.tp_price != null)  live.tp_price  = pos.tp_price
-    return live
-  }
-
   function scheduleStaleCheck() {
     clearStaleTimer()
     staleTimer = setTimeout(() => {
@@ -105,7 +114,6 @@ export function usePositions() {
         startBackfill()
       },
       received(data) {
-        // ANY incoming data marks fresh and applies update instantly
         console.debug('⚡ [WS:Positions] Update:', data)
         markFresh()
         if (data.type === 'pnl_stale') {
@@ -128,5 +136,14 @@ export function usePositions() {
     stopBackfill()
   })
 
-  return { open, closed, connected, isStale, lastMessageAt, fetchPositions }
+  return {
+    open,
+    closed,
+    connected,
+    isStale,
+    lastMessageAt,
+    fetchPositions,
+    closeOpenPosition,
+    closingPositionId
+  }
 }
