@@ -55,6 +55,15 @@ module Live
       # State validation
       return { success: false, reason: 'not_active' } unless tracker.active?
 
+      # DhanHQ rejects sell orders for expired contracts, so a broker round-trip here
+      # would leave the tracker stuck "active" forever. Settle locally instead.
+      if expired_contract?(tracker)
+        Rails.logger.warn(
+          "[ExitEngine] #{tracker.order_no} contract expired (#{tracker.expiry_date}); settling locally without a broker order"
+        )
+        return finalize_exit!(tracker, exit_price: safe_ltp(tracker) || BigDecimal('0'), reason: "#{reason} (EXPIRED_CONTRACT_LOCAL_SETTLE)")
+      end
+
       intent_persisted = prepare_exit_intent!(tracker, reason)
       return { success: true, reason: 'already_exited', exit_price: tracker.exit_price } if tracker.exited?
       return { success: true, reason: 'exit_already_requested', client_order_id: tracker.exit_coid } unless intent_persisted
@@ -260,6 +269,12 @@ module Live
         tracker.update!(meta: meta)
       end
       updated_reason
+    end
+
+    # @param tracker [PositionTracker]
+    # @return [Boolean] true when the tracker's contract expiry has already passed
+    def expired_contract?(tracker)
+      tracker.expiry_date.present? && tracker.expiry_date < Date.current
     end
 
     # Generates a deterministic, broker-safe correlation id for exits.

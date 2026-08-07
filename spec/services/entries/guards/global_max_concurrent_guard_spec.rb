@@ -5,7 +5,7 @@ require 'rails_helper'
 RSpec.describe Entries::Guards::GlobalMaxConcurrentGuard do
   describe '.call' do
     let(:context) { {} }
-    let(:algo_config) { instance_double(AlgoConfig::Configuration) }
+    let(:algo_config) { instance_double(Hash) } # AlgoConfig.fetch returns a deep-symbolized Hash, not a Configuration class
 
     before do
       allow(AlgoConfig).to receive(:fetch).and_return(algo_config)

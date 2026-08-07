@@ -6,7 +6,6 @@ RSpec.describe 'Api::Strategies' do
   describe 'GET /api/strategies' do
     it 'returns an empty list when no strategies exist' do
       get '/api/strategies'
-       if response.status != 200
       expect(response).to have_http_status(:ok)
       body = response.parsed_body
       expect(body['success']).to be true
@@ -100,7 +99,6 @@ RSpec.describe 'Api::Strategies' do
 
     it 'deploys the strategy' do
       post "/api/strategies/#{slug}/deploy"
-       if response.status != 200
       expect(response).to have_http_status(:ok)
       body = response.parsed_body
       expect(body['success']).to be true
@@ -113,7 +111,6 @@ RSpec.describe 'Api::Strategies' do
 
     it 'sets desired_status to running' do
       post "/api/strategies/#{strategy.slug}/start"
-       if response.status != 202
       expect(response).to have_http_status(:accepted)
       expect(strategy.reload.desired_status).to eq('running')
     end
@@ -173,7 +170,6 @@ RSpec.describe 'Api::Strategies' do
 
     it 'returns empty logs array' do
       get "/api/strategies/#{strategy.slug}/logs"
-       if response.status != 200
       expect(response).to have_http_status(:ok)
       body = response.parsed_body
       expect(body['logs']).to eq([])

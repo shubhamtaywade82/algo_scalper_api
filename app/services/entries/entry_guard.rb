@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'digest'
+
 module Entries
   class EntryGuard
     ENTRY_CONTRACT = 'bos_machine_v1'
@@ -372,10 +374,26 @@ module Entries
         instrument
       end
 
-      def build_client_order_id(index_cfg:, pick:)
+      # Deterministic per (index, security, signal-or-time-window) so that retrying the
+      # same entry attempt reproduces the same id instead of bypassing Orders::Placer's
+      # client_order_id dedup (which was the point of a "duplicate order" guard at all).
+      CLIENT_ORDER_ID_TIME_BUCKET_SECONDS = 5
+
+      def build_client_order_id(index_cfg:, pick:, signal: nil)
         # DhanHQ correlation_id limit is 25 characters
-        # Format: AS-{KEY}-{SID}-{HEX}
-        "AS-#{index_cfg[:key][0..3]}-#{pick[:security_id]}-#{SecureRandom.hex(3)}"
+        # Format: AS-{KEY}-{SID}-{HASH}
+        seed = "#{index_cfg[:key]}-#{pick[:security_id]}-#{client_order_id_seed(signal)}"
+        "AS-#{index_cfg[:key][0..3]}-#{pick[:security_id]}-#{Digest::SHA1.hexdigest(seed)[0, 6]}"
+      end
+
+      # Most try_enter callers don't pass a signal record, so fall back to a short time
+      # bucket: concurrent/retried calls for the same opportunity collapse to one id,
+      # while a later, genuinely new entry still gets a fresh one.
+      def client_order_id_seed(signal)
+        return signal.id if signal.respond_to?(:id) && signal.id.present?
+        return signal.candle_timestamp.to_i if signal.respond_to?(:candle_timestamp) && signal.candle_timestamp.present?
+
+        Time.current.to_i / CLIENT_ORDER_ID_TIME_BUCKET_SECONDS
       end
 
       def extract_order_no(response)
@@ -584,6 +602,11 @@ module Entries
         Rails.logger.error("[EntryGuard] banknifty_last_week? error: #{e.message}")
         false
       end
+
+      # These are collaborators' API, not internal-only helpers: OrderExecutionService and
+      # BosStructureGuard call them with an explicit receiver. `private` above blocks that
+      # (NoMethodError) for anything declared after it, so re-open them here.
+      public :build_client_order_id, :extract_order_no, :create_tracker!, :create_paper_tracker!, :timeframe_to_interval
     end
   end
 end

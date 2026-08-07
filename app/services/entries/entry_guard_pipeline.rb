@@ -41,10 +41,12 @@ module Entries
         Guards::DrawdownGuard,
         Guards::EntryPolicyGuard,
         Guards::CircuitBreakerGuard,
+        Guards::FeedHealthGuard,             # blocks on stale/never-synced ticks, positions, or funds feed
         Guards::EdgeFailureGuard,
         Guards::LossStreakGuard,
         Guards::DailyLimitsGuard,
         Guards::MaxConcurrentGuard,
+        Guards::GlobalMaxConcurrentGuard,     # portfolio-wide cap across all indices, cheap so runs early
         Guards::InstrumentLookupGuard,       # sets context[:instrument] — required by EPT guard
         Guards::LtpResolutionGuard,
         Guards::ExpiryWeekPowerTrendGuard,   # enriches context[:expiry_power_trend] when pattern detected

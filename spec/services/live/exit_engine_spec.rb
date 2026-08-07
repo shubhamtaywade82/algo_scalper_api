@@ -228,6 +228,46 @@ RSpec.describe Live::ExitEngine do
       end
     end
 
+    context 'with an expired contract' do
+      it 'settles locally without calling the broker when expiry_date is in the past' do
+        tracker.update!(expiry_date: Date.yesterday)
+
+        result = engine.execute_exit(tracker, 'stop_loss')
+
+        expect(result[:success]).to be true
+        expect(router).not_to have_received(:exit_market)
+        tracker.reload
+        expect(tracker.status).to eq('exited')
+        expect(tracker.exit_reason).to include('EXPIRED_CONTRACT_LOCAL_SETTLE')
+      end
+
+      it 'does not persist an exit intent/coid since no broker order is placed' do
+        tracker.update!(expiry_date: Date.yesterday)
+
+        engine.execute_exit(tracker, 'stop_loss')
+
+        expect(tracker.reload.exit_sent_at).to be_nil
+      end
+
+      it 'still exits normally through the broker when expiry_date is today' do
+        tracker.update!(expiry_date: Date.current)
+
+        result = engine.execute_exit(tracker, 'stop_loss')
+
+        expect(result[:success]).to be true
+        expect(router).to have_received(:exit_market)
+      end
+
+      it 'still exits normally through the broker when expiry_date is nil' do
+        tracker.update!(expiry_date: nil)
+
+        result = engine.execute_exit(tracker, 'stop_loss')
+
+        expect(result[:success]).to be true
+        expect(router).to have_received(:exit_market)
+      end
+    end
+
     context 'with router failures' do
       it 'returns failure hash when router returns false' do
         allow(router).to receive(:exit_market).and_return(false)

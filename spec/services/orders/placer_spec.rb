@@ -12,7 +12,9 @@ RSpec.describe Orders::Placer do
 
   before do
     allow(Rails.cache).to receive(:read).and_return(nil)
-    allow(Rails.cache).to receive(:write)
+    # write(..., unless_exist: true) returns truthy on first claim, falsy on a repeat id —
+    # Orders::Placer#claim! relies on that return value, so the default here must claim.
+    allow(Rails.cache).to receive(:write).and_return(true)
     allow(DhanHQ::Models::Order).to receive(:create!) do |attributes|
       captured_attrs << attributes
       order_double
@@ -44,12 +46,12 @@ RSpec.describe Orders::Placer do
       described_class.sell_market!(seg: segment, sid: security_id, qty: quantity, client_order_id: long_id)
 
       # Verify cache write with normalized ID (not correlation_id in payload)
-      expect(Rails.cache).to have_received(:write).with(match(/^coid:/), true, expires_in: 20.minutes)
+      expect(Rails.cache).to have_received(:write).with(match(/^coid:/), true, expires_in: 20.minutes, unless_exist: true)
     end
 
     it "skips placing duplicate orders based on the normalized id" do
       long_id = "AS-EXIT-12345678901234567890-9999999999"
-      allow(Rails.cache).to receive(:read).and_return(nil, true)
+      allow(Rails.cache).to receive(:write).and_return(true, false)
       allow(described_class).to receive(:fetch_position_details).and_return(
         {
           product_type: DhanHQ::Constants::ProductType::INTRADAY,
@@ -354,8 +356,8 @@ RSpec.describe Orders::Placer do
     it "prevents duplicate orders within 20 minutes" do
       client_order_id = "DUPLICATE-TEST-#{Time.current.to_i}"
 
-      # First order succeeds
-      allow(Rails.cache).to receive(:read).and_return(nil)
+      # First order succeeds (claims the id)
+      allow(Rails.cache).to receive(:write).and_return(true)
       described_class.buy_market!(
         seg: segment,
         sid: security_id,
@@ -363,8 +365,8 @@ RSpec.describe Orders::Placer do
         client_order_id: client_order_id
       )
 
-      # Second order should be blocked
-      allow(Rails.cache).to receive(:read).and_return(true)
+      # Second order should be blocked (id already claimed)
+      allow(Rails.cache).to receive(:write).and_return(false)
       result = described_class.buy_market!(
         seg: segment,
         sid: security_id,
@@ -389,7 +391,8 @@ RSpec.describe Orders::Placer do
       expect(Rails.cache).to have_received(:write).with(
         "coid:#{client_order_id}",
         true,
-        expires_in: 20.minutes
+        expires_in: 20.minutes,
+        unless_exist: true
       )
     end
   end
@@ -558,6 +561,34 @@ RSpec.describe Orders::Placer do
 
       expect(result).to eq(order_double)
       expect(Dhan::TokenManager).to have_received(:refresh!).once
+    end
+  end
+
+  describe '.claim! (atomic dedup, real cache)' do
+    # Exercise a real cache store instead of the stubbed Rails.cache used elsewhere in this
+    # file — the test env's Rails.cache is a NullStore (always "succeeds", stores nothing),
+    # which can't distinguish claim! from the old duplicate?/remember pair. A real store's
+    # write(unless_exist: true) is what actually closes the race: the previous pair only wrote
+    # the dedup key in `ensure`, *after* the broker call, so two racing calls with the same id
+    # could both pass the check.
+    let(:real_cache) { ActiveSupport::Cache::MemoryStore.new }
+
+    before { allow(Rails).to receive(:cache).and_return(real_cache) }
+
+    it 'lets exactly one of two racing claims for the same id succeed' do
+      results = [described_class.send(:claim!, "CLAIM-RACE-TEST"), described_class.send(:claim!, "CLAIM-RACE-TEST")]
+
+      expect(results.count { |r| r }).to eq(1)
+    end
+
+    it 'allows a claim again once the id is a genuinely new order' do
+      expect(described_class.send(:claim!, "CLAIM-RACE-TEST")).to be_truthy
+      expect(described_class.send(:claim!, "CLAIM-RACE-TEST-2")).to be_truthy
+    end
+
+    it 'treats a blank id as always claimable, deferring to the caller\'s own validation' do
+      expect(described_class.send(:claim!, nil)).to be true
+      expect(described_class.send(:claim!, '')).to be true
     end
   end
 

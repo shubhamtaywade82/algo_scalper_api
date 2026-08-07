@@ -24,7 +24,7 @@ module Orders
       def buy_market!(seg:, sid:, qty:, client_order_id:, product_type: "INTRADAY", price: nil,
                       target_price: nil, stop_loss_price: nil, trailing_jump: nil)
         normalized_id = normalize_client_order_id(client_order_id)
-        return nil if duplicate?(normalized_id)
+        return nil unless claim!(normalized_id)
 
         unless seg && sid && qty && normalized_id
           Rails.logger.error("[Orders::Placer] Missing required parameters for buy_market!: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{client_order_id}")
@@ -63,13 +63,11 @@ module Orders
           nil
         end
         order
-      ensure
-        remember(normalized_id)
       end
 
       def sell_market!(seg:, sid:, qty:, client_order_id:, product_type: nil)
         normalized_id = normalize_client_order_id(client_order_id)
-        return nil if duplicate?(normalized_id)
+        return nil unless claim!(normalized_id)
 
         unless seg && sid && normalized_id
           Rails.logger.error("[Orders::Placer] Missing required parameters for sell_market!: seg=#{seg}, sid=#{sid}, client_order_id=#{client_order_id}")
@@ -117,13 +115,11 @@ module Orders
             OpenStruct.new(order_id: "MOCK_MARKET_#{SecureRandom.hex(4).upcase}", status: "success")
           end
         end
-      ensure
-        remember(normalized_id)
       end
 
       def buy_ioc_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "NORMAL")
         normalized_id = normalize_client_order_id(client_order_id)
-        return nil if duplicate?(normalized_id)
+        return nil unless claim!(normalized_id)
 
         unless seg && sid && qty && price && normalized_id
           Rails.logger.error("[Orders::Placer] Missing required parameters for buy_ioc_limit!: seg=#{seg}, sid=#{sid}, qty=#{qty}, price=#{price}, client_order_id=#{client_order_id}")
@@ -163,8 +159,6 @@ module Orders
             OpenStruct.new(order_id: "MOCK_IOC_#{SecureRandom.hex(4).upcase}", status: "success")
           end
         end
-      ensure
-        remember(normalized_id)
       end
 
       # Market order first; fall back to IOC limit if market returns nil (e.g. PLACE_ORDER disabled
@@ -185,7 +179,7 @@ module Orders
 
       def sell_ioc_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "NORMAL")
         normalized_id = normalize_client_order_id(client_order_id)
-        return nil if duplicate?(normalized_id)
+        return nil unless claim!(normalized_id)
 
         unless seg && sid && qty && price && normalized_id
           Rails.logger.error("[Orders::Placer] Missing required parameters for sell_ioc_limit!: seg=#{seg}, sid=#{sid}, qty=#{qty}, price=#{price}, client_order_id=#{client_order_id}")
@@ -225,13 +219,11 @@ module Orders
             OpenStruct.new(order_id: "MOCK_IOC_#{SecureRandom.hex(4).upcase}", status: "success")
           end
         end
-      ensure
-        remember(normalized_id)
       end
 
       def sell_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "NORMAL")
         normalized_id = normalize_client_order_id(client_order_id)
-        return nil if duplicate?(normalized_id)
+        return nil unless claim!(normalized_id)
 
         unless seg && sid && qty && price && normalized_id
           Rails.logger.error("[Orders::Placer] Missing required parameters for sell_limit!: seg=#{seg}, sid=#{sid}, qty=#{qty}, price=#{price}, client_order_id=#{client_order_id}")
@@ -271,13 +263,11 @@ module Orders
             OpenStruct.new(order_id: "MOCK_LIMIT_#{SecureRandom.hex(4).upcase}", status: "success")
           end
         end
-      ensure
-        remember(normalized_id)
       end
 
       def buy_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "NORMAL")
         normalized_id = normalize_client_order_id(client_order_id)
-        return nil if duplicate?(normalized_id)
+        return nil unless claim!(normalized_id)
 
         unless seg && sid && qty && price && normalized_id
           Rails.logger.error("[Orders::Placer] Missing required parameters for buy_limit!: seg=#{seg}, sid=#{sid}, qty=#{qty}, price=#{price}, client_order_id=#{client_order_id}")
@@ -316,13 +306,11 @@ module Orders
             OpenStruct.new(order_id: "MOCK_LIMIT_#{SecureRandom.hex(4).upcase}", status: "success")
           end
         end
-      ensure
-        remember(normalized_id)
       end
 
       def exit_position!(seg:, sid:, client_order_id:)
         normalized_id = normalize_client_order_id(client_order_id)
-        return nil if duplicate?(normalized_id)
+        return nil unless claim!(normalized_id)
 
         unless sid && normalized_id
           Rails.logger.error("[Orders::Placer] Missing required parameters for exit_position!: sid=#{sid}, client_order_id=#{client_order_id}")
@@ -376,7 +364,6 @@ module Orders
           order = nil
         end
 
-        remember(normalized_id)
         order
       end
 
@@ -438,16 +425,14 @@ module Orders
         ENV['PLACE_ORDER'].to_s.casecmp('true').zero?
       end
 
-      def duplicate?(client_order_id)
-        return false if client_order_id.blank?
+      # Atomic check-and-set: the previous duplicate?/remember pair only recorded the id in
+      # `ensure`, *after* the broker call, leaving a window where two concurrent calls with the
+      # same client_order_id could both pass `duplicate?` before either registered. Claiming the
+      # id up front via `unless_exist` closes that race — first caller gets true, the rest false.
+      def claim!(client_order_id)
+        return true if client_order_id.blank?
 
-        Rails.cache.read("coid:#{client_order_id}").present?
-      end
-
-      def remember(client_order_id)
-        return if client_order_id.blank?
-
-        Rails.cache.write("coid:#{client_order_id}", true, expires_in: 20.minutes)
+        Rails.cache.write("coid:#{client_order_id}", true, expires_in: 20.minutes, unless_exist: true)
       end
 
       def normalize_client_order_id(client_order_id)

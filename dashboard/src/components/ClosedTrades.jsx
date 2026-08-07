@@ -5,6 +5,7 @@ import Button from './ui/Button'
 import Badge from './ui/Badge'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './ui/Table'
 import { exitBadge } from '../lib/exitBadge'
+import { getLotInfo } from '../lib/lots'
 
 function inr(val, dec = 2) {
   if (val == null) return '—'
@@ -321,7 +322,7 @@ export default function ClosedTrades() {
               <TableRow class="text-[9px] uppercase tracking-widest border-b border-white/5 bg-white/[0.005]">
                 <SortHeader col="symbol" label="Asset" align="left" sortBy={sortBy()} sortDir={sortDir()} onSort={handleSort} />
                 <SortHeader col="side" label="Side" align="center" sortBy={sortBy()} sortDir={sortDir()} onSort={handleSort} />
-                <SortHeader col="quantity" label="Qty" align="right" sortBy={sortBy()} sortDir={sortDir()} onSort={handleSort} />
+                <SortHeader col="quantity" label="Qty (Lots)" align="right" sortBy={sortBy()} sortDir={sortDir()} onSort={handleSort} />
                 <SortHeader col="entry_price" label="Entry" align="right" sortBy={sortBy()} sortDir={sortDir()} onSort={handleSort} />
                 <TableHead class="text-right px-4 py-3 font-bold text-gray-600">Exit</TableHead>
                 <SortHeader col="last_pnl_rupees" label="Net P&L" align="right" sortBy={sortBy()} sortDir={sortDir()} onSort={handleSort} />
@@ -334,10 +335,15 @@ export default function ClosedTrades() {
               <For each={positions()}>
                 {(pos) => {
                   const badge = exitBadge(pos)
+                  const lotDetails = getLotInfo(pos.symbol, pos.quantity)
                   return (
-                    <TableRow class="group hover:bg-white/[0.02] transition-colors">
+                    <TableRow
+                      clickable={typeof props.onSelect === 'function'}
+                      onClick={() => props.onSelect?.(pos.id)}
+                      class="group hover:bg-white/[0.02] transition-colors"
+                    >
                       <TableCell class="px-6 py-4">
-                        <span class="text-xs font-bold text-gray-500 uppercase tracking-tight group-hover:text-gray-300 transition-colors">{pos.symbol}</span>
+                        <span class="text-xs font-bold text-gray-300 uppercase tracking-tight group-hover:text-white transition-colors">{pos.symbol}</span>
                       </TableCell>
                       <TableCell class="px-4 py-4 text-center">
                         <Badge
@@ -347,13 +353,22 @@ export default function ClosedTrades() {
                           {pos.side}
                         </Badge>
                       </TableCell>
-                      <TableCell class="px-4 py-4 text-right text-gray-600 text-data text-xs">{pos.quantity}</TableCell>
-                      <TableCell class="px-4 py-4 text-right text-gray-600 text-data text-xs">{inr(pos.entry_price)}</TableCell>
-                      <TableCell class="px-4 py-4 text-right text-gray-500 text-data text-xs">{inr(pos.exit_price)}</TableCell>
-                      <TableCell class={`px-4 py-4 text-right font-bold text-data text-xs ${pnlClass(pos.pnl)}`}>
+                      <TableCell class="px-4 py-4 text-right">
+                        <div class="flex flex-col items-end">
+                          <span class="text-gray-300 text-data font-bold text-xs">{pos.quantity}</span>
+                          <Show when={lotDetails.hasLots}>
+                            <span class="text-[9px] font-semibold text-primary-400 text-data">
+                              {lotDetails.lots} {lotDetails.lots === 1 ? 'Lot' : 'Lots'}
+                            </span>
+                          </Show>
+                        </div>
+                      </TableCell>
+                      <TableCell class="px-4 py-4 text-right text-gray-400 text-data text-xs">{inr(pos.entry_price)}</TableCell>
+                      <TableCell class="px-4 py-4 text-right text-gray-300 font-bold text-data text-xs">{inr(pos.exit_price)}</TableCell>
+                      <TableCell class={`px-4 py-4 text-right font-black text-data text-xs ${pnlClass(pos.pnl)}`}>
                         {sign(pos.pnl)}₹{inr(pos.pnl)}
                       </TableCell>
-                      <TableCell class={`px-4 py-4 text-right text-data font-medium text-xs ${pnlClass(pos.pnl_pct)}`}>
+                      <TableCell class={`px-4 py-4 text-right text-data font-bold text-xs ${pnlClass(pos.pnl_pct)}`}>
                         {sign(pos.pnl_pct)}{inr(pos.pnl_pct)}%
                       </TableCell>
                       <TableCell class="px-4 py-4 text-center">
@@ -364,7 +379,7 @@ export default function ClosedTrades() {
                           {badge.label}
                         </Badge>
                       </TableCell>
-                      <TableCell class="px-6 py-4 text-right text-gray-600 text-data text-[10px]">{formatTime(pos.exited_at)}</TableCell>
+                      <TableCell class="px-6 py-4 text-right text-gray-400 text-data text-[10px]">{formatTime(pos.exited_at)}</TableCell>
                     </TableRow>
                   )
                 }}

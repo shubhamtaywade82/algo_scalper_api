@@ -77,4 +77,54 @@ RSpec.describe Entries::EntryGuard do
       end
     end
   end
+
+  describe '.build_client_order_id' do
+    let(:index_cfg) { { key: 'NIFTY' } }
+    let(:pick) { { security_id: '55111' } }
+
+    it 'is deterministic for the same index/security/time-bucket' do
+      id1 = described_class.build_client_order_id(index_cfg: index_cfg, pick: pick)
+      id2 = described_class.build_client_order_id(index_cfg: index_cfg, pick: pick)
+
+      expect(id1).to eq(id2)
+    end
+
+    it 'is deterministic for the same signal identity regardless of time' do
+      signal = instance_double(TradingSignal, id: 42, respond_to?: true)
+      allow(signal).to receive(:respond_to?).with(:id).and_return(true)
+
+      id1 = described_class.build_client_order_id(index_cfg: index_cfg, pick: pick, signal: signal)
+      id2 = described_class.build_client_order_id(index_cfg: index_cfg, pick: pick, signal: signal)
+
+      expect(id1).to eq(id2)
+    end
+
+    it 'differs for different signal identities' do
+      signal_a = instance_double(TradingSignal, id: 1)
+      signal_b = instance_double(TradingSignal, id: 2)
+
+      id_a = described_class.build_client_order_id(index_cfg: index_cfg, pick: pick, signal: signal_a)
+      id_b = described_class.build_client_order_id(index_cfg: index_cfg, pick: pick, signal: signal_b)
+
+      expect(id_a).not_to eq(id_b)
+    end
+
+    it 'stays within DhanHQ correlation_id 25-character limit' do
+      id = described_class.build_client_order_id(index_cfg: { key: 'BANKNIFTY' }, pick: { security_id: '1234567' })
+
+      expect(id.length).to be <= 25
+    end
+  end
+
+  # Orders::Entries::OrderExecutionService and Guards::BosStructureGuard call these with an
+  # explicit receiver (`Entries::EntryGuard.method_name`). If any of them slip back below
+  # `private`, that call raises NoMethodError at runtime for every order — and the specs above
+  # never catch it because they stub OrderExecutionService.call entirely.
+  describe 'methods required to be public for external callers' do
+    %i[build_client_order_id extract_order_no create_tracker! create_paper_tracker! timeframe_to_interval].each do |method_name|
+      it "exposes .#{method_name} as a public class method" do
+        expect(described_class).to respond_to(method_name)
+      end
+    end
+  end
 end

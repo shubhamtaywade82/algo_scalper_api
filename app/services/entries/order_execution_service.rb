@@ -16,6 +16,7 @@ module Entries
       @ltp = context[:ltp]
       @entry_metadata = context[:entry_metadata]
       @bos_context = context[:bos_context]
+      @signal = context[:signal]
     end
 
     def call
@@ -49,7 +50,7 @@ module Entries
     private
 
     def build_client_order_id
-      Entries::EntryGuard.build_client_order_id(index_cfg: @index_cfg, pick: @pick)
+      Entries::EntryGuard.build_client_order_id(index_cfg: @index_cfg, pick: @pick, signal: @signal)
     end
 
     def extract_order_no(response)

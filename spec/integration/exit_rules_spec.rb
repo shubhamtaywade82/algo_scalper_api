@@ -271,8 +271,12 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
           match(/STOP_LOSS|SL HIT/)
         )
 
-    # Mock TrailingConfig to trigger peak drawdown in tests
-    allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(false)
+        # Mock TrailingConfig to trigger peak drawdown in tests
+        allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(false)
+
+        risk_manager.send(:enforce_hard_limits, exit_engine: mock_exit_engine)
+      end
+    end
   end
 
   describe 'Trailing Stop Logic' do

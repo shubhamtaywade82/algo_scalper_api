@@ -12,6 +12,20 @@ RSpec.describe Entries::EntryGuardPipeline do
       expect(handlers.index(Entries::Guards::MiddayQualityGuard)).to be > handlers.index(Entries::Guards::TimeRegimeGuard)
       expect(handlers.index(Entries::Guards::LossStreakGuard)).to be > handlers.index(Entries::Guards::EdgeFailureGuard)
     end
+
+    it 'includes the portfolio-wide GlobalMaxConcurrentGuard ahead of instrument-specific checks' do
+      handlers = described_class.new.send(:default_handlers)
+
+      expect(handlers).to include(Entries::Guards::GlobalMaxConcurrentGuard)
+      expect(handlers.index(Entries::Guards::GlobalMaxConcurrentGuard)).to be < handlers.index(Entries::Guards::InstrumentLookupGuard)
+    end
+
+    it 'includes FeedHealthGuard right after the circuit breaker check' do
+      handlers = described_class.new.send(:default_handlers)
+
+      expect(handlers).to include(Entries::Guards::FeedHealthGuard)
+      expect(handlers.index(Entries::Guards::FeedHealthGuard)).to eq(handlers.index(Entries::Guards::CircuitBreakerGuard) + 1)
+    end
   end
 
   describe '#run' do
