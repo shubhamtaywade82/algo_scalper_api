@@ -19,3 +19,6 @@ dashboard/out/
 .DS_Store
 *.swp
 *.swo
+
+# Graphify codebase index (regenerated locally, not needed in git)
+graphify-out/
