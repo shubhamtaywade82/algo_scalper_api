@@ -37,7 +37,7 @@ module Api
           net_pnl: net_pnl,
           gross_profit: gross_profit,
           gross_loss: gross_loss,
-          total_brokerage: total_trades * 40.0
+          total_brokerage: scope.sum(:charges_rupees).to_f
         }
       }
     end

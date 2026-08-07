@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_07_065516) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -42,6 +42,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.datetime "updated_at", null: false
     t.index ["index_key", "alpha_source", "created_at"], name: "idx_on_index_key_alpha_source_created_at_2aa039ddff"
     t.index ["status", "created_at"], name: "index_alpha_signals_on_status_and_created_at"
+  end
+
+  create_table "audit_logs", force: :cascade do |t|
+    t.string "actor"
+    t.datetime "created_at", null: false
+    t.string "event_type", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_at"], name: "index_audit_logs_on_created_at"
+    t.index ["event_type"], name: "index_audit_logs_on_event_type"
   end
 
   create_table "best_indicator_params", force: :cascade do |t|
@@ -290,12 +300,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.decimal "max_equity", precision: 18, scale: 2, default: "0.0", null: false
     t.jsonb "meta", default: {}, null: false
     t.decimal "min_equity", precision: 18, scale: 2, default: "0.0", null: false
+    t.string "mode", default: "paper", null: false
     t.decimal "net_pnl", precision: 18, scale: 2, default: "0.0", null: false
     t.decimal "opening_cash", precision: 18, scale: 2, default: "0.0", null: false
     t.integer "trades_count", default: 0, null: false
     t.date "trading_date", null: false
     t.datetime "updated_at", null: false
-    t.index ["trading_date"], name: "index_paper_daily_wallets_on_trading_date", unique: true
+    t.index ["trading_date", "mode"], name: "index_paper_daily_wallets_on_trading_date_and_mode", unique: true
   end
 
   create_table "paper_fills_logs", force: :cascade do |t|
@@ -430,6 +441,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.datetime "carry_marked_at"
     t.string "carry_mode"
     t.decimal "carry_roi_pct", precision: 8, scale: 4
+    t.decimal "charges_rupees", precision: 12, scale: 4
     t.string "client_order_id"
     t.string "continuation_body_position"
     t.datetime "created_at", null: false

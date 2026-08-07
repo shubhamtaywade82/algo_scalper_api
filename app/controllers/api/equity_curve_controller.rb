@@ -10,8 +10,10 @@ module Api
       date_from = parse_date(params[:date_from], 90.days.ago.to_date)
       date_to = parse_date(params[:date_to], Time.zone.today)
 
+      # Explicit mode filter: this table now also holds live-mode KPI rows
+      # (Ledger::DailyCloseJob), which don't share a comparable closing_cash concept.
       records = PaperDailyWallet
-                .where(trading_date: date_from..date_to)
+                .where(trading_date: date_from..date_to, mode: 'paper')
                 .order(trading_date: :asc)
 
       if records.any?

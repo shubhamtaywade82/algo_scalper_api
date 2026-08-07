@@ -39,6 +39,7 @@ module TradingSystem
 
         @running = true
       end
+      audit_log!('bot_start', metadata: { services: @services.keys })
     end
 
     def stop_all
@@ -54,6 +55,7 @@ module TradingSystem
 
         @running = false
       end
+      audit_log!('bot_stop')
     end
 
     def start_service(name)
@@ -116,6 +118,12 @@ module TradingSystem
       Rails.logger.info("[Supervisor] stopped #{name}")
     rescue StandardError => e
       Rails.logger.error("[Supervisor] error stopping #{name}: #{e.class} - #{e.message}")
+    end
+
+    def audit_log!(event_type, metadata: {})
+      AuditLog.create!(event_type: event_type, metadata: metadata)
+    rescue StandardError => e
+      Rails.logger.error("[Supervisor] audit_log! failed for #{event_type}: #{e.class} - #{e.message}")
     end
   end
 end

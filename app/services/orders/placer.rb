@@ -401,16 +401,20 @@ module Orders
       def with_token_auto_heal(context:, &)
         retried = false
         begin
-          with_order_rate_limit(context: context, &)
+          result = with_order_rate_limit(context: context, &)
+          reset_consecutive_order_failures! if result
+          result
         rescue StandardError => e
           Rails.logger.error("[Orders::Placer] #{context} failed: #{e.class} - #{e.message}")
 
           unless DhanhqErrorHandler.token_expired?(e)
+            record_order_failure!
             return nil
           end
 
           if retried
             Rails.logger.error("[Orders::Placer] #{context} retry failed: #{e.class} - #{e.message}")
+            record_order_failure!
             return nil
           end
 
@@ -419,6 +423,35 @@ module Orders
           retried = true
           retry
         end
+      end
+
+      CONSECUTIVE_FAILURES_CACHE_KEY = 'orders:placer:consecutive_failures'
+      CONSECUTIVE_FAILURES_TTL = 15.minutes
+
+      # Auto-trips Risk::CircuitBreaker after N consecutive broker failures — previously the
+      # breaker only tripped via manual API call, so a broker outage or bad payload could burn
+      # through repeated failed orders with nothing halting entries. Rate-limited/dry-run "nil"
+      # results don't reach here (they don't raise), so only real broker failures count.
+      def record_order_failure!
+        threshold = auto_trip_threshold
+        return unless threshold&.positive?
+
+        count = (Rails.cache.read(CONSECUTIVE_FAILURES_CACHE_KEY) || 0) + 1
+        Rails.cache.write(CONSECUTIVE_FAILURES_CACHE_KEY, count, expires_in: CONSECUTIVE_FAILURES_TTL)
+        return unless count >= threshold
+
+        Risk::CircuitBreaker.instance.trip!(reason: "auto: #{count} consecutive order failures")
+        Rails.cache.delete(CONSECUTIVE_FAILURES_CACHE_KEY)
+      end
+
+      def reset_consecutive_order_failures!
+        Rails.cache.delete(CONSECUTIVE_FAILURES_CACHE_KEY)
+      end
+
+      def auto_trip_threshold
+        AlgoConfig.fetch.dig(:risk, :circuit_breaker_auto_trip_threshold) || 3
+      rescue StandardError
+        3
       end
 
       def order_placement_enabled?

@@ -185,6 +185,11 @@ module Live
           context: 'Live::ReconciliationService#fix_stuck_exit'
         )
       end
+
+      AuditLog.create!(
+        event_type: 'reconciliation_mismatch',
+        metadata: { order_no: tracker.order_no, tracker_id: tracker.id, kind: 'stuck_exit' }
+      )
     rescue StandardError => e
       Rails.logger.error("[ReconciliationService] Failed to auto-correct stuck exit for #{tracker.order_no}: #{e.class} - #{e.message}")
     end

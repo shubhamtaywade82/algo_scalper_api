@@ -18,7 +18,7 @@ function formatDuration(secs) {
 }
 
 export default function PositionRow(props) {
-  const pos = () => props.pos
+  const pos = createMemo(() => typeof props.pos === 'function' ? props.pos() : props.pos)
   const isStale = createMemo(() => pos()?.stale === true || pos()?.ltp_stale === true)
 
   const ltpFlash = useFlash(() => pos()?.ltp)

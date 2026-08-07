@@ -68,6 +68,28 @@ development:
     priority: 25
     description: "Persists public IP last-seen (throttled); dashboard no longer writes public_ip_logs"
 
+  cancel_stuck_orders:
+    class: Live::CancelStuckOrdersJob
+    schedule: every 1 minute
+    queue_name: background
+    priority: 4
+    description: "Cancels live entry orders DhanHQ never confirmed filled/rejected within the check window"
+
+  daily_close_paper:
+    class: Ledger::DailyCloseJob
+    schedule: at 3:35pm every day
+    queue_name: background
+    priority: 6
+    description: "Persists paper-mode daily KPI rollup (net PnL, win rate, expectancy, profit factor) after market close"
+
+  daily_close_live:
+    class: Ledger::DailyCloseJob
+    args: [{ mode: 'live' }]
+    schedule: at 3:36pm every day
+    queue_name: background
+    priority: 6
+    description: "Persists live-mode daily KPI rollup after market close"
+
 production:
   instruments_import:
     class: InstrumentsImportJob
@@ -130,3 +152,10 @@ production:
     queue_name: background
     priority: 25
     description: "Persists public IP last-seen (throttled); dashboard polling does not write public_ip_logs"
+
+  cancel_stuck_orders:
+    class: Live::CancelStuckOrdersJob
+    schedule: every 1 minute between 9:15am and 3:30pm on weekdays
+    queue_name: background
+    priority: 4
+    description: "Cancels live entry orders DhanHQ never confirmed filled/rejected within the check window"

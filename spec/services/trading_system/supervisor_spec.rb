@@ -34,4 +34,30 @@ RSpec.describe TradingSystem::Supervisor do
       expect(supervisor.health_check).to eq(broken: false)
     end
   end
+
+  describe '#start_all / #stop_all audit logging' do
+    let(:service) { double('Service', start: true, stop: true) } # rubocop:disable RSpec/VerifiedDoubles
+
+    before { supervisor.register(:svc, service) }
+
+    it 'creates a bot_start audit log entry on start_all' do
+      expect { supervisor.start_all }.to change(AuditLog, :count).by(1)
+      expect(AuditLog.last.event_type).to eq('bot_start')
+    end
+
+    it 'does not double-log when start_all is called again while already running' do
+      supervisor.start_all
+      expect { supervisor.start_all }.not_to change(AuditLog, :count)
+    end
+
+    it 'creates a bot_stop audit log entry on stop_all' do
+      supervisor.start_all
+      expect { supervisor.stop_all }.to change(AuditLog, :count).by(1)
+      expect(AuditLog.last.event_type).to eq('bot_stop')
+    end
+
+    it 'does not log stop_all when not running' do
+      expect { supervisor.stop_all }.not_to change(AuditLog, :count)
+    end
+  end
 end

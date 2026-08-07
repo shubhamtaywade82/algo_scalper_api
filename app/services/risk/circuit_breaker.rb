@@ -39,6 +39,7 @@ module Risk
       payload = { at: Time.current, reason: reason.to_s }
       Rails.cache.write(TRIP_CACHE_KEY, payload, expires_in: ttl)
       Rails.logger.error("[CircuitBreaker] *** TRIPPED *** reason=#{reason.inspect} ttl=#{ttl}")
+      audit_log!('kill_switch_trip', metadata: { reason: reason.to_s, ttl: ttl.to_s })
       status
     rescue StandardError => e
       Rails.logger.error("[CircuitBreaker] trip! failed: #{e.message}")
@@ -50,6 +51,7 @@ module Risk
     def reset!
       Rails.cache.delete(TRIP_CACHE_KEY)
       Rails.logger.info('[CircuitBreaker] Reset — trading re-enabled')
+      audit_log!('kill_switch_reset')
       true
     rescue StandardError => e
       Rails.logger.error("[CircuitBreaker] reset! failed: #{e.message}")
@@ -75,12 +77,21 @@ module Risk
     def force_close_all!(exit_engine:, reason: 'circuit_breaker')
       trackers = PositionTracker.active.to_a
       Rails.logger.error("[CircuitBreaker] Force-closing #{trackers.size} position(s): #{reason}")
+      audit_log!('square_off', metadata: { reason: reason.to_s, position_count: trackers.size })
 
       trackers.each do |tracker|
         exit_engine.execute_exit(tracker, reason)
       rescue StandardError => e
         Rails.logger.error("[CircuitBreaker] Force-close failed for #{tracker.order_no}: #{e.class} - #{e.message}")
       end
+    end
+
+    private
+
+    def audit_log!(event_type, metadata: {})
+      AuditLog.create!(event_type: event_type, metadata: metadata)
+    rescue StandardError => e
+      Rails.logger.error("[CircuitBreaker] audit_log! failed for #{event_type}: #{e.class} - #{e.message}")
     end
   end
 end

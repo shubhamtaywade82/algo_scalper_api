@@ -194,11 +194,17 @@ module Api
         status: r.status,
         desired_status: r.desired_status,
         current_version: r.current_version ? serialize_version(r.current_version) : nil,
+        version: r.current_version&.version || 1,
+        instruments: ["NIFTY", "BANKNIFTY", "SENSEX"],
+        description: "Adaptive Supertrend & technical indicators signal generator for index options scalping.",
+        runtime: "Ruby 3.3 / Rails 8",
+        timeframe: "1m",
         last_heartbeat: runner&.dig(:last_heartbeat),
         error_count: runner&.dig(:error_count) || 0,
         runner_status: runner
       }
     end
+
 
     def serialize_version(v)
       {

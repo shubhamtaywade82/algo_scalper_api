@@ -592,6 +592,65 @@ RSpec.describe Orders::Placer do
     end
   end
 
+  describe 'circuit breaker auto-trip on consecutive order failures' do
+    let(:real_cache) { ActiveSupport::Cache::MemoryStore.new }
+
+    before do
+      allow(Rails).to receive(:cache).and_return(real_cache)
+      allow(described_class).to receive(:auto_trip_threshold).and_return(3)
+      allow(Risk::CircuitBreaker.instance).to receive(:trip!)
+    end
+
+    it 'does not trip before the threshold is reached' do
+      2.times { described_class.send(:record_order_failure!) }
+
+      expect(Risk::CircuitBreaker.instance).not_to have_received(:trip!)
+    end
+
+    it 'trips exactly at the configured threshold' do
+      3.times { described_class.send(:record_order_failure!) }
+
+      expect(Risk::CircuitBreaker.instance).to have_received(:trip!).once.with(reason: a_string_matching(/3 consecutive/))
+    end
+
+    it 'resets the counter on the next success, so an isolated failure never trips it' do
+      described_class.send(:record_order_failure!)
+      described_class.send(:reset_consecutive_order_failures!)
+      2.times { described_class.send(:record_order_failure!) }
+
+      expect(Risk::CircuitBreaker.instance).not_to have_received(:trip!)
+    end
+
+    it 'does nothing when auto-trip is disabled (threshold nil/zero)' do
+      allow(described_class).to receive(:auto_trip_threshold).and_return(nil)
+
+      5.times { described_class.send(:record_order_failure!) }
+
+      expect(Risk::CircuitBreaker.instance).not_to have_received(:trip!)
+    end
+
+    it 'trips via the real order-placement path after N consecutive broker exceptions' do
+      allow(DhanhqErrorHandler).to receive(:token_expired?).and_return(false)
+
+      3.times do
+        result = described_class.send(:with_token_auto_heal, context: 'orders.test') { raise 'broker down' }
+        expect(result).to be_nil
+      end
+
+      expect(Risk::CircuitBreaker.instance).to have_received(:trip!).once
+    end
+
+    it 'a success between failures resets the streak, so it never trips' do
+      allow(DhanhqErrorHandler).to receive(:token_expired?).and_return(false)
+
+      2.times { described_class.send(:with_token_auto_heal, context: 'orders.test') { raise 'broker down' } }
+      described_class.send(:with_token_auto_heal, context: 'orders.test') { double('order') } # rubocop:disable RSpec/VerifiedDoubles
+      2.times { described_class.send(:with_token_auto_heal, context: 'orders.test') { raise 'broker down' } }
+
+      expect(Risk::CircuitBreaker.instance).not_to have_received(:trip!)
+    end
+  end
+
   describe '.order_placement_enabled?' do
     before do
       allow(ENV).to receive(:[]).and_call_original

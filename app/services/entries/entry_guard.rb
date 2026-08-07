@@ -17,6 +17,7 @@ module Entries
       end
 
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil, signal: nil)
+        entry_attempt_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         Entries::AdvisoryLock.with_index_lock(index_cfg[:key]) do
           EventStore::DecisionTrace.with_trace(index_key: index_cfg[:key], direction: direction, metadata: entry_metadata || {}) do |trace|
             Rails.logger.info("[EntryGuard][#{trace.decision_id}] Attempting entry for #{index_cfg[:key]} (#{direction})")
@@ -119,6 +120,7 @@ module Entries
         end
 
         tracker = result
+        record_signal_to_order_latency!(tracker, entry_attempt_started_at)
         signal&.record_entry_outcome('entered')
         trace.mark_status(:executed)
 
@@ -394,6 +396,18 @@ module Entries
         return signal.candle_timestamp.to_i if signal.respond_to?(:candle_timestamp) && signal.candle_timestamp.present?
 
         Time.current.to_i / CLIENT_ORDER_ID_TIME_BUCKET_SECONDS
+      end
+
+      # Records how long the entry attempt took from try_enter's first line to a placed
+      # order, as a per-trade execution-quality KPI (queryable via TradeAnalytic/reports
+      # once aggregated — no separate metrics table needed for a per-trade field).
+      def record_signal_to_order_latency!(tracker, started_at)
+        return unless tracker.respond_to?(:execution)
+
+        elapsed_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) * 1000).round
+        tracker.update_column(:execution, (tracker.execution || {}).merge('signal_to_order_ms' => elapsed_ms))
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] record_signal_to_order_latency! failed: #{e.class} - #{e.message}")
       end
 
       def extract_order_no(response)

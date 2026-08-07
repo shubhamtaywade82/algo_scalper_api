@@ -63,6 +63,30 @@ RSpec.describe Entries::EntryGuard do
     end
   end
 
+  describe '.record_signal_to_order_latency!' do
+    it 'stores a positive signal_to_order_ms in tracker.execution' do
+      tracker = create(:position_tracker)
+      started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC) - 0.05 # simulate 50ms elapsed
+
+      described_class.send(:record_signal_to_order_latency!, tracker, started_at)
+
+      expect(tracker.reload.execution['signal_to_order_ms']).to be >= 50
+    end
+
+    it 'preserves other keys already present in execution' do
+      tracker = create(:position_tracker, execution: { 'type' => 'stop_loss' })
+
+      described_class.send(:record_signal_to_order_latency!, tracker, Process.clock_gettime(Process::CLOCK_MONOTONIC))
+
+      expect(tracker.reload.execution).to include('type' => 'stop_loss', 'signal_to_order_ms' => a_value >= 0)
+    end
+
+    it 'does not raise for an object without an execution column' do
+      expect { described_class.send(:record_signal_to_order_latency!, Object.new, Process.clock_gettime(Process::CLOCK_MONOTONIC)) }
+        .not_to raise_error
+    end
+  end
+
   describe Entries::Guards::ExposureGuard do
     describe '.exposure_ok?' do
       let(:db_instrument) { create(:instrument) }

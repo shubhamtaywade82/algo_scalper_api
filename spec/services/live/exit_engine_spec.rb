@@ -268,6 +268,27 @@ RSpec.describe Live::ExitEngine do
       end
     end
 
+    context 'charges persistence' do
+      it 'persists round-trip (entry + exit leg) charges on a normal exit' do
+        tracker.update!(entry_price: BigDecimal('150.0'), quantity: 50, segment: 'NSE_FNO')
+        allow(Live::TickQuery).to receive(:ltp_for).and_return(BigDecimal('200.0'))
+
+        engine.execute_exit(tracker, 'stop_loss')
+
+        expected = Orders::ChargesCalculator.call(side: 'buy', quantity: 50, price: BigDecimal('150.0'), segment: 'NSE_FNO') +
+                   Orders::ChargesCalculator.call(side: 'sell', quantity: 50, price: BigDecimal('200.0'), segment: 'NSE_FNO')
+        expect(tracker.reload.charges_rupees).to eq(expected)
+      end
+
+      it 'does not persist charges for a local expired-contract settlement (no real broker order placed)' do
+        tracker.update!(expiry_date: Date.yesterday)
+
+        engine.execute_exit(tracker, 'stop_loss')
+
+        expect(tracker.reload.charges_rupees).to be_nil
+      end
+    end
+
     context 'with router failures' do
       it 'returns failure hash when router returns false' do
         allow(router).to receive(:exit_market).and_return(false)

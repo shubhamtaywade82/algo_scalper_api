@@ -159,6 +159,8 @@ module Live
         )
       end
 
+      persist_round_trip_charges!(tracker, exit_price: exit_price) unless reason.to_s.include?('EXPIRED_CONTRACT_LOCAL_SETTLE')
+
       tracker.reload
       normalized_reason = normalize_exit_reason_with_final_pnl(tracker, reason)
 
@@ -269,6 +271,23 @@ module Live
         tracker.update!(meta: meta)
       end
       updated_reason
+    end
+
+    # Real per-leg NSE F&O charges (brokerage/STT/GST/stamp duty/SEBI fee) for both the
+    # entry and exit leg, computed once at exit since only then are both prices known.
+    # Skipped by the caller for local settlements (no real broker order was placed).
+    def persist_round_trip_charges!(tracker, exit_price:)
+      return if tracker.entry_price.blank? || tracker.quantity.blank? || exit_price.blank?
+
+      entry_charges = Orders::ChargesCalculator.call(
+        side: 'buy', quantity: tracker.quantity, price: tracker.entry_price, segment: tracker.segment
+      )
+      exit_charges = Orders::ChargesCalculator.call(
+        side: 'sell', quantity: tracker.quantity, price: exit_price, segment: tracker.segment
+      )
+      tracker.update_column(:charges_rupees, entry_charges + exit_charges)
+    rescue StandardError => e
+      Rails.logger.error("[ExitEngine] Failed to compute charges for #{tracker.order_no}: #{e.class} - #{e.message}")
     end
 
     # @param tracker [PositionTracker]

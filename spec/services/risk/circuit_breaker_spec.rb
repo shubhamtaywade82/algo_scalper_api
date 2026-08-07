@@ -28,6 +28,12 @@ RSpec.describe Risk::CircuitBreaker do
       )
       cb.trip!(reason: 'test halt')
     end
+
+    it 'creates a kill_switch_trip audit log entry' do
+      expect { cb.trip!(reason: 'test halt') }.to change(AuditLog, :count).by(1)
+      expect(AuditLog.last).to have_attributes(event_type: 'kill_switch_trip')
+      expect(AuditLog.last.metadata['reason']).to eq('test halt')
+    end
   end
 
   describe '#reset!' do
@@ -39,6 +45,22 @@ RSpec.describe Risk::CircuitBreaker do
         hash_including(type: 'circuit_breaker', tripped: false)
       )
       cb.reset!
+    end
+
+    it 'creates a kill_switch_reset audit log entry' do
+      expect { cb.reset! }.to change(AuditLog, :count).by(1)
+      expect(AuditLog.last).to have_attributes(event_type: 'kill_switch_reset')
+    end
+  end
+
+  describe '#force_close_all!' do
+    let(:exit_engine) { instance_double(Live::ExitEngine, execute_exit: true) }
+
+    it 'creates a square_off audit log entry with the position count' do
+      expect { cb.force_close_all!(exit_engine: exit_engine, reason: 'manual halt') }
+        .to change(AuditLog, :count).by(1)
+      expect(AuditLog.last).to have_attributes(event_type: 'square_off')
+      expect(AuditLog.last.metadata['reason']).to eq('manual halt')
     end
   end
 end
