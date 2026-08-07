@@ -16,6 +16,10 @@
 # frozen_string_literal: true
 
 class DhanAccessToken < ApplicationRecord
+  # Never queried by value (only .active's expiry_time filter), so randomized encryption
+  # is fine and stronger than deterministic.
+  encrypts :token, deterministic: false
+
   CACHE_KEY = 'dhan_access_token/active'
   CACHE_TTL = 30.seconds
 
@@ -29,9 +33,15 @@ class DhanAccessToken < ApplicationRecord
 
   class << self
     def active
-      Rails.cache.fetch(CACHE_KEY, expires_in: CACHE_TTL) do
-        where('expiry_time > ?', Time.current).order(expiry_time: :desc).first
+      # Cache only the id, not the record: Rails.cache is Solid Cache (Postgres-backed) in
+      # this project, and caching the full instance would serialize the decrypted token
+      # into a second table, defeating the point of encrypting the column at all.
+      id = Rails.cache.fetch(CACHE_KEY, expires_in: CACHE_TTL) do
+        where('expiry_time > ?', Time.current).order(expiry_time: :desc).first&.id
       end
+      return nil unless id
+
+      find_by(id: id)
     end
 
     def valid?
