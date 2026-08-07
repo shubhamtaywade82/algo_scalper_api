@@ -475,6 +475,9 @@ module Live
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
         return unless position_data
 
+        snapshot = pnl_snapshot(tracker)
+        return unless snapshot
+
         # Build rule context
         position_data = build_position_data_for_rule_engine(tracker, snapshot)
         context = Risk::Rules::RuleContext.new(
@@ -512,6 +515,8 @@ module Live
         cfg = profit_floor_config
         return unless cfg[:enabled]
 
+        position_data ||= active_cache&.get_by_tracker_id(tracker.id)
+
         snapshot = pnl_snapshot(tracker)
         return unless snapshot
 
@@ -537,7 +542,7 @@ module Live
  
         # Ratchet the floor upward as HWM PnL grows (trailing floor).
         trail_pct = cfg[:trail_pct]
-        if trail_pct && (pending_meta || tracker.meta || {})['profit_floor_rupees'].present?
+        if trail_pct && position_data && (pending_meta || tracker.meta || {})['profit_floor_rupees'].present?
           hwm_pnl = safe_big_decimal(position_data.high_water_mark)
           update_trailing_floor!(tracker, hwm_pnl, trail_pct: trail_pct, pending_meta: pending_meta)
         end
@@ -846,7 +851,7 @@ module Live
         instrument = tracker.instrument || tracker.watchable&.instrument
         index_key = tracker.meta&.dig('index_key') || instrument&.symbol_name
 
-        Positions::ActiveCache::PositionData.new(
+        Positions::PositionData.new(
           tracker_id: tracker.id,
           security_id: tracker.security_id,
           segment: tracker.segment || instrument&.exchange_segment,

@@ -100,6 +100,14 @@ module Live
       def run_enforcement_for_tracker(tracker, exit_engine)
         return if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
 
+        # UnifiedExitChecker's comprehensive check (hard SL/TP, adaptive trailing, emergency
+        # peak-loss) — was defined but never called from anywhere in the running system, so
+        # positions could give back their entire peak profit into a large loss with nothing
+        # catching it. Runs first since it reads PnL straight from RedisPnlCache and doesn't
+        # depend on Positions::ActiveCache being populated, unlike the stages below.
+        enforce_hard_limits_for(tracker, exit_engine: exit_engine)
+        return if exit_requested_or_sent?(tracker)
+
         # Advance trade state before evaluating rules (updates trade_state, peak_trend_score etc)
         advance_trade_state_for(tracker)
 

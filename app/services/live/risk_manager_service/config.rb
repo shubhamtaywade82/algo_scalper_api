@@ -78,6 +78,16 @@ module Live
         }
       end
 
+      def rr_profit_booking_config
+        algo_config.dig(:risk, :rr_profit_booking) || {}
+      rescue StandardError
+        {}
+      end
+
+      def rr_profit_booking_enabled?
+        rr_profit_booking_config[:enabled] == true
+      end
+
       def integer_or_nil(value)
         return nil if value.nil?
 
