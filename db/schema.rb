@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_07_075821) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_07_142556) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -65,6 +65,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_07_075821) do
     t.jsonb "results", default: {}, null: false
     t.datetime "started_at"
     t.string "status", default: "pending", null: false
+    t.bigint "strategy_version_id"
     t.string "symbol", null: false
     t.decimal "total_pnl", precision: 12, scale: 4
     t.integer "total_trades"
@@ -73,6 +74,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_07_075821) do
     t.decimal "win_rate", precision: 8, scale: 4
     t.index ["created_at"], name: "index_backtest_runs_on_created_at"
     t.index ["status"], name: "index_backtest_runs_on_status"
+    t.index ["strategy_version_id"], name: "index_backtest_runs_on_strategy_version_id"
   end
 
   create_table "best_indicator_params", force: :cascade do |t|
@@ -1219,7 +1221,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_07_075821) do
   create_table "trading_strategies", force: :cascade do |t|
     t.string "author", default: "System"
     t.jsonb "backtest_results", default: {}
-    t.jsonb "checks", default: {"risk" => "not_run", "logic" => "not_run", "syntax" => "not_run", "backtest" => "not_run"}
+    t.jsonb "checks", default: {"risk"=>"not_run", "logic"=>"not_run", "syntax"=>"not_run", "backtest"=>"not_run"}
     t.text "code", default: ""
     t.datetime "created_at", null: false
     t.text "description"
@@ -1298,6 +1300,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_07_075821) do
     t.index ["unit_type"], name: "index_woods_units_on_unit_type"
   end
 
+  add_foreign_key "backtest_runs", "strategy_versions"
   add_foreign_key "best_indicator_params", "instruments"
   add_foreign_key "derivatives", "instruments"
   add_foreign_key "ledger_postings", "ledger_accounts"

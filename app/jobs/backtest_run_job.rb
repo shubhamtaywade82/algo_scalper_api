@@ -14,13 +14,23 @@ class BacktestRunJob < ApplicationJob
     run = BacktestRun.find(backtest_run_id)
     run.update!(status: 'running', started_at: Time.current)
 
-    engine = Backtest::OptionsBuyingBacktester.call(
-      symbol: run.symbol,
-      days_back: run.days_back,
-      params: run.params.symbolize_keys,
-      trading_type: run.trading_type.to_sym,
-      entry_interval: run.entry_interval
-    )
+    engine = if run.strategy_version_id.present?
+               Backtest::StrategyBacktester.call(
+                 symbol: run.symbol,
+                 days_back: run.days_back,
+                 strategy_version: run.strategy_version,
+                 trading_type: run.trading_type.to_sym,
+                 entry_interval: run.entry_interval
+               )
+             else
+               Backtest::OptionsBuyingBacktester.call(
+                 symbol: run.symbol,
+                 days_back: run.days_back,
+                 params: run.params.symbolize_keys,
+                 trading_type: run.trading_type.to_sym,
+                 entry_interval: run.entry_interval
+               )
+             end
     summary = engine.summary
 
     run.update!(

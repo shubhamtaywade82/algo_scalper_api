@@ -45,4 +45,24 @@ RSpec.describe BacktestRunJob do
     expect(run.error_message).to eq('RuntimeError: Instrument NIFTY not found')
     expect(run.finished_at).to be_present
   end
+
+  context 'when the run has a pinned strategy_version' do
+    let(:strategy_version) { create(:strategy_version) }
+    let(:run) { create(:backtest_run, symbol: 'NIFTY', days_back: 30, strategy_version: strategy_version) }
+    let(:strategy_engine) { instance_double(Backtest::StrategyBacktester, summary: summary) }
+
+    before do
+      allow(Backtest::StrategyBacktester).to receive(:call).and_return(strategy_engine)
+    end
+
+    it 'dispatches to Backtest::StrategyBacktester instead of OptionsBuyingBacktester' do
+      described_class.new.perform(run.id)
+
+      expect(Backtest::StrategyBacktester).to have_received(:call).with(
+        symbol: 'NIFTY', days_back: 30, strategy_version: strategy_version, trading_type: :options, entry_interval: '5'
+      )
+      expect(Backtest::OptionsBuyingBacktester).not_to have_received(:call)
+      expect(run.reload.status).to eq('completed')
+    end
+  end
 end

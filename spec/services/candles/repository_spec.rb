@@ -117,4 +117,43 @@ RSpec.describe Candles::Repository do
       expect(result.candles).to eq([])
     end
   end
+
+  describe '.rollup_candles' do
+    def candle(offset_minutes, open:, high:, low:, close:, volume: 100)
+      Candle.new(
+        timestamp: base_ts + offset_minutes.minutes,
+        open: open, high: high, low: low, close: close, volume: volume
+      )
+    end
+
+    it 'resamples an in-memory Array<Candle> without touching the Record table' do
+      candles = [
+        candle(0, open: 100, high: 110, low: 95, close: 105),
+        candle(1, open: 105, high: 120, low: 100, close: 115),
+        candle(2, open: 115, high: 118, low: 108, close: 112)
+      ]
+
+      result = described_class.rollup_candles(candles: candles, symbol: 'NIFTY', timeframe: '3m')
+
+      expect(result).to be_a(CandleSeries)
+      expect(result.candles.size).to eq(1)
+      bar = result.candles.first
+      expect(bar.timestamp).to eq(base_ts)
+      expect(bar.open).to eq(100.0)
+      expect(bar.high).to eq(120.0)
+      expect(bar.low).to eq(95.0)
+      expect(bar.close).to eq(112.0)
+      expect(bar.volume).to eq(300)
+      expect(Candles::Record.count).to eq(0)
+    end
+
+    it 'passes 1m candles through unchanged when timeframe matches the base timeframe' do
+      candles = [candle(0, open: 100, high: 105, low: 95, close: 100)]
+
+      result = described_class.rollup_candles(candles: candles, symbol: 'NIFTY', timeframe: '1m')
+
+      expect(result.candles.size).to eq(1)
+      expect(result.candles.first.close).to eq(100.0)
+    end
+  end
 end

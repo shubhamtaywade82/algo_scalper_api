@@ -32,6 +32,21 @@ module Candles
         to_candle_series(instrument_key, timeframe, rows)
       end
 
+      # Resample an in-memory Array<Candle> not backed by the `Record` table (e.g. a
+      # backtester's own already-fetched historical candles) using the same bucketing
+      # rules as the durable-data path.
+      # @param candles [Array<Candle>] ascending by timestamp
+      # @param symbol [String]
+      # @param timeframe [String] e.g. "1m", "3m", "5m"
+      # @return [CandleSeries]
+      def rollup_candles(candles:, symbol:, timeframe:)
+        rows = candles.map do |c|
+          { ts: c.timestamp, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, oi: 0 }
+        end
+        rows = rollup(rows, timeframe) unless timeframe.to_s == BASE_TIMEFRAME
+        to_candle_series(symbol, timeframe, rows)
+      end
+
       private
 
       def base_series(instrument_key:, from:, to:)

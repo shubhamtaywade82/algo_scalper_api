@@ -38,6 +38,25 @@ RSpec.describe 'Api::BacktestRuns' do
 
       expect(BacktestRun.last.params).to eq('stop_loss_pct' => 0.3)
     end
+
+    it 'resolves and pins strategy_slug to the strategy_record current_version' do
+      strategy_record = create(:strategy_record, slug: 'vwap-reversal')
+      version = create(:strategy_version, strategy_record: strategy_record)
+      strategy_record.update!(current_version: version)
+
+      post '/api/backtest_runs', params: { symbol: 'NIFTY', strategy_slug: 'vwap-reversal' }
+
+      expect(response).to have_http_status(:accepted)
+      expect(BacktestRun.last.strategy_version_id).to eq(version.id)
+    end
+
+    it 'returns 422 for an unknown strategy_slug' do
+      post '/api/backtest_runs', params: { symbol: 'NIFTY', strategy_slug: 'does-not-exist' }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body['error']).to eq('strategy_not_found')
+      expect(BacktestRun.count).to eq(0)
+    end
   end
 
   describe 'GET /api/backtest_runs' do

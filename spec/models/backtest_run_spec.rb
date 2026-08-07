@@ -33,4 +33,18 @@ RSpec.describe BacktestRun, type: :model do
       expect(described_class.recent_first.to_a).to eq([newer, older])
     end
   end
+
+  describe '#strategy_version' do
+    it 'is optional' do
+      run = build(:backtest_run, strategy_version: nil)
+      expect(run).to be_valid
+    end
+
+    it 'can be pinned to a Strategies::Version' do
+      version = create(:strategy_version)
+      run = create(:backtest_run, strategy_version: version)
+
+      expect(run.reload.strategy_version).to eq(version)
+    end
+  end
 end

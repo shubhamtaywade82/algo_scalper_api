@@ -21,12 +21,18 @@ module Api
     NUMERIC_PARAM_KEYS = %w[stop_loss_pct target_pct giveback_activation_pct giveback_pct max_hold_minutes].freeze
 
     def create
+      strategy_version = resolve_strategy_version(params[:strategy_slug])
+      if params[:strategy_slug].present? && strategy_version.nil?
+        return render json: { error: 'strategy_not_found', slug: params[:strategy_slug] }, status: :unprocessable_entity
+      end
+
       run = BacktestRun.create!(
         symbol: params[:symbol].to_s.upcase.presence || 'NIFTY',
         days_back: params[:days_back].presence&.to_i&.clamp(1, MAX_DAYS_BACK) || 90,
         trading_type: params[:trading_type].presence || 'options',
         entry_interval: params[:entry_interval].presence || '5',
-        params: strategy_params
+        params: strategy_params,
+        strategy_version: strategy_version
       )
       BacktestRunJob.perform_later(run.id)
 
@@ -72,6 +78,16 @@ module Api
 
     private
 
+    def resolve_strategy_version(slug)
+      return nil if slug.blank?
+
+      version = ::Strategies::Record.find_by(slug: slug)&.current_version
+      return version if version
+
+      ::Strategies::Discovery.sync! # cold-start: no daemon has reconciled this box yet
+      ::Strategies::Record.find_by(slug: slug)&.current_version
+    end
+
     def strategy_params
       raw = params[:params].presence&.to_unsafe_h || {}
       raw.slice(*NUMERIC_PARAM_KEYS).each_with_object({}) do |(key, value), casted|
@@ -85,7 +101,8 @@ module Api
       {
         id: run.id, symbol: run.symbol, days_back: run.days_back, status: run.status,
         total_trades: run.total_trades, win_rate: run.win_rate, total_pnl: run.total_pnl,
-        max_drawdown: run.max_drawdown, created_at: run.created_at
+        max_drawdown: run.max_drawdown, created_at: run.created_at,
+        strategy_slug: run.strategy_version&.strategy_record&.slug
       }
     end
 
