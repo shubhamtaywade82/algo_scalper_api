@@ -55,6 +55,7 @@ class PositionTracker < ApplicationRecord
   belongs_to :instrument # Kept for backward compatibility during transition
   belongs_to :watchable, polymorphic: true
   has_one :trade_analytic, dependent: :destroy
+  has_one :meta_snapshot, class_name: 'PositionMetaSnapshot', dependent: :destroy
 
   # Scopes
   # Note: enum automatically creates scopes for :pending, :active, :exited, :cancelled

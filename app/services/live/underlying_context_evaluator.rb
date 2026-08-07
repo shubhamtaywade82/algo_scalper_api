@@ -54,7 +54,7 @@ module Live
     # Reads underlying_segment and underlying_security_id from ActiveCache pos_data
     # (already populated by Positions::MetadataResolver at entry time).
     def build_underlying_position_data(tracker, pos_data)
-      index_key = tracker.index_key
+      index_key = (tracker.respond_to?(:index_key) ? tracker.index_key : nil) || tracker.meta&.dig('index_key')
 
       OpenStruct.new(
         tracker_id: tracker.id,
@@ -72,7 +72,8 @@ module Live
     # Safe default: :bullish — unknown direction → false negative, never false positive.
     def resolve_position_direction(tracker, pos_data)
       raw = pos_data&.position_direction.presence ||
-            tracker.direction.presence
+            (tracker.respond_to?(:direction) ? tracker.direction.presence : nil) ||
+            tracker.meta&.dig('direction')
 
       case raw.to_s.downcase
       when 'long_pe', 'bearish', 'put' then :bearish

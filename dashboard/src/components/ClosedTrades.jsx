@@ -76,7 +76,7 @@ function SortHeader(props) {
   )
 }
 
-export default function ClosedTrades() {
+export default function ClosedTrades(props) {
   const ctx = useDashboardContext()
 
   const [positions, setPositions] = createSignal([])

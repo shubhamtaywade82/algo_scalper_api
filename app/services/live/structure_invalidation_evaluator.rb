@@ -15,17 +15,20 @@ module Live
     # @param si_cfg [Hash] structure invalidation config with :underlying_move_pct and :premium_drop_pct
     # @return [Boolean]
     def dual_condition_met?(tracker, underlying_ltp, current_premium, si_cfg)
-      entry_underlying = tracker.entry_underlying_price.to_f
+      entry_underlying = tracker.respond_to?(:entry_underlying_price) ? tracker.entry_underlying_price.to_f : tracker.meta&.dig('entry_underlying_price').to_f
+      entry_underlying = tracker.meta&.dig('entry_underlying_price').to_f if entry_underlying.zero?
       return false unless entry_underlying.positive?
 
-      direction = tracker.direction.to_s
+      direction = tracker.respond_to?(:direction) ? tracker.direction.to_s : tracker.meta&.dig('direction').to_s
+      direction = tracker.meta&.dig('direction').to_s if direction.blank?
+
       move_pct = si_cfg[:underlying_move_pct].to_f
       return false unless move_pct.positive?
 
       underlying_moved = case direction
-                         when 'long_ce'
+                         when 'long_ce', 'bullish'
                            (entry_underlying - underlying_ltp) / entry_underlying >= move_pct
-                         when 'long_pe'
+                         when 'long_pe', 'bearish'
                            (underlying_ltp - entry_underlying) / entry_underlying >= move_pct
                          else
                            false
@@ -33,6 +36,7 @@ module Live
       return false unless underlying_moved
 
       peak_premium = tracker.meta&.dig('peak_premium').to_f
+      peak_premium = tracker.entry_price.to_f if peak_premium.zero? && tracker.respond_to?(:entry_price)
       return false unless peak_premium.positive?
       return false unless current_premium.to_f.positive?
 
