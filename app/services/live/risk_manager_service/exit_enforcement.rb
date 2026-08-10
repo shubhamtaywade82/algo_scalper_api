@@ -303,7 +303,8 @@ module Live
         context = Risk::Rules::RuleContext.new(
           position: position_data,
           tracker: tracker,
-          risk_config: risk_config
+          risk_config: risk_config,
+          tracker_snapshot: snapshot
         )
 
         # Evaluate StructureInvalidationRule
@@ -346,12 +347,16 @@ module Live
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
         return unless position_data
 
+        snapshot = pnl_snapshot(tracker)
+        return unless snapshot
+
         # Build rule context
         position_data = build_position_data_for_rule_engine(tracker, snapshot)
         context = Risk::Rules::RuleContext.new(
           position: position_data,
           tracker: tracker,
-          risk_config: risk_config
+          risk_config: risk_config,
+          tracker_snapshot: snapshot
         )
 
         # Evaluate PremiumMomentumFailureRule
@@ -383,12 +388,16 @@ module Live
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
         return unless position_data
 
+        snapshot = pnl_snapshot(tracker)
+        return unless snapshot
+
         # Build rule context
         position_data = build_position_data_for_rule_engine(tracker, snapshot)
         context = Risk::Rules::RuleContext.new(
           position: position_data,
           tracker: tracker,
-          risk_config: risk_config
+          risk_config: risk_config,
+          tracker_snapshot: snapshot
         )
 
         # Evaluate TimeStopRule
@@ -483,7 +492,8 @@ module Live
         context = Risk::Rules::RuleContext.new(
           position: position_data,
           tracker: tracker,
-          risk_config: risk_config
+          risk_config: risk_config,
+          tracker_snapshot: snapshot
         )
 
         # Evaluate PercentagePnlRule

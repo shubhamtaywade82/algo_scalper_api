@@ -97,7 +97,8 @@ module Live
     def prepare_exit_intent!(tracker, reason)
       tracker.with_lock do
         tracker.reload
-        return false if tracker.exited? || tracker.exit_requested_at.present?
+        return false if tracker.exited? || tracker.exit_sent_at.present?
+        return false if tracker.exit_requested_at.present? && !stale_exit_intent?(tracker)
 
         coid = tracker.exit_coid.presence || deterministic_exit_coid(tracker)
         metadata = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
@@ -112,6 +113,15 @@ module Live
       end
 
       true
+    end
+
+    # An intent with no broker ack after the retry window means the order never reached
+    # the broker (router failure/crash); the position would otherwise stay open forever.
+    # @param tracker [PositionTracker]
+    # @return [Boolean]
+    def stale_exit_intent?(tracker)
+      tracker.exit_sent_at.blank? &&
+        tracker.exit_requested_at < EXIT_INTENT_RETRY_AFTER_SECONDS.seconds.ago
     end
 
     # Persists broker acknowledgement metadata after successful exit order placement.
@@ -250,27 +260,10 @@ module Live
       end
 
       final_pnl = tracker.last_pnl_rupees
-      entry_price = tracker.entry_price
-      quantity = tracker.quantity
+      cost_basis = tracker.entry_price.to_f * tracker.quantity.to_i
+      return { pnl: nil, pnl_pct_decimal: nil } if final_pnl.blank? || !cost_basis.positive?
 
-      unless final_pnl.present? && entry_price.present? && quantity.present? &&
-             entry_price.to_f.positive? && quantity.to_i.positive? && reason.present? && reason.include?('%')
-        Rails.logger.warn("[ExitEngine] Cannot update exit reason for #{tracker.order_no}: final_pnl=#{final_pnl.inspect}, entry_price=#{entry_price.inspect}, quantity=#{quantity.inspect}, reason=#{reason.inspect}")
-        return reason
-      end
-
-      pnl_pct_display = ((final_pnl.to_f / (entry_price.to_f * quantity.to_i)) * 100.0).round(2)
-      updated_reason = "#{reason} (Actual: #{pnl_pct_display}%)"
-      return reason if reason == updated_reason
-
-      Rails.logger.info("[ExitEngine] Updating exit reason for #{tracker.order_no}: '#{reason}' -> '#{updated_reason}' (PnL: ₹#{final_pnl}, PnL%: #{pnl_pct_display}%)")
-      tracker.transaction do
-        tracker.lock!
-        meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
-        meta['exit_reason'] = updated_reason
-        tracker.update!(meta: meta)
-      end
-      updated_reason
+      { pnl: final_pnl, pnl_pct_decimal: (final_pnl.to_f / cost_basis) * 100.0 }
     end
 
     # Real per-leg NSE F&O charges (brokerage/STT/GST/stamp duty/SEBI fee) for both the

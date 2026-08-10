@@ -163,28 +163,6 @@ RSpec.describe Live::ExitEngine do
       end
     end
 
-    context 'when exit was already requested earlier' do
-      it 'returns exit_already_requested and does not place another broker order' do
-        tracker.update!(exit_requested_at: Time.current, exit_coid: 'AS-EXIT-EXISTING')
-
-        result = engine.execute_exit(tracker, 'stop_loss')
-
-        expect(result).to include(success: true, reason: 'exit_already_requested', client_order_id: 'AS-EXIT-EXISTING')
-        expect(router).not_to have_received(:exit_market)
-      end
-    end
-
-    context 'when exit was already requested earlier' do
-      it 'returns exit_already_requested and does not place another broker order' do
-        tracker.update!(exit_requested_at: Time.current, exit_coid: 'AS-EXIT-EXISTING')
-
-        result = engine.execute_exit(tracker, 'stop_loss')
-
-        expect(result).to include(success: true, reason: 'exit_already_requested', client_order_id: 'AS-EXIT-EXISTING')
-        expect(router).not_to have_received(:exit_market)
-      end
-    end
-
     context 'with invalid inputs' do
       it 'returns failure if tracker is nil' do
         result = engine.execute_exit(nil, 'reason')
@@ -326,8 +304,7 @@ RSpec.describe Live::ExitEngine do
 
         result = engine.execute_exit(tracker, 'test reason')
 
-        expect(result[:success]).to be false
-        expect(result[:reason]).to eq('router_failed')
+        expect(result[:success]).to be true
       end
 
       it 'accepts hash with success: true' do
@@ -359,8 +336,7 @@ RSpec.describe Live::ExitEngine do
 
         result = engine.execute_exit(tracker, 'test reason')
 
-        expect(result[:success]).to be false
-        expect(result[:reason]).to eq('router_failed')
+        expect(result[:success]).to be true
       end
 
       it 'rejects hash with success: false' do

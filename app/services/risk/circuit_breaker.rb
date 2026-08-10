@@ -40,6 +40,7 @@ module Risk
       Rails.cache.write(TRIP_CACHE_KEY, payload, expires_in: ttl)
       Rails.logger.error("[CircuitBreaker] *** TRIPPED *** reason=#{reason.inspect} ttl=#{ttl}")
       audit_log!('kill_switch_trip', metadata: { reason: reason.to_s, ttl: ttl.to_s })
+      broadcast_status
       status
     rescue StandardError => e
       Rails.logger.error("[CircuitBreaker] trip! failed: #{e.message}")
@@ -52,6 +53,7 @@ module Risk
       Rails.cache.delete(TRIP_CACHE_KEY)
       Rails.logger.info('[CircuitBreaker] Reset — trading re-enabled')
       audit_log!('kill_switch_reset')
+      broadcast_status
       true
     rescue StandardError => e
       Rails.logger.error("[CircuitBreaker] reset! failed: #{e.message}")
@@ -92,6 +94,14 @@ module Risk
       AuditLog.create!(event_type: event_type, metadata: metadata)
     rescue StandardError => e
       Rails.logger.error("[CircuitBreaker] audit_log! failed for #{event_type}: #{e.class} - #{e.message}")
+    end
+
+    # Dashboard listens for type: 'circuit_breaker'; a broadcast failure must never
+    # abort the trip/reset itself.
+    def broadcast_status
+      ActionCable.server.broadcast('dashboard', { type: 'circuit_breaker' }.merge(status))
+    rescue StandardError => e
+      Rails.logger.debug("[CircuitBreaker] broadcast_status failed: #{e.message}")
     end
   end
 end

@@ -82,11 +82,13 @@ module Strategies
         File.write(release_path, source)
       end
       checksum = Digest::SHA256.hexdigest(release_path.read)
-      scan_report = SecurityScanner.new(File.read(release_path)).scan
-      raise PluginError, "security scan blocked" unless scan_report[:pass]
 
-      next_version = (strategy_record.versions.maximum(:version) || 0) + 1
-      release_path_str = release_path.to_s
+      strategy_record.update!(name: plugin[:name]) if strategy_record.name != plugin[:name]
+
+      # Only create a new version when the release file or manifest actually changed,
+      # otherwise return the existing version. Version bumping on every sync (2s
+      # control-loop tick) previously produced 200k+ phantom versions.
+      current = strategy_record.current_version
       manifest = {
         "name" => plugin[:name],
         "slug" => plugin[:slug],
@@ -95,33 +97,24 @@ module Strategies
         "instruments" => plugin[:instruments],
         "params" => plugin[:params]
       }
+      return current if current && current.checksum == checksum && current.manifest == manifest
 
-      version = if strategy_record.id && strategy_record.current_version_id
-                  strategy_record.versions.find_or_create_by!(version: next_version) do |v|
-                    v.file_path = release_path_str
-                    v.checksum = checksum
-                    v.manifest = manifest
-                    v.scan_report = scan_report
-                    v.deployed_at = Time.current
-                  end
-                else
-                  strategy_record.versions.create!(
-                    version: next_version,
-                    file_path: release_path_str,
-                    checksum: checksum,
-                    manifest: manifest,
-                    scan_report: scan_report,
-                    deployed_at: Time.current
-                  )
-                end
+      scan_report = SecurityScanner.new(File.read(release_path)).scan
+      raise PluginError, "security scan blocked" unless scan_report[:pass]
 
-      # Always advance current_version to the version just synced/found — Manager (manager.rb:157)
-      # and backtest strategy resolution both key off this to pick which version to run. Previously
-      # gated on `name != plugin[:name]`, but find_or_create_by!'s block already sets the name at
-      # creation time, so that condition was always false on first sync and current_version never
-      # got set for a freshly-discovered strategy.
-      strategy_record.update!(name: plugin[:name]) if strategy_record.name != plugin[:name]
-      strategy_record.update!(current_version: version) if strategy_record.current_version_id != version.id
+      next_version = (strategy_record.versions.maximum(:version) || 0) + 1
+      release_path_str = release_path.to_s
+
+      version = strategy_record.versions.create!(
+        version: next_version,
+        file_path: release_path_str,
+        checksum: checksum,
+        manifest: manifest,
+        scan_report: scan_report,
+        deployed_at: Time.current
+      )
+
+      strategy_record.update!(current_version: version)
       version
     rescue ActiveRecord::RecordInvalid => e
       raise PluginError, e.message

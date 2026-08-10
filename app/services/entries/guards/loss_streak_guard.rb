@@ -78,7 +78,7 @@ module Entries
         end
 
         def position_scope
-          paper_trading_mode? ? PositionTracker.paper : PositionTracker.live
+          AlgoConfig.paper_trading_enabled? ? PositionTracker.paper : PositionTracker.live
         end
 
         def loss_exit?(position)
