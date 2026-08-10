@@ -35,7 +35,8 @@ module Entries
 
             pipeline_res = entry_guard_pipeline.run(context)
             if pipeline_res != Entries::EntryGuardPipeline::PASS
-              blocked_reason = pipeline_res.is_a?(Hash) ? pipeline_res[:blocked] : 'pipeline_blocked'
+              blocked_reason = blocked_reason_for(pipeline_res)
+              Rails.logger.info("[EntryGuard][#{trace.decision_id}] Blocked #{index_cfg[:key]} (#{direction}): #{blocked_reason}")
               signal&.record_entry_outcome('blocked', blocked_reason)
               trace.mark_status(:rejected)
               return false
@@ -354,6 +355,16 @@ module Entries
       end
 
       private
+
+      # The pipeline always normalizes a block into a DecisionRejection, so the old
+      # Hash check could never match and every block was persisted as the literal
+      # 'pipeline_blocked' — which guard fired was unrecoverable afterwards.
+      def blocked_reason_for(pipeline_res)
+        return pipeline_res.message.presence || pipeline_res.code.to_s if pipeline_res.is_a?(DecisionRejection)
+        return pipeline_res[:blocked].to_s if pipeline_res.is_a?(Hash) && pipeline_res[:blocked].present?
+
+        'pipeline_blocked'
+      end
 
       # Removed ensure_ws_connection! - no longer needed
       # WebSocket status is checked inline in try_enter for logging only

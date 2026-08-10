@@ -32,12 +32,12 @@ RSpec.describe Entries::EntryGuard, '#try_enter signal recording' do
       allow(Portfolio::DrawdownGuard).to receive(:triggered?).and_return(true)
     end
 
-    it 'records skipped with drawdown_guard_active reason' do
+    it 'records blocked with drawdown_guard_active reason' do
       described_class.try_enter(
         index_cfg: index_cfg, pick: pick, direction: 'bullish', signal: signal
       )
 
-      expect(signal.reload.metadata['entry_outcome']).to eq('skipped')
+      expect(signal.reload.metadata['entry_outcome']).to eq('blocked')
       expect(signal.reload.metadata['entry_blocked_reason']).to eq('drawdown_guard_active')
     end
   end
@@ -81,6 +81,25 @@ RSpec.describe Entries::EntryGuard, '#try_enter signal recording' do
     end
   end
 
+  describe 'when the pipeline returns a DecisionRejection' do
+    before do
+      allow(Portfolio::DrawdownGuard).to receive(:triggered?).and_return(false)
+      policy_dbl = instance_double(Policies::EntryPolicy, permitted?: true)
+      allow(Policies::EntryPolicy).to receive(:new).and_return(policy_dbl)
+      allow(described_class.entry_guard_pipeline).to receive(:run).and_return(
+        Entries::DecisionRejection.new(code: :feed_stale, message: 'feed_stale: ticks 42s stale')
+      )
+    end
+
+    it 'records the rejection message, not the pipeline_blocked fallback' do
+      described_class.try_enter(
+        index_cfg: index_cfg, pick: pick, direction: 'bullish', signal: signal
+      )
+
+      expect(signal.reload.metadata['entry_blocked_reason']).to eq('feed_stale: ticks 42s stale')
+    end
+  end
+
   describe 'when no signal is passed' do
     before do
       allow(Portfolio::DrawdownGuard).to receive(:triggered?).and_return(true)
@@ -112,7 +131,7 @@ RSpec.describe Entries::EntryGuard, '#try_enter signal recording' do
     it 'the entered recording line is present in try_enter source' do
       source = described_class.method(:try_enter).source_location.first
       content = File.read(source)
-      expect(content).to include("signal&.record_entry_outcome('entered') if tracker")
+      expect(content).to include("signal&.record_entry_outcome('entered')")
     end
   end
 end
