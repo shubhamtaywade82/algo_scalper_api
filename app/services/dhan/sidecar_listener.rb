@@ -52,11 +52,9 @@ module Dhan
         if payload['is_paper'] && defined?(PaperPosition)
           paper = PaperPosition.find_by(id: payload['position_id']) || PaperPosition.find_by(id: payload['correlation_id'])
           paper&.update!(status: 'active', entry_price: payload['fill_price'], quantity: payload['quantity'])
-          ActionCable.server.broadcast('paper_positions', paper.as_json) if paper && defined?(ActionCable)
         elsif defined?(PositionTracker)
           tracker = PositionTracker.find_by(client_order_id: payload['correlation_id']) || PositionTracker.find_by(id: payload['position_id'])
           tracker&.update!(status: 'open', entry_price: payload['fill_price'], quantity: payload['quantity'])
-          ActionCable.server.broadcast("positions_#{tracker.user_id}", tracker.as_json) if tracker.respond_to?(:user_id) && defined?(ActionCable)
         end
       end
 
