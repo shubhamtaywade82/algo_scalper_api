@@ -9,7 +9,7 @@ Rails 8 API backend for **fully autonomous** intraday options scalping on Indian
 - Redis (tick cache, PnL cache, position state, circuit breaker)
 - Solid Queue (background job processing — not Sidekiq)
 - ActionCable over the `redis` adapter (`config/cable.yml`) — not Solid Cable
-- Solid Cache (Rails.cache backend)
+- Solid Cache (Rails.cache backend in production; development uses `:redis_cache_store`)
 - DhanHQ v2 via `dhanhq` gem (broker API + WebSocket)
 - Optional: OpenAI for AI technical analysis
 - Optional: Telegram Bot for notifications
