@@ -28,6 +28,10 @@ Rails.application.routes.draw do
     get    'settings',              to: 'settings#index'
     get    'settings/change_logs',  to: 'settings#change_logs'
     patch  'settings/bulk',         to: 'settings#update_bulk'
+    get    'settings/fast_entry_mode',   to: 'settings#fast_entry_mode'
+    patch  'settings/fast_entry_mode',   to: 'settings#update_fast_entry_mode'
+    post   'settings/update_ip',         to: 'settings#update_ip'
+    patch  'settings/deep_merge',        to: 'settings#deep_merge'
 
     get 'dashboard', to: 'dashboard#show'
     get 'orders', to: 'orders#index'

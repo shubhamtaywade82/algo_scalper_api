@@ -101,4 +101,132 @@ RSpec.describe 'Api::Settings' do
       expect(json['limit']).to eq(200)
     end
   end
+
+  describe 'GET/PATCH /api/settings/fast_entry_mode' do
+    after { Signal::FastEntryMode.reset! }
+
+    it 'GET returns the current status' do
+      get '/api/settings/fast_entry_mode'
+      expect(response).to have_http_status(:ok)
+      json = response.parsed_body
+      expect(json['success']).to be(true)
+      expect(json['fast_entry_mode']).to include('persisted', 'effective', 'env_override')
+    end
+
+    context 'when SETTINGS_UPDATE_TOKEN is set' do
+      around do |example|
+        prior = ENV.fetch('SETTINGS_UPDATE_TOKEN', nil)
+        ENV['SETTINGS_UPDATE_TOKEN'] = 'test-token'
+        example.run
+      ensure
+        if prior
+          ENV['SETTINGS_UPDATE_TOKEN'] = prior
+        else
+          ENV.delete('SETTINGS_UPDATE_TOKEN')
+        end
+      end
+
+      it 'PATCH rejects requests without the token' do
+        patch '/api/settings/fast_entry_mode', params: { enabled: true }
+        expect(response).to have_http_status(:unauthorized)
+      end
+
+      it 'PATCH toggles the persisted flag with a valid token' do
+        patch '/api/settings/fast_entry_mode',
+              params: { enabled: true },
+              headers: { 'X-Settings-Update-Token' => 'test-token' }
+        expect(response).to have_http_status(:ok)
+        json = response.parsed_body
+        expect(json['success']).to be(true)
+        expect(json['fast_entry_mode']['persisted']).to be(true)
+      end
+    end
+  end
+
+  describe 'POST /api/settings/update_ip' do
+    context 'when SETTINGS_UPDATE_TOKEN is set' do
+      around do |example|
+        prior = ENV.fetch('SETTINGS_UPDATE_TOKEN', nil)
+        ENV['SETTINGS_UPDATE_TOKEN'] = 'test-token'
+        example.run
+      ensure
+        if prior
+          ENV['SETTINGS_UPDATE_TOKEN'] = prior
+        else
+          ENV.delete('SETTINGS_UPDATE_TOKEN')
+        end
+      end
+
+      it 'rejects requests without the token' do
+        post '/api/settings/update_ip'
+        expect(response).to have_http_status(:unauthorized)
+      end
+
+      it 'returns a graceful error when the current IP cannot be detected' do
+        allow(Dhan::IpService).to receive(:fetch_ip_info).and_return(
+          { public_ipv4: 'Unknown', public_ipv6: 'Unknown', registered_ips: nil }
+        )
+        post '/api/settings/update_ip', headers: { 'X-Settings-Update-Token' => 'test-token' }
+        expect(response).to have_http_status(:ok)
+        json = response.parsed_body
+        expect(json['success']).to be(false)
+      end
+
+      it 'delegates to Dhan::IpService.update_ip with the detected IP' do
+        allow(Dhan::IpService).to receive(:fetch_ip_info).and_return(
+          { public_ipv4: '1.2.3.4', public_ipv6: 'None', registered_ips: nil }
+        )
+        allow(Dhan::IpService).to receive(:update_ip).with('1.2.3.4').and_return(
+          { success: true, flag: 'PRIMARY' }
+        )
+        post '/api/settings/update_ip', headers: { 'X-Settings-Update-Token' => 'test-token' }
+        expect(response).to have_http_status(:ok)
+        json = response.parsed_body
+        expect(json['success']).to be(true)
+        expect(json['flag']).to eq('PRIMARY')
+      end
+    end
+  end
+
+  describe 'PATCH /api/settings/deep_merge' do
+    context 'when SETTINGS_UPDATE_TOKEN is set' do
+      around do |example|
+        prior = ENV.fetch('SETTINGS_UPDATE_TOKEN', nil)
+        ENV['SETTINGS_UPDATE_TOKEN'] = 'test-token'
+        example.run
+      ensure
+        if prior
+          ENV['SETTINGS_UPDATE_TOKEN'] = prior
+        else
+          ENV.delete('SETTINGS_UPDATE_TOKEN')
+        end
+      end
+
+      it 'rejects requests without the token' do
+        patch '/api/settings/deep_merge', params: { patch: { signals: { fast_entry_mode: { enabled: true } } } }
+        expect(response).to have_http_status(:unauthorized)
+      end
+
+      it 'applies the patch with a valid token' do
+        # as: :json mirrors the real caller (SignalsSidebar.jsx sends JSON.stringify({ patch }))
+        # — Signal::FastEntryMode.persisted_enabled? does a strict `== true` check, so a
+        # form-encoded "true" string (as the other describe blocks in this file send) would
+        # silently fail to enable the flag. This request must exercise the real wire format.
+        patch '/api/settings/deep_merge',
+              params: { patch: { signals: { fast_entry_mode: { enabled: true } } } },
+              headers: { 'X-Settings-Update-Token' => 'test-token' },
+              as: :json
+        expect(response).to have_http_status(:ok)
+        json = response.parsed_body
+        expect(json['success']).to be(true)
+        doc = JSON.parse(Setting.find_by!(key: doc_key).value)
+        expect(doc.dig('signals', 'fast_entry_mode', 'enabled')).to be(true)
+      end
+
+      it 'requires the patch param' do
+        patch '/api/settings/deep_merge', params: {}, headers: { 'X-Settings-Update-Token' => 'test-token' }
+        expect(response).to have_http_status(:bad_request)
+      end
+    end
+  end
 end

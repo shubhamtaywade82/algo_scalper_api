@@ -6,8 +6,8 @@ module Api
   class SettingsController < ApplicationController
     include Api::TokenAuthenticatable
 
-    before_action :authenticate_dashboard_token!, only: :index
-    before_action :authenticate_settings!, only: :update_bulk
+    before_action :authenticate_dashboard_token!, only: %i[index fast_entry_mode]
+    before_action :authenticate_settings!, only: %i[update_bulk update_fast_entry_mode update_ip deep_merge]
 
     # Top-level keys allowed for algo config overrides (must match config/algo.yml structure)
     PERMITTED_SETTINGS_KEYS = %i[
@@ -55,6 +55,74 @@ module Api
       render json: { error: e.message }, status: :bad_request
     rescue StandardError => e
       Rails.logger.error("[SettingsController] update_bulk error: #{e.class} - #{e.message}")
+      render json: { error: e.message }, status: :internal_server_error
+    end
+
+    # GET /api/settings/fast_entry_mode
+    def fast_entry_mode
+      render json: { success: true, fast_entry_mode: Signal::FastEntryMode.status }
+    rescue StandardError => e
+      Rails.logger.error("[SettingsController] fast_entry_mode error: #{e.class} - #{e.message}")
+      render json: { error: e.message }, status: :internal_server_error
+    end
+
+    # PATCH /api/settings/fast_entry_mode
+    # Requires a param `enabled` (boolean).
+    def update_fast_entry_mode
+      enabled = ActiveModel::Type::Boolean.new.cast(params.require(:enabled))
+
+      AlgoConfig::DocumentStore.apply_deep_merge_patch!(
+        { signals: { fast_entry_mode: { enabled: enabled } } },
+        source: 'api_settings_fast_entry_mode',
+        actor: 'api',
+        request_id: request.request_id,
+        metadata: { remote_ip: request.remote_ip }
+      )
+      Signal::FastEntryMode.reset!
+
+      render json: { success: true, fast_entry_mode: Signal::FastEntryMode.status }
+    rescue ActionController::ParameterMissing => e
+      render json: { error: e.message }, status: :bad_request
+    rescue StandardError => e
+      Rails.logger.error("[SettingsController] update_fast_entry_mode error: #{e.class} - #{e.message}")
+      render json: { error: e.message }, status: :internal_server_error
+    end
+
+    # POST /api/settings/update_ip
+    # Detects the current public IPv4 and attempts to whitelist it on Dhan.
+    def update_ip
+      info = Dhan::IpService.fetch_ip_info
+      ip = info[:public_ipv4]
+
+      if ip.blank? || ip == 'Unknown'
+        render json: { success: false, error: 'Could not detect current public IPv4' }
+        return
+      end
+
+      render json: Dhan::IpService.update_ip(ip)
+    rescue StandardError => e
+      Rails.logger.error("[SettingsController] update_ip error: #{e.class} - #{e.message}")
+      render json: { error: e.message }, status: :internal_server_error
+    end
+
+    # PATCH /api/settings/deep_merge
+    # Requires a param `patch` (nested hash) — deep-merged into the algo config document.
+    def deep_merge
+      patch = params.require(:patch).permit!.to_h
+
+      AlgoConfig::DocumentStore.apply_deep_merge_patch!(
+        patch,
+        source: 'api_settings_deep_merge',
+        actor: 'api',
+        request_id: request.request_id,
+        metadata: { remote_ip: request.remote_ip }
+      )
+
+      render json: { success: true, message: 'Settings updated successfully' }
+    rescue ActionController::ParameterMissing => e
+      render json: { error: e.message }, status: :bad_request
+    rescue StandardError => e
+      Rails.logger.error("[SettingsController] deep_merge error: #{e.class} - #{e.message}")
       render json: { error: e.message }, status: :internal_server_error
     end
 
