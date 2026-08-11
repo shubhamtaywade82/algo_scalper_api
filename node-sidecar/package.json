@@ -1,7 +1,7 @@
 {
   "name": "algo-scalper-node-sidecar",
   "version": "0.4.1",
-  "description": "Node.js Execution & Analytics Sidecar for DhanHQ v2 using @shubhamtaywade82/dhanhq-ts",
+  "description": "Node.js Execution Sidecar for DhanHQ v2 using @shubhamtaywade82/dhanhq-ts",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

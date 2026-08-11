@@ -18,7 +18,7 @@ However, its architectural role differs from the original template in `v2.0.md`:
 * **Original `v2.0.md` Spec**: Envisioned Node.js as the monolithic primary hot-path engine replacing Rails for tick ingestion, candle building, and simple EMA strategy evaluation.
 * **Actual Production Architecture**: 
   - **Ruby Trading Daemon (`TradingSystem::Supervisor`)**: Acts as the primary trading supervisor, tick feed hub (`Live::MarketFeedHub`), and quantitative signal engine (SMC + AVRZ + Ollama AI).
-  - **Node.js TypeScript Sidecar ([`node-sidecar/`](file:///home/nemesis/project/trading-workspace/bots/algo_scalper_api/node-sidecar/))**: Uses `@shubhamtaywade82/dhanhq-ts` (v0.4.1) as an **Auxiliary Execution, Defined-Risk Strategy Skill Resolver & Real-Time Options Greeks Analytics Sidecar** connected via Redis channels (`dhan:execution:intents`, `dhan:execution:fills`, `dhan:execution:exits`, `dhan:market:greeks:*`). It is managed automatically alongside Rails processes in [`Procfile.dev`](file:///home/nemesis/project/trading-workspace/bots/algo_scalper_api/Procfile.dev#L5).
+  - **Node.js TypeScript Sidecar ([`node-sidecar/`](file:///home/nemesis/project/trading-workspace/bots/algo_scalper_api/node-sidecar/))**: Uses `@shubhamtaywade82/dhanhq-ts` (v0.4.1) as an **Auxiliary Execution & Defined-Risk Strategy Skill Resolver** connected via Redis channels (`dhan:execution:intents`, `dhan:execution:fills`, `dhan:execution:exits`). It is managed automatically alongside Rails processes in [`Procfile.dev`](file:///home/nemesis/project/trading-workspace/bots/algo_scalper_api/Procfile.dev#L5). It no longer opens a Dhan WebSocket of its own — that collided with Rails' own `Live::MarketFeedHub`/`Live::OrderUpdateHub` WS clients (429 handshake errors) — so its Greeks-analytics module and tick-driven exit path have been removed/are dormant; see `node-sidecar/` source comments for the current state.
 
 ---
 
@@ -27,7 +27,7 @@ However, its architectural role differs from the original template in `v2.0.md`:
 | Component / Layer | Original `v2.0.md` Spec | Actual `algo_scalper_api` Implementation | Status & Reconciled Design |
 | :--- | :--- | :--- | :--- |
 | **Control Plane API** | Rails API | Rails 8.1.3 API-only (`app/controllers/api/`) | **Match** — Rails API provides authentication, control endpoints, and DB state |
-| **Node.js Engine & `dhanhq-ts`** | Monolithic hot-path engine in `apps/engine/` | [`node-sidecar/`](file:///home/nemesis/project/trading-workspace/bots/algo_scalper_api/node-sidecar/) running `@shubhamtaywade82/dhanhq-ts` (v0.4.1) | **Present as Sidecar**: Auxiliary execution engine, pre-trade risk pipeline, strategy skill resolver, & real-time Greeks analytics worker |
+| **Node.js Engine & `dhanhq-ts`** | Monolithic hot-path engine in `apps/engine/` | [`node-sidecar/`](file:///home/nemesis/project/trading-workspace/bots/algo_scalper_api/node-sidecar/) running `@shubhamtaywade82/dhanhq-ts` (v0.4.1) | **Present as Sidecar**: Auxiliary execution engine, pre-trade risk pipeline, strategy skill resolver (Greeks-analytics module removed, no WS of its own) |
 | **Primary Trading Daemon** | Not specified (assumed pure Rails API) | Multi-threaded Ruby Trading Daemon (`lib/trading_system/`, `TradingSystem::Supervisor`) running 11 threads | **Present**: Manages live WebSocket feed (`Live::MarketFeedHub`), SMC/AVRZ signals, position indexing, and core risk monitoring |
 | **Frontend UI** | SolidJS + Vite | Next.js (React) in [`dashboard/`](file:///home/nemesis/project/trading-workspace/bots/algo_scalper_api/dashboard/) + ActionCable WebSockets | **Reconciled**: Next.js React frontend dashboard |
 | **Background Processing** | Sidekiq | Solid Queue (`app/jobs/`, `config/recurring.yml`) | **Reconciled**: Uses Rails 8 Solid Queue for recurring background jobs |
@@ -55,10 +55,7 @@ The Node.js sidecar lives in [`node-sidecar/`](file:///home/nemesis/project/trad
    - Dispatches orders via [`PaperExecutionEngine`](file:///home/nemesis/project/trading-workspace/bots/algo_scalper_api/node-sidecar/src/engines/paper.ts) or [`LiveExecutionEngine`](file:///home/nemesis/project/trading-workspace/bots/algo_scalper_api/node-sidecar/src/engines/live.ts).
    - Publishes order fill notifications to `dhan:execution:fills` and position exits to `dhan:execution:exits`.
 
-3. **Greeks & Analytics Engine ([`node-sidecar/src/analytics.ts`](file:///home/nemesis/project/trading-workspace/bots/algo_scalper_api/node-sidecar/src/analytics.ts))**:
-   - Listens to market feed ticks via `dhanhq-ts` WebSocket.
-   - Calculates real-time option Greeks (Delta, Gamma, Theta, Vega, Volatility) via `greeks()` helper.
-   - Caches calculated Greeks in Redis under `dhan:market:greeks:{securityId}` with a 10-second TTL.
+3. **Greeks & Analytics Engine — removed**: `node-sidecar/src/analytics.ts` (real-time Greeks calc, cached in Redis under `dhan:market:greeks:{securityId}`) was deleted along with the sidecar's Dhan WebSocket — it depended on market-feed ticks the sidecar no longer receives, since that WS collided with Rails' own `Live::MarketFeedHub`/`Live::OrderUpdateHub` clients (429 handshake errors).
 
 ---
 
@@ -71,7 +68,7 @@ The overall platform runs as 5 integrated processes managed by Foreman:
 2. trading:   Ruby Trading Daemon (TradingSystem::Supervisor managing 11 threads)
 3. jobs:      Solid Queue Worker (Background & recurring scheduled tasks)
 4. dashboard: Next.js Frontend Dashboard (npm run dev)
-5. sidecar:   Node.js Execution & Analytics Sidecar (node-sidecar / dhanhq-ts)
+5. sidecar:   Node.js Execution Sidecar (node-sidecar / dhanhq-ts)
 ```
 
 ---
@@ -86,7 +83,6 @@ The overall platform runs as 5 integrated processes managed by Foreman:
 
 ### 5.2 Execution & Sidecar KPIs
 * **Sidecar Intent Processing Latency**: $< 20 \text{ ms}$ from Redis `dhan:execution:intents` reception to `dhanhq-ts` dispatch.
-* **Option Greeks Calculation Time**: $< 2 \text{ ms}$ per tick in `analytics.ts`.
 * **Duplicate Order Rate**: $0\%$ (guaranteed via SHA256 deterministic correlation IDs and `OrderTracker`).
 
 ---
@@ -101,5 +97,5 @@ The overall platform runs as 5 integrated processes managed by Foreman:
 * **Issue**: [`OptionsBuying::EodCarryManager`](file:///home/nemesis/project/trading-workspace/bots/algo_scalper_api/app/services/options_buying/eod_carry_manager.rb) can tag positions for overnight carry.
 * **Action**: Disallow overnight carry tagging if `expiry_date == Date.current`.
 
-### Item 3: Node Sidecar Reconnect & Error Logging Hardening
-* **Enhancement**: Enhance error reporting in `node-sidecar/src/executor.ts` when Redis intent messages or WebSocket order stream reconnections occur during token rotation.
+### Item 3: Node Sidecar Error Logging Hardening
+* **Enhancement**: Enhance error reporting in `node-sidecar/src/executor.ts` around Redis intent message handling during token rotation. (The sidecar no longer opens its own Dhan WebSocket — see `node-sidecar/` source comments — so this should not involve reintroducing a WS order stream there.)

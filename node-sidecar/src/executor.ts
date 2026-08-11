@@ -16,7 +16,11 @@ export async function startExecutor(client: DhanClient): Promise<void> {
   const paperEngine = new PaperExecutionEngine(client, monitor);
   const liveEngine = new LiveExecutionEngine(client, tracker, monitor);
 
-  // Handle position exits emitted by PositionMonitor
+  // Dead until ticks are re-sourced: PositionMonitor only ever emits "exit" from its
+  // onTick handler, whose only caller was the market-WS listener deleted on this branch
+  // (WS collided with Rails' own Dhan WebSocket clients). This listener never fires until
+  // ticks feed the monitor another way (e.g. Rails' Live::TickCache via Redis instead of
+  // a direct WS subscription).
   monitor.on("exit", async (signal: any) => {
     console.log(`[PositionMonitor] Exit triggered: ${signal.reason}, PnL: ${signal.pnl}`);
     const exitPayload = {

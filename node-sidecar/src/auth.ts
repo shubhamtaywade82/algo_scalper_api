@@ -27,6 +27,10 @@ export async function createDhanClient(): Promise<DhanClient> {
     }
   });
 
+  // Guardrail: Rails' Live::MarketFeedHub and Live::OrderUpdateHub are the only Dhan
+  // WebSocket clients this system should ever run. A second client authenticating with
+  // the same credentials causes 429 handshake errors — that collision is the whole reason
+  // this branch exists (see the other commits). Don't open a WS here to react to rotation.
   redisSubscriber.on("message", (channel) => {
     if (channel === "dhan:auth:rotated") {
       console.log("[Sidecar] Token rotated notification received from Rails. tokenProvider will pick up the new token on next use.");

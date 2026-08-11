@@ -23,26 +23,12 @@ export class PaperExecutionEngine {
       await new Promise((resolve) => setTimeout(resolve, this.latencyMs));
     }
 
-    // Try fetching live depth or fallback to LTP
-    let fillPrice = 100.0;
+    // client.ws.market has no getDepth() on the installed dhanhq-ts version — always fall back to LTP.
+    // (Deliberately not reading client.ws here: this sidecar no longer opens a Dhan WebSocket at all,
+    // see the other commits on this branch — don't reintroduce a live reference to it.)
     const tickSize = 0.05;
-
-    try {
-      const marketFeed = this.client.ws?.market as any;
-      const depth = marketFeed && typeof marketFeed.getDepth === "function" ? marketFeed.getDepth(security_id) : null;
-      if (depth && depth.bestAsk > 0 && depth.bestBid > 0) {
-        if (transaction_type === "BUY") {
-          fillPrice = depth.bestAsk + this.slippageTicks * tickSize;
-        } else {
-          fillPrice = depth.bestBid - this.slippageTicks * tickSize;
-        }
-      } else {
-        const ltp = params.price || 100.0;
-        fillPrice = transaction_type === "BUY" ? ltp + this.slippageTicks * tickSize : ltp - this.slippageTicks * tickSize;
-      }
-    } catch {
-      fillPrice = params.price || 100.0;
-    }
+    const ltp = params.price || 100.0;
+    const fillPrice = transaction_type === "BUY" ? ltp + this.slippageTicks * tickSize : ltp - this.slippageTicks * tickSize;
 
     const fillPayload = {
       intent_id,
@@ -57,7 +43,10 @@ export class PaperExecutionEngine {
     console.log(`[PaperExecutionEngine] Simulated fill for ${correlation_id} @ ₹${fillPrice}`);
     await redisPublisher.publish("dhan:execution:fills", JSON.stringify(fillPayload));
 
-    // Register position with PositionMonitor for tick-driven trailing stop exit
+    // Dead until ticks are re-sourced: PositionMonitor.onTick (the only path that ever
+    // emits "exit") has no caller now that the market WS is gone. Tracking a position here
+    // has no effect until ticks feed the monitor another way (e.g. Rails' Live::TickCache
+    // via Redis instead of a direct WS subscription).
     if (risk_limits && (risk_limits.stop_loss || risk_limits.trailing_stop)) {
       this.monitor.track({
         securityId: security_id,

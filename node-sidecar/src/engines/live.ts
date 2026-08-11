@@ -18,6 +18,11 @@ export class LiveExecutionEngine {
 
     console.log(`[LiveExecutionEngine] Placing live order for correlationId: ${correlation_id}`);
 
+    // This can never resolve today: OrderTracker.onOrderUpdate was only ever fed by the
+    // client.ws.orders.on("order", ...) listener this branch deleted (WS collided with
+    // Rails' own Dhan WebSocket clients — see the other commits on this branch). Reviving
+    // this live-intent path requires sourcing fills another way (e.g. Rails'
+    // Live::OrderUpdateHub over Redis) instead of re-opening a WebSocket here.
     const settled = this.tracker.waitFor(correlation_id, { timeoutMs: 30000 });
 
     await this.client.orders.place({
@@ -45,6 +50,10 @@ export class LiveExecutionEngine {
 
     await redisPublisher.publish("dhan:execution:fills", JSON.stringify(fillPayload));
 
+    // Dead until ticks are re-sourced: PositionMonitor.onTick (the only path that ever
+    // emits "exit") has no caller now that the market WS is gone. Tracking a position here
+    // has no effect until ticks feed the monitor another way (e.g. Rails' Live::TickCache
+    // via Redis instead of a direct WS subscription).
     if (risk_limits && (risk_limits.stop_loss || risk_limits.trailing_stop)) {
       this.monitor.track({
         securityId: security_id,
