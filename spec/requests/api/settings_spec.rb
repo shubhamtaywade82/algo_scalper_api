@@ -140,6 +140,21 @@ RSpec.describe 'Api::Settings' do
         expect(json['success']).to be(true)
         expect(json['fast_entry_mode']['persisted']).to be(true)
       end
+
+      it 'PATCH toggles the persisted flag off with a valid token' do
+        # as: :json ensures `enabled` arrives as a real boolean `false`, not the form-encoded
+        # string "false" — this is the case where Rails' params.require(:enabled) needs its
+        # explicit `value == false` special case to avoid raising ActionController::ParameterMissing
+        # (false.blank? is true, so a naive `value.presence` check would otherwise reject it).
+        patch '/api/settings/fast_entry_mode',
+              params: { enabled: false },
+              headers: { 'X-Settings-Update-Token' => 'test-token' },
+              as: :json
+        expect(response).to have_http_status(:ok)
+        json = response.parsed_body
+        expect(json['success']).to be(true)
+        expect(json['fast_entry_mode']['persisted']).to be(false)
+      end
     end
   end
 
@@ -238,12 +253,19 @@ RSpec.describe 'Api::Settings' do
         expect(json['error']).to include('No permitted')
       end
 
-      # SignalsSidebar.jsx's Midday/Loss-Streak/Market-Context toggles PATCH these
-      # top-level keys directly — regression coverage for the round-1 allowlist fix
-      # that briefly 422'd these previously-working dashboard controls.
+      # SignalsSidebar.jsx's Midday/Loss-Streak/Market-Context/Entry-Quality toggles PATCH
+      # these top-level keys directly — regression coverage for the allowlist fixes that
+      # briefly 422'd these previously-working dashboard controls. entry_quality was missed
+      # in rounds 1-2 because it doesn't appear as a top-level key in config/algo.yml, even
+      # though it's read live via AlgoConfig.fetch[:entry_quality] (see entry_quality_filter.rb).
       it 'applies patches to the dashboard Signals sidebar toggle keys' do
-        %i[midday_guard loss_streak_guard market_context].each do |top_key|
-          nested = top_key == :market_context ? { gate: { enabled: true } } : { enabled: true }
+        nested_by_key = {
+          midday_guard: { enabled: true },
+          loss_streak_guard: { enabled: true },
+          market_context: { gate: { enabled: true } },
+          entry_quality: { gates: { block_choppy_regime: false } }
+        }
+        nested_by_key.each do |top_key, nested|
           patch '/api/settings/deep_merge',
                 params: { patch: { top_key => nested } },
                 headers: { 'X-Settings-Update-Token' => 'test-token' },
@@ -252,6 +274,16 @@ RSpec.describe 'Api::Settings' do
           doc = JSON.parse(Setting.find_by!(key: doc_key).value)
           expect(doc[top_key.to_s]).to be_present
         end
+      end
+
+      it 'returns 422 when the patch only targets the run_mode non-permitted key' do
+        patch '/api/settings/deep_merge',
+              params: { patch: { run_mode: { mode: 'live' } } },
+              headers: { 'X-Settings-Update-Token' => 'test-token' },
+              as: :json
+        expect(response).to have_http_status(:unprocessable_content)
+        json = response.parsed_body
+        expect(json['error']).to include('No permitted')
       end
     end
   end
