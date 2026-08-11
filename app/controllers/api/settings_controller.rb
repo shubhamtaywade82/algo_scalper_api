@@ -107,11 +107,20 @@ module Api
 
     # PATCH /api/settings/deep_merge
     # Requires a param `patch` (nested hash) — deep-merged into the algo config document.
+    # Only top-level keys in PERMITTED_SETTINGS_KEYS are accepted; nested values within
+    # an allowed key are merged in full (unlike update_bulk's top-level replacement).
     def deep_merge
       patch = params.require(:patch).permit!.to_h
+      allowed_keys = PERMITTED_SETTINGS_KEYS.map(&:to_s)
+      filtered_patch = patch.slice(*allowed_keys)
+
+      if filtered_patch.blank?
+        render json: { success: false, error: 'No permitted settings keys provided' }, status: :unprocessable_content
+        return
+      end
 
       AlgoConfig::DocumentStore.apply_deep_merge_patch!(
-        patch,
+        filtered_patch,
         source: 'api_settings_deep_merge',
         actor: 'api',
         request_id: request.request_id,

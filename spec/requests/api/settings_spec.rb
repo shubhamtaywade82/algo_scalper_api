@@ -227,6 +227,16 @@ RSpec.describe 'Api::Settings' do
         patch '/api/settings/deep_merge', params: {}, headers: { 'X-Settings-Update-Token' => 'test-token' }
         expect(response).to have_http_status(:bad_request)
       end
+
+      it 'returns 422 when the patch only targets a non-permitted top-level key' do
+        patch '/api/settings/deep_merge',
+              params: { patch: { dhanhq: { enable_orders: true } } },
+              headers: { 'X-Settings-Update-Token' => 'test-token' },
+              as: :json
+        expect(response).to have_http_status(:unprocessable_content)
+        json = response.parsed_body
+        expect(json['error']).to include('No permitted')
+      end
     end
   end
 end
