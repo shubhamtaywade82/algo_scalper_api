@@ -62,7 +62,7 @@ class DhanhqFilteredLogger
 
   def warn(progname = nil)
     message = block_given? ? yield.to_s : progname.to_s
-    return if SUPPRESSED_WARN_PATTERNS.any? { |pattern| message.include?(pattern) }
+    return if SUPPRESSED_WARN_PATTERNS.intersect?(message)
 
     block_given? ? @logger.warn { message } : @logger.warn(progname)
   end
@@ -113,9 +113,9 @@ DhanHQ.configure do |config|
   end
 
   config.on_token_expired = lambda do |_error|
-    Rails.logger.warn "[SCALPER] Token expired, clearing cache..."
+    Rails.logger.warn "[SCALPER] Token invalid/expired, forcing TOTP refresh..."
     Rails.cache.delete("scalper:dhan_token")
-    Dhan::TokenManager.clear_cache! if defined?(Dhan::TokenManager)
+    Dhan::TokenManager.refresh!(force: true) if defined?(Dhan::TokenManager)
   end
 end
 
