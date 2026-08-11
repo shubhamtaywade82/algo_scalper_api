@@ -1,6 +1,7 @@
 import { createSignal, onMount, For, Show } from 'solid-js'
 import RecursiveFormNode from '../components/settings/RecursiveFormNode'
 import NetworkStatusPanel from '../components/settings/NetworkStatusPanel'
+import { dashboardApiHeaders } from '../lib/dashboardApi'
 
 export default function Settings() {
   const [configRoot, setConfigRoot] = createSignal(null)
@@ -21,7 +22,7 @@ export default function Settings() {
   async function fetchSettings() {
     setLoading(true)
     try {
-      const response = await fetch('/api/settings')
+      const response = await fetch('/api/settings', { headers: dashboardApiHeaders() })
       const data = await response.json()
       if (data.success) {
         setConfigRoot(data.config)

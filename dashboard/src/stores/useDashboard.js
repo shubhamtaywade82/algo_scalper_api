@@ -1,6 +1,7 @@
 import { createSignal, onMount, onCleanup } from 'solid-js'
 import toast from 'solid-toast'
 import cable from '../cable'
+import { dashboardApiHeaders } from '../lib/dashboardApi'
 
 const POLL_INTERVAL_MS = 30000
 
@@ -99,7 +100,7 @@ export function useDashboard(onPositionChange) {
 
   const fetchInitial = async () => {
     try {
-      const res = await fetch('/api/dashboard', { headers: { 'Accept': 'application/json' } })
+      const res = await fetch('/api/dashboard', { headers: { 'Accept': 'application/json', ...dashboardApiHeaders() } })
       if (res.ok) {
         const data = await res.json()
         applyData(data)

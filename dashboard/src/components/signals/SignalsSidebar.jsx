@@ -1,4 +1,5 @@
 import { createSignal, onMount, For, Show } from 'solid-js'
+import { dashboardApiHeaders } from '../../lib/dashboardApi'
 
 const TOGGLE_GROUPS = [
   {
@@ -117,7 +118,7 @@ export default function SignalsSidebar() {
   async function fetchSettings() {
     setLoading(true)
     try {
-      const res = await fetch('/api/settings')
+      const res = await fetch('/api/settings', { headers: dashboardApiHeaders() })
       const data = await res.json()
       if (data.success) {
         setConfig(data.config)

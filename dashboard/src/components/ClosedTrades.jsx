@@ -1,5 +1,6 @@
 import { createSignal, createMemo, onMount, createEffect } from 'solid-js'
 import { Show, For } from 'solid-js'
+import { dashboardApiHeaders } from '../lib/dashboardApi'
 import { useDashboardContext } from '../context/DashboardContext'
 import Button from './ui/Button'
 import Badge from './ui/Badge'
@@ -109,7 +110,7 @@ export default function ClosedTrades(props) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/positions?${buildQuery()}`)
+      const res = await fetch(`/api/positions?${buildQuery()}`, { headers: dashboardApiHeaders() })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setPositions(data.closed || [])

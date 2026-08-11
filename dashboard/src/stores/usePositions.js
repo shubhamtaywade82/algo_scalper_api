@@ -1,6 +1,7 @@
 import { createSignal, onMount, onCleanup } from 'solid-js'
 import toast from 'solid-toast'
 import cable from '../cable'
+import { dashboardApiHeaders } from '../lib/dashboardApi'
 
 const WS_STALE_AFTER_MS = 3000
 const BACKFILL_INTERVAL_MS = 5000
@@ -19,7 +20,7 @@ export function usePositions() {
 
   async function fetchPositions() {
     try {
-      const res = await fetch('/api/positions')
+      const res = await fetch('/api/positions', { headers: dashboardApiHeaders() })
       const data = await res.json()
       setOpen(data.open || [])
       setClosed(data.closed || [])
@@ -32,7 +33,7 @@ export function usePositions() {
     if (!id) return
     setClosingPositionId(id)
     try {
-      const res = await fetch(`/api/positions/${id}/close`, { method: 'POST' })
+      const res = await fetch(`/api/positions/${id}/close`, { method: 'POST', headers: dashboardApiHeaders() })
       const data = await res.json()
       if (res.ok) {
         toast.success(`Position #${id} close requested`)

@@ -1,4 +1,5 @@
 import { createSignal, For, Show } from 'solid-js'
+import { dashboardApiHeaders } from '../../lib/dashboardApi'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/Table'
 import Badge from '../ui/Badge'
 import Button from '../ui/Button'
@@ -76,7 +77,7 @@ export default function ExpectancyReportPanel() {
       params.set('phase', phase())
       params.set('dimensions', dimensions().join(','))
 
-      const res = await fetch(`/api/research/lifecycles/expectancy?${params.toString()}`)
+      const res = await fetch(`/api/research/lifecycles/expectancy?${params.toString()}`, { headers: dashboardApiHeaders() })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
       setBuckets(data.buckets || [])

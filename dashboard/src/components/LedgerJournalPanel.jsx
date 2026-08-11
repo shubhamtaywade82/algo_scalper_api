@@ -1,4 +1,5 @@
 import { createSignal, onMount, onCleanup, Show, For } from 'solid-js'
+import { dashboardApiHeaders } from '../lib/dashboardApi'
 
 const POLL_MS = 30_000
 
@@ -20,7 +21,7 @@ export default function LedgerJournalPanel() {
 
   async function fetchJournal() {
     try {
-      const res = await fetch('/api/ledger/journal?per_page=25')
+      const res = await fetch('/api/ledger/journal?per_page=25', { headers: dashboardApiHeaders() })
       if (!res.ok) {
         setError(`HTTP ${res.status}`)
         return

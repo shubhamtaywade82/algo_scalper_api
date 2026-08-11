@@ -1,5 +1,6 @@
 import { createSignal, createMemo, onMount } from 'solid-js'
 import { For, Show } from 'solid-js'
+import { dashboardApiHeaders } from '../lib/dashboardApi'
 import SignalsSidebar from '../components/signals/SignalsSidebar'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
@@ -120,7 +121,7 @@ export default function Signals() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/signals?${buildQuery()}`)
+      const res = await fetch(`/api/signals?${buildQuery()}`, { headers: dashboardApiHeaders() })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setSignals(data.signals || [])

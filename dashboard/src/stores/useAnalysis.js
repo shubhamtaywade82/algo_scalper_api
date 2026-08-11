@@ -1,4 +1,5 @@
 import { createSignal, onMount, onCleanup } from 'solid-js'
+import { dashboardApiHeaders } from '../lib/dashboardApi'
 
 const INDICES = ['NIFTY', 'SENSEX', 'BANKNIFTY']
 const POLL_INTERVAL_MS = 30000
@@ -28,7 +29,7 @@ export function useAnalysis() {
     try {
       setLoading(true)
       setError(null)
-      const res = await fetch(`/api/analysis/${index}`)
+      const res = await fetch(`/api/analysis/${index}`, { headers: dashboardApiHeaders() })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setData(await res.json())
     } catch (e) {
@@ -52,7 +53,7 @@ export function useAnalysis() {
     setActiveIndex(index)
     try {
       setHistoricalLoading(true)
-      const res = await fetch(`/api/analysis/${index}/historical?weeks=${weeks}`)
+      const res = await fetch(`/api/analysis/${index}/historical?weeks=${weeks}`, { headers: dashboardApiHeaders() })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setHistoricalData(await res.json())
     } catch (e) {
