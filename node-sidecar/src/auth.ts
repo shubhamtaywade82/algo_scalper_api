@@ -27,17 +27,9 @@ export async function createDhanClient(): Promise<DhanClient> {
     }
   });
 
-  redisSubscriber.on("message", async (channel) => {
+  redisSubscriber.on("message", (channel) => {
     if (channel === "dhan:auth:rotated") {
-      console.log("[Sidecar] Token rotated notification received from Rails. Reconnecting WebSockets...");
-      try {
-        if (client.ws) {
-          await client.ws.disconnect();
-          await client.ws.connect();
-        }
-      } catch (e) {
-        console.error("[Sidecar] Failed to reconnect WebSocket after token rotation:", e);
-      }
+      console.log("[Sidecar] Token rotated notification received from Rails. tokenProvider will pick up the new token on next use.");
     }
   });
 
