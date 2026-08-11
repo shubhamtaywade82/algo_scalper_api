@@ -62,7 +62,7 @@ class DhanhqFilteredLogger
 
   def warn(progname = nil)
     message = block_given? ? yield.to_s : progname.to_s
-    return if SUPPRESSED_WARN_PATTERNS.intersect?(message)
+    return if SUPPRESSED_WARN_PATTERNS.any? { |pattern| message.include?(pattern) }
 
     block_given? ? @logger.warn { message } : @logger.warn(progname)
   end
