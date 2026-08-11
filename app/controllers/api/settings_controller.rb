@@ -13,7 +13,7 @@ module Api
     PERMITTED_SETTINGS_KEYS = %i[
       paper_trading trading_time_restrictions feature_flags indices trade_limits
       broker_fees risk position_sizing signals chain_analyzer option_chain
-      data_freshness watchlist telegram ai
+      data_freshness watchlist telegram ai midday_guard loss_streak_guard market_context
     ].freeze
 
     # GET /api/settings

@@ -237,6 +237,22 @@ RSpec.describe 'Api::Settings' do
         json = response.parsed_body
         expect(json['error']).to include('No permitted')
       end
+
+      # SignalsSidebar.jsx's Midday/Loss-Streak/Market-Context toggles PATCH these
+      # top-level keys directly — regression coverage for the round-1 allowlist fix
+      # that briefly 422'd these previously-working dashboard controls.
+      it 'applies patches to the dashboard Signals sidebar toggle keys' do
+        %i[midday_guard loss_streak_guard market_context].each do |top_key|
+          nested = top_key == :market_context ? { gate: { enabled: true } } : { enabled: true }
+          patch '/api/settings/deep_merge',
+                params: { patch: { top_key => nested } },
+                headers: { 'X-Settings-Update-Token' => 'test-token' },
+                as: :json
+          expect(response).to have_http_status(:ok)
+          doc = JSON.parse(Setting.find_by!(key: doc_key).value)
+          expect(doc[top_key.to_s]).to be_present
+        end
+      end
     end
   end
 end
