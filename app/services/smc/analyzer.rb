@@ -6,12 +6,14 @@ module Smc
   class Analyzer
     def initialize(series)
       @series = series
-      @symbol = series.symbol
-      @interval = series.interval
+      @symbol = series.respond_to?(:symbol) ? series.symbol : 'UNKNOWN'
+      @interval = series.respond_to?(:interval) ? series.interval : '5'
       @store = StructureStore.new(@symbol, @interval)
     end
 
     def run
+      return nil unless @series.respond_to?(:candles) && @series.candles.any?
+
       # 1. Update Detectors
       structure = Detectors::Structure.new(@series).to_h
       fvg = Detectors::Fvg.new(@series).to_h

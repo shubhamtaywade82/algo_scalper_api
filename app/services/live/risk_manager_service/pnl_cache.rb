@@ -12,7 +12,14 @@ module Live
 
       # Fetch live broker positions keyed by security_id (string). Returns {} on paper mode or failure.
       def fetch_positions_indexed
-        return {} if paper_trading_enabled?
+        if paper_trading_enabled?
+          begin
+            Live::FeedHealthService.instance.mark_success!(:positions)
+          rescue StandardError
+            nil
+          end
+          return {}
+        end
 
         positions = DhanHQ::Models::Position.active.each_with_object({}) do |position, map|
           security_id = position.respond_to?(:security_id) ? position.security_id : position[:security_id]

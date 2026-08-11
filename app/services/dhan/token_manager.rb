@@ -104,6 +104,7 @@ module Dhan
       end
 
       def cache_token(token, expiry_time)
+        apply_token_to_runtime!(token) if token.present?
         @cached_token = {
           token: token,
           expiry_time: expiry_time
@@ -117,6 +118,8 @@ module Dhan
       def load_from_db
         record = DhanAccessToken.first
         return nil unless record
+
+        apply_token_to_runtime!(record.token)
 
         {
           token: record.token,
