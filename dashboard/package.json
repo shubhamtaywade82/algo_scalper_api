@@ -21,9 +21,7 @@
     "axios": "^1.19.0",
     "lightweight-charts": "^5.2.0",
     "solid-toast": "^0.5.0",
-    "tapable": "^2.3.3",
-    "vue": "^3.5.13",
-    "vue-router": "^4.6.4"
+    "tapable": "^2.3.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.6",
