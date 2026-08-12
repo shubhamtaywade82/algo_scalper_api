@@ -41,13 +41,16 @@ module Entries
         Guards::DrawdownGuard,
         Guards::EntryPolicyGuard,
         Guards::CircuitBreakerGuard,
-        Guards::FeedHealthGuard,             # blocks on stale/never-synced ticks, positions, or funds feed
+        Guards::FeedHealthGuard, # blocks on stale/never-synced ticks, positions, or funds feed
         Guards::EdgeFailureGuard,
         Guards::LossStreakGuard,
         Guards::DailyLimitsGuard,
         Guards::MaxConcurrentGuard,
         Guards::GlobalMaxConcurrentGuard,     # portfolio-wide cap across all indices, cheap so runs early
-        Guards::InstrumentLookupGuard,       # sets context[:instrument] — required by EPT guard
+        Guards::DirectionConflictGuard,       # blocks opposite-side entry while same-index position open
+        Guards::StrikeCooldownGuard,          # blocks re-entry of the same contract within its cooldown window
+        Guards::InstrumentLookupGuard, # sets context[:instrument] — required by EPT guard
+        Guards::ChopScoreGuard, # blocks noisy entries when ADX/Supertrend/BB say chop
         Guards::LtpResolutionGuard,
         Guards::ExpiryWeekPowerTrendGuard,   # enriches context[:expiry_power_trend] when pattern detected
         Guards::TimeRegimeGuard,             # reads context[:expiry_power_trend] to bypass S3/S4 block

@@ -1,0 +1,191 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://auth.dhan.co/app/generateAccessToken?dhanClientId=<CLIENT_ID>&pin=855179&totp=085724
+    body:
+      encoding: UTF-8
+      string: ''
+    headers:
+      User-Agent:
+      - Faraday v2.14.3
+      Accept:
+      - application/json
+      Content-Length:
+      - '0'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+  response:
+    status:
+      code: 200
+      message: ''
+    headers:
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Date:
+      - Wed, 12 Aug 2026 11:20:24 GMT
+      Content-Security-Policy:
+      - frame-ancestors 'self' https://dhan.co https://*.dhan.co https://scanx.trade
+        https://*.scanx.trade https://dhanhq.co https://*.dhanhq.co;
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Cache:
+      - Miss from cloudfront
+      Via:
+      - 1.1 a04d8c955face1abd64ecddf6ae1e006.cloudfront.net (CloudFront)
+      X-Amz-Cf-Pop:
+      - BLR50-P1
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      X-Amz-Cf-Id:
+      - CRNq7P5uVuB2US9mx5Xktu7T53XfVbHMh6rnlyd5JHnxA56ehiEWvg==
+    body:
+      encoding: UTF-8
+      string: '{"message":"Invalid TOTP","status":"error"}'
+  recorded_at: Wed, 12 Aug 2026 11:20:23 GMT
+- request:
+    method: post
+    uri: https://auth.dhan.co/app/generateAccessToken?dhanClientId=<CLIENT_ID>&pin=855179&totp=085724
+    body:
+      encoding: UTF-8
+      string: ''
+    headers:
+      User-Agent:
+      - Faraday v2.14.3
+      Accept:
+      - application/json
+      Content-Length:
+      - '0'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+  response:
+    status:
+      code: 200
+      message: ''
+    headers:
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Date:
+      - Wed, 12 Aug 2026 11:20:24 GMT
+      Content-Security-Policy:
+      - frame-ancestors 'self' https://dhan.co https://*.dhan.co https://scanx.trade
+        https://*.scanx.trade https://dhanhq.co https://*.dhanhq.co;
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Cache:
+      - Miss from cloudfront
+      Via:
+      - 1.1 b76856b4c353f872f6e40939a077ee2e.cloudfront.net (CloudFront)
+      X-Amz-Cf-Pop:
+      - BLR50-P1
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      X-Amz-Cf-Id:
+      - lKIW8yjdL7bMXpGA3byXJSXw33sXjYekq6KSF0TJ4Pq-vWKqLXTSmg==
+    body:
+      encoding: UTF-8
+      string: '{"message":"Invalid TOTP","status":"error"}'
+  recorded_at: Wed, 12 Aug 2026 11:20:23 GMT
+- request:
+    method: post
+    uri: https://auth.dhan.co/app/generateAccessToken?dhanClientId=<CLIENT_ID>&pin=855179&totp=085724
+    body:
+      encoding: UTF-8
+      string: ''
+    headers:
+      User-Agent:
+      - Faraday v2.14.3
+      Accept:
+      - application/json
+      Content-Length:
+      - '0'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+  response:
+    status:
+      code: 200
+      message: ''
+    headers:
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Date:
+      - Wed, 12 Aug 2026 11:20:24 GMT
+      Content-Security-Policy:
+      - frame-ancestors 'self' https://dhan.co https://*.dhan.co https://scanx.trade
+        https://*.scanx.trade https://dhanhq.co https://*.dhanhq.co;
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Cache:
+      - Miss from cloudfront
+      Via:
+      - 1.1 ce3baca0b6c9126607602f8e13f57b20.cloudfront.net (CloudFront)
+      X-Amz-Cf-Pop:
+      - BLR50-P1
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      X-Amz-Cf-Id:
+      - H4kju3SaHaDBo2Do9INtdYqjTVOD8rpnegg18dDQ2pcvGheih4RjkQ==
+    body:
+      encoding: UTF-8
+      string: '{"message":"Invalid TOTP","status":"error"}'
+  recorded_at: Wed, 12 Aug 2026 11:20:23 GMT
+- request:
+    method: post
+    uri: https://auth.dhan.co/app/generateAccessToken?dhanClientId=<CLIENT_ID>&pin=855179&totp=085724
+    body:
+      encoding: UTF-8
+      string: ''
+    headers:
+      User-Agent:
+      - Faraday v2.14.3
+      Accept:
+      - application/json
+      Content-Length:
+      - '0'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+  response:
+    status:
+      code: 200
+      message: ''
+    headers:
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Date:
+      - Wed, 12 Aug 2026 11:20:24 GMT
+      Content-Security-Policy:
+      - frame-ancestors 'self' https://dhan.co https://*.dhan.co https://scanx.trade
+        https://*.scanx.trade https://dhanhq.co https://*.dhanhq.co;
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Cache:
+      - Miss from cloudfront
+      Via:
+      - 1.1 aa71cf37b3a66689802e5e9755bf2dea.cloudfront.net (CloudFront)
+      X-Amz-Cf-Pop:
+      - BLR50-P1
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      X-Amz-Cf-Id:
+      - pAnojv1oWUDHbB28ecTdA1Set6gJyxX8LQrXIh_JhkJ5rQ_hdZZptQ==
+    body:
+      encoding: UTF-8
+      string: '{"message":"Invalid TOTP","status":"error"}'
+  recorded_at: Wed, 12 Aug 2026 11:20:23 GMT
+recorded_with: VCR 6.4.0
