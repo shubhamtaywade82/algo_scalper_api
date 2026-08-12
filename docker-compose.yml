@@ -69,6 +69,16 @@ services:
     ports:
       - "3000:80"
 
+  arch-dashboard:
+    build:
+      context: ./architecture-dashboard
+      dockerfile: Dockerfile
+    depends_on: []
+    ports:
+      - "3003:3003"
+    environment:
+      - NEXT_TELEMETRY_DISABLED=1
+
   sidecar:
     build:
       context: ./node-sidecar

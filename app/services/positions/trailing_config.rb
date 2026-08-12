@@ -163,7 +163,7 @@ module Positions
       raise ArgumentError, 'entry_price required' if entry_price.nil?
 
       # sl_offset_pct is DECIMAL format (e.g., -0.15 for -15%)
-      entry_price.to_f * (1.0 + sl_offset_pct.to_f)
+      (entry_price.to_f * (1.0 + sl_offset_pct.to_f)).round(2)
     end
 
     def calculate_sl_price(entry_price, profit_pct)

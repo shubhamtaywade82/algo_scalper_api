@@ -74,7 +74,10 @@ module CandleExtension
       freshness_config = AlgoConfig.fetch[:data_freshness] || {}
       cache_duration_minutes = freshness_config[:ohlc_cache_duration_minutes] || 5
 
-      return true unless @last_ohlc_fetched[interval]
+      if @last_ohlc_fetched[interval].nil?
+        @last_ohlc_fetched[interval] = Time.current
+        return true
+      end
 
       is_stale = Time.current - @last_ohlc_fetched[interval] > cache_duration_minutes.minutes
       @last_ohlc_fetched[interval] = Time.current if is_stale

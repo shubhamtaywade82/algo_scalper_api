@@ -29,8 +29,6 @@ class ClearCarriedOvernightPositionsJob < ApplicationJob
     trackers.each do |tracker|
       execute_exit_with_retry(exit_engine, tracker)
     end
-  rescue StandardError
-    raise
   ensure
     exit_engine&.stop
   end

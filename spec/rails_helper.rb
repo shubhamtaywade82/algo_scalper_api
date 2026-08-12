@@ -58,6 +58,7 @@ RSpec.configure do |config|
   config.example_status_persistence_file_path = 'spec/failed_examples.txt'
 
   config.include FactoryBot::Syntax::Methods
+  config.include ActiveSupport::Testing::TimeHelpers
 
   # Add delay between tests that use VCR to prevent rate limits
   # This is especially important when regenerating cassettes

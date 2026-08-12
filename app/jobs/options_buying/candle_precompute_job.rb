@@ -20,11 +20,10 @@ module OptionsBuying
 
       IndexConfigLoader.load_indices.each do |idx|
         index_key = idx[:key].to_s.upcase
-        sid = idx[:sid].to_s
-        segment = idx[:segment].to_s
+        sid = idx[:sid].to_i
 
         TIMEFRAMES.each do |tf|
-          cache_candles(index_key, sid, segment, tf)
+          cache_candles(index_key, sid, tf)
         end
       rescue StandardError => e
         Rails.logger.error("[CandlePrecomputeJob] #{index_key} failed: #{e.class} - #{e.message}")
@@ -38,15 +37,19 @@ module OptionsBuying
       now.between?(now.beginning_of_day + 9.hours + 15.minutes, now.beginning_of_day + 15.hours + 30.minutes)
     end
 
-    def cache_candles(index_key, sid, segment, timeframe)
-      candles = Market::CandleSeries.new(
-        security_id: sid,
-        segment: segment,
-        timeframe: timeframe
-      ).fetch(limit: LIMITS[timeframe])
+    def cache_candles(index_key, sid, timeframe)
+      instrument = Instrument.find_by(security_id: sid)
+      return unless instrument
 
+      raw = timeframe == 'D' ? instrument.historical_ohlc : instrument.intraday_ohlc(interval: timeframe, days: 10)
+      return if raw.blank?
+
+      series = CandleSeries.new(symbol: index_key, interval: timeframe)
+      series.load_from_raw(raw)
+      candles = series.to_hash
       return if candles.blank?
 
+      candles = candles.transform_values { |arr| arr.last(LIMITS[timeframe]) }
       StateStore.cache_index_candles(index_key, timeframe, candles)
     rescue StandardError => e
       Rails.logger.warn("[CandlePrecomputeJob] #{index_key} #{timeframe}m failed: #{e.class} - #{e.message}")

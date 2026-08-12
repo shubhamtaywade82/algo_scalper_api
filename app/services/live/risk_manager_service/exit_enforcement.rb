@@ -133,12 +133,6 @@ module Live
         # Skip if trailing is disabled (threshold too high)
         return if drop_threshold >= 100
 
-        breakeven_gain = begin
-          BigDecimal(risk[:breakeven_after_gain].to_s)
-        rescue StandardError
-          BigDecimal(999) # Disabled by default
-        end
-
         PositionTracker.active.find_each do |tracker|
           enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine)
         end

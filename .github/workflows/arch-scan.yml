@@ -1,0 +1,44 @@
+name: Scan Architecture & Update Dashboard
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'app/services/**'
+      - 'lib/trading_system/**'
+      - 'config/routes.rb'
+      - 'config/recurring.yml'
+      - 'db/schema.rb'
+      - 'strategies/**'
+      - '.env.example'
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
+      - name: Scan codebase
+        run: ruby scripts/scan_architecture.rb architecture-dashboard/src/lib/architecture-data.ts
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet architecture-dashboard/src/lib/architecture-data.ts; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit & Push if changed
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name "arch-scanner[bot]"
+          git config user.email "arch-scanner[bot]@users.noreply.github.com"
+          git add architecture-dashboard/src/lib/architecture-data.ts
+          git commit -m "chore: auto-update architecture dashboard data [skip ci]"
+          git push
