@@ -284,6 +284,8 @@ module Live
           tracker: tracker
         )
 
+        Portfolio::PnlTracker.update_unrealized(tracker_id: tracker_id, pnl: pnl_bd.to_f)
+
         # Publish event for high-frequency risk evaluation
         Core::EventBus.instance.publish(:ltp, {
           tracker_id: tracker_id,

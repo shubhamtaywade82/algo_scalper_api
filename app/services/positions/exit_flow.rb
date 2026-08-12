@@ -42,6 +42,7 @@ module Positions
         )
 
         # 5. Post-exit side effects
+        Portfolio::PnlTracker.mark_realized(tracker_id: tracker.id, pnl: final_pnl_rupees.to_f)
         Positions::DailyPnlRecorder.call(tracker: tracker)
         cleanup_exit_caches
         Positions::FeedSubscription.unsubscribe(tracker: tracker)
