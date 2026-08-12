@@ -25,6 +25,8 @@ module Live
     include PnlCache
     include Config
 
+    LOOP_INTERVAL = 5
+
     def initialize(exit_engine: nil)
       @exit_engine = exit_engine
       @algo_config = begin
@@ -52,13 +54,34 @@ module Live
     end
 
     def start
-      return if @running
+      # Check if thread is actually alive, not just if @running is true
+      return if @running && @thread&.alive?
 
       @running = true
+
+      # Start watchdog only when service is explicitly started
+      start_watchdog unless @watchdog_thread&.alive?
 
       # Subscribe to PnL updates from EventBus for high-frequency evaluation
       @event_subscription = Core::EventBus.instance.subscribe(Core::EventBus::EVENTS[:pnl_update]) do |event|
         handle_pnl_event(event)
+      end
+
+      @thread = Thread.new do
+        Thread.current.name = 'risk-manager'
+        last_paper_pnl_update = Time.current
+
+        loop do
+          break unless @running
+
+          begin
+            monitor_loop(last_paper_pnl_update)
+            last_paper_pnl_update = Time.current
+          rescue StandardError => e
+            Rails.logger.error("[RiskManagerService] monitor_loop crashed: #{e.class} - #{e.message}\n#{e.backtrace.first(8).join("\n")}")
+          end
+          sleep LOOP_INTERVAL
+        end
       end
 
       Rails.logger.info '[RiskManager] Service started'
@@ -66,6 +89,10 @@ module Live
 
     def stop
       @running = false
+      @thread&.kill
+      @thread = nil
+      @watchdog_thread&.kill
+      @watchdog_thread = nil
       if @event_subscription
         Core::EventBus.instance.unsubscribe(@event_subscription)
         @event_subscription = nil
@@ -128,25 +155,6 @@ module Live
       end
     end
 
-    def should_run_realtime_enforcement?(tracker_id)
-      gap = realtime_min_enforcement_gap_seconds
-      return true if gap <= 0
-
-      @realtime_eval_mutex ||= Mutex.new
-      @last_realtime_eval_at ||= {}
-      now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-
-      @realtime_eval_mutex.synchronize do
-        last = @last_realtime_eval_at[tracker_id]
-        if last.nil? || (now - last) >= gap
-          @last_realtime_eval_at[tracker_id] = now
-          true
-        else
-          false
-        end
-      end
-    end
-
     def running?
       @running
     end
@@ -181,34 +189,6 @@ module Live
       recommended_stop_loss = stop_loss || (entry_price * 0.98)
 
       { risk_level: risk_level, max_position_size: max_position_size, recommended_stop_loss: recommended_stop_loss }
-    end
-
-    # High-frequency risk evaluation (Event-driven)
-    # Reacts immediately to price changes without waiting for LOOP_INTERVAL
-    def handle_pnl_event(event)
-      return unless @running
-
-      tracker_id = event[:tracker_id]
-      return unless tracker_id
-
-      # Use ActiveCache to avoid DB load in the high-frequency path
-      tracker = PositionTracker.find_by(id: tracker_id)
-      return unless tracker&.active?
-
-      # Evaluate immediate exits (Hard SL, TP, Trailing)
-      # We use UnifiedExitChecker for sub-second logic
-      exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker)
-
-      if exit_decision && exit_decision[:exit]
-        reason = "#{exit_decision[:reason]} (Sub-second Trigger)"
-        Rails.logger.info("[RiskManager] ⚡ HIGH-FREQUENCY EXIT for #{tracker.order_no}: #{reason}")
-
-        # Execute exit immediately
-        engine = @exit_engine || self
-        dispatch_exit(engine, tracker, reason)
-      end
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] Event-driven evaluation failed for tracker=#{tracker_id}: #{e.message}")
     end
   end
 end
