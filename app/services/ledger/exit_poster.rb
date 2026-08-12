@@ -27,9 +27,9 @@ module Ledger
           { account_code: 'cash', credit: exit_fee }
         ]
 
-        if gain >= 0
+        if gain.positive?
           lines << { account_code: 'realized_pnl', credit: gain }
-        else
+        elsif gain.negative?
           lines << { account_code: 'realized_pnl', debit: gain.abs }
         end
 
