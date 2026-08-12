@@ -25,6 +25,19 @@ module Capital
 
         return 0 unless valid_for_allocation?(index_cfg, entry_price, derivative_lot_size, capital_available)
 
+        @index_key = index_cfg[:key] || 'UNKNOWN'
+
+        # Check if Kelly-based position sizing is enabled
+        if kelly_based_sizing_enabled?(index_cfg)
+          return calculate_kelly_based_quantity(
+            index_cfg: index_cfg,
+            entry_price: entry_price,
+            derivative_lot_size: derivative_lot_size,
+            capital_available: capital_available,
+            multiplier: multiplier
+          )
+        end
+
         # Check if rupee-based position sizing is enabled
         if rupee_based_sizing_enabled?
           return calculate_rupee_based_quantity(
@@ -393,6 +406,80 @@ module Capital
         )
       end
 
+      # Kelly-based position sizing: derive quantity from Kelly Criterion formula
+      # Formula: f* = p - (1-p)/r
+      def calculate_kelly_based_quantity(index_cfg:, entry_price:, derivative_lot_size:, capital_available:, multiplier:)
+        sizing_cfg = AlgoConfig.fetch[:kelly_sizing] || {}
+        return 0 unless sizing_cfg[:enabled]
+
+        entry_bd = BigDecimal(entry_price.to_s)
+        return 0 unless entry_bd.finite? && entry_bd.positive?
+
+        # Attempt to load dynamic historical stats
+        strategy_name = index_cfg[:entry_strategy] || index_cfg[:strategy]
+        index_key = index_cfg[:key] || @index_key
+        stats = OptionsBuying::PerformanceDb.stats_for(strategy_name, index_key)
+
+        if stats
+          p = stats[:win_rate].to_f
+          r = stats[:payout_ratio].to_f
+          Rails.logger.info("[Allocator] KELLY_BASED using database stats: p=#{p.round(4)}, r=#{r.round(4)} (n=#{stats[:sample_size]})")
+        else
+          # Fallback: p = confidence (0.0 to 1.0)
+          p = (index_cfg[:confidence] || sizing_cfg[:default_win_rate] || 0.55).to_f
+          # r = Reward-to-Risk ratio. Option premiums swing far more than equity-style
+          # 2%/4% defaults, so fall back to the actual configured SL/TP percentages
+          # (same source as calculate_max_by_risk and Live::UnifiedExitChecker).
+          default_stop_price = entry_bd * (1 - configured_sl_pct)
+          default_target_price = entry_bd * (1 + configured_tp_pct)
+          risk = (entry_bd - BigDecimal((index_cfg[:stop_loss] || default_stop_price).to_s)).abs
+          reward = (BigDecimal((index_cfg[:target] || default_target_price).to_s) - entry_bd).abs
+          r = risk.positive? ? (reward / risk).to_f : (sizing_cfg[:default_payout_ratio] || 1.5).to_f
+          Rails.logger.info("[Allocator] KELLY_BASED using fallback defaults: p=#{p.round(4)}, r=#{r.round(4)}")
+        end
+
+        # Calculate Kelly fraction f*
+        kelly_f = p - ((1.0 - p) / r)
+        # Apply safety factor (Half-Kelly or Fractional Kelly)
+        safety_factor = (sizing_cfg[:safety_factor] || 0.5).to_f
+        max_alloc = (sizing_cfg[:max_capital_allocation_pct] || 0.20).to_f
+        f_star = [kelly_f * safety_factor, max_alloc].min
+
+        return 0 if f_star <= 0
+
+        # buy_value = capital_available * f_star
+        buy_value = capital_available * BigDecimal(f_star.to_s)
+        lot_cost = entry_bd * derivative_lot_size
+        max_lots = (buy_value / lot_cost).floor
+
+        # Apply multiplier
+        max_lots = (max_lots * multiplier).to_i
+        quantity = max_lots * derivative_lot_size
+
+        # Minimum 1 lot
+        quantity = [quantity, derivative_lot_size.to_i].max
+
+        # Affordability check
+        max_affordable_lots = (capital_available / lot_cost).floor
+        final_quantity = [quantity, max_affordable_lots * derivative_lot_size.to_i].min
+
+        Rails.logger.info(
+          "[Allocator] KELLY_BASED index:#{@index_key} p:#{p.round(2)} r:#{r.round(2)} " \
+          "f_star:#{f_star.round(3)} buy_value:₹#{format_money(buy_value)} " \
+          "qty:#{final_quantity}"
+        )
+
+        final_quantity
+      end
+
+      def kelly_based_sizing_enabled?(index_cfg)
+        cfg = AlgoConfig.fetch[:kelly_sizing]
+        return false unless cfg && cfg[:enabled] == true
+
+        index_cfg[:confidence].present? ||
+          OptionsBuying::PerformanceDb.stats_for(index_cfg[:entry_strategy] || index_cfg[:strategy], index_cfg[:key]).present?
+      end
+
       # Rupee-based position sizing: derive quantity from fixed ₹ risk
       # Formula: quantity = floor(risk_rupees / (stop_distance_rupees × lot_size)) × lot_size
       def calculate_rupee_based_quantity(entry_price:, derivative_lot_size:, capital_available:, multiplier:, index_cfg: {})
@@ -404,7 +491,7 @@ module Capital
         return 0 unless finite_money?(capital_available)
 
         risk_rupees = BigDecimal((sizing_cfg[:risk_rupees] || 1000).to_s)
-        index_key = (index_cfg[:key] || 'UNKNOWN').to_s
+        index_key = (@index_key || index_cfg[:key] || 'UNKNOWN').to_s
 
         # Deduct broker fees from risk capital (₹40 per trade: entry + exit)
         # This ensures net risk after fees matches the target risk
