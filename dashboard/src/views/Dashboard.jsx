@@ -48,6 +48,9 @@ export default function Dashboard() {
   const [positionsTab, setPositionsTab] = createSignal('open') // 'open' | 'closed'
   const [selectedPositionId, setSelectedPositionId] = createSignal(null)
 
+  const isCircuitSafe = createMemo(() => !circuitBreaker()?.tripped)
+  const isWsLive = createMemo(() => positionsConnected() && !positionsStale())
+
   const { alerts: liveAlerts } = useAlerts()
   const { orders: recentOrders, fetchOrders } = useOrders()
   const { data: equityCurveData, fetchCurve: fetchEquityCurve } = useEquityCurve()
@@ -133,40 +136,54 @@ export default function Dashboard() {
       />
 
       {/* 2. Main Positions Hub (Active & Closed Positions) */}
-      <div class="glass rounded-2xl p-6 border border-white/5 space-y-4">
-        <div class="flex items-center justify-between border-b border-white/5 pb-4 flex-wrap gap-4">
-          <div class="flex items-center gap-3">
-            <div class="w-2.5 h-7 bg-primary-500 rounded-full" />
-            <h2 class="text-base font-black text-white uppercase tracking-wider">
+      <div class="glass rounded-2xl p-3 border border-white/5 space-y-2">
+        <div class="flex items-center justify-between border-b border-white/5 pb-2 flex-wrap gap-2">
+          <div class="flex items-center gap-2">
+            <div class="w-1.5 h-4 bg-primary-500 rounded-full" />
+            <h2 class="text-xs font-bold text-gray-300 uppercase tracking-wide">
               Positions Hub
             </h2>
           </div>
 
           {/* Positions Tab Controls */}
-          <div class="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/5">
+          <div class="flex items-center gap-1 bg-white/5 p-0.5 rounded-lg border border-white/5">
             <button
               type="button"
-              class={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+              class={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all cursor-pointer ${
                 positionsTab() === 'open'
-                  ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/20'
+                  ? 'bg-primary-600 text-white'
                   : 'text-gray-400 hover:text-white'
               }`}
               onClick={() => setPositionsTab('open')}
             >
-              Active Positions ({openPositionsList().length})
+              Active ({openPositionsList().length})
             </button>
             <button
               type="button"
-              class={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+              class={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all cursor-pointer ${
                 positionsTab() === 'closed'
-                  ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/20'
+                  ? 'bg-primary-600 text-white'
                   : 'text-gray-400 hover:text-white'
               }`}
               onClick={() => setPositionsTab('closed')}
             >
-              Closed Trades ({closedPositionsList().length})
+              Closed ({closedPositionsList().length})
             </button>
           </div>
+
+          {/* Contextual status for the active tab */}
+          <Show when={positionsTab() === 'open'}>
+            <div class="flex items-center gap-1.5">
+              <div class={`flex items-center gap-1.5 text-[9px] font-bold tracking-wide px-2 py-0.5 rounded-full border ${isWsLive() ? 'text-cyan-300 bg-cyan-500/10 border-cyan-500/30' : 'text-amber-300 bg-amber-500/10 border-amber-500/30'}`}>
+                <span class={`w-1.5 h-1.5 rounded-full ${isWsLive() ? 'bg-cyan-300' : 'bg-amber-300 animate-pulse'}`} />
+                {isWsLive() ? 'WS LIVE' : 'WS STALE'}
+              </div>
+              <div class={`flex items-center gap-1.5 text-[9px] font-bold tracking-wide px-2 py-0.5 rounded-full border ${isCircuitSafe() ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-rose-400 bg-rose-500/10 border-rose-500/20'}`}>
+                <span class={`w-1.5 h-1.5 rounded-full ${isCircuitSafe() ? 'bg-emerald-400' : 'bg-rose-400 animate-pulse'}`} />
+                {isCircuitSafe() ? 'OPTIMAL' : 'TRIPPED'}
+              </div>
+            </div>
+          </Show>
         </div>
 
         {/* Tab View */}
@@ -176,9 +193,6 @@ export default function Dashboard() {
             onClosePosition={closeOpenPosition}
             closingPositionId={closingPositionId()}
             onSelectPosition={setSelectedPositionId}
-            wsConnected={positionsConnected()}
-            wsStale={positionsStale()}
-            circuitBreaker={circuitBreaker()}
           />
         </Show>
 

@@ -168,29 +168,9 @@ export default function ClosedTrades(props) {
   const totalCount = createMemo(() => summary()?.total ?? 0)
 
   return (
-    <div class="glass rounded-2xl overflow-hidden mt-8 opacity-90 transition-opacity hover:opacity-100">
-      {/* Header */}
-      <div class="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-white/[0.01]">
-        <div class="flex items-center gap-3">
-          <div class="w-1.5 h-6 bg-gray-600 rounded-full" />
-          <h2 class="text-xs font-bold text-gray-400 uppercase tracking-[0.2em]">
-            Completed Trades
-            <span class="text-gray-600 ml-2 font-black text-data">[{positions().length}]</span>
-          </h2>
-        </div>
-        <Button
-          variant="ghost"
-          class="text-[10px] font-bold text-gray-500 hover:text-gray-300 uppercase tracking-wider"
-          onClick={fetchPositions}
-          disabled={loading()}
-          leftIcon={loading() ? undefined : <span>↻</span>}
-        >
-          {loading() ? '↻ Loading...' : '↻ Refresh'}
-        </Button>
-      </div>
-
+    <div class="overflow-hidden opacity-90 transition-opacity hover:opacity-100">
       {/* Filters */}
-      <div class="px-6 py-5 border-b border-white/5 bg-white/[0.005] flex flex-wrap items-end gap-4">
+      <div class="px-4 py-2.5 border-b border-white/5 bg-white/[0.005] flex flex-wrap items-end gap-3">
         <div class="flex flex-col gap-1.5">
           <label class="text-[9px] font-black text-gray-500 uppercase tracking-widest">Date</label>
           <select
@@ -275,6 +255,15 @@ export default function ClosedTrades(props) {
             onClick={resetFilters}
           >
             Reset
+          </Button>
+          <Button
+            variant="ghost"
+            class="text-[10px] font-bold text-gray-500 hover:text-gray-300 uppercase tracking-wider"
+            onClick={fetchPositions}
+            disabled={loading()}
+            leftIcon={loading() ? undefined : <span>↻</span>}
+          >
+            {loading() ? '↻ Loading...' : '↻ Refresh'}
           </Button>
         </div>
       </div>
