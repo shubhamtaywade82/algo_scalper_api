@@ -193,6 +193,8 @@ module Dhan
         DhanHQ.configure do |config|
           config.access_token = access_token
         end
+
+        Rails.cache.delete("scalper:dhan_token")
       rescue StandardError => e
         Rails.logger.error("[DHAN] Failed to apply token to runtime: #{e.class} - #{e.message}")
       end

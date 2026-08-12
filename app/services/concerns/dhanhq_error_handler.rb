@@ -9,6 +9,7 @@ module DhanhqErrorHandler
   TOKEN_EXPIRY_KEYWORDS = [
     'access token.*expired',
     'token.*invalid',
+    'invalid.*token',
     'Client ID.*invalid',
     'authentication.*failed',
     'unauthorized'
