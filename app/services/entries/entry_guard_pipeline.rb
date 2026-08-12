@@ -51,6 +51,8 @@ module Entries
         Guards::InstrumentLookupGuard, # sets context[:instrument] — required by EPT guard
         Guards::ChopScoreGuard, # blocks noisy entries when ADX/Supertrend/BB say chop
         Guards::DirectionConflictGuard, # runs only after regime is chop-cleared; kills a losing opposite-side position, leaves a green one alone
+        Guards::SellingIvRankGuard, # selling-only: don't sell premium when IV is cheap
+        Guards::MarginLimitGuard,   # selling-only: fail fast if even 1 lot won't fit the margin budget
         Guards::LtpResolutionGuard,
         Guards::ExpiryWeekPowerTrendGuard,   # enriches context[:expiry_power_trend] when pattern detected
         Guards::TimeRegimeGuard,             # reads context[:expiry_power_trend] to bypass S3/S4 block

@@ -86,6 +86,28 @@ RSpec.describe Live::UnifiedExitChecker do
       expect(result).to be false
     end
 
+    context 'when the tracker is a short position' do
+      before do
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({ pnl_pct: 0.0, pnl: 0.0 })
+        allow(described_class).to receive(:portfolio_floor_breach?).and_return(false)
+        allow(tracker).to receive(:short_position?).and_return(true)
+      end
+
+      it 'returns nil without evaluating any long-only exit condition' do
+        allow(described_class).to receive(:emergency_peak_loss_exit_triggered?)
+
+        expect(described_class.check_exit_conditions(tracker)).to be_nil
+        expect(described_class).not_to have_received(:emergency_peak_loss_exit_triggered?)
+      end
+
+      it 'still evaluates the portfolio floor breach kill-switch' do
+        allow(described_class).to receive(:portfolio_floor_breach?).and_return(true)
+
+        result = described_class.check_exit_conditions(tracker)
+        expect(result[:reason]).to eq('PORTFOLIO_FLOOR_BREACH')
+      end
+    end
+
     it 'handles zero entry value gracefully' do
       allow(tracker).to receive(:entry_price).and_return(0.0)
       result = described_class.send(:emergency_peak_loss_exit_triggered?, tracker)

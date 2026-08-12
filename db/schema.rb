@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_07_142556) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_12_200607) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -516,10 +516,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_07_142556) do
     t.decimal "last_pnl_pct", precision: 8, scale: 4
     t.decimal "last_pnl_rupees", precision: 12, scale: 4
     t.decimal "lowest_price", precision: 12, scale: 4
+    t.decimal "margin_required", precision: 12, scale: 2, default: "0.0"
     t.jsonb "meta", default: {}
     t.string "order_no", null: false
     t.boolean "paper", default: false, null: false
     t.datetime "peak_premium_at"
+    t.string "position_side", default: "long", null: false
+    t.decimal "premium_received", precision: 10, scale: 2, default: "0.0"
     t.decimal "premium_stop_price", precision: 12, scale: 4
     t.decimal "profit_floor_rupees", precision: 12, scale: 4
     t.datetime "profit_floor_set_at"
@@ -561,6 +564,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_07_142556) do
     t.index ["instrument_id"], name: "index_position_trackers_on_instrument_id"
     t.index ["order_no"], name: "index_position_trackers_on_order_no", unique: true
     t.index ["paper"], name: "index_position_trackers_on_paper"
+    t.index ["position_side", "status"], name: "index_position_trackers_on_position_side_and_status"
     t.index ["security_id", "segment", "status"], name: "idx_trackers_on_sid_seg_status"
     t.index ["security_id", "segment"], name: "index_position_trackers_on_security_id_and_segment"
     t.index ["security_id", "status"], name: "index_position_trackers_on_security_id_and_status"
@@ -1221,7 +1225,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_07_142556) do
   create_table "trading_strategies", force: :cascade do |t|
     t.string "author", default: "System"
     t.jsonb "backtest_results", default: {}
-    t.jsonb "checks", default: {"risk"=>"not_run", "logic"=>"not_run", "syntax"=>"not_run", "backtest"=>"not_run"}
+    t.jsonb "checks", default: {"risk" => "not_run", "logic" => "not_run", "syntax" => "not_run", "backtest" => "not_run"}
     t.text "code", default: ""
     t.datetime "created_at", null: false
     t.text "description"

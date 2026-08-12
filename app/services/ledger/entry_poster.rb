@@ -28,12 +28,7 @@ module Ledger
             fee: fee.to_f,
             iv_percentile: tracker.iv_percentile
           }.compact,
-          lines: [
-            { account_code: 'premium_deployed', debit: gross },
-            { account_code: 'cash', credit: gross },
-            { account_code: 'brokerage_expense', debit: fee },
-            { account_code: 'cash', credit: fee }
-          ]
+          lines: entry_lines(tracker: tracker, gross: gross, fee: fee)
         )
       rescue PostingService::InsufficientCashError => e
         Rails.logger.warn("[Ledger::EntryPoster] #{e.message} tracker=#{tracker.id}")
@@ -41,6 +36,31 @@ module Ledger
       rescue StandardError => e
         Rails.logger.error("[Ledger::EntryPoster] #{e.class} - #{e.message} tracker=#{tracker.id}")
         nil
+      end
+
+      # Long: pay cash for the option (an asset you hold, "premium_deployed").
+      # Short: receive cash for writing the option (a liability, "premium_written"),
+      # and separately lock margin as collateral out of free cash ("margin_blocked").
+      def entry_lines(tracker:, gross:, fee:)
+        base = [
+          { account_code: 'brokerage_expense', debit: fee },
+          { account_code: 'cash', credit: fee }
+        ]
+
+        if tracker.short_position?
+          margin = BigDecimal(tracker.margin_required.to_s)
+          base + [
+            { account_code: 'cash', debit: gross },
+            { account_code: 'premium_written', credit: gross },
+            { account_code: 'margin_blocked', debit: margin },
+            { account_code: 'cash', credit: margin }
+          ]
+        else
+          base + [
+            { account_code: 'premium_deployed', debit: gross },
+            { account_code: 'cash', credit: gross }
+          ]
+        end
       end
 
       def paper_posting?(tracker)

@@ -22,7 +22,7 @@ module Entries
     def call
       place_cmd = Orders::Commands::PlaceOrderCommand.new(
         gateway: Orders.config.gateway,
-        side: :buy,
+        side: opening_order_side,
         segment: @pick[:segment] || @index_cfg[:segment],
         security_id: @pick[:security_id],
         qty: @quantity,
@@ -49,6 +49,11 @@ module Entries
     end
 
     private
+
+    # Selling opens with a SELL order (sell-to-open); buying opens with BUY as before.
+    def opening_order_side
+      @side.to_s.start_with?('short') ? :sell : :buy
+    end
 
     def build_client_order_id
       Entries::EntryGuard.build_client_order_id(index_cfg: @index_cfg, pick: @pick, signal: @signal)

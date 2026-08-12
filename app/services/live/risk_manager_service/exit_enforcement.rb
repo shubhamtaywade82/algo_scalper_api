@@ -21,6 +21,34 @@ module Live
         end
       end
 
+      # Selling's exit surface: MaxPremiumLossRule (risk cap) then PremiumTargetRule
+      # (take-profit). First-match-wins, same pattern as the buying enforcement layers.
+      def enforce_selling_exits_for(tracker, exit_engine:)
+        snapshot = pnl_snapshot(tracker)
+        return unless snapshot
+
+        position_data = build_position_data_for_rule_engine(tracker, snapshot)
+        context = Risk::Rules::RuleContext.new(
+          position: position_data,
+          tracker: tracker,
+          risk_config: risk_config,
+          tracker_snapshot: snapshot
+        )
+
+        [Risk::Rules::MaxPremiumLossRule, Risk::Rules::PremiumTargetRule].each do |rule_class|
+          result = rule_class.new(config: risk_config).evaluate(context)
+          next unless result.exit?
+
+          exit_path = rule_class.name.demodulize.underscore
+          Rails.logger.info("[RiskManager] #{result.reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, result.reason)
+          dispatch_exit(exit_engine, tracker, result.reason)
+          return
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_selling_exits_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+
       def enforce_hard_limits_for(tracker, exit_engine:)
         # UnifiedExitChecker handles Hard SL, TP, and Adaptive Trailing
         exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker)

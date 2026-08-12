@@ -19,8 +19,14 @@ module Live
 
         pnl_pct_display = (snapshot[:pnl_pct].to_f * 100.0).round(2)
 
-        # 1. Emergency portfolio/drawdown exits
+        # 1. Emergency portfolio/drawdown exits — global kill-switches, apply to every position
         return { exit: true, reason: 'PORTFOLIO_FLOOR_BREACH', path: 'profit_lock', pnl_pct: pnl_pct_display } if portfolio_floor_breach?
+
+        # Everything below assumes a long's P&L shape (rising premium is good) and isn't
+        # safe to run against a short. Selling has its own exit rules — see
+        # RiskManagerService::ExitEnforcement#enforce_selling_exits_for.
+        return nil if tracker.respond_to?(:short_position?) && tracker.short_position?
+
         return { exit: true, reason: 'EMERGENCY_PEAK_LOSS', path: 'emergency_peak_loss', pnl_pct: pnl_pct_display } if emergency_peak_loss_exit_triggered?(tracker)
 
         # 2. Structure invalidation / SMC Navigator

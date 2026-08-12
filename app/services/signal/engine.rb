@@ -33,6 +33,7 @@ module Signal
         ta_result = nil
         regime_result = { regime: 'UNKNOWN', confidence: 0, metrics: {} }
         regime = 'UNKNOWN'
+        position_side = 'long'
 
         if entry_primary == 'supertrend'
           result = execute_supertrend_only_flow(index_cfg, instrument, signals_cfg, primary_tf)
@@ -210,27 +211,31 @@ module Signal
             if enable_direction_gate
               trade_side = final_direction == :bullish ? :CE : :PE
 
-              # Hard block for non-trending markets as per options buying requirements
-              if %w[RANGING CHOPPY INSUFFICIENT_DATA].include?(regime)
+              if regime == 'INSUFFICIENT_DATA'
                 Rails.logger.info(
-                  "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: Market is #{regime}. Skipping to avoid theta decay."
+                  "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: Market is #{regime}. Skipping — not enough data either way."
                 )
                 Signal::StateTracker.reset(index_cfg[:key])
                 return
-              end
+              elsif %w[RANGING CHOPPY].include?(regime)
+                # Chop is theta decay poison for buying, but exactly the regime selling profits
+                # from — route to the selling path instead of skipping the cycle entirely.
+                position_side = 'short'
+                Rails.logger.info("[Signal] DirectionGate: #{regime} regime for #{index_cfg[:key]} — routing to selling path")
+              else
+                # Verify alignment with expected trade direction
+                aligned = (regime == 'TRENDING_UP' && trade_side == :CE) ||
+                          (regime == 'TRENDING_DOWN' && trade_side == :PE)
 
-              # Verify alignment with expected trade direction
-              aligned = (regime == 'TRENDING_UP' && trade_side == :CE) ||
-                        (regime == 'TRENDING_DOWN' && trade_side == :PE)
-
-              unless aligned
-                Rails.logger.info(
-                  "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: Counter-trend trade. #{trade_side} requested vs #{regime}."
-                )
-                Signal::StateTracker.reset(index_cfg[:key])
-                return
+                unless aligned
+                  Rails.logger.info(
+                    "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: Counter-trend trade. #{trade_side} requested vs #{regime}."
+                  )
+                  Signal::StateTracker.reset(index_cfg[:key])
+                  return
+                end
+                Rails.logger.debug { "[Signal] DirectionGate ALLOWED #{index_cfg[:key]}: #{trade_side} in #{regime}" }
               end
-              Rails.logger.debug { "[Signal] DirectionGate ALLOWED #{index_cfg[:key]}: #{trade_side} in #{regime}" }
             end
 
             validation_result = Signal::ValidationGates.comprehensive_validation(index_cfg, final_direction, primary_series,
@@ -486,8 +491,9 @@ module Signal
           permission: execution_permission
         )
 
-        if supertrend_direct_entry
-          # Supertrend-only mode: enter directly on signal without BOS pullback wait.
+        if supertrend_direct_entry || position_side == 'short'
+          # Supertrend-only mode, and selling (no pullback/BOS concept for a chop-regime
+          # premium seller), enter directly on signal without the BOS state machine.
           # Add stub BOS fields required by EntryGuard's contract check.
           Rails.logger.info("[Signal] Exit-testing mode: using direct EntryGuard path (no BOS state machine).") if exit_testing_mode?
           entry_metadata.merge!(
@@ -503,7 +509,8 @@ module Signal
               direction: final_direction,
               scale_multiplier: 1,
               entry_metadata: entry_metadata,
-              permission: execution_permission
+              permission: execution_permission,
+              position_side: position_side
             )
             break if entered
           end

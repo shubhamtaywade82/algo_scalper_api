@@ -14,6 +14,14 @@ class PositionTracker < ApplicationRecord
     highest_price
   end
 
+  def long_position?
+    position_side == 'long'
+  end
+
+  def short_position?
+    position_side == 'short'
+  end
+
   def create_position_meta_snapshot!(config_version_hash:, config_snapshot:, config_change_log_id: nil, entry_at: nil)
     create_meta_snapshot!(
       config_version_hash: config_version_hash,
