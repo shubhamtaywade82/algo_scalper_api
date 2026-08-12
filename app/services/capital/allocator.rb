@@ -28,6 +28,7 @@ module Capital
         # Check if rupee-based position sizing is enabled
         if rupee_based_sizing_enabled?
           return calculate_rupee_based_quantity(
+            index_cfg: index_cfg,
             entry_price: entry_price,
             derivative_lot_size: derivative_lot_size,
             capital_available: capital_available,
@@ -65,6 +66,24 @@ module Capital
       end
 
       private
+
+      # Max fraction of available cash for position buy value (percentage path and rupee-based cap).
+      # Order: per-index capital_alloc_pct → sizing.allocation_cap_pct → deployment band alloc_pct.
+      def effective_allocation_pct(index_cfg, capital_available)
+        cfg = index_cfg || {}
+        return cfg[:capital_alloc_pct].to_f if cfg[:capital_alloc_pct].present?
+
+        global_cap = sizing_allocation_cap_pct
+        return global_cap.to_f if global_cap.present?
+
+        deployment_policy(capital_available.to_f)[:alloc_pct]
+      end
+
+      def sizing_allocation_cap_pct
+        AlgoConfig.fetch.dig(:sizing, :allocation_cap_pct)
+      rescue StandardError
+        nil
+      end
 
       def normalize_multiplier(scale_multiplier)
         [scale_multiplier.to_i, 1].max
@@ -376,7 +395,7 @@ module Capital
 
       # Rupee-based position sizing: derive quantity from fixed ₹ risk
       # Formula: quantity = floor(risk_rupees / (stop_distance_rupees × lot_size)) × lot_size
-      def calculate_rupee_based_quantity(entry_price:, derivative_lot_size:, capital_available:, multiplier:)
+      def calculate_rupee_based_quantity(entry_price:, derivative_lot_size:, capital_available:, multiplier:, index_cfg: {})
         sizing_cfg = position_sizing_config
         return 0 unless sizing_cfg && sizing_cfg[:enabled]
 
@@ -385,7 +404,7 @@ module Capital
         return 0 unless finite_money?(capital_available)
 
         risk_rupees = BigDecimal((sizing_cfg[:risk_rupees] || 1000).to_s)
-        index_key = @index_key || 'UNKNOWN'
+        index_key = (index_cfg[:key] || 'UNKNOWN').to_s
 
         # Deduct broker fees from risk capital (₹40 per trade: entry + exit)
         # This ensures net risk after fees matches the target risk
@@ -421,8 +440,7 @@ module Capital
 
         # Check capital allocation constraint (alloc_pct caps total buy value)
         cost_per_lot = BigDecimal(entry_price.to_s) * lot_size
-        policy = deployment_policy(capital_available.to_f)
-        alloc_pct = policy[:alloc_pct] || 0.35
+        alloc_pct = effective_allocation_pct(index_cfg, capital_available.to_f)
         max_allocation = capital_available * BigDecimal(alloc_pct.to_s)
         max_lots_by_alloc = (max_allocation / cost_per_lot).floor
         max_alloc_quantity = max_lots_by_alloc * lot_size
