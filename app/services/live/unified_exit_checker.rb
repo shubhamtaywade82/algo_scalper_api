@@ -251,6 +251,84 @@ module Live
         (hwm - pnl) / hwm >= drop_threshold
       end
 
+      # Best-effort trailing SL price for DISPLAY only — mirrors trailing_stop_hit?'s
+      # logic without ever triggering an exit. Returns nil when trailing hasn't armed
+      # yet, or when the active rule is PnL-ratio-based and no reliable price
+      # equivalent can be derived (falls back to the caller's static SL in that case).
+      def live_sl_price(tracker, snapshot, ltp)
+        return nil unless snapshot && ltp.to_f.positive?
+
+        config = exit_config
+        return nil unless config[:trailing][:enabled]
+
+        qty = tracker.quantity.to_f
+        return nil unless qty.positive?
+
+        symbol = tracker.symbol.to_s.upcase
+        if %w[NIFTY BANKNIFTY SENSEX].any? { |s| symbol.include?(s) }
+          live_sl_price_for_index(tracker, snapshot, ltp, config)
+        else
+          hwm = snapshot[:hwm_pnl].to_f
+          return nil if hwm <= 0
+
+          pnl_floor = hwm * (1.0 - config[:trailing][:drop_threshold].to_f)
+          implied_price_from_pnl_floor(tracker, snapshot, ltp, pnl_floor)
+        end
+      rescue StandardError => e
+        Rails.logger.debug { "[UnifiedExitChecker] live_sl_price failed for #{tracker.id}: #{e.class} - #{e.message}" }
+        nil
+      end
+
+      def live_sl_price_for_index(tracker, snapshot, ltp, config)
+        entry_value = tracker.entry_price.to_f * tracker.quantity.to_f
+        return nil unless entry_value.positive?
+
+        activation = config[:trailing][:activation_profit].to_f
+        peak_profit_pct = snapshot[:hwm_pnl].to_f / entry_value
+        return nil if activation.positive? && peak_profit_pct < activation
+
+        index_key = tracker.meta&.dig('index_key')&.downcase
+        inst_trailing = AlgoConfig.fetch.dig(:risk, :institutional_trailing, index_key&.to_sym) || {}
+        adaptive_tiers = inst_trailing[:adaptive_drawdown]
+
+        if adaptive_tiers.is_a?(Array) && adaptive_tiers.any?
+          return implied_sl_from_drawdown_tiers(tracker, snapshot, ltp, peak_profit_pct, adaptive_tiers)
+        end
+
+        pos_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
+        prices = pos_data&.price_history || [ltp]
+        analyzer = Orders::Analyzer.new(tracker: tracker, ltp: ltp, prices: prices, peak_profit_pct: peak_profit_pct)
+        analyzer.recommended_sl
+      end
+
+      def implied_sl_from_drawdown_tiers(tracker, snapshot, ltp, peak_profit_pct, adaptive_tiers)
+        sorted_tiers = adaptive_tiers.sort_by { |t| -t[:min_profit].to_f }
+        tier = sorted_tiers.find { |t| peak_profit_pct >= t[:min_profit].to_f }
+        return nil unless tier
+
+        allowed_dd = (tier[:drawdown] || tier[:max_drawdown]).to_f
+        return nil unless allowed_dd.positive?
+
+        hwm = snapshot[:hwm_pnl].to_f
+        return nil if hwm <= 0
+
+        allowed_drop_from_hwm = allowed_dd / peak_profit_pct
+        pnl_floor = hwm * (1.0 - allowed_drop_from_hwm)
+        implied_price_from_pnl_floor(tracker, snapshot, ltp, pnl_floor)
+      end
+
+      # The adaptive/simple trailing rules are expressed in PnL space (drop from peak
+      # profit), not price space. PnL moves linearly with LTP at rate = quantity (fees
+      # are a fixed offset that cancels out in a delta calc), so we back-solve the LTP
+      # that would hit the target PnL floor instead of re-deriving the PnL formula here.
+      def implied_price_from_pnl_floor(tracker, snapshot, ltp, pnl_floor)
+        qty = tracker.quantity.to_f
+        return nil unless qty.positive?
+
+        delta_pnl_needed = snapshot[:pnl].to_f - pnl_floor
+        (ltp.to_f - (delta_pnl_needed / qty)).round(2)
+      end
+
       def time_based_exit?(_tracker)
         config = exit_config
         return false unless config[:time_based][:enabled]

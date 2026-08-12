@@ -830,4 +830,96 @@ RSpec.describe Live::UnifiedExitChecker do
       end
     end
   end
+
+  describe '.live_sl_price' do
+    let(:tracker) do
+      instance_double(PositionTracker, instrument: mock_instrument, watchable: nil, active?: true, id: 1,
+                                       entry_price: 200.0,
+                                       quantity: 50,
+                                       symbol: 'NIFTY24MAR22000CE',
+                                       meta: { 'index_key' => 'NIFTY' },
+                                       high_water_mark_pnl: 2_000.0)
+    end
+
+    context 'with adaptive drawdown tiers configured' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return(
+          exit: { trailing: { enabled: true, activation_profit: 0.035, drop_threshold: 0.025 } },
+          risk: {
+            institutional_trailing: {
+              nifty: {
+                adaptive_drawdown: [
+                  { min_profit: 0.03, drawdown: 0.06 },
+                  { min_profit: 0.15, drawdown: 0.10 }
+                ]
+              }
+            }
+          }
+        )
+      end
+
+      it 'derives the implied SL price from the active tier drawdown, not a stale static value' do
+        # peak_profit_pct = hwm_pnl / (entry * qty) = 2000 / 10000 = 0.20 -> tier {0.15, 0.10}
+        # allowed_drop_from_hwm = 0.10 / 0.20 = 0.5 -> pnl_floor = 2000 * 0.5 = 1000
+        # delta_pnl_needed = pnl(1800) - pnl_floor(1000) = 800 -> implied = 180 - 800/50
+        snapshot = { pnl: 1_800.0, hwm_pnl: 2_000.0 }
+        result = described_class.live_sl_price(tracker, snapshot, 180.0)
+        expect(result).to eq(164.0)
+      end
+
+      it 'returns nil when activation threshold has not been reached' do
+        snapshot = { pnl: 50.0, hwm_pnl: 50.0 } # peak_profit_pct = 0.005, below 0.035 activation
+        result = described_class.live_sl_price(tracker, snapshot, 201.0)
+        expect(result).to be_nil
+      end
+    end
+
+    context 'without adaptive tiers configured (index falls back to Orders::Analyzer)' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return(
+          exit: { trailing: { enabled: true, activation_profit: 0.035, drop_threshold: 0.025 } },
+          risk: {}
+        )
+        allow(Positions::ActiveCache.instance).to receive(:get_by_tracker_id).and_return(nil)
+      end
+
+      it 'delegates to Orders::Analyzer#recommended_sl' do
+        snapshot = { pnl: 1_800.0, hwm_pnl: 2_000.0 }
+        allow_any_instance_of(Orders::Analyzer).to receive(:recommended_sl).and_return(175.5) # rubocop:disable RSpec/AnyInstance
+        result = described_class.live_sl_price(tracker, snapshot, 180.0)
+        expect(result).to eq(175.5)
+      end
+    end
+
+    context 'for a non-index instrument (simple drop-from-peak rule)' do
+      let(:tracker) do
+        instance_double(PositionTracker, instrument: mock_instrument, watchable: nil, active?: true, id: 1,
+                                         entry_price: 200.0,
+                                         quantity: 50,
+                                         symbol: 'RELIANCE24MAR3000CE',
+                                         meta: {},
+                                         high_water_mark_pnl: 2_000.0)
+      end
+
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return(
+          exit: { trailing: { enabled: true, activation_profit: 0.035, drop_threshold: 0.10 } },
+          risk: {}
+        )
+      end
+
+      it 'derives the implied SL price from the flat drop_threshold' do
+        # pnl_floor = hwm(2000) * (1 - 0.10) = 1800 -> delta = 1900 - 1800 = 100 -> implied = 180 - 100/50
+        snapshot = { pnl: 1_900.0, hwm_pnl: 2_000.0 }
+        result = described_class.live_sl_price(tracker, snapshot, 180.0)
+        expect(result).to eq(178.0)
+      end
+    end
+
+    it 'returns nil when trailing is disabled in config' do
+      allow(AlgoConfig).to receive(:fetch).and_return(exit: { trailing: { enabled: false } }, risk: {})
+      result = described_class.live_sl_price(tracker, { pnl: 1_800.0, hwm_pnl: 2_000.0 }, 180.0)
+      expect(result).to be_nil
+    end
+  end
 end

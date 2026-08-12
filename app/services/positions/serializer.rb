@@ -17,7 +17,7 @@ module Positions
         pnl: net_pnl.round(2),
         pnl_pct: net_pnl_pct(net_pnl, entry, qty),
         hwm_pnl: (cache[:hwm_pnl] || tracker.high_water_mark_pnl.to_f).round(2),
-        sl_price: sl_price(tracker, entry),
+        sl_price: sl_price(tracker, entry, cache, ltp),
         tp_price: tp_price(tracker, entry),
         entry_strategy: tracker.entry_strategy,
         time_in_position_sec: cache[:time_in_position_sec]
@@ -209,8 +209,13 @@ module Positions
       (((current - entry) / entry) * 100).round(2)
     end
 
-    # Tightest active stop, for display only — not the exit engine's decision path.
-    def sl_price(tracker, entry)
+    # Live trailing SL price, mirroring what Live::UnifiedExitChecker actually uses to
+    # trigger exits (see live_sl_price) — falls back to the last-known stop meta, then
+    # to a static entry-relative estimate when trailing hasn't armed yet.
+    def sl_price(tracker, entry, cache = nil, ltp = nil)
+      live_sl = cache && ltp && Live::UnifiedExitChecker.live_sl_price(tracker, cache, ltp)
+      return live_sl.round(2) if live_sl&.positive?
+
       active_sl = (tracker.respond_to?(:secured_sl_price) ? tracker.secured_sl_price : nil) || tracker.meta&.dig('premium_stop_price') || tracker.trailing_stop_price || tracker.premium_stop_price
       val = active_sl.to_f
       return val.round(2) if val.positive?
