@@ -7,15 +7,10 @@ RSpec.describe Entries::Guards::PremiumBandGuard do
     let(:context) { { index_cfg: { key: index_key }, pick: { ltp: premium } } }
     let(:index_key) { 'NIFTY' }
     let(:premium) { 150.0 }
-    let(:algo_config) { instance_double(AlgoConfig::Configuration) }
-
-    before do
-      allow(AlgoConfig).to receive(:fetch).and_return(algo_config)
-    end
 
     context 'when premium band config is not enabled' do
       before do
-        allow(algo_config).to receive(:[]).with(:indices).and_return({})
+        allow(AlgoConfig).to receive(:fetch).and_return(indices: {})
       end
 
       it 'allows entry' do
@@ -26,9 +21,9 @@ RSpec.describe Entries::Guards::PremiumBandGuard do
 
     context 'when premium band config is enabled' do
       before do
-        allow(algo_config).to receive(:[]).with(:indices).and_return({
-                                                                       'NIFTY' => { premium_band: { min: 100, max: 200 } }
-                                                                     })
+        allow(AlgoConfig).to receive(:fetch).and_return(
+          indices: { 'NIFTY' => { premium_band: { min: 100, max: 200 } } }
+        )
       end
 
       context 'and index_key is blank' do
@@ -60,9 +55,9 @@ RSpec.describe Entries::Guards::PremiumBandGuard do
 
       context 'and premium band min/max are both zero' do
         before do
-          allow(algo_config).to receive(:[]).with(:indices).and_return({
-                                                                         'NIFTY' => { premium_band: { min: 0, max: 0 } }
-                                                                       })
+          allow(AlgoConfig).to receive(:fetch).and_return(
+            indices: { 'NIFTY' => { premium_band: { min: 0, max: 0 } } }
+          )
         end
 
         it 'allows entry' do

@@ -12,13 +12,11 @@ RSpec.describe Entries::Guards::MomentumGateGuard do
     end
     let(:index_key) { 'NIFTY' }
     let(:instrument) { create(:instrument, :nifty_index) }
-    let(:candle_series) { instance_double(Live::CandleSeriesCache) }
-    let(:algo_config) { instance_double(AlgoConfig::Configuration) }
+    let(:candle_series) { instance_double(CandleSeries) }
 
     before do
       allow(instrument).to receive(:candle_series).with(interval: '15').and_return(candle_series)
-      allow(AlgoConfig).to receive(:fetch).and_return(algo_config)
-      allow(algo_config).to receive(:dig).with(:risk, :momentum_gate).and_return(momentum_config)
+      allow(AlgoConfig).to receive(:fetch).and_return(risk: { momentum_gate: momentum_config })
     end
 
     context 'when momentum gate is disabled' do
@@ -128,15 +126,9 @@ RSpec.describe Entries::Guards::MomentumGateGuard do
   end
 
   describe '.enabled?' do
-    let(:algo_config) { instance_double(AlgoConfig::Configuration) }
-
-    before do
-      allow(AlgoConfig).to receive(:fetch).and_return(algo_config)
-    end
-
     context 'when enabled is true in config' do
       before do
-        allow(algo_config).to receive(:dig).with(:risk, :momentum_gate).and_return({ enabled: true })
+        allow(AlgoConfig).to receive(:fetch).and_return(risk: { momentum_gate: { enabled: true } })
       end
 
       it 'returns true' do
@@ -146,7 +138,7 @@ RSpec.describe Entries::Guards::MomentumGateGuard do
 
     context 'when enabled is false in config' do
       before do
-        allow(algo_config).to receive(:dig).with(:risk, :momentum_gate).and_return({ enabled: false })
+        allow(AlgoConfig).to receive(:fetch).and_return(risk: { momentum_gate: { enabled: false } })
       end
 
       it 'returns false' do
@@ -156,7 +148,7 @@ RSpec.describe Entries::Guards::MomentumGateGuard do
 
     context 'when momentum_gate config is missing' do
       before do
-        allow(algo_config).to receive(:dig).with(:risk, :momentum_gate).and_return(nil)
+        allow(AlgoConfig).to receive(:fetch).and_return(risk: {})
       end
 
       it 'returns false (default)' do
@@ -166,15 +158,9 @@ RSpec.describe Entries::Guards::MomentumGateGuard do
   end
 
   describe '.adx_threshold' do
-    let(:algo_config) { instance_double(AlgoConfig::Configuration) }
-
-    before do
-      allow(AlgoConfig).to receive(:fetch).and_return(algo_config)
-    end
-
     context 'when adx_threshold is configured' do
       before do
-        allow(algo_config).to receive(:dig).with(:risk, :momentum_gate).and_return({ adx_threshold: 30 })
+        allow(AlgoConfig).to receive(:fetch).and_return(risk: { momentum_gate: { adx_threshold: 30 } })
       end
 
       it 'returns the configured value' do
@@ -184,7 +170,7 @@ RSpec.describe Entries::Guards::MomentumGateGuard do
 
     context 'when adx_threshold is not configured' do
       before do
-        allow(algo_config).to receive(:dig).with(:risk, :momentum_gate).and_return({})
+        allow(AlgoConfig).to receive(:fetch).and_return(risk: { momentum_gate: {} })
       end
 
       it 'returns the default threshold' do

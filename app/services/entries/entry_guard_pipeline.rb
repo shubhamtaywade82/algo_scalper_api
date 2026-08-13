@@ -46,12 +46,21 @@ module Entries
         Guards::LossStreakGuard,
         Guards::DailyLimitsGuard,
         Guards::MaxConcurrentGuard,
-        Guards::GlobalMaxConcurrentGuard,     # portfolio-wide cap across all indices, cheap so runs early
-        Guards::StrikeCooldownGuard,          # blocks re-entry of the same contract within its cooldown window
+        Guards::GlobalMaxConcurrentGuard, # portfolio-wide cap across all indices, cheap so runs early
+        Guards::EarliestEntryGuard,    # blocks entries before configured earliest_entry_time (default 09:30, volatile open)
+        Guards::VixGateGuard,          # India VIX ceiling gate — no-op until market.vix_gate is configured
+        Guards::StrikeCooldownGuard, # blocks re-entry of the same contract within its cooldown window
         Guards::InstrumentLookupGuard, # sets context[:instrument] — required by EPT guard
         Guards::ChopScoreGuard, # blocks noisy entries when ADX/Supertrend/BB say chop
+        Guards::RegimeGuard,           # blocks entries during a detected choppy regime — no-op until risk.regime_guard is configured
+        Guards::MomentumGateGuard,     # requires BB breakout or strong ADX — no-op until risk.momentum_gate is configured
         Guards::BreakoutReadyGuard,     # OptionsBuying: requires an armed breakout level (no-op until ChainRadar is scheduled)
         Guards::CompressionSetupGuard,  # OptionsBuying: requires ATR compression setup (currently no-op — gated on positional mode)
+        Guards::ChainConfirmationGuard, # OI/IV/delta band check via live chain watch — no-op until ChainWatchService is started
+        Guards::IvVolGateGuard,         # IV rank gate — no-op until IvSnapshotJob is scheduled (insufficient history)
+        Guards::OptionVolumeVelocityGuard, # option contract volume velocity — no-op until OptionsBuying stream is live
+        Guards::DteEntryWindowGuard,    # DTE-specific max entry time — no-op until risk.dte_parameters.by_dte is configured
+        Guards::SegmentExpectancyGuard, # blocks entries into historically negative-edge (index, regime) segments — no-op until risk.segment_expectancy is configured
         Guards::DirectionConflictGuard, # runs only after regime is chop-cleared; kills a losing opposite-side position, leaves a green one alone
         Guards::SellingIvRankGuard, # selling-only: don't sell premium when IV is cheap
         Guards::MarginLimitGuard,   # selling-only: fail fast if even 1 lot won't fit the margin budget
