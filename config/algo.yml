@@ -15,7 +15,7 @@ realtime:
   min_enforcement_gap_ms: 250
   db_sync_interval_seconds: 30
   entry_ltp_max_age_seconds: 2
-run_mode: exit_testing
+run_mode: production
 trading_time_restrictions:
   enabled: false
   avoid_periods:
@@ -173,6 +173,10 @@ risk:
   rr_profit_booking:
     enabled: true
     target_rr: 2.5
+  zero_hwm_false_entry:
+    enabled: true
+    min_hold_seconds: 120
+    hwm_threshold_rupees: 0
   exits:
     structure_invalidation:
       enabled: true
@@ -457,6 +461,7 @@ position_sizing:
     enabled: true
     activation_pct: 0.1
     drawdown_pct: 0.03
+  secure_profit_enabled: false
   secure_profit_threshold_rupees: 1000
   secure_profit_drawdown_pct: 0.03
   underlying_trend_score_threshold: 10.0

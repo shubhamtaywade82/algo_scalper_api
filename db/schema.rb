@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_12_200607) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_13_151505) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1225,7 +1225,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_12_200607) do
   create_table "trading_strategies", force: :cascade do |t|
     t.string "author", default: "System"
     t.jsonb "backtest_results", default: {}
-    t.jsonb "checks", default: {"risk" => "not_run", "logic" => "not_run", "syntax" => "not_run", "backtest" => "not_run"}
+    t.jsonb "checks", default: {"risk"=>"not_run", "logic"=>"not_run", "syntax"=>"not_run", "backtest"=>"not_run"}
     t.text "code", default: ""
     t.datetime "created_at", null: false
     t.text "description"

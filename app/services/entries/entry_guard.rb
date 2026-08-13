@@ -517,6 +517,8 @@ module Entries
           avg_price: ltp,
           status: :active,
           paper: false,
+          index_key: index_cfg[:key],
+          entry_strategy: meta_hash[:entry_strategy],
           meta: meta_hash
         )
       end
@@ -553,6 +555,7 @@ module Entries
           avg_price: ltp,
           status: :active,
           paper: true,
+          index_key: index_cfg[:key],
           meta: meta_hash
         )
       end
