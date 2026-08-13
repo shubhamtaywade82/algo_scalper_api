@@ -45,6 +45,7 @@ module Entries
         Guards::EdgeFailureGuard,
         Guards::LossStreakGuard,
         Guards::DailyLimitsGuard,
+        Guards::IndexTradeLimitGuard, # per-index max_trades_per_day from index config (NIFTY:2, BANKNIFTY:20, SENSEX:20)
         Guards::MaxConcurrentGuard,
         Guards::GlobalMaxConcurrentGuard, # portfolio-wide cap across all indices, cheap so runs early
         Guards::EarliestEntryGuard,    # blocks entries before configured earliest_entry_time (default 09:30, volatile open)
@@ -60,6 +61,7 @@ module Entries
         Guards::IvVolGateGuard,         # IV rank gate — no-op until IvSnapshotJob is scheduled (insufficient history)
         Guards::OptionVolumeVelocityGuard, # option contract volume velocity — no-op until OptionsBuying stream is live
         Guards::DteEntryWindowGuard,    # DTE-specific max entry time — no-op until risk.dte_parameters.by_dte is configured
+        Guards::PremiumBandGuard,       # blocks entries outside the configured per-index premium band
         Guards::SegmentExpectancyGuard, # blocks entries into historically negative-edge (index, regime) segments — no-op until risk.segment_expectancy is configured
         Guards::DirectionConflictGuard, # runs only after regime is chop-cleared; kills a losing opposite-side position, leaves a green one alone
         Guards::SellingIvRankGuard, # selling-only: don't sell premium when IV is cheap

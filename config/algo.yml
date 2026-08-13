@@ -469,7 +469,7 @@ position_sizing:
   use_smc_bias_flip: false
   smc_bias_flip_trend_threshold: 40
   daily_limits:
-    enable: true
+    enabled: true
     per_index:
       NIFTY: 0.02
       BANKNIFTY: 0.04
