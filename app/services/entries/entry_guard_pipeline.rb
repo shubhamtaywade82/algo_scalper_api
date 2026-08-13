@@ -50,6 +50,8 @@ module Entries
         Guards::StrikeCooldownGuard,          # blocks re-entry of the same contract within its cooldown window
         Guards::InstrumentLookupGuard, # sets context[:instrument] — required by EPT guard
         Guards::ChopScoreGuard, # blocks noisy entries when ADX/Supertrend/BB say chop
+        Guards::BreakoutReadyGuard,     # OptionsBuying: requires an armed breakout level (no-op until ChainRadar is scheduled)
+        Guards::CompressionSetupGuard,  # OptionsBuying: requires ATR compression setup (currently no-op — gated on positional mode)
         Guards::DirectionConflictGuard, # runs only after regime is chop-cleared; kills a losing opposite-side position, leaves a green one alone
         Guards::SellingIvRankGuard, # selling-only: don't sell premium when IV is cheap
         Guards::MarginLimitGuard,   # selling-only: fail fast if even 1 lot won't fit the margin budget
