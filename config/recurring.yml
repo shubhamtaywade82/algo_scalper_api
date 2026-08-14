@@ -17,6 +17,13 @@ development:
     priority: 1
     description: "Daily DhanHQ instrument master sync — ensures derivative records exist for strike selection"
 
+  portfolio_reset:
+    class: PortfolioResetJob
+    schedule: at 9:14am every day
+    queue_name: background
+    priority: 1
+    description: "Daily portfolio PnL and drawdown guard reset before market open (9:14 AM)"
+
   clear_carried_overnight:
     class: ClearCarriedOvernightPositionsJob
     schedule: at 9:15am every day
@@ -46,13 +53,6 @@ development:
     queue_name: background
     priority: 5
     description: "AI technical analysis for SENSEX - post-close scheduled run; intraday flow is event-driven from tick events"
-
-  dhan_auto_ip_sync:
-    class: Dhan::AutoIpUpdaterJob
-    schedule: every 30 minutes
-    queue_name: background
-    priority: 20
-    description: "Auto-syncs local public IP with Dhan whitelisting slots when cooldown expires"
 
   dhan_auto_ip_sync:
     class: Dhan::AutoIpUpdaterJob
@@ -111,6 +111,13 @@ production:
     queue_name: background
     priority: 1
     description: "Daily DhanHQ instrument master sync — ensures derivative records exist for strike selection"
+
+  portfolio_reset:
+    class: PortfolioResetJob
+    schedule: at 9:14am every weekday
+    queue_name: background
+    priority: 1
+    description: "Daily portfolio PnL and drawdown guard reset before market open (9:14 AM)"
 
   clear_carried_overnight:
     class: ClearCarriedOvernightPositionsJob

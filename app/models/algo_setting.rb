@@ -16,7 +16,6 @@ class AlgoSetting
 
     # Feature Flags
     'feature_enable_trend_scorer' => { type: :boolean, default: false, category: 'Features', description: 'Use new multi-indicator TrendScorer over basic Supertrend path.' },
-    'feature_enable_underlying_aware_exits' => { type: :boolean, default: false, category: 'Features', description: 'Exit options proactively if the underlying index hits a key level.' },
     'feature_enable_peak_drawdown_activation' => { type: :boolean, default: false, category: 'Features', description: 'Activate trailing stops based on drawdown from peak premium.' },
 
     # Trend / Market Filters (ADX)

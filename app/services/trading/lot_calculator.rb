@@ -5,8 +5,9 @@ module Trading
     class UnsupportedInstrumentError < StandardError; end
 
     LOT_SIZES = {
-      'NIFTY' => 65,
-      'SENSEX' => 20
+      'NIFTY' => 75,
+      'BANKNIFTY' => 15,
+      'SENSEX' => 10
     }.freeze
 
     class << self
@@ -16,7 +17,7 @@ module Trading
       # @return [Integer]
       def lot_size_for(symbol)
         key = symbol.to_s.strip.upcase
-        lot = LOT_SIZES[key]
+        lot = IndiaIndexRegistry.for_key(key)&.dig(:lot) || LOT_SIZES[key]
         raise UnsupportedInstrumentError, "Unsupported instrument: #{symbol}" unless lot
 
         lot
