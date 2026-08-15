@@ -69,7 +69,8 @@ class Instrument < ApplicationRecord
   }, as: :watchable, class_name: 'WatchlistItem', dependent: :nullify, inverse_of: :watchable
 
   scope :enabled, -> { where(enabled: true) }
-
+  scope :active, -> { where(active: true) }
+  scope :tradable, -> { where(tradable: true) }
   validates :security_id, presence: true, uniqueness: true # rubocop:disable Rails/UniqueValidationWithoutIndex
   validates :symbol_name, presence: true
   validates :exchange_segment, presence: true, unless: -> { exchange.present? && segment.present? }

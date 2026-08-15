@@ -20,12 +20,23 @@ RSpec.describe Orders::GatewayPaper do
   end
 
   describe '#exit_market' do
-    it 'returns success hash with exit_price from LTP' do
+    let(:tick) do
+      double('MarketTick', ltp: 101.5, bid: 101.0, ask: 102.0)
+    end
+
+    before do
+      allow(Live::TickQuery).to receive(:for_security).and_return(tick)
+      allow(AlgoConfig).to receive(:dig).and_call_original
+      allow(AlgoConfig).to receive(:dig).with('paper_trading', 'slippage', 'enabled').and_return(false)
+    end
+
+    it 'returns success hash with exit_price from bid for LONG position' do
+      tracker.update!(position_side: 'LONG')
       result = gateway.exit_market(tracker)
 
       expect(result).to include(
         success: true,
-        exit_price: BigDecimal('101.5'),
+        exit_price: BigDecimal('101.0'),
         order_id: "PAPER-EXIT-#{tracker.id}",
         client_order_id: "PAPER-EXIT-#{tracker.id}",
         status: :accepted,
@@ -33,20 +44,31 @@ RSpec.describe Orders::GatewayPaper do
       )
     end
 
-    it 'uses entry_price as fallback when LTP is nil' do
-      allow(Live::TickCache).to receive(:ltp).and_return(nil)
+    it 'returns success hash with exit_price from ask for SHORT position' do
+      tracker.update!(position_side: 'SHORT')
+      result = gateway.exit_market(tracker)
+
+      expect(result).to include(
+        success: true,
+        exit_price: BigDecimal('102.0')
+      )
+    end
+
+    it 'uses entry_price as fallback when tick is nil' do
+      allow(Live::TickQuery).to receive(:for_security).and_return(nil)
 
       result = gateway.exit_market(tracker)
 
       expect(result).to include(success: true, exit_price: BigDecimal('100.0'))
     end
 
-    it 'uses entry_price as fallback when LTP raises error' do
-      allow(Live::TickCache).to receive(:ltp).and_raise(StandardError.new('Cache error'))
+    it 'falls back to ltp when bid/ask are missing' do
+      allow(tick).to receive_messages(bid: nil, ask: nil)
+      tracker.update!(position_side: 'LONG')
 
       result = gateway.exit_market(tracker)
 
-      expect(result).to include(success: true, exit_price: BigDecimal('100.0'))
+      expect(result).to include(success: true, exit_price: BigDecimal('101.5'))
     end
 
     it 'uses provided client_order_id as order identity' do
@@ -72,6 +94,42 @@ RSpec.describe Orders::GatewayPaper do
   end
 
   describe '#place_market' do
+    let(:tick) do
+      double('MarketTick', ltp: 101.5, bid: 101.0, ask: 102.0)
+    end
+
+    before do
+      allow(Live::TickQuery).to receive(:for_security).and_return(tick)
+      allow(AlgoConfig).to receive(:dig).and_call_original
+      allow(AlgoConfig).to receive(:dig).with('paper_trading', 'slippage', 'enabled').and_return(true)
+      allow(AlgoConfig).to receive(:dig).with('paper_trading', 'slippage', 'market_buy_ticks').and_return(2)
+      allow(AlgoConfig).to receive(:dig).with('paper_trading', 'slippage', 'market_sell_ticks').and_return(3)
+    end
+
+    it 'uses ask + slippage for BUY side' do
+      result = gateway.place_market(
+        side: 'buy',
+        segment: 'NSE_FNO',
+        security_id: '55111',
+        qty: 50
+      )
+
+      # ask (102.0) + (2 * 0.05) = 102.1
+      expect(result).to include(success: true, paper: true, fill_price: 102.1)
+    end
+
+    it 'uses bid - slippage for SELL side' do
+      result = gateway.place_market(
+        side: 'sell',
+        segment: 'NSE_FNO',
+        security_id: '55111',
+        qty: 50
+      )
+
+      # bid (101.0) - (3 * 0.05) = 100.85
+      expect(result).to include(success: true, paper: true, fill_price: 100.85)
+    end
+
     it 'returns a simulated broker acknowledgement without persisting tracker' do
       expect do
         result = gateway.place_market(

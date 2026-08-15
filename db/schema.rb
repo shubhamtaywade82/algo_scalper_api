@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_13_151505) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_15_223807) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -203,6 +203,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_151505) do
   end
 
   create_table "instruments", force: :cascade do |t|
+    t.boolean "active"
     t.string "asm_gsm_category"
     t.string "asm_gsm_flag"
     t.string "bracket_flag"
@@ -215,8 +216,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_151505) do
     t.decimal "buy_co_sl_range_max_perc", precision: 8, scale: 2
     t.decimal "buy_co_sl_range_min_perc", precision: 8, scale: 2
     t.string "buy_sell_indicator"
+    t.decimal "contract_multiplier"
     t.string "cover_flag"
     t.datetime "created_at", null: false
+    t.string "custom_symbol"
     t.string "display_name"
     t.string "exchange", null: false
     t.date "expiry_date"
@@ -241,6 +244,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_151505) do
     t.decimal "strike_price", precision: 15, scale: 5
     t.string "symbol_name"
     t.decimal "tick_size"
+    t.boolean "tradable"
     t.string "underlying_security_id"
     t.string "underlying_symbol"
     t.datetime "updated_at", null: false
@@ -325,6 +329,33 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_151505) do
     t.index ["index_key"], name: "index_options_buying_signal_events_on_index_key"
     t.index ["metadata"], name: "index_options_buying_signal_events_on_metadata", using: :gin
     t.index ["occurred_at"], name: "index_options_buying_signal_events_on_occurred_at"
+  end
+
+  create_table "order_intents", force: :cascade do |t|
+    t.string "correlation_id"
+    t.datetime "created_at", null: false
+    t.bigint "instrument_id", null: false
+    t.decimal "limit_price", precision: 12, scale: 4
+    t.boolean "margin_approved", default: false, null: false
+    t.jsonb "meta", default: {}, null: false
+    t.string "order_type", default: "MARKET", null: false
+    t.string "product_type", default: "INTRADAY", null: false
+    t.integer "quantity", null: false
+    t.string "rejection_reason"
+    t.boolean "risk_approved", default: false, null: false
+    t.string "side", null: false
+    t.string "status", default: "created", null: false
+    t.decimal "stop_loss", precision: 12, scale: 4
+    t.string "strategy_name", null: false
+    t.decimal "target", precision: 12, scale: 4
+    t.decimal "trigger_price", precision: 12, scale: 4
+    t.datetime "updated_at", null: false
+    t.string "validity", default: "DAY", null: false
+    t.index ["correlation_id"], name: "index_order_intents_on_correlation_id", unique: true, where: "(correlation_id IS NOT NULL)"
+    t.index ["instrument_id", "status"], name: "index_order_intents_on_instrument_id_and_status"
+    t.index ["instrument_id"], name: "index_order_intents_on_instrument_id"
+    t.index ["status"], name: "index_order_intents_on_status"
+    t.index ["strategy_name"], name: "index_order_intents_on_strategy_name"
   end
 
   create_table "paper_daily_wallets", force: :cascade do |t|
@@ -581,6 +612,40 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_151505) do
     t.string "ip_version"
     t.datetime "last_seen_at"
     t.datetime "updated_at", null: false
+  end
+
+  create_table "reconciliation_discrepancies", force: :cascade do |t|
+    t.string "broker_value"
+    t.datetime "created_at", null: false
+    t.string "entity_id"
+    t.string "entity_type", null: false
+    t.string "field_name", null: false
+    t.string "local_value"
+    t.text "notes"
+    t.bigint "reconciliation_run_id", null: false
+    t.string "resolution"
+    t.string "severity", default: "warning", null: false
+    t.datetime "updated_at", null: false
+    t.index ["entity_type"], name: "index_reconciliation_discrepancies_on_entity_type"
+    t.index ["reconciliation_run_id"], name: "index_reconciliation_discrepancies_on_reconciliation_run_id"
+    t.index ["severity"], name: "index_reconciliation_discrepancies_on_severity"
+  end
+
+  create_table "reconciliation_runs", force: :cascade do |t|
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.integer "discrepancies_found", default: 0, null: false
+    t.integer "funds_checked", default: 0, null: false
+    t.boolean "halted_trading", default: false, null: false
+    t.string "mode", default: "paper", null: false
+    t.integer "orders_checked", default: 0, null: false
+    t.integer "positions_checked", default: 0, null: false
+    t.datetime "started_at"
+    t.string "status", default: "running", null: false
+    t.jsonb "summary", default: {}, null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_at"], name: "index_reconciliation_runs_on_created_at"
+    t.index ["status"], name: "index_reconciliation_runs_on_status"
   end
 
   create_table "research_data_quality_audits", force: :cascade do |t|
@@ -878,6 +943,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_151505) do
     t.datetime "updated_at", null: false
     t.index ["source_type", "source_id"], name: "index_research_signals_on_source_type_and_source_id"
     t.index ["underlying_symbol", "signal_timestamp"], name: "index_research_signals_on_symbol_and_ts"
+  end
+
+  create_table "risk_events", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
   end
 
   create_table "ruby_llm_agents_execution_details", force: :cascade do |t|
@@ -1179,6 +1249,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_151505) do
     t.index ["position_tracker_id"], name: "index_trade_analytics_on_position_tracker_id"
   end
 
+  create_table "trade_journals", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
   create_table "trade_telemetry", force: :cascade do |t|
     t.integer "bos_age_at_entry"
     t.decimal "continuation_body_position", precision: 6, scale: 4
@@ -1225,7 +1300,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_151505) do
   create_table "trading_strategies", force: :cascade do |t|
     t.string "author", default: "System"
     t.jsonb "backtest_results", default: {}
-    t.jsonb "checks", default: {"risk"=>"not_run", "logic"=>"not_run", "syntax"=>"not_run", "backtest"=>"not_run"}
+    t.jsonb "checks", default: {"risk" => "not_run", "logic" => "not_run", "syntax" => "not_run", "backtest" => "not_run"}
     t.text "code", default: ""
     t.datetime "created_at", null: false
     t.text "description"
@@ -1309,6 +1384,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_151505) do
   add_foreign_key "derivatives", "instruments"
   add_foreign_key "ledger_postings", "ledger_accounts"
   add_foreign_key "ledger_postings", "ledger_journal_entries"
+  add_foreign_key "order_intents", "instruments"
   add_foreign_key "paper_orders", "instruments"
   add_foreign_key "paper_positions", "instruments"
   add_foreign_key "paper_positions", "paper_orders"
@@ -1316,6 +1392,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_151505) do
   add_foreign_key "paper_trades", "paper_positions"
   add_foreign_key "position_meta_snapshots", "position_trackers"
   add_foreign_key "position_trackers", "instruments"
+  add_foreign_key "reconciliation_discrepancies", "reconciliation_runs"
   add_foreign_key "research_option_bars", "research_raw_fetches"
   add_foreign_key "research_option_candidates", "research_signals"
   add_foreign_key "ruby_llm_agents_execution_details", "ruby_llm_agents_executions", column: "execution_id", on_delete: :cascade
