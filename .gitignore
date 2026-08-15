@@ -1,58 +1,29 @@
-```
-# Compiled and build artifacts
-*.pyc
-__pycache__/
-*.o
-*.obj
-*.class
-*.so
-*.dll
-*.exe
-*.out
-
-# Dependencies
-node_modules/
-venv/
-.venv/
-.bundle/
-vendor/bundle/
-
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-*.swo
-
-# Environment
-.env
-.env.local
-.env.*
-
-# Editors
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# Build and distribution
-dist/
-build/
-target/
-*.gem
-*.war
-*.jar
-
-# Coverage reports
+log/
+tmp/
 coverage/
-htmlcov/
-.coverage
+spec/failed_examples.txt
+/failed_examples*.txt
+/rspec_out*.txt
+/spec_failure.txt
+/temp_rspec_output.txt
+.env
+.env*.local
 
-# Cache directories
-.mypy_cache/
-.pytest_cache/
-.gradle/
-```
+# Node sidecar
+node-sidecar/node_modules/
+node-sidecar/dist/
+node-sidecar/.env
+
+# Next.js dashboard
+dashboard/node_modules/
+dashboard/.next/
+dashboard/out/
+
+# System and editor files
+.DS_Store
+*.swp
+*.swo
+
+# Graphify codebase index (regenerated locally, not needed in git)
+graphify-out/
+.worktrees/
