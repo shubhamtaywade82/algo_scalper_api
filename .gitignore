@@ -1,29 +1,58 @@
-log/
-tmp/
-coverage/
-spec/failed_examples.txt
-/failed_examples*.txt
-/rspec_out*.txt
-/spec_failure.txt
-/temp_rspec_output.txt
-.env
-.env*.local
+```
+# Compiled and build artifacts
+*.pyc
+__pycache__/
+*.o
+*.obj
+*.class
+*.so
+*.dll
+*.exe
+*.out
 
-# Node sidecar
-node-sidecar/node_modules/
-node-sidecar/dist/
-node-sidecar/.env
+# Dependencies
+node_modules/
+venv/
+.venv/
+.bundle/
+vendor/bundle/
 
-# Next.js dashboard
-dashboard/node_modules/
-dashboard/.next/
-dashboard/out/
-
-# System and editor files
-.DS_Store
+# Logs and temp files
+*.log
+*.tmp
 *.swp
 *.swo
 
-# Graphify codebase index (regenerated locally, not needed in git)
-graphify-out/
-.worktrees/
+# Environment
+.env
+.env.local
+.env.*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Build and distribution
+dist/
+build/
+target/
+*.gem
+*.war
+*.jar
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# Cache directories
+.mypy_cache/
+.pytest_cache/
+.gradle/
+```
