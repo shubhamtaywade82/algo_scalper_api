@@ -17,12 +17,13 @@ RSpec.describe Risk::Rules::RuleFactory do
       rules = described_class.exit_rules(risk_config)
       rule_classes = rules.map(&:class)
 
+      # ProfitFloorExitRule, PeakDrawdownRule, and AdaptiveTrailRule were deleted —
+      # confirmed duplicates of already-live logic in exit_enforcement.rb/trailing_engine.rb/
+      # unified_exit_checker.rb.
       expect(rule_classes).to include(
         Risk::Rules::VixForceExitRule,
         Risk::Rules::DteZeroThetaFlatExitRule,
         Risk::Rules::GreenTradeCapRule,
-        Risk::Rules::ProfitFloorExitRule,
-        Risk::Rules::PeakDrawdownRule,
         Risk::Rules::SecureProfitRule,
         Risk::Rules::FastProfitLockRule
       )

@@ -16,7 +16,8 @@ module Entries
         @entry_guard_pipeline ||= EntryGuardPipeline.new
       end
 
-      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil, signal: nil)
+      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil, signal: nil,
+                    position_side: 'long')
         entry_attempt_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         Entries::AdvisoryLock.with_index_lock(index_cfg[:key]) do
           EventStore::DecisionTrace.with_trace(index_key: index_cfg[:key], direction: direction, metadata: entry_metadata || {}) do |trace|
@@ -30,7 +31,8 @@ module Entries
               entry_metadata: entry_metadata,
               permission: permission,
               signal: signal,
-              trace: trace
+              trace: trace,
+              position_side: position_side
             }
 
             pipeline_res = entry_guard_pipeline.run(context)
@@ -45,7 +47,14 @@ module Entries
             instrument = context[:instrument] || find_instrument(index_cfg)
             ltp = context[:ltp] || pick[:ltp] || (instrument ? resolve_entry_ltp(instrument: instrument, pick: pick, index_cfg: index_cfg) : nil)
             dir_sym = direction.to_s.downcase.to_sym
-            side = context[:side] || (%i[bullish long].include?(dir_sym) ? 'long_ce' : 'long_pe')
+            bullish_bias = %i[bullish long].include?(dir_sym)
+            side = context[:side] || if position_side.to_s == 'short'
+                                        # Selling inverts the option leg: bullish bias sells puts
+                                        # (profit if price holds above strike), bearish sells calls.
+                                        bullish_bias ? 'short_pe' : 'short_ce'
+                                     else
+                                        bullish_bias ? 'long_ce' : 'long_pe'
+                                     end
             is_supertrend = entry_metadata&.dig(:entry_contract).to_s == SUPERTREND_CONTRACT
             multiplier = [scale_multiplier.to_i, 1].max
 
@@ -101,6 +110,7 @@ module Entries
 
         quantity_by_cap = cap_lots * lot_size
         quantity = [quantity_by_existing_allocator.to_i, quantity_by_cap.to_i].min
+        quantity = cap_quantity_by_margin(quantity, position_side: position_side, pick: pick, index_cfg: index_cfg, lot_size: lot_size, ltp: ltp)
         quantity = (quantity / lot_size) * lot_size # ensure lot-aligned
 
         if quantity <= 0 || quantity < lot_size
@@ -112,7 +122,8 @@ module Entries
         end
 
         result = OrderExecutionService.call(
-          context.merge(instrument: instrument, ltp: ltp, side: side, quantity: quantity, bos_context: bos_context)
+          context.merge(instrument: instrument, ltp: ltp, side: side, quantity: quantity, bos_context: bos_context,
+                        position_side: position_side)
         )
 
         if result.is_a?(Hash) && result[:error]
@@ -433,6 +444,27 @@ module Entries
         end
       end
 
+      # Selling's real capital-at-risk is margin, not premium — cap the premium-sized
+      # quantity down to what the margin budget actually affords. Buying is untouched.
+      def cap_quantity_by_margin(quantity, position_side:, pick:, index_cfg:, lot_size:, ltp:)
+        return quantity unless position_side.to_s == 'short'
+        return quantity if quantity <= 0
+
+        margin_per_lot = Adapters::Margin::DhanMarginAdapter.new.margin_for(
+          segment: pick[:segment] || index_cfg[:segment],
+          security_id: pick[:security_id],
+          quantity: lot_size,
+          price: ltp
+        )
+        return quantity if margin_per_lot.blank? || !margin_per_lot.positive?
+
+        lots_by_margin = (Entries::Guards::MarginLimitGuard.max_margin_budget / margin_per_lot).floor
+        [quantity, lots_by_margin * lot_size].min
+      rescue StandardError => e
+        Rails.logger.warn("[EntryGuard] cap_quantity_by_margin failed: #{e.class} - #{e.message}")
+        quantity
+      end
+
       def find_watchable_for_pick(pick:, instrument:)
         Derivative.find_by(security_id: pick[:security_id].to_s, segment: (pick[:segment] || 'NSE_FNO').to_s) || instrument
       rescue StandardError
@@ -478,11 +510,15 @@ module Entries
           security_id: pick[:security_id],
           segment: pick[:segment] || index_cfg[:segment],
           side: side,
+          position_side: side.to_s.start_with?('short') ? 'short' : 'long',
+          premium_received: side.to_s.start_with?('short') ? (ltp.to_f * quantity.to_i) : 0,
           quantity: quantity,
           entry_price: ltp,
           avg_price: ltp,
           status: :active,
           paper: false,
+          index_key: index_cfg[:key],
+          entry_strategy: meta_hash[:entry_strategy],
           meta: meta_hash
         )
       end
@@ -512,11 +548,14 @@ module Entries
           security_id: pick[:security_id],
           segment: pick[:segment] || index_cfg[:segment],
           side: side,
+          position_side: side.to_s.start_with?('short') ? 'short' : 'long',
+          premium_received: side.to_s.start_with?('short') ? (ltp.to_f * quantity.to_i) : 0,
           quantity: quantity,
           entry_price: ltp,
           avg_price: ltp,
           status: :active,
           paper: true,
+          index_key: index_cfg[:key],
           meta: meta_hash
         )
       end

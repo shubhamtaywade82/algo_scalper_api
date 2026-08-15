@@ -61,18 +61,7 @@ class AlgoConfig
       # 2. Merge run-mode profile if present (exit_testing, entry_testing, production)
       base_config = apply_profile(base_config)
 
-      # 3. Load dynamic overrides from the database (Settings table)
-      override_json = Setting.fetch('algo_config_overrides', nil, ttl: CACHE_TTL)
-      if override_json.present?
-        begin
-          overrides = JSON.parse(override_json).deep_symbolize_keys
-          base_config = deep_merge_hashes_with_arrays(base_config, overrides)
-        rescue StandardError => e
-          Rails.logger.error("[AlgoConfig] Failed to parse algo_config_overrides: #{e.message}")
-        end
-      end
-
-      # 4. Merge the DB-canonical document (seeded from algo.yml + legacy overrides,
+      # 3. Merge the DB-canonical document (seeded from algo.yml + legacy overrides,
       #    patched via /api/settings/bulk, calibration runs, profitability slices).
       base_config = deep_merge_hashes_with_arrays(base_config, DocumentStore.current_mutable_document)
 

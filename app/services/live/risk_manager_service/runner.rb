@@ -123,8 +123,18 @@ module Live
         # positions could give back their entire peak profit into a large loss with nothing
         # catching it. Runs first since it reads PnL straight from RedisPnlCache and doesn't
         # depend on Positions::ActiveCache being populated, unlike the stages below.
+        # (For a short, it only evaluates the portfolio-level kill-switch — see the
+        # short_position? guard inside UnifiedExitChecker.check_exit_conditions.)
         enforce_hard_limits_for(tracker, exit_engine: exit_engine)
         return if exit_requested_or_sent?(tracker)
+
+        if tracker.short_position?
+          # The chain below assumes a long's P&L shape throughout (premium R-stop, trailing
+          # that follows premium up, structure/trend invalidation, etc.) — none of it is safe
+          # to run against a short. Selling gets its own, much smaller, exit surface.
+          enforce_selling_exits_for(tracker, exit_engine: exit_engine)
+          return
+        end
 
         # Advance trade state before evaluating rules (updates trade_state, peak_trend_score etc)
         advance_trade_state_for(tracker)

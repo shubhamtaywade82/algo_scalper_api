@@ -243,13 +243,16 @@ module Live
         entry_bd = safe_decimal(tracker.entry_price) || BigDecimal(0)
         qty_bd = BigDecimal(tracker.quantity.to_i.to_s)
 
+        # Short: profit when price falls, so the price delta is inverted vs. long.
+        price_delta_bd = tracker.short_position? ? (entry_bd - ltp_bd) : (ltp_bd - entry_bd)
+
         # Compute gross PnL (fresh) — allow payload override when present (payload values are BigDecimal already)
-        gross_pnl_bd = payload[:pnl] || ((ltp_bd - entry_bd) * qty_bd)
+        gross_pnl_bd = payload[:pnl] || (price_delta_bd * qty_bd)
 
         # Deduct broker fees (₹20 per order, ₹40 per trade if exited)
         pnl_bd = BrokerFeeCalculator.net_pnl(gross_pnl_bd, is_exited: tracker.exited?)
         pnl_pct_bd = begin
-          payload[:pnl_pct] || ((ltp_bd - entry_bd) / entry_bd)
+          payload[:pnl_pct] || (price_delta_bd / entry_bd)
         rescue StandardError
           BigDecimal(0)
         end

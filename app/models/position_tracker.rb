@@ -14,6 +14,14 @@ class PositionTracker < ApplicationRecord
     highest_price
   end
 
+  def long_position?
+    position_side == 'long'
+  end
+
+  def short_position?
+    position_side == 'short'
+  end
+
   def create_position_meta_snapshot!(config_version_hash:, config_snapshot:, config_change_log_id: nil, entry_at: nil)
     create_meta_snapshot!(
       config_version_hash: config_version_hash,
@@ -24,10 +32,39 @@ class PositionTracker < ApplicationRecord
   end
 
   # Attribute accessors
-  store_accessor :meta, :breakeven_locked, :trailing_stop_price, :index_key, :direction, :entry_path, :entry_strategy,
-                 :exit_path, :exit_reason, :highest_price, :lowest_price, :be_set, :profit_floor_rupees,
+  #
+  # index_key, entry_strategy, breakeven_locked, and be_set are deliberately NOT store_accessors
+  # here — all four are real, indexed/typed columns on this table, and a store_accessor on top
+  # shadows every SQL `.where(...)` query (and, for breakeven_locked/be_set, the plain non-`?`
+  # reader) with the always-empty column while reads/writes silently go through `meta` instead.
+  # That broke DirectionConflictGuard, OptionsBuying::PerformanceDb, and PositionTracker#lock_
+  # breakeven! (via Positions::MetaUpdater/MetaPatch, see PROMOTED_META_KEYS below). Fixed
+  # 2026-08-13 — see backfill in db/migrate for the historical `meta`-only records.
+  #
+  # trailing_stop_price/highest_price/lowest_price/profit_floor_rupees/profit_floor_set_at/
+  # profit_zone_state/profit_zone_transitioned_at/secured_sl_price/secured_sl_rupees/direction/
+  # entry_path/exit_path/exit_reason stay store_accessors on purpose: they're written directly
+  # into `meta` from hot tick-path code (Live::TrailingEngine, Orders::MfeExitEngine,
+  # RiskManagerService::ExitEnforcement) that bypasses this accessor entirely — unshadowing them
+  # without also rewriting those hot paths to write the real column would make the accessor
+  # silently stop reflecting what the trailing/exit engines just set. Left alone; PROMOTED_META_KEYS
+  # excludes them for the same reason.
+  store_accessor :meta, :trailing_stop_price, :direction, :entry_path,
+                 :exit_path, :exit_reason, :highest_price, :lowest_price, :profit_floor_rupees,
                  :profit_floor_set_at, :profit_zone_state, :secured_sl_price, :secured_sl_rupees,
                  :profit_zone_transitioned_at
+
+  # Meta keys that have a matching real column AND are safe for Positions::MetaUpdater/MetaPatch
+  # to scrub out of `meta` into that column — i.e. NOT one of the still-shadowed store_accessor
+  # fields above (promoting one of those here would silently break its accessor the same way
+  # breakeven_locked did). See db/migrate/20260625000002_..._extract_snapshots.rb for the
+  # original (broader, aspirational) PROMOTED_KEYS this was trimmed down from.
+  PROMOTED_META_KEYS = %w[
+    breakeven_locked index_key entry_strategy be_set carry_mode carry_marked_at carry_roi_pct
+    alpha_source signal_confidence expected_value signal_timestamp client_order_id
+  ].freeze
+
+  BOOLEAN_PROMOTED_KEYS = %w[breakeven_locked be_set].freeze
 
   # Enums
   enum :status, {

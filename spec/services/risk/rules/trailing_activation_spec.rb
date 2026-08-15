@@ -263,62 +263,9 @@ RSpec.describe 'Trailing Activation Percentage Rule' do
     end
   end
 
-  describe 'PeakDrawdownRule with activation threshold' do
-    let(:position_data) do
-      Positions::PositionData.new(
-        tracker_id: tracker.id,
-        entry_price: 100.0,
-        quantity: 75,
-        current_ltp: 120.0,
-        pnl: 1500.0,
-        pnl_pct: 20.0,
-        peak_profit_pct: 25.0
-      )
-    end
-    let(:risk_config) do
-      {
-        trailing: {
-          activation_pct: 10.0
-        }
-      }
-    end
-    let(:context) do
-      Risk::Rules::RuleContext.new(
-        position: position_data,
-        tracker: tracker,
-        risk_config: risk_config
-      )
-    end
-    let(:rule) { Risk::Rules::PeakDrawdownRule.new(config: risk_config) }
-
-    before do
-      allow(Positions::TrailingConfig).to receive_messages(peak_drawdown_triggered?: true, peak_drawdown_active?: true, config: { peak_drawdown_pct: 5.0,
-                                                                                                                                  activation_profit_pct: 25.0,
-                                                                                                                                  activation_sl_offset_pct: 10.0 })
-      allow(AlgoConfig).to receive(:fetch).and_return(feature_flags: {})
-    end
-
-    context 'when trailing is activated (pnl_pct >= 10%)' do
-      it 'evaluates peak drawdown rule' do
-        # Peak: 25%, Current: 20%, Drawdown: 5% >= 5% threshold
-        result = rule.evaluate(context)
-        expect(result.exit?).to be true
-        expect(result.reason).to include('peak_drawdown_exit')
-      end
-    end
-
-    context 'when trailing is not activated (pnl_pct < 10%)' do
-      before do
-        position_data.pnl_pct = 5.0
-        position_data.peak_profit_pct = 5.0
-      end
-
-      it 'skips evaluation' do
-        result = rule.evaluate(context)
-        expect(result.skip?).to be true
-      end
-    end
-  end
+  # Risk::Rules::PeakDrawdownRule was deleted — a duplicate of the live
+  # Live::TrailingEngine#check_peak_drawdown, which already covers this
+  # activation-threshold behavior in spec/services/live/trailing_engine_spec.rb.
 
   describe 'Real-world scenarios' do
     context 'Scenario A: 10% activation, Entry ₹100, Lot 75' do

@@ -18,11 +18,17 @@ module Entries
         REASON = 'DIRECTION_CONFLICT_KILL'
 
         def call(context)
+          # This is a trend-reversal protection for long-vs-long conflicts; selling
+          # fires during chop (no "confirmed reversal") and has no place in it.
+          return PASS if context[:position_side].to_s == 'short'
+
           index_key = context.dig(:index_cfg, :key).to_s
           return PASS if index_key.blank?
 
           new_side = side_for(context[:direction])
-          position_scope.where(index_key: index_key).where.not(side: new_side).find_each do |tracker|
+          # Only long positions participate — a short position "losing" doesn't mean
+          # the same thing as a long on the wrong side of a confirmed reversal.
+          position_scope.where(index_key: index_key, position_side: 'long').where.not(side: new_side).find_each do |tracker|
             kill_if_losing(tracker, new_side)
           end
 

@@ -107,7 +107,7 @@ module Portfolio
           next unless tracker&.active?
 
           begin
-            exit_engine = Rails.application.config.x.trading_supervisor[:exit_manager]
+            exit_engine = Rails.application.config.x.trading_supervisor&.dig(:exit_manager) || Live::ExitEngine.instance
             exit_engine.execute_exit(tracker, 'PORTFOLIO_FLOOR_BREACH')
           rescue StandardError => e
             Rails.logger.error(

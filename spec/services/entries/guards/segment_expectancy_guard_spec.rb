@@ -6,13 +6,11 @@ RSpec.describe Entries::Guards::SegmentExpectancyGuard do
   describe '.call' do
     let(:context) { { index_cfg: { key: index_key } } }
     let(:index_key) { 'NIFTY' }
-    let(:algo_config) { instance_double(AlgoConfig::Configuration) }
     let(:time_regime_service) { instance_double(Live::TimeRegimeService) }
     let(:segment_expectancy_analyzer) { instance_double(Trading::SegmentExpectancyAnalyzer) }
 
     before do
-      allow(AlgoConfig).to receive(:fetch).and_return(algo_config)
-      allow(algo_config).to receive(:[]).with(:segment_expectancy_guard).and_return(guard_config)
+      allow(AlgoConfig).to receive(:fetch).and_return(segment_expectancy_guard: guard_config)
       allow(Live::TimeRegimeService).to receive(:instance).and_return(time_regime_service)
       allow(time_regime_service).to receive(:current_regime).and_return(regime)
       allow(Trading::SegmentExpectancyAnalyzer).to receive(:instance).and_return(segment_expectancy_analyzer)

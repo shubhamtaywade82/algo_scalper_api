@@ -61,6 +61,22 @@ RSpec.describe Entries::EntryGuard do
         expect(signal).to have_received(:record_entry_outcome).with('entered')
       end
     end
+
+    context 'when position_side is short (selling)' do
+      it 'derives short_pe for a bullish bias and passes position_side through' do
+        described_class.try_enter(index_cfg: index_cfg, pick: pick, direction: :bullish, position_side: 'short')
+
+        expect(Entries::OrderExecutionService).to have_received(:call)
+          .with(hash_including(side: 'short_pe', position_side: 'short'))
+      end
+
+      it 'derives short_ce for a bearish bias' do
+        described_class.try_enter(index_cfg: index_cfg, pick: pick, direction: :bearish, position_side: 'short')
+
+        expect(Entries::OrderExecutionService).to have_received(:call)
+          .with(hash_including(side: 'short_ce', position_side: 'short'))
+      end
+    end
   end
 
   describe '.record_signal_to_order_latency!' do

@@ -12,14 +12,12 @@ RSpec.describe Entries::Guards::RegimeGuard do
     end
     let(:index_key) { 'NIFTY' }
     let(:instrument) { create(:instrument, :nifty_index) }
-    let(:candle_series) { instance_double(Live::CandleSeriesCache) }
-    let(:algo_config) { instance_double(AlgoConfig::Configuration) }
+    let(:candle_series) { instance_double(CandleSeries) }
     let(:market_regime_detector) { instance_double(MarketRegimeDetector) }
 
     before do
       allow(instrument).to receive(:candle_series).with(interval: '15').and_return(candle_series)
-      allow(AlgoConfig).to receive(:fetch).and_return(algo_config)
-      allow(algo_config).to receive(:dig).with(:risk, :regime_guard).and_return(regime_config)
+      allow(AlgoConfig).to receive(:fetch).and_return(risk: { regime_guard: regime_config })
     end
 
     context 'when regime guard is disabled' do
@@ -133,15 +131,9 @@ RSpec.describe Entries::Guards::RegimeGuard do
   end
 
   describe '.config' do
-    let(:algo_config) { instance_double(AlgoConfig::Configuration) }
-
-    before do
-      allow(AlgoConfig).to receive(:fetch).and_return(algo_config)
-    end
-
     context 'when regime_guard config exists' do
       before do
-        allow(algo_config).to receive(:dig).with(:risk, :regime_guard).and_return({ enabled: true })
+        allow(AlgoConfig).to receive(:fetch).and_return(risk: { regime_guard: { enabled: true } })
       end
 
       it 'returns the config' do
@@ -151,7 +143,7 @@ RSpec.describe Entries::Guards::RegimeGuard do
 
     context 'when regime_guard config is missing' do
       before do
-        allow(algo_config).to receive(:dig).with(:risk, :regime_guard).and_return(nil)
+        allow(AlgoConfig).to receive(:fetch).and_return(risk: {})
       end
 
       it 'returns empty hash' do
@@ -171,7 +163,7 @@ RSpec.describe Entries::Guards::RegimeGuard do
   end
 
   describe '.detect_regime' do
-    let(:series) { instance_double(Live::CandleSeriesCache) }
+    let(:series) { instance_double(CandleSeries) }
     let(:market_regime_detector) { instance_double(MarketRegimeDetector) }
 
     context 'when detection succeeds' do

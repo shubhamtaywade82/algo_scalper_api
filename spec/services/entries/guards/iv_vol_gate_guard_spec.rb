@@ -57,6 +57,15 @@ RSpec.describe Entries::Guards::IvVolGateGuard do
         expect(result).to be_a(Hash)
         expect(result[:blocked]).to include('IV Rank (0.0%) is too low')
       end
+
+      context 'with symbol-specific min_iv_rank override' do
+        let(:index_cfg) { { key: 'NIFTY', risk_model: { min_iv_rank: 0.0 } } }
+
+        it 'passes when IV rank meets the symbol-specific threshold' do
+          result = described_class.call(context)
+          expect(result).to eq(Entries::EntryGuardPipeline::PASS)
+        end
+      end
     end
   end
 end

@@ -8,6 +8,9 @@ module Entries
         include BaseGuard
 
         def call(context)
+          # Selling exists specifically to trade the chop this guard filters out for buying.
+          return PASS if context[:position_side].to_s == 'short'
+
           cfg = config
           return PASS unless cfg.fetch(:enabled, true)
 

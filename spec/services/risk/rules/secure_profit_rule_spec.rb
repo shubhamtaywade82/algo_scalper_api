@@ -39,6 +39,17 @@ RSpec.describe Risk::Rules::SecureProfitRule do
   end
   let(:rule) { described_class.new(config: risk_config) }
 
+  describe '#enabled?' do
+    it 'defaults to disabled until explicitly turned on' do
+      expect(rule.enabled?(context)).to be false
+    end
+
+    it 'enables when secure_profit_enabled is true in risk_config' do
+      allow(context).to receive(:config_value).with(:secure_profit_enabled, false).and_return(true)
+      expect(rule.enabled?(context)).to be true
+    end
+  end
+
   describe '#evaluate' do
     context 'when profit exceeds threshold and drawdown triggers' do
       it 'returns exit result when profit >= threshold and drawdown >= threshold' do

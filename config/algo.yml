@@ -15,7 +15,7 @@ realtime:
   min_enforcement_gap_ms: 250
   db_sync_interval_seconds: 30
   entry_ltp_max_age_seconds: 2
-run_mode: exit_testing
+run_mode: production
 trading_time_restrictions:
   enabled: false
   avoid_periods:
@@ -43,9 +43,7 @@ feature_flags:
   enable_trend_scorer: false
   enable_auto_subscribe_unsubscribe: true
   enable_demand_driven_services: true
-  enable_underlying_aware_exits: true
   enable_peak_drawdown_activation: true
-  auto_paper_on_insufficient_balance: false
 dhanhq:
   enable_orders: false
 indices:
@@ -94,10 +92,13 @@ indices:
     max: 650
   otm_rules:
     max_otm: 2
+  expiry_rules:
+    only_last_week: false
   risk_model:
     base_risk_pct: 0.02
     strong_trend_pct: 0.02
     weak_trend_pct: 0.01
+    min_iv_rank: 0.02
   trade_limits:
     max_trades_per_day: 20
   adx_thresholds:
@@ -124,14 +125,15 @@ indices:
   max_concurrent_per_index: 2
   direction: bullish
   premium_band:
-    min: 40
-    max: 320
+    min: 50
+    max: 650
   otm_rules:
     max_otm: 2
   risk_model:
     base_risk_pct: 0.02
     strong_trend_pct: 0.02
     weak_trend_pct: 0.01
+    min_iv_rank: 0.02
   trade_limits:
     max_trades_per_day: 20
   adx_thresholds:
@@ -173,6 +175,10 @@ risk:
   rr_profit_booking:
     enabled: true
     target_rr: 2.5
+  zero_hwm_false_entry:
+    enabled: true
+    min_hold_seconds: 120
+    hwm_threshold_rupees: 0
   exits:
     structure_invalidation:
       enabled: true
@@ -457,6 +463,7 @@ position_sizing:
     enabled: true
     activation_pct: 0.1
     drawdown_pct: 0.03
+  secure_profit_enabled: false
   secure_profit_threshold_rupees: 1000
   secure_profit_drawdown_pct: 0.03
   underlying_trend_score_threshold: 10.0
@@ -464,7 +471,7 @@ position_sizing:
   use_smc_bias_flip: false
   smc_bias_flip_trend_threshold: 40
   daily_limits:
-    enable: true
+    enabled: true
     per_index:
       NIFTY: 0.02
       BANKNIFTY: 0.04
@@ -527,7 +534,6 @@ signals:
   - 60
   ta_days_back: 30
   ta_min_confidence: 0.6
-  enable_no_trade_engine: false
   enable_smc_avrz_permission: false
   enable_smc_decision_alignment: true
   smc_event_store_publish: true
@@ -549,9 +555,6 @@ signals:
   permission_mode: lenient
   enable_trading_context_gate: true
   trading_context_strictness: relaxed
-  enable_option_premium_momentum_gate: false
-  enable_strike_score_floor_gate: false
-  enable_expected_move_strike_gate: false
   enable_supertrend_signal: true
   enable_adx_filter: true
   enable_confirmation_timeframe: false

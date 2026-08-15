@@ -19,6 +19,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
         activation_pct: 10.0, # Activate trailing at 10%
         drawdown_pct: 3.0
       },
+      secure_profit_enabled: true,
       secure_profit_threshold_rupees: 1000.0,
       secure_profit_drawdown_pct: 3.0,
       peak_drawdown_exit_pct: 5.0,
@@ -180,82 +181,9 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
     end
   end
 
-  describe 'Trailing Activation Threshold' do
-    it 'does not activate trailing rules when pnl_pct < 10%' do
-      position = create_position_in_cache(
-        pnl: 0.05 * buy_value, # +₹1,500 (+5%)
-        pnl_pct: 5.0,
-        ltp: 105.0,
-        hwm_pnl: 0.05 * buy_value,
-        peak_profit_pct: 5.0
-      )
-
-      # PeakDrawdownRule should skip (not activated)
-      peak_rule = rule_engine.find_rule(Risk::Rules::PeakDrawdownRule)
-      context = Risk::Rules::RuleContext.new(
-        position: position,
-        tracker: tracker,
-        risk_config: risk_config,
-        current_time: Time.current,
-        trading_session: TradingSession::Service
-      )
-      result = peak_rule.evaluate(context)
-      expect(result.skip?).to be true
-    end
-
-    it 'activates trailing rules when pnl_pct >= 10%' do
-      position = create_position_in_cache(
-        pnl: 0.10 * buy_value, # +₹3,000 (+10%)
-        pnl_pct: 10.0,
-        ltp: 110.0,
-        hwm_pnl: 0.10 * buy_value,
-        peak_profit_pct: 10.0
-      )
-
-      # PeakDrawdownRule should evaluate (not skip)
-      peak_rule = rule_engine.find_rule(Risk::Rules::PeakDrawdownRule)
-      context = Risk::Rules::RuleContext.new(
-        position: position,
-        tracker: tracker,
-        risk_config: risk_config,
-        current_time: Time.current,
-        trading_session: TradingSession::Service
-      )
-      result = peak_rule.evaluate(context)
-      # May return no_action if drawdown not triggered, but should not skip
-      expect(result.skip?).to be false
-    end
-
-    it 'works with custom activation threshold (6%)' do
-      custom_config = risk_config.dup
-      custom_config[:trailing][:activation_pct] = 6.0
-
-      custom_engine = Risk::Rules::RuleFactory.create_engine(risk_config: custom_config)
-
-      # At 6% - should activate
-      position = create_position_in_cache(
-        pnl: 0.06 * buy_value,
-        pnl_pct: 6.0,
-        ltp: 106.0
-      )
-
-      peak_rule = custom_engine.find_rule(Risk::Rules::PeakDrawdownRule)
-      context = Risk::Rules::RuleContext.new(
-        position: position,
-        tracker: tracker,
-        risk_config: custom_config,
-        current_time: Time.current,
-        trading_session: TradingSession::Service
-      )
-      result = peak_rule.evaluate(context)
-      expect(result.skip?).to be false
-
-      # At 5.99% - should skip
-      position.pnl_pct = 5.99
-      result = peak_rule.evaluate(context)
-      expect(result.skip?).to be true
-    end
-  end
+  # Risk::Rules::PeakDrawdownRule was deleted — a duplicate of the live
+  # Live::TrailingEngine#check_peak_drawdown, which already covers this
+  # activation-threshold behavior in spec/services/live/trailing_engine_spec.rb.
 
   describe 'Secure Profit Rule' do
     it 'exits when profit >= ₹1000 and drawdown >= 3% from peak' do

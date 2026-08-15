@@ -29,7 +29,7 @@ module Risk
         elapsed = (Time.current - tracker.created_at).to_f
         return no_action_result if elapsed < min_hold_seconds(context)
 
-        hwm_rupees = context.position.hwm_pnl.to_f
+        hwm_rupees = hwm_rupees_for(context).to_f
         return no_action_result if hwm_rupees > hwm_threshold(context)
 
         exit_result(
@@ -66,6 +66,15 @@ module Risk
 
       def hwm_threshold(context)
         rule_config(context).fetch(:hwm_threshold_rupees, DEFAULT_HWM_THRESHOLD).to_f
+      end
+
+      # Matches the fallback chain used by GreenTradeCapRule —
+      # tracker_snapshot (freshest, tick-path) beats the position/tracker HWM (DB-synced).
+      def hwm_rupees_for(context)
+        snapshot = context.tracker_snapshot
+        return snapshot[:hwm_pnl] if snapshot.is_a?(Hash) && snapshot[:hwm_pnl]
+
+        context.high_water_mark || context.tracker&.high_water_mark_pnl
       end
     end
   end

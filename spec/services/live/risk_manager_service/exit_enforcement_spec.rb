@@ -68,4 +68,45 @@ RSpec.describe Live::RiskManagerService::ExitEnforcement do
       end
     end
   end
+
+  describe '#enforce_selling_exits_for' do
+    let(:tracker) { create(:position_tracker, position_side: 'short', premium_received: 100.0, quantity: 1, status: 'active') }
+    let(:exit_engine) { instance_double(Live::ExitEngine) }
+
+    before do
+      allow(harness).to receive_messages(risk_config: {}, pnl_snapshot: { ltp: current_ltp, pnl: 0, pnl_pct: 0, hwm_pnl: 0 })
+      allow(harness).to receive(:dispatch_exit)
+      allow(harness).to receive(:track_exit_path)
+    end
+
+    context 'when premium has decayed past the target' do
+      let(:current_ltp) { 40.0 } # 60% decay of 100 received
+
+      it 'dispatches an exit with the PremiumTargetRule reason' do
+        harness.send(:enforce_selling_exits_for, tracker, exit_engine: exit_engine)
+
+        expect(harness).to have_received(:dispatch_exit).with(exit_engine, tracker, a_string_matching(/PREMIUM_TARGET/))
+      end
+    end
+
+    context 'when premium has expanded past the loss cap' do
+      let(:current_ltp) { 350.0 } # loss = 250 vs 100 received, default cap is 2x = 200
+
+      it 'dispatches an exit with the MaxPremiumLossRule reason (higher priority than the target rule)' do
+        harness.send(:enforce_selling_exits_for, tracker, exit_engine: exit_engine)
+
+        expect(harness).to have_received(:dispatch_exit).with(exit_engine, tracker, a_string_matching(/MAX_PREMIUM_LOSS/))
+      end
+    end
+
+    context 'when neither threshold is hit' do
+      let(:current_ltp) { 90.0 } # 10% decay, no loss
+
+      it 'does not dispatch an exit' do
+        harness.send(:enforce_selling_exits_for, tracker, exit_engine: exit_engine)
+
+        expect(harness).not_to have_received(:dispatch_exit)
+      end
+    end
+  end
 end

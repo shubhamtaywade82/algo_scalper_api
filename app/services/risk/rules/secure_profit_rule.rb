@@ -19,6 +19,12 @@ module Risk
     class SecureProfitRule < BaseRule
       PRIORITY = 35 # Between TakeProfitRule (30) and TimeBasedExitRule (40)
 
+      def enabled?(context = nil)
+        return false if context.nil?
+
+        context.config_value(:secure_profit_enabled, false) != false
+      end
+
       def evaluate(context)
         return skip_result unless context.active?
 

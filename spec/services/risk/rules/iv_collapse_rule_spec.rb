@@ -15,9 +15,9 @@ RSpec.describe Risk::Rules::IvCollapseRule do
     instance_double(
       PositionTracker,
       active?: true,
-      meta: { 'iv_at_entry' => 20.0 },
+      iv_at_entry: 20.0,
       watchable: watchable,
-      underlying_instrument: instrument
+      instrument: instrument
     )
   end
 
