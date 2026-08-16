@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "woods": {
-      "command": "woods-mcp-start",
+      "command": "/home/nemesis/.rvm/gems/ruby-3.3.4/bin/woods-mcp-start",
       "args": ["./tmp/woods"]
     }
   }
