@@ -224,7 +224,7 @@ module Live
     end
 
     def live_mode?
-      !AlgoConfig.dig('paper_trading', 'enabled')
+      !AlgoConfig.fetch.dig(:paper_trading, :enabled)
     end
 
     def current_mode

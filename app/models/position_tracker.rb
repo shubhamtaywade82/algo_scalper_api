@@ -62,6 +62,7 @@ class PositionTracker < ApplicationRecord
   PROMOTED_META_KEYS = %w[
     breakeven_locked index_key entry_strategy be_set carry_mode carry_marked_at carry_roi_pct
     alpha_source signal_confidence expected_value signal_timestamp client_order_id
+    leg_group_id leg_index leg_role premium_received
   ].freeze
 
   BOOLEAN_PROMOTED_KEYS = %w[breakeven_locked be_set].freeze
@@ -90,6 +91,7 @@ class PositionTracker < ApplicationRecord
 
   # Associations
   belongs_to :instrument # Kept for backward compatibility during transition
+  belongs_to :leg_group, optional: true
   belongs_to :watchable, polymorphic: true
   has_one :trade_analytic, dependent: :destroy
   has_one :meta_snapshot, class_name: 'PositionMetaSnapshot', dependent: :destroy

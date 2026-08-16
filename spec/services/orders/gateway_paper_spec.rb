@@ -21,7 +21,7 @@ RSpec.describe Orders::GatewayPaper do
 
   describe '#exit_market' do
     let(:tick) do
-      double('MarketTick', ltp: 101.5, bid: 101.0, ask: 102.0)
+      instance_double(MarketTick, ltp: 101.5, bid: 101.0, ask: 102.0)
     end
 
     before do
@@ -78,11 +78,12 @@ RSpec.describe Orders::GatewayPaper do
     end
 
     it 'does not update tracker directly' do
-      expect(tracker).not_to receive(:mark_exited!)
+      allow(tracker).to receive(:mark_exited!)
 
       gateway.exit_market(tracker)
 
       tracker.reload
+      expect(tracker).not_to have_received(:mark_exited!)
       expect(tracker.status).to eq('active')
     end
 
@@ -95,7 +96,7 @@ RSpec.describe Orders::GatewayPaper do
 
   describe '#place_market' do
     let(:tick) do
-      double('MarketTick', ltp: 101.5, bid: 101.0, ask: 102.0)
+      instance_double(MarketTick, ltp: 101.5, bid: 101.0, ask: 102.0)
     end
 
     before do
@@ -159,7 +160,7 @@ RSpec.describe Orders::GatewayPaper do
 
     it 'logs errors when simulation fails' do
       allow(SecureRandom).to receive(:hex).and_raise(StandardError.new('RNG error'))
-      expect(Rails.logger).to receive(:error).with(/GatewayPaper.*place_market failed/)
+      allow(Rails.logger).to receive(:error)
 
       result = gateway.place_market(
         side: 'buy',
@@ -168,6 +169,7 @@ RSpec.describe Orders::GatewayPaper do
         qty: 50
       )
 
+      expect(Rails.logger).to have_received(:error).with(/GatewayPaper.*place_market failed/)
       expect(result).to include(success: false, paper: true)
       expect(result[:error]).to be_present
     end

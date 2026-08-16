@@ -219,9 +219,21 @@ module Signal
                 return
               elsif %w[RANGING CHOPPY].include?(regime)
                 # Chop is theta decay poison for buying, but exactly the regime selling profits
-                # from — route to the selling path instead of skipping the cycle entirely.
+                # from — route to the selling path when selling strategies are enabled.
                 position_side = 'short'
-                Rails.logger.info("[Signal] DirectionGate: #{regime} regime for #{index_cfg[:key]} — routing to selling path")
+                route_decision = Entries::RegimeStrategyRouter.route(regime: regime, direction: final_direction, index_cfg: index_cfg)
+
+                if route_decision == :selling
+                  Rails.logger.info("[Signal] DirectionGate: #{regime} regime for #{index_cfg[:key]} — executing SellingEntryPipeline")
+                  selling_result = Entries::SellingEntryPipeline.run(index_cfg: index_cfg, direction: final_direction, regime: regime)
+                  if selling_result[:success]
+                    Rails.logger.info("[Signal] SellingEntryPipeline completed: LegGroup #{selling_result.dig(:leg_group, :group_id)}")
+                    Signal::StateTracker.reset(index_cfg[:key])
+                    return
+                  end
+                else
+                  Rails.logger.info("[Signal] DirectionGate: #{regime} regime for #{index_cfg[:key]} — selling disabled, continuing standard evaluation")
+                end
               else
                 # Verify alignment with expected trade direction
                 aligned = (regime == 'TRENDING_UP' && trade_side == :CE) ||
@@ -239,8 +251,8 @@ module Signal
             end
 
             validation_result = Signal::ValidationGates.comprehensive_validation(index_cfg, final_direction, primary_series,
-                                                         primary_analysis[:supertrend], { value: primary_analysis[:adx_value] },
-                                                         validation_mode: effective_validation_mode)
+                                                                                 primary_analysis[:supertrend], { value: primary_analysis[:adx_value] },
+                                                                                 validation_mode: effective_validation_mode)
           end
 
           result = {

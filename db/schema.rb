@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_15_223807) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_16_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -307,6 +307,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_223807) do
     t.index ["ledger_journal_entry_id"], name: "index_ledger_postings_on_ledger_journal_entry_id"
   end
 
+  create_table "leg_groups", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.date "expiry", null: false
+    t.string "group_id", null: false
+    t.bigint "instrument_id"
+    t.jsonb "meta", default: {}
+    t.integer "quantity", default: 0, null: false
+    t.string "status", default: "pending", null: false
+    t.string "strategy_type", null: false
+    t.string "underlying_symbol", null: false
+    t.datetime "updated_at", null: false
+    t.index ["group_id"], name: "index_leg_groups_on_group_id", unique: true
+    t.index ["instrument_id"], name: "index_leg_groups_on_instrument_id"
+    t.index ["status", "strategy_type"], name: "index_leg_groups_on_status_and_strategy_type"
+    t.index ["underlying_symbol"], name: "index_leg_groups_on_underlying_symbol"
+  end
+
   create_table "market_holidays", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "exchange", limit: 8, null: false
@@ -546,6 +563,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_223807) do
     t.decimal "iv_percentile", precision: 8, scale: 4
     t.decimal "last_pnl_pct", precision: 8, scale: 4
     t.decimal "last_pnl_rupees", precision: 12, scale: 4
+    t.integer "leg_group_id"
+    t.integer "leg_index", default: 0
+    t.string "leg_role"
     t.decimal "lowest_price", precision: 12, scale: 4
     t.decimal "margin_required", precision: 12, scale: 2, default: "0.0"
     t.jsonb "meta", default: {}
@@ -593,6 +613,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_223807) do
     t.index ["exited_at", "status"], name: "index_position_trackers_on_exited_at_and_status"
     t.index ["index_key"], name: "index_position_trackers_on_index_key"
     t.index ["instrument_id"], name: "index_position_trackers_on_instrument_id"
+    t.index ["leg_group_id", "leg_index"], name: "index_position_trackers_on_leg_group_id_and_leg_index"
+    t.index ["leg_group_id"], name: "index_position_trackers_on_leg_group_id"
     t.index ["order_no"], name: "index_position_trackers_on_order_no", unique: true
     t.index ["paper"], name: "index_position_trackers_on_paper"
     t.index ["position_side", "status"], name: "index_position_trackers_on_position_side_and_status"
@@ -1384,6 +1406,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_223807) do
   add_foreign_key "derivatives", "instruments"
   add_foreign_key "ledger_postings", "ledger_accounts"
   add_foreign_key "ledger_postings", "ledger_journal_entries"
+  add_foreign_key "leg_groups", "instruments"
   add_foreign_key "order_intents", "instruments"
   add_foreign_key "paper_orders", "instruments"
   add_foreign_key "paper_positions", "instruments"

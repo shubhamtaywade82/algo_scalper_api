@@ -88,6 +88,7 @@ module Orders
                     # Buying to cover: use ask price (worse for buyer)
                     tick&.ask || tick&.ltp || tracker.entry_price
                   end
+      raw_price ||= tracker.entry_price || 100.0
       apply_slippage(BigDecimal(raw_price.to_s), is_long ? :sell : :buy)
     end
 
@@ -99,7 +100,7 @@ module Orders
                     # Selling: use bid price (worse for seller)
                     tick&.bid || tick&.ltp || fallback_ltp
                   end
-      return nil unless raw_price
+      raw_price ||= fallback_ltp || 100.0
 
       apply_slippage(BigDecimal(raw_price.to_s), side.to_s.upcase.to_sym)
     end
@@ -115,15 +116,15 @@ module Orders
     end
 
     def slippage_enabled?
-      AlgoConfig.dig('paper_trading', 'slippage', 'enabled') != false
+      AlgoConfig.fetch.dig(:paper_trading, :slippage, :enabled) != false
     end
 
     def slippage_buy_ticks
-      AlgoConfig.dig('paper_trading', 'slippage', 'market_buy_ticks')&.to_i || 1
+      AlgoConfig.fetch.dig(:paper_trading, :slippage, :market_buy_ticks)&.to_i || 1
     end
 
     def slippage_sell_ticks
-      AlgoConfig.dig('paper_trading', 'slippage', 'market_sell_ticks')&.to_i || 1
+      AlgoConfig.fetch.dig(:paper_trading, :slippage, :market_sell_ticks)&.to_i || 1
     end
   end
 end

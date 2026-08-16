@@ -5,10 +5,10 @@ require 'rails_helper'
 RSpec.describe Live::BrokerReconciliationService do
   subject(:service) { described_class.new(client: mock_client) }
 
-  let(:mock_client) { instance_double('DhanHQ::Client') }
+  let(:mock_client) { double('DhanHQClient') }
 
   before do
-    allow(AlgoConfig).to receive(:dig).with('paper_trading', 'enabled').and_return(false)
+    allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: { enabled: false } })
   end
 
   describe '#reconcile!' do
@@ -29,7 +29,7 @@ RSpec.describe Live::BrokerReconciliationService do
 
     context 'when in paper mode' do
       before do
-        allow(AlgoConfig).to receive(:dig).with('paper_trading', 'enabled').and_return(true)
+        allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: { enabled: true } })
       end
 
       it 'skips broker checks and passes' do
