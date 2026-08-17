@@ -682,3 +682,13 @@ smc:
   live_service:
     loop_interval_seconds: 300
     cooldown_seconds: 300
+
+telegram:
+  enabled: true
+  notify_entry: true
+  notify_exit: true
+  notify_milestones: true
+  notify_stats: true
+  notify_daily_profit_target: true
+  smc_alert_cooldown_minutes: 30
+  smc_max_alerts_per_session: 2
