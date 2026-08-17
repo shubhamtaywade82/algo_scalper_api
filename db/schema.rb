@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_16_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_17_111853) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -133,6 +133,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_16_000001) do
     t.decimal "candle_alignment_accuracy_pct", precision: 8, scale: 4
     t.datetime "created_at", null: false
     t.integer "expired_instrument_count", default: 0, null: false
+    t.integer "fill_reconciliation_checked_count", default: 0, null: false
+    t.integer "fill_reconciliation_mismatch_count", default: 0, null: false
     t.decimal "instrument_mapping_accuracy_pct", precision: 8, scale: 4
     t.jsonb "meta", default: {}, null: false
     t.integer "missing_candle_count", default: 0, null: false
@@ -1322,7 +1324,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_16_000001) do
   create_table "trading_strategies", force: :cascade do |t|
     t.string "author", default: "System"
     t.jsonb "backtest_results", default: {}
-    t.jsonb "checks", default: {"risk" => "not_run", "logic" => "not_run", "syntax" => "not_run", "backtest" => "not_run"}
+    t.jsonb "checks", default: {"risk"=>"not_run", "logic"=>"not_run", "syntax"=>"not_run", "backtest"=>"not_run"}
     t.text "code", default: ""
     t.datetime "created_at", null: false
     t.text "description"
