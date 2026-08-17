@@ -186,7 +186,7 @@ module Entries
 
             attempts.times do
               cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
-              if cached_tick&.ltp&.to_f&.positive?
+              if cached_tick&.ltp&.to_f&.positive? && cached_tick.fresh?
                 Rails.logger.debug { "[EntryGuard] Got LTP from TickCache for #{segment}:#{security_id}: ₹#{cached_tick.ltp}" }
                 return cached_tick.ltp
               end

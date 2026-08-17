@@ -90,7 +90,7 @@ module InstrumentHelpers
     hub = Live::MarketFeedHub.instance
     if hub.running? && hub.connected?
       tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
-      return tick.ltp if tick&.ltp&.positive?
+      return tick.ltp if tick&.ltp&.positive? && tick.fresh?
     end
 
     # Fallback to REST API when WebSocket unavailable or cache miss
@@ -118,7 +118,7 @@ module InstrumentHelpers
     # Strategy 1: Check WebSocket TickCache first (fastest, no API rate limits)
     if hub.running? && hub.connected?
       cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
-      if cached_tick&.ltp&.to_f&.positive?
+      if cached_tick&.ltp&.to_f&.positive? && cached_tick.fresh?
         Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache for #{segment}:#{security_id}: ₹#{cached_tick.ltp}" }
         return cached_tick.ltp.to_f
       end
@@ -131,7 +131,7 @@ module InstrumentHelpers
           4.times do
             sleep(0.05) # 50ms intervals
             cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
-            if cached_tick&.ltp&.to_f&.positive?
+            if cached_tick&.ltp&.to_f&.positive? && cached_tick.fresh?
               Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache after subscription for #{segment}:#{security_id}: ₹#{cached_tick.ltp}" }
               return cached_tick.ltp.to_f
             end

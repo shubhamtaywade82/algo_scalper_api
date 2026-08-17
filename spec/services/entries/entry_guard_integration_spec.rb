@@ -71,9 +71,22 @@ RSpec.describe "Entries::EntryGuard Integration" do
       allow(hub).to receive_messages(running?: true, connected?: true, subscribe: true)
     end
 
+    def market_tick(ltp:, timestamp:)
+      MarketTick.new(segment: 'NSE_FNO', security_id: '12345', ltp: ltp, timestamp: timestamp,
+                     oi: nil, oi_change: nil, bid: nil, ask: nil, volume: nil, prev_close: nil)
+    end
+
     it 'returns cached LTP if available' do
-      allow(Live::TickQuery).to receive(:for_security).and_return(double('Tick', ltp: 155.5))
+      allow(Live::TickQuery).to receive(:for_security).and_return(market_tick(ltp: 155.5, timestamp: Time.current))
       expect(Entries::EntryGuard.resolve_entry_ltp(instrument: instrument, pick: pick, index_cfg: index_cfg)).to eq(155.5)
+    end
+
+    it 'falls back to API if cached tick is stale' do
+      allow(Live::TickQuery).to receive(:for_security).and_return(market_tick(ltp: 155.5, timestamp: 1.hour.ago))
+      allow(instrument).to receive(:fetch_ltp_from_api_for_segment).and_return(160.0)
+      allow(Entries::EntryGuard).to receive(:sleep)
+
+      expect(Entries::EntryGuard.resolve_entry_ltp(instrument: instrument, pick: pick, index_cfg: index_cfg)).to eq(160.0)
     end
 
     it 'falls back to API if WebSocket tick timeout' do
