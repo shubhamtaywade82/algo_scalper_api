@@ -3,7 +3,11 @@
 module Orders
   class GatewayPaper < Orders::Gateway
     def exit_market(tracker, client_order_id: nil)
-      tick = Live::TickQuery.for_security(segment: tracker.segment, security_id: tracker.security_id)
+      # Same staleness-checked + REST-fallback tick resolution as place_market — without it,
+      # a cache miss at exit time fell straight to tracker.entry_price (pinning the exit fill
+      # to the entry price instead of the real market), which the daily fill-reconciliation
+      # check caught in production.
+      tick = resolve_fresh_tick(segment: tracker.segment, security_id: tracker.security_id.to_s)
       # For long exits (selling), use bid; for short exits (buying to cover), use ask
       exit_price = resolve_exit_fill(tracker, tick)
       coid = client_order_id || "PAPER-EXIT-#{tracker.id}"

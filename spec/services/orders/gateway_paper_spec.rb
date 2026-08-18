@@ -92,6 +92,20 @@ RSpec.describe Orders::GatewayPaper do
 
       expect(result[:exit_price]).to be_a(BigDecimal)
     end
+
+    it 'ignores a stale cached tick and uses the REST API price instead' do
+      stale_tick = MarketTick.new(segment: 'NSE_FNO', security_id: '55111', ltp: 999.0, timestamp: 1.hour.ago,
+                                  oi: nil, oi_change: nil, bid: 999.0, ask: 999.0, volume: nil, prev_close: nil)
+      allow(Live::TickQuery).to receive(:for_security).and_return(stale_tick)
+      allow(DhanHQ::Models::MarketFeed).to receive(:ltp).and_return(
+        { 'status' => 'success', 'data' => { 'NSE_FNO' => { '55111' => { 'last_price' => 105.0 } } } }
+      )
+      tracker.update!(position_side: 'LONG')
+
+      result = gateway.exit_market(tracker)
+
+      expect(result[:exit_price]).to eq(BigDecimal('105.0'))
+    end
   end
 
   describe '#place_market' do
