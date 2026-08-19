@@ -5,6 +5,10 @@ module Dhan
     BUFFER_MINUTES = 30
     REQUIRED_ENV_KEYS = %w[DHAN_PIN DHAN_TOTP_SECRET].freeze
     TOTP_COOLDOWN_HOURS = 12
+    # Re-read the DB record periodically so all processes (Puma, daemon, jobs)
+    # converge on the same token instead of each memoizing its own and
+    # invalidating the others' tokens on every forced refresh.
+    CACHE_TTL_SECONDS = 60
 
     class << self
       def current_token
@@ -91,6 +95,7 @@ module Dhan
       def clear_cache!
         mutex.synchronize do
           @cached_token = nil
+          @cached_at = nil
           @totp_refresh_cooldown_until = nil
           DhanAccessToken.delete_all
         end
@@ -100,7 +105,13 @@ module Dhan
       private
 
       def cached_token
-        @cached_token ||= load_from_db
+        if @cached_token && @cached_at && (Time.current - @cached_at) < CACHE_TTL_SECONDS
+          return @cached_token
+        end
+
+        @cached_token = load_from_db
+        @cached_at = Time.current
+        @cached_token
       end
 
       def cache_token(token, expiry_time)
@@ -109,6 +120,7 @@ module Dhan
           token: token,
           expiry_time: expiry_time
         }
+        @cached_at = Time.current
       end
 
       def expiring?(token_data)

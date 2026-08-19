@@ -45,7 +45,7 @@ module Risk
 
         # Determine trade type (scalp vs trend)
         trade_type = determine_trade_type(tracker)
-        time_limit = get_time_limit(tracker, trade_type)
+        time_limit = get_time_limit(tracker, trade_type, time_limits(context))
 
         return skip_result unless time_limit
 
@@ -87,7 +87,7 @@ module Risk
 
         # For scalps, also check candle count
         if trade_type == :scalp
-          candle_limit = time_limits[:scalp][:max_candles] || DEFAULT_TIME_LIMITS[:scalp][:max_candles]
+          candle_limit = time_limits(context)[:scalp][:max_candles] || DEFAULT_TIME_LIMITS[:scalp][:max_candles]
           if candle_count_exceeded?(tracker, candle_limit)
             reason = "TIME_STOP (scalp exceeded #{candle_limit} candles)"
             return exit_result(reason: reason, metadata: {
@@ -105,44 +105,36 @@ module Risk
 
       private
 
-      def days_to_expiry(tracker)
-        watchable = tracker.watchable
-        return 7 unless watchable.respond_to?(:expiry_date)
-
-        expiry = watchable.expiry_date
-        return 7 unless expiry && expiry > Date.new(2000, 1, 1)
-
-        [(expiry - Date.current).to_i, 0].max
-      end
-
-      def base_time_limit_minutes(context)
-        tracker = context.tracker
-        cfg = context.risk_config[:time_stop] || context.risk_config.dig(:exits, :time_stop) || {}
-
+      # Determine trade type from tracker metadata or entry path
+      def determine_trade_type(tracker)
+        entry_metadata = tracker.meta&.dig('entry_metadata') || {}
+        entry_path = entry_metadata['entry_path'] || tracker.meta&.dig('entry_path') || tracker.entry_path
         entry_strategy = tracker.entry_strategy.to_s.downcase
-        entry_path = tracker.entry_path.to_s.downcase
 
-        is_scalp = entry_strategy.include?('scalp') ||
-                   entry_path.include?('scalp') ||
-                   entry_strategy.include?('momentum') ||
-                   (context.risk_config.dig(:options_buying, :mode).to_s == 'intraday_scalper')
-
-        if is_scalp
-          (cfg.dig(:scalp, :max_minutes) || 8).to_f
-        else
-          index_key = (tracker.index_key || tracker.underlying_instrument&.symbol_name || 'NIFTY').to_s.upcase
-          trend_cfg = cfg[:trend] || {}
-          (trend_cfg[index_key] || trend_cfg[index_key.to_sym] || 15).to_f
+        if entry_path.to_s.include?('scalp') || entry_path.to_s.include?('1m') ||
+           entry_strategy.include?('scalp') || entry_strategy.include?('momentum')
+          return :scalp
         end
 
-        # Default to trend for longer timeframes
         :trend
       end
 
-      # Get time limit for this trade
-      def get_time_limit(tracker, trade_type)
-        limits = time_limits
+      # Get time limits for this trade, from risk config with defaults as fallback
+      def time_limits(context)
+        cfg = context.risk_config[:time_stop] || context.risk_config.dig(:exits, :time_stop) || {}
+        trend_cfg = (cfg[:trend] || {}).transform_keys(&:to_s)
 
+        {
+          scalp: {
+            max_minutes: (cfg.dig(:scalp, :max_minutes) || DEFAULT_TIME_LIMITS[:scalp][:max_minutes]).to_f,
+            max_candles: (cfg.dig(:scalp, :max_candles) || DEFAULT_TIME_LIMITS[:scalp][:max_candles]).to_i
+          },
+          trend: DEFAULT_TIME_LIMITS[:trend].merge(trend_cfg)
+        }
+      end
+
+      # Get time limit for this trade
+      def get_time_limit(tracker, trade_type, limits)
         if trade_type == :scalp
           return limits[:scalp][:max_minutes]
         end

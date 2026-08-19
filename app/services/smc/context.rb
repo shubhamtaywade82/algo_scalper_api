@@ -16,7 +16,7 @@ module Smc
       # Use Analyzer for state machine phase
       @analyzer = Analyzer.new(series)
       @analysis = @analyzer.run
-      @phase = @analysis[:phase]
+      @phase = @analysis ? @analysis[:phase] : nil
 
       # Primary trend comes from swing structure (higher TF control)
       @trend = @swing_structure.trend

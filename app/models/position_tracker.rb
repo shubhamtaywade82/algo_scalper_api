@@ -538,6 +538,15 @@ class PositionTracker < ApplicationRecord
     value.is_a?(Hash) ? value : {}
   end
 
+  def runtime_meta_fetch(key)
+    key_s = key.to_s
+    cached = Live::PositionRuntimeCache.instance.fetch(id)
+    sym = key_s.to_sym
+    return cached[sym] if cached.key?(sym)
+
+    meta_hash[key_s]
+  end
+
   def segment_must_be_tradable
     return if segment.blank?
     return if Orders::Placer::VALID_TRADABLE_SEGMENTS.include?(segment.to_s.upcase)
