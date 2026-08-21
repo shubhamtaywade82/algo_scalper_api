@@ -546,6 +546,7 @@ class PositionTracker < ApplicationRecord
 
     meta_hash[key_s]
   end
+  public :runtime_meta_fetch
 
   def segment_must_be_tradable
     return if segment.blank?

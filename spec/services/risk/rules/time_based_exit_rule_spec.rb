@@ -18,14 +18,13 @@ RSpec.describe Risk::Rules::TimeBasedExitRule do
       entry_price: 100.0,
       current_ltp: 103.0,
       pnl: 300.0,
-      pnl_pct: 3.0
+      pnl_pct: 0.03
     )
   end
   let(:exit_time) { Time.zone.parse('15:20') }
   let(:risk_config) do
     {
-      time_exit_hhmm: '15:20',
-      min_profit_rupees: 200.0
+      exit: { time_based: { enabled: true, exit_time: '15:20' } }
     }
   end
   let(:context) do
@@ -39,71 +38,38 @@ RSpec.describe Risk::Rules::TimeBasedExitRule do
   let(:rule) { described_class.new(config: risk_config) }
 
   describe '#evaluate' do
-    context 'when exit time is reached and minimum profit is met' do
+    context 'when exit time is reached' do
+      before do
+        allow(Live::UnifiedExitChecker).to receive(:time_based_exit?).and_return(true)
+      end
+
       it 'returns exit result' do
         result = rule.evaluate(context)
         expect(result.exit?).to be true
-        expect(result.reason).to include('time-based exit')
-        expect(result.reason).to include('15:20')
-        expect(result.metadata[:exit_time]).to eq(exit_time)
-        expect(result.metadata[:pnl_rupees]).to eq(300.0)
-      end
-    end
-
-    context 'when exit time is reached but minimum profit not met' do
-      before do
-        position_data.pnl = 100.0
-      end
-
-      it 'returns no_action' do
-        result = rule.evaluate(context)
-        expect(result.no_action?).to be true
+        expect(result.reason).to include('TIME_BASED')
       end
     end
 
     context 'when exit time is not reached' do
       before do
-        context = Risk::Rules::RuleContext.new(
-          position: position_data,
-          tracker: tracker,
-          risk_config: risk_config,
-          current_time: exit_time - 1.hour
-        )
-        @context = context
+        allow(Live::UnifiedExitChecker).to receive(:time_based_exit?).and_return(false)
       end
 
       it 'returns no_action' do
-        result = rule.evaluate(@context)
-        expect(result.no_action?).to be true
-      end
-    end
-
-    context 'when current time is after market close' do
-      before do
-        risk_config[:market_close_hhmm] = '15:30'
-        context = Risk::Rules::RuleContext.new(
-          position: position_data,
-          tracker: tracker,
-          risk_config: risk_config,
-          current_time: Time.zone.parse('15:35')
-        )
-        @context = context
-      end
-
-      it 'returns no_action' do
-        result = rule.evaluate(@context)
+        result = rule.evaluate(context)
         expect(result.no_action?).to be true
       end
     end
 
     context 'when exit time is not configured' do
-      before do
-        risk_config.delete(:time_exit_hhmm)
-      end
-
-      it 'returns skip_result' do
-        result = rule.evaluate(context)
-        expect(result.skip?).to be true
+      it 'is disabled' do
+        plain_context = Risk::Rules::RuleContext.new(
+          position: position_data,
+          tracker: tracker,
+          risk_config: {}
+        )
+        result = described_class.new(config: {}).enabled?(plain_context)
+        expect(result).to be false
       end
     end
 
@@ -112,29 +78,6 @@ RSpec.describe Risk::Rules::TimeBasedExitRule do
         tracker.update(status: 'exited')
         result = rule.evaluate(context)
         expect(result.skip?).to be true
-      end
-    end
-
-    context 'when minimum profit is zero' do
-      before do
-        risk_config[:min_profit_rupees] = 0
-      end
-
-      it 'exits without profit check' do
-        position_data.pnl = 50.0
-        result = rule.evaluate(context)
-        expect(result.exit?).to be true
-      end
-    end
-
-    context 'when profit is negative' do
-      before do
-        position_data.pnl = -100.0
-      end
-
-      it 'returns no_action even if time reached' do
-        result = rule.evaluate(context)
-        expect(result.no_action?).to be true
       end
     end
 

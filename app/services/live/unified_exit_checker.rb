@@ -165,7 +165,11 @@ module Live
         return false unless cfg[:enabled]
         return false unless defined?(Smc::Navigator)
 
-        nav_result = Smc::Navigator.evaluate_exit(tracker, snapshot) rescue nil
+        nav_result = begin
+          Smc::Navigator.evaluate_exit(tracker, snapshot)
+        rescue StandardError
+          nil
+        end
         return false unless nav_result&.suggest_exit?
 
         min_conf = (cfg[:min_confidence] || 0.6).to_f
@@ -202,7 +206,11 @@ module Live
 
         tightening_mult = 1.0
         if trailing_armed?(tracker, snapshot, config)
-          ctx_res = evaluate_underlying_context(tracker, snapshot) rescue nil
+          ctx_res = begin
+            evaluate_underlying_context(tracker, snapshot)
+          rescue StandardError
+            nil
+          end
           if ctx_res.is_a?(Hash)
             if ctx_res[:action] == :exit
               return { exit: true, reason: ctx_res[:reason] || 'UNDERLYING_STRUCTURE_BREAK', path: 'underlying_context_exit' }
@@ -357,7 +365,8 @@ module Live
         if current_ltp > peak
           meta['peak_premium'] = current_ltp
           meta['peak_premium_at'] = Time.current.iso8601
-          tracker.update_column(:meta, meta) if tracker.respond_to?(:update_column)
+          # Skip validations on purpose: this runs every cycle for every tracker
+          tracker.update_column(:meta, meta) if tracker.respond_to?(:update_column) # rubocop:disable Rails/SkipsModelValidations
           return false
         end
 

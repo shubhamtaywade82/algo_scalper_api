@@ -147,6 +147,9 @@ module Smc
 
         # Persist scan event for audit trail and replay capability
         publish_scan_event(index_cfg, instrument, decision)
+
+        # Record atomic structural events (swings/BOS/CHoCH/FVG/OB/sweeps)
+        Smc::StructureEventRecorder.record!(instrument: instrument, interval: STRUCTURE_EVENT_INTERVAL)
       rescue DhanHQ::RateLimitError => e
         Rails.logger.error("[Smc::Scanner] Rate limit error for #{index_cfg[:key]}: #{e.message}")
         Rails.logger.info('[Smc::Scanner] Waiting 5 seconds before continuing...')

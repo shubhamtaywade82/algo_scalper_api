@@ -36,6 +36,20 @@ module Risk
         }
       }.freeze
 
+      # The underlying intraday_ohlc call is expensive and this rule runs every
+      # cycle for every active scalp — throttle the 1m series to once per minute.
+      CANDLE_CHECK_TTL_SECONDS = 60
+
+      class << self
+        def candle_series_cache
+          @candle_series_cache ||= {}
+        end
+
+        def candle_series_cache_mutex
+          @candle_series_cache_mutex ||= Mutex.new
+        end
+      end
+
       def evaluate(context)
         return skip_result unless enabled?
         return skip_result unless context.active?
@@ -150,7 +164,17 @@ module Risk
         return false unless instrument
 
         # Get 1m series to count candles since entry
-        series_1m = instrument.candle_series(interval: '1')
+        series_1m = self.class.candle_series_cache_mutex.synchronize do
+          now = Time.current
+          entry = self.class.candle_series_cache[instrument.id]
+          if entry && entry[:expires_at] > now
+            entry[:series]
+          else
+            series = instrument.candle_series(interval: '1')
+            self.class.candle_series_cache[instrument.id] = { series: series, expires_at: now + CANDLE_CHECK_TTL_SECONDS }
+            series
+          end
+        end
         return false unless series_1m&.candles&.any?
 
         entry_time = tracker.created_at

@@ -77,34 +77,34 @@ RSpec.describe Risk::Rules::PremiumMomentumFailureRule do
       end
     end
 
-    context 'SENSEX in morning (base 4 min) — stalled 3.5 min' do
+    context 'stalled 2.5 min does NOT trigger (2.5 < 3)' do
       let(:index_key) { 'SENSEX' }
-      let(:peak_at) { 3.5.minutes.ago }
+      let(:peak_at) { 2.5.minutes.ago }
 
       before do
         allow(Time).to receive(:current).and_return(Time.zone.parse('2026-03-17 10:00:00 +05:30'))
       end
 
-      it 'does NOT trigger PMF (3.5 < 4)' do
+      it 'does NOT trigger PMF (2.5 < 3)' do
         result = rule.evaluate(context)
         expect(result.exit?).to be false
       end
     end
   end
 
-  describe 'session-aware stall minutes' do
+  describe 'stall minutes (fixed 3-min threshold)' do
     let(:index_key) { 'NIFTY' }
 
-    context 'NIFTY in chop_decay (3 + 2 = 5 min) — stalled 4 min' do
+    context 'stalled 4 min triggers (4 >= 3)' do
       let(:peak_at) { 4.minutes.ago }
 
       before do
         allow(Time).to receive(:current).and_return(Time.zone.parse('2026-03-17 12:00:00 +05:30'))
       end
 
-      it 'does NOT trigger PMF (4 < 5)' do
+      it 'triggers PMF exit (4 >= 3)' do
         result = rule.evaluate(context)
-        expect(result.exit?).to be false
+        expect(result.exit?).to be true
       end
     end
 

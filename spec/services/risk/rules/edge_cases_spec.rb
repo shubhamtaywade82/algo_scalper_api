@@ -82,15 +82,17 @@ RSpec.describe 'Rule Engine Edge Cases' do
         quantity: 10,
         current_ltp: 96.0,
         pnl: -40.0,
-        pnl_pct: -4.0,
+        pnl_pct: -0.40,
         last_updated_at: 45.seconds.ago
       )
     end
+    let(:tracker_snapshot) { { pnl_pct: -0.40, pnl: -40.0, ltp: 96.0 } }
     let(:context) do
       Risk::Rules::RuleContext.new(
         position: position_data,
         tracker: tracker,
-        risk_config: risk_config
+        risk_config: risk_config,
+        tracker_snapshot: tracker_snapshot
       )
     end
 
@@ -140,11 +142,13 @@ RSpec.describe 'Rule Engine Edge Cases' do
         pnl_pct: -4.0
       )
     end
+    let(:tracker_snapshot) { { pnl_pct: -0.40, pnl: -40.0, ltp: 96.0 } }
     let(:context) do
       Risk::Rules::RuleContext.new(
         position: position_data,
         tracker: tracker,
-        risk_config: risk_config
+        risk_config: risk_config,
+        tracker_snapshot: tracker_snapshot
       )
     end
 
@@ -157,10 +161,11 @@ RSpec.describe 'Rule Engine Edge Cases' do
 
       engine = Risk::Rules::RuleEngine.new(rules: [error_rule, sl_rule])
 
-      expect(Rails.logger).to receive(:error).with(/Error evaluating rule error_rule/)
+      allow(Rails.logger).to receive(:error)
 
       result = engine.evaluate(context)
       expect(result.exit?).to be true # SL rule still triggers
+      expect(Rails.logger).to have_received(:error).with(/Error evaluating rule error_rule/)
     end
   end
 
@@ -170,16 +175,18 @@ RSpec.describe 'Rule Engine Edge Cases' do
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
-        current_ltp: 105.0,
-        pnl: 50.0,
-        pnl_pct: 5.0
+        current_ltp: 96.0,
+        pnl: -40.0,
+        pnl_pct: -0.20
       )
     end
+    let(:tracker_snapshot) { { pnl_pct: -0.20, pnl: -40.0, ltp: 96.0 } }
     let(:context) do
       Risk::Rules::RuleContext.new(
         position: position_data,
         tracker: tracker,
-        risk_config: risk_config
+        risk_config: risk_config,
+        tracker_snapshot: tracker_snapshot
       )
     end
 
@@ -196,7 +203,8 @@ RSpec.describe 'Rule Engine Edge Cases' do
       threads.each(&:join)
 
       # All evaluations should return same result
-      expect(results.uniq.count).to eq(1)
+      expect(results.map(&:action).uniq.count).to eq(1)
+      expect(results.map(&:reason).uniq).to eq(['STOP_LOSS'])
     end
   end
 
@@ -208,22 +216,24 @@ RSpec.describe 'Rule Engine Edge Cases' do
         quantity: 10,
         current_ltp: 200.0,
         pnl: 100_000.0,
-        pnl_pct: 100.0,
-        peak_profit_pct: 100.0
+        pnl_pct: 1.0,
+        peak_profit_pct: 1.0
       )
     end
+    let(:tracker_snapshot) { { pnl_pct: 1.0, pnl: 100_000.0, ltp: 200.0 } }
     let(:context) do
       Risk::Rules::RuleContext.new(
         position: position_data,
         tracker: tracker,
-        risk_config: risk_config
+        risk_config: risk_config,
+        tracker_snapshot: tracker_snapshot
       )
     end
 
     it 'handles large profit values correctly' do
       result = engine.evaluate(context)
       expect(result.exit?).to be true
-      expect(result.reason).to include('TP HIT')
+      expect(result.reason).to include('PERCENTAGE_PNL_EXIT')
     end
   end
 

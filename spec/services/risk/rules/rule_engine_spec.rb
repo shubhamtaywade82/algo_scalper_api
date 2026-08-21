@@ -29,11 +29,14 @@ RSpec.describe Risk::Rules::RuleEngine do
       tp_pct: 5.0
     }
   end
+  # Rules read the snapshot (pnl_pct in decimal format: 0.12 = 12% stop)
+  let(:tracker_snapshot) { { pnl_pct: -0.20, pnl: -40.0, ltp: 96.0 } }
   let(:context) do
     Risk::Rules::RuleContext.new(
       position: position_data,
       tracker: tracker,
-      risk_config: risk_config
+      risk_config: risk_config,
+      tracker_snapshot: tracker_snapshot
     )
   end
 
@@ -73,16 +76,16 @@ RSpec.describe Risk::Rules::RuleEngine do
         # Stop loss should trigger first (higher priority)
         result = engine.evaluate(context)
         expect(result.exit?).to be true
-        expect(result.reason).to include('SL HIT')
+        expect(result.reason).to include('STOP_LOSS')
       end
 
       it 'stops evaluation when first rule triggers exit' do
         sl_rule = instance_double(Risk::Rules::StopLossRule)
         tp_rule = instance_double(Risk::Rules::TakeProfitRule)
 
-        allow(sl_rule).to receive_messages(priority: 20, enabled?: true,
+        allow(sl_rule).to receive_messages(priority: 20, enabled?: true, name: 'sl',
                                            evaluate: Risk::Rules::RuleResult.exit(reason: 'SL'))
-        allow(tp_rule).to receive_messages(priority: 30, enabled?: true,
+        allow(tp_rule).to receive_messages(priority: 30, enabled?: true, name: 'tp',
                                            evaluate: Risk::Rules::RuleResult.exit(reason: 'TP'))
 
         engine = described_class.new(rules: [sl_rule, tp_rule])
@@ -96,7 +99,7 @@ RSpec.describe Risk::Rules::RuleEngine do
 
     context 'with disabled rules' do
       it 'skips disabled rules' do
-        sl_rule = Risk::Rules::StopLossRule.new(config: { sl_pct: 0 }) # Disabled
+        sl_rule = Risk::Rules::StopLossRule.new(config: { enabled: false })
         tp_rule = Risk::Rules::TakeProfitRule.new(config: risk_config)
 
         engine = described_class.new(rules: [sl_rule, tp_rule])
@@ -119,7 +122,7 @@ RSpec.describe Risk::Rules::RuleEngine do
         result = engine.evaluate(context)
 
         expect(result.exit?).to be true
-        expect(result.reason).to include('SL HIT')
+        expect(result.reason).to include('STOP_LOSS')
       end
     end
 
@@ -135,7 +138,7 @@ RSpec.describe Risk::Rules::RuleEngine do
         result = engine.evaluate(context)
 
         expect(result.exit?).to be true
-        expect(result.reason).to include('SL HIT')
+        expect(result.reason).to include('STOP_LOSS')
       end
 
       it 'logs errors' do
@@ -144,10 +147,12 @@ RSpec.describe Risk::Rules::RuleEngine do
         allow(error_rule).to receive(:evaluate).and_raise(StandardError.new('Test error'))
         allow(error_rule).to receive_messages(priority: 15, enabled?: true, name: 'error_rule')
 
-        expect(Rails.logger).to receive(:error).with(/Error evaluating rule error_rule/)
+        allow(Rails.logger).to receive(:error)
 
         engine = described_class.new(rules: [error_rule])
         engine.evaluate(context)
+
+        expect(Rails.logger).to have_received(:error).with(/Error evaluating rule error_rule/)
       end
     end
 
@@ -185,14 +190,14 @@ RSpec.describe Risk::Rules::RuleEngine do
         tp_rule = Risk::Rules::TakeProfitRule.new(config: risk_config)
 
         # Both conditions could be met, but SL has higher priority
-        position_data.pnl_pct = -4.0 # SL triggers
-        position_data.current_ltp = 96.0
+        tracker_snapshot[:pnl_pct] = -0.20
+        tracker_snapshot[:ltp] = 96.0
 
         engine = described_class.new(rules: [sl_rule, tp_rule])
         result = engine.evaluate(context)
 
         expect(result.exit?).to be true
-        expect(result.reason).to include('SL HIT')
+        expect(result.reason).to include('STOP_LOSS')
       end
     end
   end
@@ -245,7 +250,7 @@ RSpec.describe Risk::Rules::RuleEngine do
 
   describe '#enabled_rules' do
     it 'returns only enabled rules' do
-      sl_rule = Risk::Rules::StopLossRule.new(config: { sl_pct: 0 }) # Disabled
+      sl_rule = Risk::Rules::StopLossRule.new(config: { enabled: false })
       tp_rule = Risk::Rules::TakeProfitRule.new(config: {})
 
       engine = described_class.new(rules: [sl_rule, tp_rule])
