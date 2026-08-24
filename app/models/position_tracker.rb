@@ -94,6 +94,7 @@ class PositionTracker < ApplicationRecord
   belongs_to :leg_group, optional: true
   belongs_to :watchable, polymorphic: true
   has_one :trade_analytic, dependent: :destroy
+  has_one :trade_memory, dependent: :destroy
   has_one :meta_snapshot, class_name: 'PositionMetaSnapshot', dependent: :destroy
 
   # Scopes

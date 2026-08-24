@@ -24,10 +24,18 @@ module Ai
 
       private
 
-      def fetch_recent_closed_trades
-        # Fetch from the position tracker or storage
-        # This is a placeholder — actual implementation depends on trade storage
-        []
+      def fetch_recent_closed_trades(limit: 20)
+        scope = @config.paper? ? PositionTracker.paper : PositionTracker.live
+        scope.exited.order(exited_at: :desc).limit(limit).map do |tracker|
+          {
+            symbol: tracker.symbol,
+            direction: tracker.direction,
+            entry_price: tracker.entry_price&.to_f,
+            exit_price: tracker.exit_price&.to_f,
+            pnl: tracker.last_pnl_rupees&.to_f,
+            exit_reason: tracker.exit_reason
+          }
+        end
       end
 
       def extract_lessons(trades)

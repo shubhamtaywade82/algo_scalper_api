@@ -579,7 +579,13 @@ module Options
       }
 
       # 1. Delta Score (0.40–0.60 ideal)
-      delta = option[:delta]&.to_f&.abs || 0.5
+      delta = option[:delta]&.to_f&.abs || Options::Greeks::Calculator.estimate_delta(
+        spot_price: spot,
+        strike_price: option[:strike],
+        option_type: option[:type],
+        iv_pct: option[:iv],
+        expiry_date: option[:expiry]
+      )
       delta_score = 1.0 - (delta - 0.5).abs
 
       # 2. Liquidity Score (Spread < 1% preferred)

@@ -455,14 +455,23 @@ module Options
       filtered.map do |item|
         strike = item[:strike]
         option_data = item[:option_data]
+        iv = option_data['implied_volatility']&.to_f
+        delta = option_data.dig('greeks', 'delta')&.to_f&.abs
+        delta ||= Options::Greeks::Calculator.estimate_delta(
+          spot_price: spot_price,
+          strike_price: strike,
+          option_type: option_type,
+          iv_pct: iv,
+          expiry_date: expiry_date
+        )
 
         leg = {
           strike: strike,
           ltp: option_data['last_price']&.to_f,
-          iv: option_data['implied_volatility']&.to_f,
+          iv: iv,
           oi: option_data['oi']&.to_i,
           spread: calculate_spread_ratio(option_data),
-          delta: option_data.dig('greeks', 'delta')&.to_f&.abs,
+          delta: delta,
           distance_from_atm: (strike - atm_strike).abs
         }
 

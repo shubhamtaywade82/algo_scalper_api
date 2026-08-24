@@ -10,9 +10,25 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_17_111853) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_24_171901) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "agent_decision_logs", force: :cascade do |t|
+    t.string "agent_name", null: false
+    t.string "authority_level", default: "advisor", null: false
+    t.decimal "confidence", precision: 5, scale: 4
+    t.datetime "created_at", null: false
+    t.string "decision_type", null: false
+    t.text "error"
+    t.jsonb "input_context", default: {}
+    t.jsonb "output", default: {}
+    t.string "published_event"
+    t.datetime "updated_at", null: false
+    t.index ["agent_name", "created_at"], name: "index_agent_decision_logs_on_agent_name_and_created_at"
+    t.index ["agent_name"], name: "index_agent_decision_logs_on_agent_name"
+    t.index ["created_at"], name: "index_agent_decision_logs_on_created_at"
+  end
 
   create_table "algo_config_change_logs", force: :cascade do |t|
     t.string "actor"
@@ -1278,6 +1294,30 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_111853) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "trade_memories", force: :cascade do |t|
+    t.string "category", default: "general", null: false
+    t.decimal "confidence", precision: 3, scale: 2, default: "0.5"
+    t.datetime "created_at", null: false
+    t.decimal "entry_quality_score", precision: 5, scale: 2
+    t.decimal "exit_efficiency_pct", precision: 6, scale: 2
+    t.string "exit_reason"
+    t.text "lesson", null: false
+    t.decimal "pnl_rupees", precision: 12, scale: 4
+    t.bigint "position_tracker_id", null: false
+    t.string "regime_at_entry"
+    t.string "regime_at_exit"
+    t.string "strategy_name"
+    t.string "symbol"
+    t.bigint "trade_analytic_id"
+    t.datetime "updated_at", null: false
+    t.index ["category"], name: "index_trade_memories_on_category"
+    t.index ["position_tracker_id"], name: "index_trade_memories_on_position_tracker_id"
+    t.index ["position_tracker_id"], name: "index_trade_memories_on_tracker_uniq", unique: true
+    t.index ["strategy_name"], name: "index_trade_memories_on_strategy_name"
+    t.index ["symbol"], name: "index_trade_memories_on_symbol"
+    t.index ["trade_analytic_id"], name: "index_trade_memories_on_trade_analytic_id"
+  end
+
   create_table "trade_telemetry", force: :cascade do |t|
     t.integer "bos_age_at_entry"
     t.decimal "continuation_body_position", precision: 6, scale: 4
@@ -1430,6 +1470,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_111853) do
   add_foreign_key "solid_queue_recurring_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "trade_analytics", "position_trackers"
+  add_foreign_key "trade_memories", "position_trackers"
+  add_foreign_key "trade_memories", "trade_analytics"
   add_foreign_key "trade_telemetry", "position_trackers", column: "tracker_id"
   add_foreign_key "woods_edges", "woods_units", column: "source_id"
   add_foreign_key "woods_edges", "woods_units", column: "target_id"
