@@ -52,7 +52,7 @@ gem 'DhanHQ', '~> 3.0'
 # Telegram bot for notifications
 gem 'telegram-bot-ruby', '~> 2.8'
 
-gem 'ollama-client', '~> 1.1'
+gem 'ollama-client', '~> 1.4'
 gem 'ruby_llm', '~> 1.16'
 gem 'ruby_llm-agents', '~> 3.15'
 
