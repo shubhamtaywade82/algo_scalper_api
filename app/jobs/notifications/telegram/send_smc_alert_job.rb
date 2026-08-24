@@ -104,13 +104,14 @@ module Notifications
         false
       end
 
-      def build_reasons(htf_context, mtf_context, ltf_context)
+      def build_reasons(contexts)
         reasons = []
+        htf = (contexts[:htf] || contexts['htf'] || {}).with_indifferent_access
+        mtf = (contexts[:mtf] || contexts['mtf'] || {}).with_indifferent_access
+        ltf = (contexts[:ltf] || contexts['ltf'] || {}).with_indifferent_access
 
-        # Use serialized context data to build reasons
-        # Context keys: premium_discount, swing_structure (or structure), liquidity
-        if htf_context[:premium_discount]
-          pd_data = htf_context[:premium_discount]
+        if htf[:premium_discount]
+          pd_data = htf[:premium_discount]
           if pd_data[:discount]
             reasons << 'HTF in Discount (Demand)'
           elsif pd_data[:premium]
@@ -118,15 +119,12 @@ module Notifications
           end
         end
 
-        # Check for CHoCH in MTF swing structure
-        if (mtf_context[:swing_structure] && mtf_context[:swing_structure][:choch]) ||
-           (mtf_context[:structure] && mtf_context[:structure][:choch])
+        if mtf.dig(:swing_structure, :choch) || mtf.dig(:structure, :choch)
           reasons << '15m CHoCH detected'
         end
 
-        # Check for liquidity sweep in LTF
-        if ltf_context[:liquidity]
-          liq_data = ltf_context[:liquidity]
+        if ltf[:liquidity]
+          liq_data = ltf[:liquidity]
           if liq_data[:sell_side_taken]
             reasons << 'Liquidity sweep on 5m (sell-side)'
           elsif liq_data[:buy_side_taken]
@@ -135,7 +133,6 @@ module Notifications
         end
 
         reasons << 'AVRZ rejection confirmed'
-
         reasons
       end
 

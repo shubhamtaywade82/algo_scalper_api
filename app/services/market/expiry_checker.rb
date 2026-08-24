@@ -31,7 +31,10 @@ module Market
       today = Time.zone.today
 
       instrument  = fetch_instrument(key)
-      expiry_list = instrument&.expiry_list&.compact
+      # DhanHQ's option-chain expirylist endpoint rejects scrips it cannot resolve
+      # (400 Unknown error) — e.g. BSE indices like SENSEX/BANKEX, which have no
+      # IDX_I security id. Skip the API call and use the weekday heuristic instead.
+      expiry_list = instrument&.security_id.to_i.positive? ? instrument.expiry_list&.compact : nil
 
       if expiry_list.present?
         parsed = parse_dates(expiry_list)

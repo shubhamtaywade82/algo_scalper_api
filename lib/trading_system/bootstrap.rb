@@ -66,7 +66,19 @@ module TradingSystem
       supervisor.register(:pnl_updater, Live::PnlUpdaterService.instance)
       supervisor.register(:candle_poller, Live::CandlePollerService.new)
 
+      register_chain_watch_services(supervisor)
+
       supervisor
+    end
+
+    def register_chain_watch_services(supervisor)
+      %w[NIFTY BANKNIFTY SENSEX].each do |index_key|
+        service = Options::ChainWatchService.new(index_key: index_key)
+        supervisor.register(:"chain_watch_#{index_key.downcase}", service)
+        Options::ChainWatchRegistry.register(index_key, service)
+      rescue StandardError => e
+        Rails.logger.warn("[Bootstrap] ChainWatchService registration failed for #{index_key}: #{e.message}")
+      end
     end
   end
 end

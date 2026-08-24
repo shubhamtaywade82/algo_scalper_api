@@ -5,9 +5,12 @@ module Risk
     # Rule that triggers an exit based on a specific time of day.
     # Matches logic from UnifiedExitChecker#time_based_exit?
     class TimeBasedExitRule < BaseRule
+      PRIORITY = 40
+
       def evaluate(context)
         tracker = context.tracker
         return skip_result unless tracker
+        return skip_result unless context.active?
 
         # Delegate to legacy method for parity and spec compatibility
         if Live::UnifiedExitChecker.time_based_exit?(tracker)

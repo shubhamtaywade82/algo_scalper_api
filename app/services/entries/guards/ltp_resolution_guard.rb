@@ -32,7 +32,7 @@ module Entries
           end
 
           unless fresh_tick?(tick, max_age_seconds)
-            age_ms = (tick_age_seconds(tick) * 1000.0).round
+            age_ms = tick_age_ms(tick)
             Rails.logger.warn(
               "[EntryGuard] BLOCKED #{index_cfg[:key]} #{pick[:symbol]}: fresh_ltp_unavailable " \
               "(segment=#{segment}, security_id=#{security_id}, ltp=#{ltp.inspect}, tick_age_ms=#{age_ms}, max_age_s=#{max_age_seconds})"
@@ -40,7 +40,7 @@ module Entries
             return { blocked: "fresh_ltp_unavailable for #{index_cfg[:key]}: #{pick[:symbol]}" }
           end
 
-          age_ms = (tick_age_seconds(tick) * 1000.0).round
+          age_ms = tick_age_ms(tick)
           Rails.logger.info(
             "[EntryGuard] Fresh entry LTP selected #{index_cfg[:key]} #{pick[:symbol]}: " \
             "security_id=#{security_id}, ltp=#{tick.ltp.to_f.round(2)}, source=#{source}, tick_age_ms=#{age_ms}"
@@ -80,6 +80,13 @@ module Entries
           (Time.current - tick_time).to_f
         rescue StandardError
           Float::INFINITY
+        end
+
+        def tick_age_ms(tick)
+          age_seconds = tick_age_seconds(tick)
+          return -1 unless age_seconds.finite?
+
+          (age_seconds * 1000.0).round
         end
       end
     end

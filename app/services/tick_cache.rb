@@ -76,8 +76,11 @@ class TickCache
 
     return nil if redis_tick.empty?
 
-    # Hydrate memory so next calls (within MEMORY_TTL) skip Redis
-    redis_tick[:cached_at] = Time.current
+    # Preserve the real last-update time carried in Redis (stored as a Time#to_s string on
+    # every genuine tick write) instead of stamping "now" — stamping now would make a residual
+    # tick from hours ago (Redis TTL is 24h) look freshly arrived to callers that check
+    # staleness, such as EntryGuard's entry-LTP resolution.
+    redis_tick[:cached_at] = parse_cached_at(redis_tick[:cached_at]) || Time.current
     @map[key] = redis_tick
 
     redis_tick
@@ -156,5 +159,13 @@ class TickCache
 
   def cache_key(seg, sid)
     "#{seg}:#{sid}"
+  end
+
+  def parse_cached_at(value)
+    return value if value.is_a?(Time)
+
+    Time.zone.parse(value.to_s)
+  rescue StandardError
+    nil
   end
 end

@@ -43,7 +43,7 @@ RSpec.describe Options::ChainWatchService do
   describe '#merge_tick_data' do
     it 'fills LTP/OI/bid/ask from TickQuery and clears feed_stale when a tick exists' do
       legs = [{ strike: 24_800.0, type: 'CE', security_id: '24800CE', segment: 'NSE_FNO', feed_stale: true, ltp: nil, oi: nil, bid: nil, ask: nil }]
-      tick = MarketTick.new(segment: 'NSE_FNO', security_id: '24800CE', ltp: 120.5, oi: 45_000, oi_change: 1200, bid: 120.0, ask: 121.0, timestamp: Time.current)
+      tick = MarketTick.new(segment: 'NSE_FNO', security_id: '24800CE', ltp: 120.5, oi: 45_000, oi_change: 1200, bid: 120.0, ask: 121.0, timestamp: Time.current, volume: 10_000, prev_close: 110.0)
       allow(Live::TickQuery).to receive(:for_security).with(segment: 'NSE_FNO', security_id: '24800CE').and_return(tick)
 
       service = described_class.new(index_key: 'NIFTY')

@@ -23,7 +23,7 @@ RSpec.describe PositionTracker do
 
     before do
       mock_redis = instance_double(Redis, set: true, get: nil, del: true, hset: true, ttl: 3600, expire: true,
-                                          hgetall: {})
+                                          sadd: true, incrbyfloat: 0.0, hdel: true, hgetall: {})
       allow(Redis).to receive(:new).and_return(mock_redis)
       redis_cache.instance_variable_set(:@redis, mock_redis)
 

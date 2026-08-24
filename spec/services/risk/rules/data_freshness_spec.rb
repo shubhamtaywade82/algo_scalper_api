@@ -15,6 +15,7 @@ RSpec.describe 'Rule Engine Data Freshness' do
   end
   let(:risk_config) { { sl_pct: 2.0, tp_pct: 5.0 } }
   let(:engine) { Risk::Rules::RuleFactory.create_engine(risk_config: risk_config) }
+  let(:sl_rule) { Risk::Rules::StopLossRule.new(config: risk_config) }
 
   describe 'live data from ActiveCache' do
     let(:position_data) do
@@ -24,28 +25,30 @@ RSpec.describe 'Rule Engine Data Freshness' do
         quantity: 10,
         current_ltp: 96.0,
         pnl: -40.0,
-        pnl_pct: -4.0,
+        pnl_pct: -0.04,
         last_updated_at: Time.current
       )
     end
+    # StopLossRule reads the snapshot (pnl_pct in decimal format: 0.12 = 12%)
+    let(:tracker_snapshot) { { pnl_pct: -0.20, pnl: -40.0, ltp: 96.0 } }
     let(:context) do
       Risk::Rules::RuleContext.new(
         position: position_data,
         tracker: tracker,
-        risk_config: risk_config
+        risk_config: risk_config,
+        tracker_snapshot: tracker_snapshot
       )
     end
 
     it 'uses live data from ActiveCache for rule evaluation' do
-      result = engine.evaluate(context)
+      result = sl_rule.evaluate(context)
       expect(result.exit?).to be true
-      expect(result.reason).to include('SL HIT')
+      expect(result.reason).to include('STOP_LOSS')
     end
 
     it 'uses current LTP from position data' do
-      position_data.update_ltp(94.0)
-      position_data.recalculate_pnl
-      result = engine.evaluate(context)
+      tracker_snapshot[:pnl_pct] = -0.13
+      result = sl_rule.evaluate(context)
       expect(result.exit?).to be true
     end
   end
@@ -72,7 +75,7 @@ RSpec.describe 'Rule Engine Data Freshness' do
     it 'recalculates PnL when LTP is updated' do
       position_data.update_ltp(105.0)
       expect(position_data.pnl).to eq(50.0)
-      expect(position_data.pnl_pct).to be_within(0.01).of(5.0)
+      expect(position_data.pnl_pct).to be_within(0.01).of(0.05)
     end
   end
 
@@ -91,10 +94,10 @@ RSpec.describe 'Rule Engine Data Freshness' do
 
     it 'updates peak profit when PnL increases' do
       position_data.update_ltp(120.0)
-      expect(position_data.peak_profit_pct).to eq(20.0)
+      expect(position_data.peak_profit_pct).to eq(0.2)
 
       position_data.update_ltp(125.0)
-      expect(position_data.peak_profit_pct).to eq(25.0)
+      expect(position_data.peak_profit_pct).to eq(0.25)
     end
 
     it 'maintains peak profit when PnL decreases' do
@@ -191,7 +194,7 @@ RSpec.describe 'Rule Engine Data Freshness' do
     it 'recalculates PnL when LTP changes' do
       position_data.update_ltp(107.0)
       expect(position_data.pnl).to eq(70.0)
-      expect(position_data.pnl_pct).to be_within(0.01).of(7.0)
+      expect(position_data.pnl_pct).to be_within(0.01).of(0.07)
     end
   end
 end

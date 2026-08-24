@@ -109,6 +109,47 @@ module Options
     end
     # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
+    # Select selling strikes for credit spreads (Bull Put or Bear Call)
+    # @param index_key [String, Symbol]
+    # @param strategy_type [Symbol] :bull_put_spread or :bear_call_spread
+    # @param expiry [String, Date, nil]
+    # @param spread_width [Integer, nil]
+    # @return [Hash, nil] { short_leg:, long_leg:, spread_width: }
+    # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+    def select_selling_strikes(index_key:, strategy_type:, expiry: nil, spread_width: nil)
+      index_key = normalize_index(index_key)
+      rules = load_rules_for(index_key)
+      spot = get_spot_price(index_key)
+      return nil unless spot&.positive?
+
+      atm_strike = rules.atm(spot)
+      increment = get_strike_increment(atm_strike, rules)
+      width = spread_width || increment
+
+      direction = strategy_type.to_sym == :bull_put_spread ? :bearish : :bullish
+      short_strike, long_strike = calculate_spread_strikes(atm_strike, increment, width, strategy_type)
+
+      analyzer = DerivativeChainAnalyzer.new(index_key: index_key, expiry: expiry)
+      candidates = analyzer.select_candidates(limit: 20, direction: direction)
+      return nil if candidates.empty?
+
+      short_candidate = candidates.find { |c| (c[:strike].to_f - short_strike.to_f).abs < 0.01 }
+      long_candidate = candidates.find { |c| (c[:strike].to_f - long_strike.to_f).abs < 0.01 }
+      return nil unless short_candidate && long_candidate
+
+      {
+        short_leg: short_candidate.merge(action: 'sell'),
+        long_leg: long_candidate.merge(action: 'buy'),
+        spread_width: width,
+        atm_strike: atm_strike,
+        spot: spot
+      }
+    rescue StandardError => e
+      Rails.logger.error("[Options::StrikeSelector] select_selling_strikes failed: #{e.class} - #{e.message}")
+      nil
+    end
+    # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
+
     private
 
     def normalize_index(index)
@@ -164,6 +205,17 @@ module Options
       end
 
       strikes
+    end
+
+    def calculate_spread_strikes(atm_strike, increment, width, strategy_type)
+      if strategy_type.to_sym == :bull_put_spread
+        short_strike = atm_strike - increment
+        long_strike = short_strike - width
+      else
+        short_strike = atm_strike + increment
+        long_strike = short_strike + width
+      end
+      [short_strike, long_strike]
     end
 
     # Get strike increment for index (e.g., 50 for NIFTY, 100 for BANKNIFTY)

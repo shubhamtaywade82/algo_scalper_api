@@ -5,16 +5,22 @@ module Services
     class TechnicalAnalysisAgent
       # Handles learning and adaptation from errors
       module Learning
+        attr_accessor :redis
+
+        def redis_url
+          ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0')
+        end
+
         def load_learned_patterns
           # Load learned patterns from Redis
           # Format: [{ keywords: ['nifty', 'rsi'], error_type: 'validation', error_count: 2, solution: '...' }, ...]
           patterns = []
 
           begin
-            redis = Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
-            stored = redis.get('ai_agent:learned_patterns')
+            redis_client = @redis || Redis.new(url: redis_url)
+            stored = redis_client.get('ai_agent:learned_patterns')
             patterns = JSON.parse(stored) if stored.present?
-            redis.close
+            redis_client.close
           rescue StandardError => e
             Rails.logger.warn("[TechnicalAnalysisAgent] Failed to load learned patterns: #{e.message}")
           end
@@ -27,10 +33,10 @@ module Services
           return if @learned_patterns.empty?
 
           begin
-            redis = Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
-            redis.set('ai_agent:learned_patterns', @learned_patterns.to_json)
-            redis.expire('ai_agent:learned_patterns', 30.days.to_i) # Keep for 30 days
-            redis.close
+            redis_client = Redis.new(url: redis_url)
+            redis_client.set('ai_agent:learned_patterns', @learned_patterns.to_json)
+            redis_client.expire('ai_agent:learned_patterns', 30.days.to_i) # Keep for 30 days
+            redis_client.close
           rescue StandardError => e
             Rails.logger.warn("[TechnicalAnalysisAgent] Failed to save learned patterns: #{e.message}")
           end

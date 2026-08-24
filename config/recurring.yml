@@ -102,7 +102,7 @@ development:
     schedule: at 3:40pm every day
     queue_name: background
     priority: 15
-    description: "Section 9 data quality KPIs: candle gaps/alignment, instrument mapping accuracy, expired-instrument catalog check"
+    description: "Section 9 data quality KPIs: candle gaps/alignment, instrument mapping accuracy, expired-instrument catalog check, fill price vs real OHLC reconciliation"
 
 production:
   instruments_import:
@@ -208,4 +208,4 @@ production:
     schedule: at 3:40pm every weekday
     queue_name: background
     priority: 15
-    description: "Section 9 data quality KPIs: candle gaps/alignment, instrument mapping accuracy, expired-instrument catalog check"
+    description: "Section 9 data quality KPIs: candle gaps/alignment, instrument mapping accuracy, expired-instrument catalog check, fill price vs real OHLC reconciliation"

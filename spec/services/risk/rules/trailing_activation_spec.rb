@@ -190,7 +190,7 @@ RSpec.describe 'Trailing Activation Percentage Rule' do
     end
   end
 
-  describe 'TrailingStopRule with activation threshold' do
+  describe 'TrailingStopRule (snapshot-driven)' do
     let(:position_data) do
       Positions::PositionData.new(
         tracker_id: tracker.id,
@@ -198,68 +198,59 @@ RSpec.describe 'Trailing Activation Percentage Rule' do
         quantity: 75,
         current_ltp: 110.0,
         pnl: 750.0,
-        pnl_pct: 10.0,
+        pnl_pct: 0.10,
         high_water_mark: 1200.0
       )
     end
+    # TrailingStopRule delegates to UnifiedExitChecker, which reads the
+    # snapshot (pnl_pct/hwm in decimal format: 0.10 = 10%)
+    let(:tracker_snapshot) { { pnl_pct: 0.10, hwm_pnl: 1200.0, pnl: 750.0, ltp: 110.0 } }
     let(:risk_config) do
       {
         trailing: {
-          activation_pct: 10.0
+          activation_pct: 0.10
         },
-        exit_drop_pct: 10.0
+        exit_drop_pct: 0.10
       }
     end
     let(:context) do
       Risk::Rules::RuleContext.new(
         position: position_data,
         tracker: tracker,
-        risk_config: risk_config
+        risk_config: risk_config,
+        tracker_snapshot: tracker_snapshot
       )
     end
     let(:rule) { Risk::Rules::TrailingStopRule.new(config: risk_config) }
 
-    context 'when trailing is activated (pnl_pct >= 10%)' do
-      it 'evaluates trailing stop rule' do
-        # PnL: 750, HWM: 1200, Drop: (1200-750)/1200 = 37.5% >= 10%
-        result = rule.evaluate(context)
-        expect(result.exit?).to be true
-        expect(result.reason).to include('TRAILING STOP')
-      end
+    before do
+      allow(Live::UnifiedExitChecker).to receive(:evaluate_underlying_context).and_return({ action: :none, multiplier: 1.0 })
     end
 
-    context 'when trailing is not activated (pnl_pct < 10%)' do
-      before do
-        position_data.pnl_pct = 5.0
-        position_data.pnl = 375.0
-      end
-
-      it 'skips evaluation' do
-        result = rule.evaluate(context)
-        expect(result.skip?).to be true
-      end
+    it 'exits when trailing stop is hit' do
+      allow(Live::UnifiedExitChecker).to receive(:trailing_stop_hit?).and_return(true)
+      result = rule.evaluate(context)
+      expect(result.exit?).to be true
+      expect(result.reason).to include('TRAILING_STOP')
     end
 
-    context 'with 6% activation threshold' do
-      before do
-        risk_config[:trailing][:activation_pct] = 6.0
-      end
+    it 'exits when underlying context breaks' do
+      allow(Live::UnifiedExitChecker).to receive(:evaluate_underlying_context).and_return({ action: :exit, reason: 'STRUCTURE_BREAK' })
+      result = rule.evaluate(context)
+      expect(result.exit?).to be true
+      expect(result.reason).to eq('STRUCTURE_BREAK')
+    end
 
-      it 'activates at 6% profit' do
-        position_data.pnl_pct = 6.0
-        position_data.pnl = 450.0
-        position_data.high_water_mark = 600.0
+    it 'takes no action when neither exit triggers' do
+      allow(Live::UnifiedExitChecker).to receive(:trailing_stop_hit?).and_return(false)
+      result = rule.evaluate(context)
+      expect(result.no_action?).to be true
+    end
 
-        result = rule.evaluate(context)
-        # Should evaluate (not skip) since 6% >= 6%
-        expect(result.skip?).to be false
-      end
-
-      it 'does not activate at 5.99% profit' do
-        position_data.pnl_pct = 5.99
-        result = rule.evaluate(context)
-        expect(result.skip?).to be true
-      end
+    it 'skips when position is not active' do
+      tracker.update(status: 'exited')
+      result = rule.evaluate(context)
+      expect(result.skip?).to be true
     end
   end
 

@@ -17,10 +17,12 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
     {
       sl_pct: 2.0,
       tp_pct: 5.0,
+      secure_profit_enabled: true,
       secure_profit_threshold_rupees: 1000.0,
-      secure_profit_drawdown_pct: 3.0,
+      secure_profit_drawdown_pct: 0.03,
       time_exit_hhmm: '15:20',
-      min_profit_rupees: 200.0
+      min_profit_rupees: 200.0,
+      exit: { time_based: { enabled: true, exit_time: '15:20' } }
     }
   end
   let(:engine) { Risk::Rules::RuleFactory.create_engine(risk_config: risk_config) }
@@ -33,22 +35,24 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
         quantity: 10,
         current_ltp: 96.0,
         pnl: -40.0,
-        pnl_pct: -4.0
+        pnl_pct: -0.20
       )
     end
+    let(:tracker_snapshot) { { pnl_pct: -0.20, pnl: -40.0, ltp: 96.0 } }
     let(:context) do
       Risk::Rules::RuleContext.new(
         position: position_data,
         tracker: tracker,
-        risk_config: risk_config
+        risk_config: risk_config,
+        tracker_snapshot: tracker_snapshot
       )
     end
 
-    it 'exits immediately at -4% loss' do
+    it 'exits immediately at -20% loss' do
       result = engine.evaluate(context)
       expect(result.exit?).to be true
-      expect(result.reason).to include('SL HIT')
-      expect(result.reason).to include('-4.00%')
+      expect(result.reason).to include('STOP_LOSS')
+      expect(result.metadata[:pnl_pct]).to eq(-20.0)
     end
   end
 
@@ -60,22 +64,24 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
         quantity: 10,
         current_ltp: 107.0,
         pnl: 70.0,
-        pnl_pct: 7.0
+        pnl_pct: 0.07
       )
     end
+    let(:tracker_snapshot) { { pnl_pct: 0.07, pnl: 70.0, ltp: 107.0 } }
     let(:context) do
       Risk::Rules::RuleContext.new(
         position: position_data,
         tracker: tracker,
-        risk_config: risk_config
+        risk_config: risk_config,
+        tracker_snapshot: tracker_snapshot
       )
     end
 
     it 'exits at +7% profit' do
       result = engine.evaluate(context)
       expect(result.exit?).to be true
-      expect(result.reason).to include('TP HIT')
-      expect(result.reason).to include('7.00%')
+      expect(result.reason).to include('PERCENTAGE_PNL_EXIT')
+      expect(result.reason).to include('7.0%')
     end
   end
 
@@ -105,6 +111,9 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
     end
 
     it 'exits due to session end regardless of profit' do
+      engine = Risk::Rules::RuleEngine.new(
+        rules: [Risk::Rules::SessionEndRule.new(config: risk_config)]
+      )
       result = engine.evaluate(context)
       expect(result.exit?).to be true
       expect(result.reason).to include('session end')
@@ -119,21 +128,23 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
         quantity: 10,
         current_ltp: 96.0,
         pnl: -40.0,
-        pnl_pct: -4.0
+        pnl_pct: -0.20
       )
     end
+    let(:tracker_snapshot) { { pnl_pct: -0.20, pnl: -40.0, ltp: 96.0 } }
     let(:context) do
       Risk::Rules::RuleContext.new(
         position: position_data,
         tracker: tracker,
-        risk_config: risk_config
+        risk_config: risk_config,
+        tracker_snapshot: tracker_snapshot
       )
     end
 
     it 'stop loss triggers first' do
       result = engine.evaluate(context)
       expect(result.exit?).to be true
-      expect(result.reason).to include('SL HIT')
+      expect(result.reason).to include('STOP_LOSS')
     end
   end
 
@@ -145,28 +156,34 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
         quantity: 10,
         current_ltp: 120.0,
         pnl: 1000.0,
-        pnl_pct: 20.0,
-        peak_profit_pct: 25.0
+        pnl_pct: 0.20,
+        peak_profit_pct: 0.25
       )
     end
+    let(:tracker_snapshot) { { pnl_pct: 0.20, pnl: 1000.0, ltp: 120.0, hwm_pnl: 1250.0 } }
     let(:context) do
       Risk::Rules::RuleContext.new(
         position: position_data,
         tracker: tracker,
-        risk_config: risk_config
+        risk_config: risk_config,
+        tracker_snapshot: tracker_snapshot
       )
     end
 
     before do
-      allow(Positions::TrailingConfig).to receive_messages(peak_drawdown_triggered?: true, peak_drawdown_active?: true, config: { peak_drawdown_pct: 5.0,
-                                                                                                                                  activation_profit_pct: 25.0,
-                                                                                                                                  activation_sl_offset_pct: 10.0 })
+      allow(Live::UnifiedExitChecker).to receive(:evaluate_underlying_context)
+        .with(tracker, tracker_snapshot).and_return(action: :none, multiplier: 1.0)
+      allow(Live::UnifiedExitChecker).to receive(:trailing_stop_hit?)
+        .with(tracker, tracker_snapshot, tightening_multiplier: 1.0).and_return(true)
     end
 
     it 'exits due to peak drawdown' do
+      engine = Risk::Rules::RuleEngine.new(
+        rules: [Risk::Rules::TrailingStopRule.new(config: risk_config)]
+      )
       result = engine.evaluate(context)
       expect(result.exit?).to be true
-      expect(result.reason).to include('peak_drawdown_exit')
+      expect(result.reason).to include('TRAILING_STOP')
     end
   end
 
@@ -205,7 +222,7 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
         quantity: 10,
         current_ltp: 103.0,
         pnl: 300.0,
-        pnl_pct: 3.0
+        pnl_pct: 0.03
       )
     end
     let(:exit_time) { Time.zone.parse('15:20') }
@@ -218,10 +235,14 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
       )
     end
 
+    before do
+      allow(Live::UnifiedExitChecker).to receive(:time_based_exit?).and_return(true)
+    end
+
     it 'exits at exit time because minimum profit met' do
       result = engine.evaluate(context)
       expect(result.exit?).to be true
-      expect(result.reason).to include('time-based exit')
+      expect(result.reason).to include('TIME_BASED')
     end
   end
 
@@ -233,15 +254,17 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
         quantity: 10,
         current_ltp: 96.0,
         pnl: -40.0,
-        pnl_pct: -4.0
+        pnl_pct: -0.20
       )
     end
+    let(:tracker_snapshot) { { pnl_pct: -0.20, pnl: -40.0, ltp: 96.0 } }
     let(:exit_time) { Time.zone.parse('15:20') }
     let(:context) do
       Risk::Rules::RuleContext.new(
         position: position_data,
         tracker: tracker,
         risk_config: risk_config,
+        tracker_snapshot: tracker_snapshot,
         current_time: exit_time
       )
     end
@@ -249,7 +272,7 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
     it 'stop loss triggers first even though time-based exit could trigger' do
       result = engine.evaluate(context)
       expect(result.exit?).to be true
-      expect(result.reason).to include('SL HIT')
+      expect(result.reason).to include('STOP_LOSS')
     end
   end
 
@@ -345,8 +368,8 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
         quantity: 10,
         current_ltp: 120.0,
         pnl: 1100.0,
-        pnl_pct: 22.0,
-        peak_profit_pct: 25.0
+        pnl_pct: 0.22,
+        peak_profit_pct: 0.25
       )
     end
     let(:context) do

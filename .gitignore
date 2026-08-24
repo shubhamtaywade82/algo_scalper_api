@@ -27,3 +27,4 @@ dashboard/out/
 # Graphify codebase index (regenerated locally, not needed in git)
 graphify-out/
 .worktrees/
+.railsforge

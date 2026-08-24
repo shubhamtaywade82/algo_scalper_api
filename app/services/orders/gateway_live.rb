@@ -86,6 +86,15 @@ module Orders
       raise
     end
 
+    # PRD §32: Modify outstanding order. No blind retry per §42.
+    def modify_order(order_id, params = {})
+      order = DhanHQ::Models::Order.find(order_id)
+      order.modify!(params)
+    rescue StandardError => e
+      Rails.logger.error("[GatewayLive] modify_order failed for #{order_id}: #{e.class} - #{e.message}")
+      raise
+    end
+
     # Exit by segment/security_id (used when no tracker is available).
     # Prefer exit_market(tracker) when a PositionTracker exists.
     def flat_position(segment:, security_id:)

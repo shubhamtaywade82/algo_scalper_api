@@ -22,6 +22,16 @@ module Orders
       raise NotImplementedError, "#{self.class} must implement cancel_order"
     end
 
+    # PRD §32: modify outstanding order (price, qty, type)
+    def modify_order(order_id, params = {})
+      raise NotImplementedError, "#{self.class} must implement modify_order"
+    end
+
+    # PRD §32: close entire position for an instrument
+    def close_position(position)
+      exit_market(position)
+    end
+
     # optional
     def on_tick(segment:, security_id:, ltp:)
       nil

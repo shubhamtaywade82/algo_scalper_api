@@ -170,6 +170,11 @@ class AlgoConfig
       end
 
       profile = YAML.load_file(path)
+    rescue Psych::SyntaxError, Errno::ENOENT, Errno::EACCES => e
+      Rails.logger.error("[AlgoConfig] Failed to load profile #{mode}: #{e.class} - #{e.message}")
+      config[:run_mode] = mode
+      config
+    else
       profile = profile.deep_symbolize_keys if profile.is_a?(Hash)
       unless profile.is_a?(Hash)
         config[:run_mode] = mode

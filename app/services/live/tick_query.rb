@@ -24,7 +24,11 @@ module Live
           segment: segment,
           security_id: security_id,
           ltp: BigDecimal(raw_ltp.to_s),
-          timestamp: tick_data&.dig(:timestamp) || Time.current,
+          # Raw WS ticks never carry a :timestamp key, so this used to always fall through to
+          # Time.current here — making every tick look freshly arrived to staleness checks
+          # regardless of true age. :cached_at is the real last-write time (set by TickCache#put
+          # on every genuine tick, preserved through Redis).
+          timestamp: tick_data&.dig(:timestamp) || tick_data&.dig(:cached_at) || Time.current,
           oi: tick_data&.dig(:oi).to_i,
           oi_change: tick_data&.dig(:oi_change).to_i,
           bid: tick_data&.dig(:bid)&.to_f,

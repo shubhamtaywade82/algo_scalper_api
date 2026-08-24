@@ -24,7 +24,10 @@ module Entries
             series_15m: instrument.candle_series(interval: '15'),
             config: cfg
           ).call
-          metadata = (context[:entry_metadata] ||= {})
+          metadata = context[:entry_metadata]
+          if metadata.nil? || metadata.frozen?
+            metadata = context[:entry_metadata] = (metadata ? metadata.dup : {})
+          end
           metadata[:chop_score] = result[:score]
           metadata[:chop_action] = result[:action].to_s
 

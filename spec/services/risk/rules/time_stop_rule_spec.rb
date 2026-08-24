@@ -12,19 +12,21 @@ RSpec.describe Risk::Rules::TimeStopRule do
       entry_path: 'scalp',
       meta: {},
       index_key: 'NIFTY',
-      watchable: double('watchable', expiry_date: Date.current),
-      underlying_instrument: double('instrument', symbol_name: 'NIFTY')
+      instrument: nil,
+      watchable: nil
     )
   end
 
+  let(:position) { OpenStruct.new(pnl: 0.0, pnl_pct: 0.0) }
+
   let(:context) do
     Risk::Rules::RuleContext.new(
-      position: OpenStruct.new(pnl_pct: 0.05),
+      position: position,
       tracker: tracker,
       risk_config: {
         time_stop: {
           enabled: true,
-          scalp: { max_minutes: 8 },
+          scalp: { max_minutes: 8, max_candles: 8 },
           trend: { NIFTY: 20 }
         }
       }
@@ -34,68 +36,77 @@ RSpec.describe Risk::Rules::TimeStopRule do
   let(:rule) { described_class.new(config: {}) }
 
   describe '#evaluate' do
-    context 'when 0-DTE scalp trade' do
-      it 'triggers time stop when elapsed time exceeds dynamic DTE-scaled limit (minimum floor)' do
-        # 0-DTE means scale_factor = 0, so allowed is minimum floor (3 minutes / 180 seconds)
-        # tracker is created 10 minutes ago, so elapsed (600s) > allowed (180s)
+    context 'when scalp trade exceeds time limit' do
+      it 'triggers a time stop exit' do
         result = rule.evaluate(context)
         expect(result).to be_exit
-        expect(result.reason).to eq('TIME_STOP')
-        expect(result.metadata[:allowed_seconds]).to eq(180.0)
+        expect(result.reason).to include('TIME_STOP')
+        expect(result.metadata[:trade_type]).to eq(:scalp)
+        expect(result.metadata[:time_limit]).to eq(8.0)
       end
+    end
 
-      it 'does not exit if elapsed time is below the floor' do
+    context 'when scalp trade is within time limit' do
+      it 'does not exit' do
         allow(tracker).to receive(:created_at).and_return(1.minute.ago)
         result = rule.evaluate(context)
         expect(result).to be_no_action
       end
     end
 
-    context 'when weekly DTE (7 days) trend trade' do
+    context 'when trend trade is within time limit' do
       before do
         allow(tracker).to receive_messages(
           entry_strategy: 'trend_buying',
-          entry_path: 'trend',
-          watchable: double('watchable', expiry_date: 7.days.from_now.to_date)
+          entry_path: 'trend'
         )
       end
 
-      it 'scalesallowed time stop to exactly the base limit (20 minutes)' do
-        # 7-DTE means scale_factor = 7 / 7 = 1.0, allowed = 20 minutes (1200 seconds)
-        # tracker is 10 minutes ago (600s), so elapsed (600s) < allowed (1200s)
+      it 'does not exit' do
         result = rule.evaluate(context)
         expect(result).to be_no_action
       end
 
-      it 'exits when elapsed time exceeds scaled limit' do
+      it 'triggers a time stop exit when limit is exceeded' do
         allow(tracker).to receive(:created_at).and_return(25.minutes.ago)
         result = rule.evaluate(context)
         expect(result).to be_exit
-        expect(result.reason).to eq('TIME_STOP')
-        expect(result.metadata[:allowed_seconds]).to eq(1200.0)
+        expect(result.reason).to include('TIME_STOP')
+        expect(result.metadata[:trade_type]).to eq(:trend)
+        expect(result.metadata[:time_limit]).to eq(20)
       end
     end
 
-    context 'when watchable expiry_date is blank/invalid' do
+    context 'when trade is strongly in profit' do
       before do
         allow(tracker).to receive_messages(
           entry_strategy: 'trend_buying',
           entry_path: 'trend',
-          watchable: double('watchable', expiry_date: Date.new(1))
+          created_at: 25.minutes.ago
+        )
+        allow(position).to receive(:pnl_pct).and_return(0.06)
+      end
+
+      it 'bypasses the time stop to let winners run' do
+        result = rule.evaluate(context)
+        expect(result).to be_skip
+      end
+    end
+
+    context 'when risk config has no time_stop section' do
+      let(:context) do
+        Risk::Rules::RuleContext.new(
+          position: position,
+          tracker: tracker,
+          risk_config: {}
         )
       end
 
-      it 'falls back to 7 DTE and uses base limit' do
-        # tracker is 10 minutes ago (600s), fallback 7-DTE => scale=1 => allowed=1200s
-        result = rule.evaluate(context)
-        expect(result).to be_no_action
-
-        # Force exceed to confirm fallback DTE produced the expected allowed window
-        allow(tracker).to receive(:created_at).and_return(25.minutes.ago)
+      it 'falls back to default limits' do
+        allow(tracker).to receive(:created_at).and_return(20.minutes.ago)
         result = rule.evaluate(context)
         expect(result).to be_exit
-        expect(result.reason).to eq('TIME_STOP')
-        expect(result.metadata[:allowed_seconds]).to eq(1200.0)
+        expect(result.metadata[:time_limit]).to eq(15.0)
       end
     end
   end
