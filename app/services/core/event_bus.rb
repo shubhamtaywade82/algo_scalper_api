@@ -32,7 +32,11 @@ module Core
       strategy_signal: :strategy_signal,
       strategy_error: :strategy_error,
       strategy_status_change: :strategy_status_change,
-      pnl_update: :pnl_update
+      pnl_update: :pnl_update,
+      # Ai::Agents::* (advisor-only, see app/services/ai/agents/) — observational
+      # events only, no subscriber here is permitted to act with trading authority.
+      regime_change: :regime_change,
+      trade_lesson: :trade_lesson
     }.freeze
 
     def initialize

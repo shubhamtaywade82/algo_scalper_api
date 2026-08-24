@@ -218,41 +218,5 @@ module Orders
 
       nil
     end
-
-    def normalize_exit_response(order, client_order_id:)
-      if already_closed_or_duplicate?(order)
-        return {
-          success: true,
-          status: :already_closed,
-          order_id: extract_order_id(order),
-          client_order_id: client_order_id
-        }
-      end
-
-      return { success: true, status: :accepted, order_id: extract_order_id(order), client_order_id: client_order_id } if order.present?
-
-      { success: false, status: :failed, error: 'exit failed', client_order_id: client_order_id }
-    end
-
-    def already_closed_or_duplicate?(order)
-      # DhanHQ payloads observed in this codebase use error/message text like
-      # 'position not found' and 'duplicate'; re-verify these tokens on broker API changes.
-      return false unless order.is_a?(Hash)
-
-      code = (order[:error_code] || order['error_code']).to_s.downcase
-      message = (order[:message] || order['message'] || order[:error] || order['error']).to_s.downcase
-
-      [code, message].any? do |value|
-        value.include?('already') || value.include?('closed') ||
-          value.include?('position not found') || value.include?('duplicate')
-      end
-    end
-
-    def extract_order_id(order)
-      return order.order_id if order.respond_to?(:order_id)
-      return order[:order_id] || order['order_id'] if order.is_a?(Hash)
-
-      nil
-    end
   end
 end
