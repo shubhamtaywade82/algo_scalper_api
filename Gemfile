@@ -47,7 +47,7 @@ gem 'kamal', require: false
 gem 'thruster', require: false
 
 # DhanHQ Ruby client (v3 API wrapper and WebSocket feed)
-gem 'DhanHQ', '~> 3.0'
+gem 'DhanHQ', '~> 3.4'
 
 # Telegram bot for notifications
 gem 'telegram-bot-ruby', '~> 2.8'

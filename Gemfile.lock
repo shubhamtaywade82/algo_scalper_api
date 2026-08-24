@@ -1,13 +1,13 @@
 GEM
   remote: https://rubygems.org/
   specs:
-    DhanHQ (3.3.0)
+    DhanHQ (3.4.0)
       activesupport
       base64
       bindata
       concurrent-ruby
       csv
-      dry-validation
+      dry-validation (~> 1.11)
       eventmachine
       faraday (~> 2.14)
       faye-websocket
@@ -612,7 +612,7 @@ PLATFORMS
   x86_64-linux-musl
 
 DEPENDENCIES
-  DhanHQ (~> 3.0)
+  DhanHQ (~> 3.4)
   activerecord-import
   annotaterb
   bootsnap
