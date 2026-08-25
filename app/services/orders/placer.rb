@@ -99,10 +99,9 @@ module Orders
           qty
                      end
 
-        # NOTE: intentionally does not release the claim if slicing fails partway —
-        # a failure here may mean earlier slices already reached the broker, and a
-        # from-scratch resend under the same client_order_id would re-attempt them.
-        # alert_partial_slice_failure already flags that case for manual reconciliation.
+        # place_order_with_slicing releases the claim! on a clean single-slice failure
+        # (nothing reached the broker) but leaves it claimed once a slice has partially
+        # filled — see its docstring.
         place_order_with_slicing(sid: sid, qty: actual_qty, client_order_id: normalized_id) do |slice_qty, slice_coid|
           payload = {
             transaction_type: DhanHQ::Constants::TransactionType::SELL,
@@ -145,7 +144,6 @@ module Orders
           return nil
         end
 
-        nil
         place_order_with_slicing(sid: sid, qty: qty, client_order_id: normalized_id) do |slice_qty, slice_coid|
           payload = {
             transaction_type: DhanHQ::Constants::TransactionType::BUY,
@@ -205,7 +203,6 @@ module Orders
           return nil
         end
 
-        nil
         place_order_with_slicing(sid: sid, qty: qty, client_order_id: normalized_id) do |slice_qty, slice_coid|
           payload = {
             transaction_type: DhanHQ::Constants::TransactionType::SELL,
@@ -249,7 +246,6 @@ module Orders
           return nil
         end
 
-        nil
         place_order_with_slicing(sid: sid, qty: qty, client_order_id: normalized_id) do |slice_qty, slice_coid|
           payload = {
             transaction_type: DhanHQ::Constants::TransactionType::SELL,
@@ -540,41 +536,58 @@ module Orders
         "#{base}-#{digest}"
       end
 
+      # Shared by sell_market!/buy_ioc_limit!/sell_ioc_limit!/sell_limit!/buy_limit! — all
+      # of them call claim! before this and must have it released on a failed attempt, the
+      # same way buy_market!/exit_position! do via their own ensure blocks. Releases only
+      # when NO slice reached the broker (filled_qty still 0): once an earlier slice has
+      # succeeded, a from-scratch resend under the same client_order_id would re-attempt
+      # already-placed slices, so that case is intentionally left claimed for manual
+      # reconciliation (see alert_partial_slice_failure).
       def place_order_with_slicing(sid:, qty:, client_order_id:, &block)
         index_key = resolve_index_key(sid)
         slices = Slicer.slice_quantity(index_key: index_key, total_quantity: qty)
 
         if slices.size <= 1
-          return yield(qty, client_order_id)
+          result = nil
+          begin
+            result = yield(qty, client_order_id)
+          ensure
+            release_claim!(client_order_id) if result.nil?
+          end
+          return result
         end
 
         Rails.logger.info("[Orders::Placer] Slicing quantity #{qty} into #{slices.inspect} for index=#{index_key} (limit=#{Slicer.freeze_limit_for(index_key)})")
 
         last_order = nil
         filled_qty = 0
-        slices.each_with_index do |slice_qty, index|
-          slice_coid = "#{client_order_id}_#{index + 1}"
+        begin
+          slices.each_with_index do |slice_qty, index|
+            slice_coid = "#{client_order_id}_#{index + 1}"
 
-          # Sleep between slices (except first)
-          sleep(Slicer.delay_seconds) if index.positive?
+            # Sleep between slices (except first)
+            sleep(Slicer.delay_seconds) if index.positive?
 
-          last_order = yield(slice_qty, slice_coid)
+            last_order = yield(slice_qty, slice_coid)
 
-          if last_order.nil?
-            alert_partial_slice_failure(
-              client_order_id: client_order_id,
-              filled_qty: filled_qty,
-              total_qty: qty,
-              failed_slice_number: index + 1,
-              total_slices: slices.size
-            )
-            break
+            if last_order.nil?
+              alert_partial_slice_failure(
+                client_order_id: client_order_id,
+                filled_qty: filled_qty,
+                total_qty: qty,
+                failed_slice_number: index + 1,
+                total_slices: slices.size
+              )
+              break
+            end
+
+            filled_qty += slice_qty
           end
 
-          filled_qty += slice_qty
+          last_order
+        ensure
+          release_claim!(client_order_id) if last_order.nil? && filled_qty.zero?
         end
-
-        last_order
       end
 
       def alert_partial_slice_failure(client_order_id:, filled_qty:, total_qty:, failed_slice_number:, total_slices:)

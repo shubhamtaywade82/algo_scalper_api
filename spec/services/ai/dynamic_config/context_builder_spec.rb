@@ -11,7 +11,7 @@ RSpec.describe Ai::DynamicConfig::ContextBuilder do
 
   before do
     allow(IndexConfigLoader).to receive(:load_indices).and_return([index_cfg])
-    allow(Risk::CircuitBreaker.instance).to receive(:status).and_return({ tripped: false })
+    allow(Risk::CircuitBreaker.instance).to receive(:tripped?).and_return(false)
   end
 
   it 'returns nil regime/chain when no instrument is configured' do
@@ -50,5 +50,14 @@ RSpec.describe Ai::DynamicConfig::ContextBuilder do
 
     expect(result[:risk][:circuit_breaker_tripped]).to be false
     expect(result[:risk][:today_realized_pnl_rupees]).to eq(-100.0)
+  end
+
+  it 'fails closed (reports stressed) when the risk snapshot query itself errors' do
+    allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).and_return(nil)
+    allow(PositionTracker).to receive(:exited).and_raise(StandardError, 'db down')
+
+    result = described_class.call(index_key: 'NIFTY')
+
+    expect(result[:risk][:circuit_breaker_tripped]).to be true
   end
 end

@@ -649,6 +649,48 @@ RSpec.describe Orders::Placer do
       expect(second).to be_nil
       expect(DhanHQ::Models::Order).to have_received(:create!).twice # not re-attempted
     end
+
+    it 'releases the claim when sell_market! fails on a single-slice order (nothing reached the broker)' do
+      client_order_id = "RELEASE-TEST-SELL-SINGLE-#{Time.current.to_i}"
+      allow(described_class).to receive(:fetch_position_details).and_return(
+        product_type: DhanHQ::Constants::ProductType::INTRADAY,
+        net_qty: quantity,
+        exchange_segment: segment,
+        position_type: DhanHQ::Constants::PositionType::LONG
+      )
+      call_count = 0
+      allow(DhanHQ::Models::Order).to receive(:create!) do
+        call_count += 1
+        raise DhanHQ::OrderError, 'rejected' if call_count == 1
+
+        order_double
+      end
+
+      first = described_class.sell_market!(seg: segment, sid: security_id, qty: quantity, client_order_id: client_order_id)
+      expect(first).to be_nil
+
+      second = described_class.sell_market!(seg: segment, sid: security_id, qty: quantity, client_order_id: client_order_id)
+      expect(second).to eq(order_double)
+      expect(DhanHQ::Models::Order).to have_received(:create!).twice
+    end
+
+    it 'releases the claim when buy_limit! fails on a single-slice order' do
+      client_order_id = "RELEASE-TEST-BUYLIMIT-#{Time.current.to_i}"
+      call_count = 0
+      allow(DhanHQ::Models::Order).to receive(:create!) do
+        call_count += 1
+        raise DhanHQ::OrderError, 'rejected' if call_count == 1
+
+        order_double
+      end
+
+      first = described_class.buy_limit!(seg: segment, sid: security_id, qty: quantity, price: 100.0, client_order_id: client_order_id)
+      expect(first).to be_nil
+
+      second = described_class.buy_limit!(seg: segment, sid: security_id, qty: quantity, price: 100.0, client_order_id: client_order_id)
+      expect(second).to eq(order_double)
+      expect(DhanHQ::Models::Order).to have_received(:create!).twice
+    end
   end
 
   describe 'with_token_auto_heal re-raises retryable network errors (regression: GatewayLive#with_retries never saw them)' do

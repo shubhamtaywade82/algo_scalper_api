@@ -88,13 +88,15 @@ module Ai
       def risk_snapshot
         exited_today = PositionTracker.exited.where(exited_at: Time.current.beginning_of_day..).order(exited_at: :desc)
         {
-          circuit_breaker_tripped: Risk::CircuitBreaker.instance.status[:tripped],
+          circuit_breaker_tripped: Risk::CircuitBreaker.instance.tripped?,
           today_realized_pnl_rupees: exited_today.sum { |t| t.last_pnl_rupees.to_f }.round(2),
           recent_consecutive_losses: exited_today.first(5).map { |t| t.last_pnl_rupees.to_f }.take_while(&:negative?).size
         }
       rescue StandardError => e
         Rails.logger.warn("[Ai::DynamicConfig::ContextBuilder] risk_snapshot failed: #{e.message}")
-        { circuit_breaker_tripped: false, today_realized_pnl_rupees: 0.0, recent_consecutive_losses: 0 }
+        # Fail closed: an unknown risk state must read as stressed, not safe — this only
+        # feeds DynamicConfigAgent's stress gate, never a live trading decision directly.
+        { circuit_breaker_tripped: true, today_realized_pnl_rupees: 0.0, recent_consecutive_losses: 0 }
       end
 
       def current_config_slice

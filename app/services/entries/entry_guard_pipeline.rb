@@ -45,7 +45,7 @@ module Entries
         Guards::EdgeFailureGuard,
         Guards::LossStreakGuard,
         Guards::DailyLimitsGuard,
-        Guards::IndexTradeLimitGuard, # per-index max_trades_per_day from index config (NIFTY:2, BANKNIFTY:20, SENSEX:20)
+        Guards::IndexTradeLimitGuard, # per-index max_trades_per_day from index config (see config/algo.yml)
         Guards::MaxConcurrentGuard,
         Guards::GlobalMaxConcurrentGuard, # portfolio-wide cap across all indices, cheap so runs early
         Guards::EarliestEntryGuard,    # blocks entries before configured earliest_entry_time (default 09:30, volatile open)
