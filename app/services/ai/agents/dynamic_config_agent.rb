@@ -11,9 +11,13 @@ module Ai
     # (Positions::ExitConfigResolver pins config at entry). Applies only
     # while AlgoConfig.paper_trading_enabled? — going live still requires
     # the same manual flip as today, this agent does not touch that gate.
+    # While the circuit breaker is tripped or there's a recent losing streak,
+    # ResultParser enforces (in code, not just via prompt instruction) that
+    # only risk-reducing moves on risk-lever params are accepted.
     class DynamicConfigAgent < BaseAgent
       AUTHORITY_LEVEL = :level_2
       SCHEMA_PATH = Rails.root.join('config/ai_dynamic_config_schema.json')
+      CONSECUTIVE_LOSS_STRESS_THRESHOLD = 2
 
       private
 
@@ -23,7 +27,12 @@ module Ai
         raw = call_ai_generate(Ai::DynamicConfig::PromptBuilder.call(context: context))
         return no_data_result(index_key, 'ollama unavailable') unless raw
 
-        parsed = Ai::DynamicConfig::ResultParser.call(raw)
+        parsed = Ai::DynamicConfig::ResultParser.call(
+          raw,
+          index_key: index_key,
+          current_config: context[:current_config],
+          stressed: stressed?(context[:risk])
+        )
         applied = apply_patch(parsed[:proposed_patch], index_key: index_key)
 
         {
@@ -63,6 +72,12 @@ module Ai
           metadata: { index_key: index_key }
         )
         true
+      end
+
+      def stressed?(risk)
+        return false unless risk
+
+        risk[:circuit_breaker_tripped] || risk[:recent_consecutive_losses].to_i >= CONSECUTIVE_LOSS_STRESS_THRESHOLD
       end
 
       def no_data_result(index_key, reason)
