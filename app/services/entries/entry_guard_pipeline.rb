@@ -52,6 +52,7 @@ module Entries
         Guards::VixGateGuard,          # India VIX ceiling gate — no-op until market.vix_gate is configured
         Guards::StrikeCooldownGuard, # blocks re-entry of the same contract within its cooldown window
         Guards::InstrumentLookupGuard, # sets context[:instrument] — required by EPT guard
+        Guards::DynamicRegimeDirectionGuard, # blocks counter-trend entries against 15m price structure regime
         Guards::ChopScoreGuard, # blocks noisy entries when ADX/Supertrend/BB say chop
         Guards::RegimeGuard,           # blocks entries during a detected choppy regime — no-op until risk.regime_guard is configured
         Guards::MomentumGateGuard,     # requires BB breakout or strong ADX — no-op until risk.momentum_gate is configured

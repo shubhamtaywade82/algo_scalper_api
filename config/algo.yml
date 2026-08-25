@@ -48,9 +48,9 @@ dhanhq:
   enable_orders: false
 indices:
 - key: NIFTY
-  capital_alloc_pct: 0.3
+  capital_alloc_pct: 0.25
   max_same_side: 1
-  cooldown_sec: 180
+  cooldown_sec: 300
   max_concurrent_per_index: 2
   direction: bullish
   premium_band:
@@ -63,7 +63,7 @@ indices:
     strong_trend_pct: 0.01
     weak_trend_pct: 0.005
   trade_limits:
-    max_trades_per_day: 2
+    max_trades_per_day: 5
   adx_thresholds:
     primary_min_strength: 15
     confirmation_min_strength: 15
@@ -82,9 +82,9 @@ indices:
       enabled: true
       priority: 4
 - key: BANKNIFTY
-  capital_alloc_pct: 0.3
+  capital_alloc_pct: 0.2
   max_same_side: 1
-  cooldown_sec: 180
+  cooldown_sec: 300
   max_concurrent_per_index: 2
   direction: bullish
   premium_band:
@@ -100,7 +100,7 @@ indices:
     weak_trend_pct: 0.01
     min_iv_rank: 0.02
   trade_limits:
-    max_trades_per_day: 20
+    max_trades_per_day: 5
   adx_thresholds:
     primary_min_strength: 15
     confirmation_min_strength: 15
@@ -119,9 +119,9 @@ indices:
       enabled: true
       priority: 4
 - key: SENSEX
-  capital_alloc_pct: 0.3
+  capital_alloc_pct: 0.2
   max_same_side: 1
-  cooldown_sec: 180
+  cooldown_sec: 300
   max_concurrent_per_index: 2
   direction: bullish
   premium_band:
@@ -135,7 +135,7 @@ indices:
     weak_trend_pct: 0.01
     min_iv_rank: 0.02
   trade_limits:
-    max_trades_per_day: 20
+    max_trades_per_day: 5
   adx_thresholds:
     primary_min_strength: 18
     confirmation_min_strength: 18
@@ -154,13 +154,13 @@ indices:
       enabled: true
       priority: 4
 trade_limits:
-  global_max_trades_per_day: 8
-  global_max_concurrent_positions: 6
+  global_max_trades_per_day: 10
+  global_max_concurrent_positions: 3
 broker_fees:
   enabled: true
   fee_per_order: 20
 risk:
-  sl_pct: 0.12
+  sl_pct: 0.10
   tp_pct: 0.5
   per_trade_risk_pct: 0.15
   percentage_pnl_exit:
@@ -168,10 +168,10 @@ risk:
     target_pct: 0.05
   profit_floor:
     enabled: true
-    lock_pct: 0.1
-    trail_pct: 0.7
-    breakeven_at: 200
-    time_kill_minutes: 30
+    lock_pct: 0.05
+    trail_pct: 0.6
+    breakeven_at: 250
+    time_kill_minutes: 20
   rr_profit_booking:
     enabled: true
     target_rr: 2.5
@@ -260,7 +260,7 @@ risk:
     underlying_atr_collapse_threshold: 0.65
     runner_zone_momentum_check: false
   time_regimes:
-    enabled: false
+    enabled: true
     open_expansion:
       start: '09:15'
       end: '09:45'
@@ -541,7 +541,7 @@ signals:
   enable_smc_decision_alignment: true
   smc_event_store_publish: true
   enable_smc_confluence_digest: true
-  enable_smc_confluence_gating: false
+  enable_smc_confluence_gating: true
   smc_confluence_intervals:
     htf: '60'
     mtf: '15'
@@ -557,7 +557,7 @@ signals:
   enable_direction_gate: true
   permission_mode: lenient
   enable_trading_context_gate: true
-  trading_context_strictness: relaxed
+  trading_context_strictness: moderate
   enable_supertrend_signal: true
   enable_adx_filter: true
   enable_confirmation_timeframe: false

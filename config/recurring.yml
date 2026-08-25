@@ -38,6 +38,13 @@ development:
     priority: 10
     description: "SMC + AVRZ scanner for all configured indices - runs every 15 minutes (aligns with 15m MTF candles)"
 
+  ai_agents_cycle:
+    class: Ai::AgentsCycleJob
+    schedule: every 15 minutes
+    queue_name: background
+    priority: 8
+    description: "Multi-Agent AI cycle (Market Analysis, Risk Management, Strategy Selection, Calibration)"
+
   ai_technical_analysis_nifty:
     class: AiTechnicalAnalysisJob
     args: ["NIFTY"]
@@ -136,6 +143,13 @@ production:
     queue_name: default
     priority: 10
     description: "SMC + AVRZ scanner - market hours only, runs every 15 minutes (aligns with 15m MTF candles)"
+
+  ai_agents_cycle:
+    class: Ai::AgentsCycleJob
+    schedule: every 15 minutes between 9:15am and 3:30pm on weekdays
+    queue_name: background
+    priority: 8
+    description: "Multi-Agent AI cycle (Market Analysis, Risk Management, Strategy Selection, Calibration)"
 
   ai_technical_analysis_nifty:
     class: AiTechnicalAnalysisJob
