@@ -682,7 +682,6 @@ smc:
   live_service:
     loop_interval_seconds: 300
     cooldown_seconds: 300
-
 telegram:
   enabled: true
   notify_entry: true
