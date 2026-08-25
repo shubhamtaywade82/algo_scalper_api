@@ -149,9 +149,10 @@ module Ai
 
       def set_nested(hash, path, value)
         *parents, last = path
-        node = parents.each_with_object(hash) do |k, h|
-          h[k.to_s] ||= {}
-          h[k.to_s]
+        node = hash
+        parents.each do |k|
+          node[k.to_s] ||= {}
+          node = node[k.to_s]
         end
         node[last.to_s] = value
       end

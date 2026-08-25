@@ -5,13 +5,14 @@ module Ai
     # Shared scaffolding for the advisor-level agentic AI layer proposed in
     # the architecture review ("Agentic AI Integration Blueprint" §8).
     #
-    # Every agent under Ai::Agents::* is Level 1 (Advisor) only in this phase:
-    # it reads existing services/models, produces a recommendation, and logs
-    # it to AgentDecisionLog. None of them place, modify, or cancel orders,
-    # mutate AlgoConfig, or override any guard/exit rule — see AgentSupervisor
-    # for the capability boundary this is built against. Promoting an agent
-    # to Level 2 (bounded autonomous execution) is a deliberate future change,
-    # not something #run can be talked into by a caller.
+    # Every agent under Ai::Agents::* reads existing services/models, produces
+    # a recommendation, and logs it to AgentDecisionLog. Every agent is Level
+    # 1 (Advisor) — it never places, modifies, or cancels orders, mutates
+    # AlgoConfig, or overrides any guard/exit rule — EXCEPT DynamicConfigAgent,
+    # deliberately promoted to Level 2 with the single `apply_config`
+    # capability. See AgentSupervisor for the capability boundary this is
+    # built against; #run itself does not enforce it, subclasses that act
+    # must check AgentSupervisor explicitly (see DynamicConfigAgent).
     class BaseAgent
       AUTHORITY_LEVEL = :advisor
 
@@ -50,7 +51,7 @@ module Ai
       def log_decision(context:, output:, decision_type:, confidence: nil, published_event: nil, error: nil)
         AgentDecisionLog.create!(
           agent_name: self.class.agent_name,
-          authority_level: AUTHORITY_LEVEL.to_s,
+          authority_level: self.class::AUTHORITY_LEVEL.to_s,
           decision_type: decision_type.to_s,
           input_context: sanitize(context),
           output: sanitize(output),

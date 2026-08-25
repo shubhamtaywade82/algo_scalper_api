@@ -1,8 +1,17 @@
 {
   "mcpServers": {
     "woods": {
-      "command": "/home/nemesis/.rvm/gems/ruby-3.3.4/bin/woods-mcp-start",
+      "command": "woods-mcp",
       "args": ["./tmp/woods"]
+    },
+    "railsforge": {
+      "command": "node",
+      "args": [
+        "/home/nemesis/.vscode-server/extensions/shubhamtaywade.railsforge-0.1.3/dist/mcp/server.js"
+      ],
+      "env": {
+        "WORKSPACE_ROOT": "/home/nemesis/project/trading-workspace/bots/algo_scalper_api"
+      }
     }
   }
 }

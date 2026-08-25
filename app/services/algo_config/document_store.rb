@@ -155,6 +155,7 @@ class AlgoConfig
           metadata: metadata.deep_stringify_keys
         )
         AlgoConfig.reset!
+        AlgoConfig::CacheBroadcaster.publish!(source: source)
         Rails.logger.info(
           "[AlgoConfig::DocumentStore] persisted #{DOCUMENT_KEY} source=#{source} " \
           "paths=#{Array(changed_paths).join(',')}"

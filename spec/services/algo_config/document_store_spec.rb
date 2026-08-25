@@ -104,6 +104,12 @@ RSpec.describe AlgoConfig::DocumentStore do
       expect { described_class.apply_deep_merge_patch!([], source: 'test') }
         .to raise_error(ArgumentError, /must be a Hash/)
     end
+
+    it 'broadcasts a cache invalidation so other processes (e.g. the trading daemon) pick up the change' do
+      allow(AlgoConfig::CacheBroadcaster).to receive(:publish!)
+      described_class.apply_deep_merge_patch!({ 'risk' => { 'sl_pct' => 0.1 } }, source: 'test')
+      expect(AlgoConfig::CacheBroadcaster).to have_received(:publish!).with(source: 'test')
+    end
   end
 
   describe '.force_bootstrap!' do

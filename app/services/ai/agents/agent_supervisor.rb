@@ -9,12 +9,12 @@ module Ai
     # checked against, plus a status view (would back a future dashboard,
     # per the report's "AgentSupervisor" recommendation).
     #
-    # This phase hardcodes every agent to :advisor with a fixed, read-only
-    # capability set — there is deliberately no setter to promote an agent's
-    # authority level here. Wiring real promotion (Level 2+, an autonomy
-    # budget, a circuit-breaker cascade) is future work the report scopes at
-    # Phase 3+; this class exists now so that boundary has one owner instead
-    # of being reimplemented ad hoc per agent.
+    # Every agent is :advisor with a fixed, read-only capability set, EXCEPT
+    # DynamicConfigAgent, deliberately promoted to :level_2 with the single
+    # extra capability `apply_config` (see DynamicConfigAgent — it is the
+    # only class in the codebase that calls AlgoConfig::DocumentStore).
+    # There is still no generic setter to promote an agent's level; a second
+    # Level 2 agent means editing LEVEL_2_AGENT_NAMES here, not a runtime call.
     class AgentSupervisor
       include Singleton
 
@@ -24,10 +24,13 @@ module Ai
         log_decision publish_event
       ].freeze
 
-      # Never grantable in this phase, regardless of caller — see class doc.
+      LEVEL_2_CAPABILITIES = %i[apply_config].freeze
+      LEVEL_2_AGENT_NAMES = %w[dynamic_config_agent].freeze
+
+      # Never grantable to any agent, regardless of level — see class doc.
       FORBIDDEN_CAPABILITIES = %i[
         place_order cancel_order modify_order
-        modify_risk_limit trip_circuit_breaker apply_config
+        modify_risk_limit trip_circuit_breaker
       ].freeze
 
       AGENT_NAMES = %w[
@@ -37,14 +40,18 @@ module Ai
         execution_agent
         post_trade_analysis_agent
         calibration_agent
+        dynamic_config_agent
       ].freeze
 
-      def authority_level(_agent_name)
-        :advisor
+      def authority_level(agent_name)
+        LEVEL_2_AGENT_NAMES.include?(agent_name.to_s) ? :level_2 : :advisor
       end
 
-      def capability_granted?(_agent_name, capability)
-        ADVISOR_CAPABILITIES.include?(capability.to_sym)
+      def capability_granted?(agent_name, capability)
+        cap = capability.to_sym
+        return true if LEVEL_2_AGENT_NAMES.include?(agent_name.to_s) && LEVEL_2_CAPABILITIES.include?(cap)
+
+        ADVISOR_CAPABILITIES.include?(cap)
       end
 
       def capability_forbidden?(capability)

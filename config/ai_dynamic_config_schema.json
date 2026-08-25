@@ -1,0 +1,53 @@
+{
+  "type": "object",
+  "required": ["internal_reasoning", "market_assessment", "parameter_changes"],
+  "additionalProperties": false,
+  "properties": {
+    "internal_reasoning": {
+      "type": "string",
+      "description": "Brief chain-of-thought over the supplied regime/chain/risk context before proposing changes"
+    },
+    "market_assessment": {
+      "type": "object",
+      "required": ["regime", "iv_environment"],
+      "additionalProperties": false,
+      "properties": {
+        "regime": {
+          "type": "string",
+          "enum": ["bullish", "bearish", "neutral", "choppy", "volatile"]
+        },
+        "iv_environment": {
+          "type": "string",
+          "enum": ["low", "fair", "high"]
+        }
+      }
+    },
+    "parameter_changes": {
+      "type": "array",
+      "description": "Adjustments limited to the ALLOWED PARAMETERS list given in the prompt",
+      "items": {
+        "type": "object",
+        "required": ["parameter", "index_key", "current", "suggested", "reason", "confidence"],
+        "additionalProperties": false,
+        "properties": {
+          "parameter": {
+            "type": "string",
+            "description": "Exact parameter name from the ALLOWED PARAMETERS list"
+          },
+          "index_key": {
+            "type": "string",
+            "description": "NIFTY, BANKNIFTY, or SENSEX for a per-index parameter; empty string for a global parameter"
+          },
+          "current": { "type": "number" },
+          "suggested": { "type": "number" },
+          "reason": { "type": "string" },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    }
+  }
+}

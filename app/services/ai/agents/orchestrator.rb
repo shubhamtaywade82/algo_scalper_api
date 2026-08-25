@@ -30,6 +30,7 @@ module Ai
           results[:"market_analysis_#{index_key}"] = MarketAnalysisAgent.new.run(index_key: index_key)
           results[:"strategy_selection_#{index_key}"] = StrategySelectionAgent.new.run(index_key: index_key)
           results[:"calibration_#{index_key}"] = CalibrationAgent.new.run(symbol: index_key)
+          results[:"dynamic_config_#{index_key}"] = DynamicConfigAgent.new.run(index_key: index_key)
         end
 
         results
