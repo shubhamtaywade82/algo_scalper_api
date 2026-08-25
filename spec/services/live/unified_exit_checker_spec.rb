@@ -115,6 +115,85 @@ RSpec.describe Live::UnifiedExitChecker do
     end
   end
 
+  describe 'missing/stale PnL snapshot (regression: used to silently disable every hard limit)' do
+    before do
+      allow(described_class).to receive(:portfolio_floor_breach?).and_return(false)
+      allow(Rails.logger).to receive(:error)
+    end
+
+    context 'when there is no snapshot at all' do
+      before { allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(nil) }
+
+      it 'logs the blind spot instead of failing silently' do
+        described_class.check_exit_conditions(tracker)
+
+        expect(Rails.logger).to have_received(:error).with(a_string_matching(/snapshot missing/))
+      end
+
+      it 'still catches a hard stop-loss via the DB-synced fallback' do
+        allow(tracker).to receive(:current_pnl_pct).and_return(-0.15) # past the -12% default SL
+
+        result = described_class.check_exit_conditions(tracker)
+
+        expect(result[:exit]).to be true
+        expect(result[:reason]).to include('STOP_LOSS')
+        expect(result[:reason]).to include('SNAPSHOT_FALLBACK')
+      end
+
+      it 'returns nil (no exit) when the fallback PnL has not breached stop-loss' do
+        allow(tracker).to receive(:current_pnl_pct).and_return(-0.03)
+
+        expect(described_class.check_exit_conditions(tracker)).to be_nil
+      end
+
+      it 'does not evaluate the fallback for a short position' do
+        allow(tracker).to receive_messages(short_position?: true, current_pnl_pct: -0.99)
+
+        expect(described_class.check_exit_conditions(tracker)).to be_nil
+      end
+    end
+
+    context 'when a snapshot exists but is older than the staleness threshold' do
+      before do
+        stale_snapshot = { pnl_pct: -0.01, pnl: -20.0, timestamp: 30.seconds.ago.to_i }
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(stale_snapshot)
+      end
+
+      it 'logs the blind spot and falls back rather than trusting the frozen pnl_pct' do
+        allow(tracker).to receive(:current_pnl_pct).and_return(-0.20)
+
+        result = described_class.check_exit_conditions(tracker)
+
+        expect(Rails.logger).to have_received(:error).with(a_string_matching(/snapshot stale/))
+        expect(result[:exit]).to be true
+      end
+    end
+
+    describe '#snapshot_stale?' do
+      it 'is false for a recent timestamp' do
+        expect(described_class.send(:snapshot_stale?, { timestamp: 2.seconds.ago.to_i })).to be false
+      end
+
+      it 'is true past the staleness threshold' do
+        expect(described_class.send(:snapshot_stale?, { timestamp: 30.seconds.ago.to_i })).to be true
+      end
+
+      it 'is false when there is no timestamp to judge staleness by' do
+        expect(described_class.send(:snapshot_stale?, { pnl_pct: 0.0 })).to be false
+      end
+    end
+
+    it 'still fires the portfolio floor breach kill-switch even with no snapshot at all' do
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(nil)
+      allow(described_class).to receive(:portfolio_floor_breach?).and_return(true)
+
+      result = described_class.check_exit_conditions(tracker)
+
+      expect(result[:reason]).to eq('PORTFOLIO_FLOOR_BREACH')
+      expect(result[:pnl_pct]).to be_nil
+    end
+  end
+
   describe 'structure invalidation' do
     it 'triggers exit for long_pe when underlying rises above invalidation price' do
       allow(tracker).to receive(:meta).and_return({

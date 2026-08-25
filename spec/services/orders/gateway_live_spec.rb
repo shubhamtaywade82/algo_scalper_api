@@ -53,12 +53,32 @@ RSpec.describe Orders::GatewayLive do
       )
     end
 
-    it 'generates client order ID when not provided' do
+    it 'falls back to tracker.exit_coid when no client_order_id is provided' do
+      tracker.update!(exit_coid: 'AS-EXIT-FROM-TRACKER')
+
       gateway.exit_market(tracker)
 
-      expect(Orders::Placer).to have_received(:exit_position!) do |args|
-        expect(args[:client_order_id]).to match(/^AS-EXIT-#{tracker.security_id}-\d+-[a-f0-9]{4}$/)
+      expect(Orders::Placer).to have_received(:exit_position!).with(
+        seg: tracker.segment,
+        sid: tracker.security_id,
+        client_order_id: 'AS-EXIT-FROM-TRACKER'
+      )
+    end
+
+    it 'derives the same deterministic id on every call (not a fresh random one) when ' \
+       'neither client_order_id nor tracker.exit_coid is set' do
+      # Regression: the old fallback (AS-EXIT-{sid}-{timestamp}-{random}) minted a new id
+      # on every call, which defeats broker-side correlation-id dedup on a retried exit.
+      coids = []
+      allow(Orders::Placer).to receive(:exit_position!) do |**kwargs|
+        coids << kwargs[:client_order_id]
+        double('order', id: '123')
       end
+
+      3.times { gateway.exit_market(tracker) }
+
+      expect(coids).to all(match(/^AS-EXIT-[a-f0-9]{20}$/))
+      expect(coids.uniq.size).to eq(1) # same id every time for the same tracker
     end
 
     it 'returns success hash with order id when order is placed' do
@@ -83,6 +103,34 @@ RSpec.describe Orders::GatewayLive do
       result = gateway.exit_market(tracker)
 
       expect(result).to include(success: false, status: :failed, error: 'exit failed')
+    end
+  end
+
+  describe '#flat_position' do
+    it 'derives the same deterministic id (segment, security_id, day) on every call' do
+      coids = []
+      allow(Orders::Placer).to receive(:exit_position!) do |**kwargs|
+        coids << kwargs[:client_order_id]
+        double('order', id: '123')
+      end
+
+      3.times { gateway.flat_position(segment: 'NSE_FNO', security_id: '55111') }
+
+      expect(coids).to all(match(/^AS-FLAT-[a-f0-9]{20}$/))
+      expect(coids.uniq.size).to eq(1)
+    end
+
+    it 'derives a different id for a different security_id' do
+      coids = []
+      allow(Orders::Placer).to receive(:exit_position!) do |**kwargs|
+        coids << kwargs[:client_order_id]
+        double('order', id: '123')
+      end
+
+      gateway.flat_position(segment: 'NSE_FNO', security_id: '55111')
+      gateway.flat_position(segment: 'NSE_FNO', security_id: '99999')
+
+      expect(coids.uniq.size).to eq(2)
     end
   end
 

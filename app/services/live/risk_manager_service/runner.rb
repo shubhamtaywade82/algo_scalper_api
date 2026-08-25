@@ -142,6 +142,14 @@ module Live
         enforce_premium_r_stop_for(tracker, exit_engine: exit_engine)
         return if exit_requested_or_sent?(tracker)
 
+        # Risk::Rules::* checks with no hardcoded equivalent elsewhere in this chain
+        # (VIX force exit, zero-HWM false entry, green trade cap, IV collapse, structural
+        # kill switch, 0-DTE theta cliff, greeks decay, fast profit lock, secure profit).
+        # Runs before profit-management layers since several of these are "this trade's
+        # thesis is broken" kill switches, not profit optimizers. See NOVEL_RULE_CLASSES.
+        enforce_novel_rule_exits_for(tracker, exit_engine: exit_engine)
+        return if exit_requested_or_sent?(tracker)
+
         enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine)
         return if exit_requested_or_sent?(tracker)
 

@@ -33,9 +33,34 @@ RSpec.describe Risk::Rules::StructuralKillSwitchRule do
     )
     allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).and_return(index_instrument)
     allow(Live::CandleSeriesCache).to receive(:fetch).and_return(series)
+    # Config-driven kill switch defaults OFF (config/algo.yml risk.structural_kill_switch.enabled:
+    # false) — force it on here so #evaluate specs exercise the break-detection logic itself.
+    allow(AlgoConfig).to receive(:fetch).and_return(risk: { structural_kill_switch: { enabled: true } })
+  end
+
+  describe '#enabled?' do
+    it 'defaults to disabled until explicitly turned on' do
+      allow(AlgoConfig).to receive(:fetch).and_return(risk: {})
+      expect(rule.enabled?).to be false
+    end
+
+    it 'enables when risk.structural_kill_switch.enabled is true' do
+      expect(rule.enabled?).to be true # set in the top-level before block
+    end
   end
 
   describe '#evaluate' do
+    context 'when disabled (default)' do
+      let(:underlying_ltp) { 24_900.0 } # would otherwise break VWAP and exit
+
+      it 'skips even when the underlying has broken VWAP' do
+        allow(AlgoConfig).to receive(:fetch).and_return(risk: { structural_kill_switch: { enabled: false } })
+        result = rule.evaluate(context)
+
+        expect(result.skip?).to be true
+      end
+    end
+
     context 'when underlying breaks VWAP against a long call' do
       let(:underlying_ltp) { 24_900.0 } # below vwap*(1-0.002)
 

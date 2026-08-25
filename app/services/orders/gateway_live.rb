@@ -2,6 +2,7 @@
 
 require 'timeout'
 require 'net/http'
+require 'digest'
 
 module Orders
   class GatewayLive < Orders::Gateway
@@ -15,7 +16,12 @@ module Orders
     # @param client_order_id [String, nil] deterministic idempotency key for retries
     # @return [Hash] normalized result with :success and optional :order_id/:status
     def exit_market(tracker, client_order_id: nil)
-      coid = client_order_id.presence || generate_client_order_id('EXIT', tracker.security_id)
+      # Prefer a deterministic id over a fresh random one: Live::ExitEngine (the canonical
+      # exit path) always supplies tracker.exit_coid before reaching here, but a caller
+      # that retries this method directly (bypassing ExitEngine) must not mint a new
+      # random id each attempt — that defeats the broker's own correlation-id dedup and
+      # risks a duplicate exit order if an earlier attempt actually reached the broker.
+      coid = client_order_id.presence || tracker.exit_coid.presence || deterministic_exit_coid(tracker)
 
       order = Orders::Placer.exit_position!(
         seg: tracker.segment,
@@ -101,7 +107,7 @@ module Orders
       Orders::Placer.exit_position!(
         seg: segment,
         sid: security_id,
-        client_order_id: generate_client_order_id('EXIT', security_id)
+        client_order_id: deterministic_flat_coid(segment: segment, security_id: security_id)
       )
     end
 
@@ -181,6 +187,22 @@ module Orders
       # Generate unique client order ID with random component to prevent collisions
       # Format: AS-{prefix}-{security_id}-{timestamp}-{random}
       "AS-#{prefix}-#{sid}-#{Time.current.to_i}-#{SecureRandom.hex(2)}"
+    end
+
+    # Same scheme as Live::ExitEngine#deterministic_exit_coid — kept identical so a
+    # retry of this method (whether by this same call or a separate one for the same
+    # tracker) reuses the same id instead of minting a new one the broker can't dedupe.
+    def deterministic_exit_coid(tracker)
+      seed = "exit-#{tracker.id}-#{tracker.order_no}-#{tracker.security_id}"
+      "AS-EXIT-#{Digest::SHA256.hexdigest(seed)[0, 20]}"
+    end
+
+    # flat_position has no tracker to key off, so this ties the id to (segment,
+    # security_id, day) instead — deterministic within a day (retries dedupe) without
+    # permanently colliding across separate days' positions in the same instrument.
+    def deterministic_flat_coid(segment:, security_id:)
+      seed = "flat-#{segment}-#{security_id}-#{Time.current.to_date}"
+      "AS-FLAT-#{Digest::SHA256.hexdigest(seed)[0, 20]}"
     end
 
     def normalize_exit_response(order, client_order_id:)

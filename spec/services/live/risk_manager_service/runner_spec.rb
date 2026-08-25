@@ -16,7 +16,8 @@ RSpec.describe Live::RiskManagerService::Runner do
     allow(harness).to receive(:enforce_selling_exits_for)
     allow(harness).to receive(:advance_trade_state_for)
     allow(harness).to receive_messages(
-      enforce_premium_r_stop_for: nil, enforce_dynamic_trailing_stops_for: nil,
+      enforce_premium_r_stop_for: nil, enforce_novel_rule_exits_for: nil,
+      enforce_dynamic_trailing_stops_for: nil,
       enforce_profit_floor_for: nil, enforce_structure_invalidation_for: nil,
       enforce_premium_momentum_failure_for: nil, enforce_rr_profit_booking_for: nil,
       enforce_percentage_pnl_exit_for: nil, enforce_time_stop_for: nil,
@@ -35,10 +36,11 @@ RSpec.describe Live::RiskManagerService::Runner do
         expect(harness).to have_received(:enforce_selling_exits_for)
       end
 
-      it 'never runs the long-only enforcement chain' do
+      it 'never runs the long-only enforcement chain' do # rubocop:disable RSpec/MultipleExpectations
         harness.send(:run_enforcement_for_tracker, tracker, exit_engine)
 
         expect(harness).not_to have_received(:enforce_premium_r_stop_for)
+        expect(harness).not_to have_received(:enforce_novel_rule_exits_for)
         expect(harness).not_to have_received(:enforce_dynamic_trailing_stops_for)
         expect(harness).not_to have_received(:enforce_structure_invalidation_for)
         expect(harness).not_to have_received(:enforce_percentage_pnl_exit_for)
@@ -53,6 +55,7 @@ RSpec.describe Live::RiskManagerService::Runner do
 
         expect(harness).to have_received(:enforce_hard_limits_for)
         expect(harness).to have_received(:enforce_premium_r_stop_for)
+        expect(harness).to have_received(:enforce_novel_rule_exits_for)
         expect(harness).not_to have_received(:enforce_selling_exits_for)
       end
     end

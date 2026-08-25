@@ -5,6 +5,7 @@
 module Live
   class UnifiedExitChecker
     EXIT_CONFIG_TTL = 30 # seconds — matches AlgoConfig.fetch TTL
+    SNAPSHOT_STALE_AFTER_SECONDS = 10
 
     class << self
       include Live::UnderlyingLtpResolver
@@ -15,12 +16,22 @@ module Live
       # Returns: { exit: true/false, reason: "...", path: "..." } or nil
       def check_exit_conditions(tracker)
         snapshot = pnl_snapshot(tracker)
-        return nil unless snapshot
+
+        # Global kill-switch, independent of this tracker's own snapshot — must never be
+        # silently skipped just because Redis happens to be missing/stale data for THIS
+        # position specifically.
+        if portfolio_floor_breach?
+          pnl_pct_display = snapshot ? (snapshot[:pnl_pct].to_f * 100.0).round(2) : nil
+          return { exit: true, reason: 'PORTFOLIO_FLOOR_BREACH', path: 'profit_lock', pnl_pct: pnl_pct_display }
+        end
+
+        # A missing or stale snapshot previously fell straight through to `return nil`
+        # below, silently disabling every hard limit for this tracker until the cache
+        # recovered — the worst possible failure mode for a risk check. Fail closed:
+        # loudly log it and fall back to a degraded stop-loss-only check instead.
+        return blind_spot_fallback_check(tracker, snapshot) if snapshot.nil? || snapshot_stale?(snapshot)
 
         pnl_pct_display = (snapshot[:pnl_pct].to_f * 100.0).round(2)
-
-        # 1. Emergency portfolio/drawdown exits — global kill-switches, apply to every position
-        return { exit: true, reason: 'PORTFOLIO_FLOOR_BREACH', path: 'profit_lock', pnl_pct: pnl_pct_display } if portfolio_floor_breach?
 
         # Everything below assumes a long's P&L shape (rising premium is good) and isn't
         # safe to run against a short. Selling has its own exit rules — see
@@ -58,6 +69,49 @@ module Live
       def pnl_snapshot(tracker)
         Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
       rescue StandardError
+        nil
+      end
+
+      # Missing a :timestamp entirely is not treated as stale — we have no evidence
+      # either way, and RedisPnlCache.store_pnl always sets one, so an absent key means
+      # a caller (a test, most likely) built the snapshot hash by hand.
+      def snapshot_stale?(snapshot)
+        ts = snapshot[:timestamp]
+        return false unless ts
+
+        (Time.current.to_i - ts.to_i) > SNAPSHOT_STALE_AFTER_SECONDS
+      end
+
+      # Degraded backstop for a missing/stale snapshot: evaluate ONLY the hard
+      # stop-loss threshold, against tracker.current_pnl_pct (which itself falls back
+      # from Redis to the last DB-synced value — see PnlCalculatable#current_pnl_pct).
+      # Not a substitute for the full waterfall above — just the single most important
+      # "stop the bleeding" check, so a Redis outage degrades risk coverage instead of
+      # eliminating it. The reason string is tagged SNAPSHOT_FALLBACK so it's obvious
+      # in logs/telemetry that this fired via the degraded path, not the normal one.
+      def blind_spot_fallback_check(tracker, snapshot)
+        state = snapshot.nil? ? 'missing' : 'stale'
+        Rails.logger.error(
+          "[UnifiedExitChecker] PnL snapshot #{state} for tracker=#{tracker.id} — hard limits " \
+          'normally evaluated here are blind this cycle; falling back to stop-loss-only check'
+        )
+
+        return nil if tracker.respond_to?(:short_position?) && tracker.short_position?
+
+        fallback_pct = tracker.current_pnl_pct&.to_f
+        return nil if fallback_pct.nil?
+
+        sl_value = exit_config[:stop_loss][:value].to_f
+        return nil unless fallback_pct <= -sl_value
+
+        {
+          exit: true,
+          reason: 'STOP_LOSS (SNAPSHOT_FALLBACK)',
+          path: 'stop_loss_snapshot_fallback',
+          pnl_pct: (fallback_pct * 100.0).round(2)
+        }
+      rescue StandardError => e
+        Rails.logger.error("[UnifiedExitChecker] blind_spot_fallback_check failed for tracker=#{tracker&.id}: #{e.class} - #{e.message}")
         nil
       end
 

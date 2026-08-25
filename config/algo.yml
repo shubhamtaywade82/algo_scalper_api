@@ -179,6 +179,9 @@ risk:
     enabled: true
     min_hold_seconds: 120
     hwm_threshold_rupees: 0
+  structural_kill_switch:
+    enabled: false # opt-in: exits on underlying VWAP/9-EMA/swing-level break, no live track record yet
+    tolerance_pct: 0.002
   exits:
     structure_invalidation:
       enabled: true
