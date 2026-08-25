@@ -564,6 +564,153 @@ RSpec.describe Orders::Placer do
     end
   end
 
+  describe 'claim release on placement failure (regression: idempotency claim burned on first attempt)' do
+    # Real cache store — Rails.cache in test env is a NullStore that can't distinguish
+    # "claimed" from "released", so these need genuine claim!/release_claim! semantics.
+    let(:real_cache) { ActiveSupport::Cache::MemoryStore.new }
+
+    before { allow(Rails).to receive(:cache).and_return(real_cache) }
+
+    it 'releases the claim when buy_market! fails validation before ever reaching the broker' do
+      client_order_id = "RELEASE-TEST-#{Time.current.to_i}"
+      allow(Rails.logger).to receive(:error)
+
+      first = described_class.buy_market!(seg: nil, sid: security_id, qty: quantity, client_order_id: client_order_id)
+      expect(first).to be_nil
+
+      # A same-id retry after a definite non-broker failure must not be blocked by our own claim.
+      second = described_class.buy_market!(seg: segment, sid: security_id, qty: quantity, client_order_id: client_order_id)
+
+      expect(second).to eq(order_double)
+      expect(DhanHQ::Models::Order).to have_received(:create!).once
+    end
+
+    it 'releases the claim when buy_market! is rejected by the broker (non-retryable error)' do
+      client_order_id = "RELEASE-TEST-REJECT-#{Time.current.to_i}"
+      call_count = 0
+      allow(DhanHQ::Models::Order).to receive(:create!) do |attrs|
+        call_count += 1
+        raise DhanHQ::OrderError, 'insufficient margin' if call_count == 1
+
+        captured_attrs << attrs
+        order_double
+      end
+
+      first = described_class.buy_market!(seg: segment, sid: security_id, qty: quantity, client_order_id: client_order_id)
+      expect(first).to be_nil
+
+      second = described_class.buy_market!(seg: segment, sid: security_id, qty: quantity, client_order_id: client_order_id)
+      expect(second).to eq(order_double)
+    end
+
+    it 'releases the claim when exit_position! fails validation before ever reaching the broker' do
+      client_order_id = "RELEASE-TEST-EXIT-#{Time.current.to_i}"
+      allow(described_class).to receive(:fetch_position_details).and_return(nil)
+
+      first = described_class.exit_position!(seg: segment, sid: security_id, client_order_id: client_order_id)
+      expect(first).to be_nil
+
+      allow(described_class).to receive(:fetch_position_details).and_return(
+        product_type: DhanHQ::Constants::ProductType::INTRADAY,
+        net_qty: quantity,
+        exchange_segment: segment,
+        position_type: DhanHQ::Constants::PositionType::LONG
+      )
+      second = described_class.exit_position!(seg: segment, sid: security_id, client_order_id: client_order_id)
+
+      expect(second).to eq(order_double)
+    end
+
+    it 'does NOT release the claim when sell_market! fails partway through a sliced order' do
+      # A partial-slice failure may mean earlier slices already reached the broker;
+      # a from-scratch resend under the same id must stay blocked (see placer.rb comment).
+      client_order_id = "NO-RELEASE-SLICE-TEST-#{Time.current.to_i}"
+      allow(described_class).to receive(:fetch_position_details).and_return(
+        product_type: DhanHQ::Constants::ProductType::INTRADAY,
+        net_qty: quantity,
+        exchange_segment: segment,
+        position_type: DhanHQ::Constants::PositionType::LONG
+      )
+      allow(Orders::Slicer).to receive(:slice_quantity).and_return([quantity / 2, quantity / 2])
+      allow(Orders::Slicer).to receive(:delay_seconds).and_return(0)
+      call_count = 0
+      allow(DhanHQ::Models::Order).to receive(:create!) do
+        call_count += 1
+        raise DhanHQ::OrderError, 'slice rejected' if call_count == 2
+
+        order_double
+      end
+      allow(Notifications::TelegramNotifier.instance).to receive(:notify_error)
+
+      first = described_class.sell_market!(seg: segment, sid: security_id, qty: quantity, client_order_id: client_order_id)
+      expect(first).to be_nil
+
+      second = described_class.sell_market!(seg: segment, sid: security_id, qty: quantity, client_order_id: client_order_id)
+      expect(second).to be_nil
+      expect(DhanHQ::Models::Order).to have_received(:create!).twice # not re-attempted
+    end
+  end
+
+  describe 'with_token_auto_heal re-raises retryable network errors (regression: GatewayLive#with_retries never saw them)' do
+    it 'raises Timeout::Error instead of swallowing it to nil' do
+      allow(DhanhqErrorHandler).to receive(:token_expired?).and_return(false)
+
+      expect do
+        described_class.send(:with_token_auto_heal, context: 'orders.test') { raise Timeout::Error, 'timed out' }
+      end.to raise_error(Timeout::Error)
+    end
+
+    it 'raises SocketError instead of swallowing it to nil' do
+      allow(DhanhqErrorHandler).to receive(:token_expired?).and_return(false)
+
+      expect do
+        described_class.send(:with_token_auto_heal, context: 'orders.test') { raise SocketError, 'connection refused' }
+      end.to raise_error(SocketError)
+    end
+
+    it 'still returns nil (does not raise) for ordinary broker/validation errors' do
+      allow(DhanhqErrorHandler).to receive(:token_expired?).and_return(false)
+
+      result = described_class.send(:with_token_auto_heal, context: 'orders.test') { raise DhanHQ::OrderError, 'bad request' }
+
+      expect(result).to be_nil
+    end
+  end
+
+  describe '.with_order_rate_limit' do
+    before { allow(described_class).to receive(:with_order_rate_limit).and_call_original }
+
+    # NOTE: Orders::Placer's bare `TokenBucket` reference resolves to Orders::TokenBucket
+    # (app/services/orders/token_bucket.rb), not the top-level ::TokenBucket loaded by
+    # placer.rb's `require "token_bucket"` — Ruby's lexical scoping favors the class
+    # nested in the enclosing `module Orders`. That top-level require is effectively
+    # dead; use Orders::TokenBucket::RateLimited here to match what the code actually uses.
+    it 'waits and retries instead of silently dropping the order on a transient rate limit' do
+      allow(described_class).to receive(:sleep)
+      call_count = 0
+      allow(described_class.send(:rate_limiter)).to receive(:consume!) do
+        call_count += 1
+        raise Orders::TokenBucket::RateLimited, 'rate limit reached' if call_count == 1
+
+        'placed'
+      end
+
+      result = described_class.send(:with_order_rate_limit, context: 'orders.test') { 'placed' }
+
+      expect(result).to eq('placed')
+      expect(described_class).to have_received(:sleep).once
+    end
+
+    it 'gives up and returns nil after exhausting bounded wait attempts' do
+      allow(described_class).to receive(:sleep)
+      allow(described_class.send(:rate_limiter)).to receive(:consume!).and_raise(Orders::TokenBucket::RateLimited, 'rate limit reached')
+
+      result = described_class.send(:with_order_rate_limit, context: 'orders.test') { 'placed' }
+
+      expect(result).to be_nil
+    end
+  end
+
   describe '.claim! (atomic dedup, real cache)' do
     # Exercise a real cache store instead of the stubbed Rails.cache used elsewhere in this
     # file — the test env's Rails.cache is a NullStore (always "succeeds", stores nothing),

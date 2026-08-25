@@ -79,6 +79,12 @@ module Options
             scale_ready: 15.0,
             full_deploy: 25.0
           }[permission]
+        when 'BANKNIFTY'
+          {
+            execution_only: 12.0,
+            scale_ready: 20.0,
+            full_deploy: 28.0
+          }[permission]
         end
       end
 

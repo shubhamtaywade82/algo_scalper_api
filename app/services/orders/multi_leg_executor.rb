@@ -116,23 +116,25 @@ module Orders
         return { success: true, fill_price: price.to_f, fill_quantity: 1, order_id: coid }
       end
 
+      order_id = extract_order_id(order_result)
+
       timeout = 15
       poll_interval = 1
       elapsed = 0
 
       while elapsed < timeout
-        status = Orders::Placer.fetch_position_details(coid)
+        status = fetch_order_status(order_id: order_id, coid: coid)
 
-        case status&.dig(:orderStatus)
-        when 'TRADED'
+        case status&.order_status
+        when DhanHQ::Constants::OrderStatus::TRADED
           return {
             success: true,
-            fill_price: status[:tradedPrice].to_f,
-            fill_quantity: status[:tradedQty].to_i,
-            order_id: status[:orderId]
+            fill_price: status.average_traded_price.to_f,
+            fill_quantity: status.filled_qty.to_i,
+            order_id: status.order_id
           }
-        when 'REJECTED', 'CANCELLED'
-          return { failed: true, error: "Order #{status[:orderStatus]}" }
+        when DhanHQ::Constants::OrderStatus::REJECTED, DhanHQ::Constants::OrderStatus::CANCELLED
+          return { failed: true, error: "Order #{status.order_status}" }
         end
 
         sleep(poll_interval)
@@ -140,6 +142,29 @@ module Orders
       end
 
       { failed: true, error: "Fill timeout after #{timeout}s" }
+    end
+
+    # order_result is whatever Orders::Placer.buy_market!/sell_market! returned at
+    # placement time — a DhanHQ::Models::Order, or a Hash in dry-run/paper contexts.
+    def extract_order_id(order_result)
+      return order_result.order_id if order_result.respond_to?(:order_id)
+      return order_result[:order_id] || order_result['order_id'] if order_result.is_a?(Hash)
+
+      nil
+    end
+
+    # Polls the broker for fresh order status via the public Order API — not
+    # Orders::Placer.fetch_position_details, which is (a) private and (b) looks up
+    # *positions* by security_id, not order status by order/correlation id.
+    def fetch_order_status(order_id:, coid:)
+      return DhanHQ::Models::Order.find(order_id) if order_id.present?
+
+      # rubocop:disable Rails/DynamicFindBy -- DhanHQ::Models::Order method, not an AR dynamic finder
+      DhanHQ::Models::Order.find_by_correlation(coid)
+      # rubocop:enable Rails/DynamicFindBy
+    rescue StandardError => e
+      Rails.logger.error("[MultiLegExecutor] fetch_order_status failed for #{coid}: #{e.class} - #{e.message}")
+      nil
     end
 
     def cancel_order(coid)

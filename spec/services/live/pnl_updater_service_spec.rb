@@ -26,6 +26,18 @@ RSpec.describe Live::PnlUpdaterService, :freeze_time do
       .with(hash_including(pnl: 1980.0, ltp: 120.0))
   end
 
+  it 'publishes on the same event name RiskManagerService subscribes to' do
+    allow(Live::TickQuery).to receive(:for_security).and_return(double(ltp: 120.0))
+    allow(Live::RedisPnlCache.instance).to receive(:store_pnl)
+    allow(Core::EventBus.instance).to receive(:publish).and_call_original
+
+    service.cache_intermediate_pnl(tracker_id: tracker.id, ltp: 120.0)
+    service.flush_now!
+
+    expect(Core::EventBus.instance).to have_received(:publish)
+      .with(Core::EventBus::EVENTS[:pnl_update], hash_including(tracker_id: tracker.id))
+  end
+
   describe 'gross pnl sign by position_side' do
     before do
       allow(Live::TickQuery).to receive(:for_security).and_return(double(ltp: 120.0))

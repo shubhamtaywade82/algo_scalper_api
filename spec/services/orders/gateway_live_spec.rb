@@ -236,6 +236,33 @@ RSpec.describe Orders::GatewayLive do
         expect(attempts).to eq(3) # RETRY_COUNT
       end
     end
+
+    context 'when going end-to-end through the real Orders::Placer (regression: with_token_auto_heal used to swallow every error to nil, so this retry path never actually engaged)' do
+      before do
+        allow(Orders::Placer).to receive(:buy_market!).and_call_original
+        allow(Rails.cache).to receive(:read).and_return(nil)
+        allow(Rails.cache).to receive(:write).and_return(true)
+        allow(ENV).to receive(:[]).and_call_original
+        allow(ENV).to receive(:[]).with('PLACE_ORDER').and_return('true')
+        allow(Orders::Placer).to receive(:with_order_rate_limit).and_yield
+      end
+
+      it 'retries a broker timeout and succeeds on the second real attempt' do
+        attempts = 0
+        order_double = double('order', id: 'RETRY-OK')
+        allow(DhanHQ::Models::Order).to receive(:create!) do
+          attempts += 1
+          raise Timeout::Error, 'Timeout' if attempts == 1
+
+          order_double
+        end
+
+        result = gateway.place_market(side: 'buy', segment: 'NSE_FNO', security_id: '55111', qty: 50)
+
+        expect(result).to eq(order_double)
+        expect(attempts).to eq(2)
+      end
+    end
   end
 
   describe '#position' do

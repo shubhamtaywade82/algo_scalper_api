@@ -27,8 +27,8 @@ module Risk
     def tripped?
       !!Rails.cache.read(TRIP_CACHE_KEY)
     rescue StandardError => e
-      Rails.logger.error("[CircuitBreaker] tripped? check failed: #{e.message} — failing open")
-      false # fail open: don't block trading if cache is unavailable
+      Rails.logger.error("[CircuitBreaker] tripped? check failed: #{e.message} — failing closed (blocking trades)")
+      true # fail closed: a kill switch must not un-kill itself when its cache is unreachable
     end
 
     # Trip the circuit breaker.

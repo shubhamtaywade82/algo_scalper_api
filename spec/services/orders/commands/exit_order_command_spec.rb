@@ -31,17 +31,33 @@ RSpec.describe Orders::Commands::ExitOrderCommand do
     end
   end
 
-  # ── Paper gateway (paper: true, success may be absent) ─────────────────────
+  # ── Paper gateway (paper: true with explicit success) ───────────────────────
 
   describe '#call — paper gateway response' do
+    before do
+      allow(gateway).to receive(:exit_market)
+        .and_return({ success: true, paper: true, exit_price: 200.0 })
+    end
+
+    it 'treats a successful paper response as success' do
+      result = command.call
+      expect(result).to be_success
+    end
+  end
+
+  # ── Paper gateway response missing success key (regression: must not
+  # masquerade as success just because paper: true is present) ───────────────
+
+  describe '#call — paper gateway response missing success key entirely' do
     before do
       allow(gateway).to receive(:exit_market)
         .and_return({ paper: true, exit_price: 200.0 })
     end
 
-    it 'treats paper:true as success' do
+    it 'does not treat an ambiguous response as success' do
       result = command.call
-      expect(result).to be_success
+      expect(result).to be_failure
+      expect(result.reason).to eq('broker_rejected')
     end
   end
 

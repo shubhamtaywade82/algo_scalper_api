@@ -290,7 +290,7 @@ module Live
         Portfolio::PnlTracker.update_unrealized(tracker_id: tracker_id, pnl: pnl_bd.to_f)
 
         # Publish event for high-frequency risk evaluation
-        Core::EventBus.instance.publish(:ltp, {
+        Core::EventBus.instance.publish(Core::EventBus::EVENTS[:pnl_update], {
           tracker_id: tracker_id,
           ltp: ltp_bd.to_f,
           pnl: pnl_bd.to_f,

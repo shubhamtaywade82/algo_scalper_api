@@ -43,16 +43,16 @@ RSpec.describe Orders::Commands::PlaceOrderCommand do
     end
   end
 
-  # ── Paper gateway (paper: true without explicit success) ────────────────────
+  # ── Paper gateway (paper: true with explicit success) ────────────────────
 
   describe '#call — paper gateway response' do
     before do
       allow(gateway).to receive(:place_market).and_return(
-        { paper: true, order_id: 'PAPER-abc123' }
+        { success: true, paper: true, order_id: 'PAPER-abc123' }
       )
     end
 
-    it 'treats paper response as success' do
+    it 'treats a successful paper response as success' do
       result = command.call
       expect(result).to be_success
       expect(result.payload[:order_id]).to eq('PAPER-abc123')
@@ -68,6 +68,37 @@ RSpec.describe Orders::Commands::PlaceOrderCommand do
     end
 
     it 'returns failure with reason broker_rejected' do
+      result = command.call
+      expect(result).to be_failure
+      expect(result.reason).to eq('broker_rejected')
+    end
+  end
+
+  # ── Paper gateway failure must not masquerade as success (regression) ───────
+  # GatewayPaper's rescue path returns {success: false, error: ..., paper: true}.
+  # A tracker must never be created off a placement that actually failed.
+  describe '#call — paper gateway failure' do
+    before do
+      allow(gateway).to receive(:place_market).and_return(
+        { success: false, error: 'insufficient funds', paper: true }
+      )
+    end
+
+    it 'returns failure even though paper: true is present' do
+      result = command.call
+      expect(result).to be_failure
+      expect(result.reason).to eq('broker_rejected')
+    end
+  end
+
+  describe '#call — paper gateway response missing success key entirely' do
+    before do
+      allow(gateway).to receive(:place_market).and_return(
+        { paper: true, order_id: 'PAPER-abc123' }
+      )
+    end
+
+    it 'does not treat an ambiguous response as success' do
       result = command.call
       expect(result).to be_failure
       expect(result.reason).to eq('broker_rejected')

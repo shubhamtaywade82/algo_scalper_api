@@ -68,10 +68,11 @@ RSpec.describe Portfolio::DrawdownGuard do
         let(:active_positions) { [pos_data] }
         let(:tracker) { instance_double(PositionTracker, id: 77, active?: true) }
         let(:exit_engine) { instance_double(Live::ExitEngine) }
+        let(:supervisor_services) { { exit_manager: exit_engine } }
 
         before do
           allow(PositionTracker).to receive(:find_by).with(id: 77).and_return(tracker)
-          allow(Live::ExitEngine).to receive(:instance).and_return(exit_engine)
+          allow(Rails.application.config.x).to receive(:trading_supervisor).and_return(supervisor_services)
           allow(exit_engine).to receive(:execute_exit)
         end
 
@@ -79,6 +80,16 @@ RSpec.describe Portfolio::DrawdownGuard do
           allow(redis).to receive(:set)
           expect(exit_engine).to receive(:execute_exit).with(tracker, 'PORTFOLIO_FLOOR_BREACH')
           described_class.trigger_global_exit!(net_pnl: 5_000.0, floor: 6_000.0)
+        end
+
+        context 'when the exit_manager is unreachable (trading_supervisor nil)' do
+          let(:supervisor_services) { nil }
+
+          it 'logs an error instead of raising' do
+            allow(redis).to receive(:set)
+            expect(Rails.logger).to receive(:error).with(/exit_manager unreachable/)
+            expect { described_class.trigger_global_exit!(net_pnl: 5_000.0, floor: 6_000.0) }.not_to raise_error
+          end
         end
       end
     end

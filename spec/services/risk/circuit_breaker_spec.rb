@@ -53,6 +53,23 @@ RSpec.describe Risk::CircuitBreaker do
     end
   end
 
+  describe '#tripped?' do
+    it 'returns false when the breaker has not been tripped' do
+      expect(cb.tripped?).to be false
+    end
+
+    it 'returns true when the breaker has been tripped' do
+      cb.trip!(reason: 'test halt')
+      expect(cb.tripped?).to be true
+    end
+
+    it 'fails closed (returns true) when the cache is unreachable' do
+      allow(Rails.cache).to receive(:read).with(described_class::TRIP_CACHE_KEY).and_raise(StandardError, 'cache down')
+
+      expect(cb.tripped?).to be true
+    end
+  end
+
   describe '#force_close_all!' do
     let(:exit_engine) { instance_double(Live::ExitEngine, execute_exit: true) }
 
