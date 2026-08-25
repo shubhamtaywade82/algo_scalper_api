@@ -220,7 +220,12 @@ module Signal
               elsif %w[RANGING CHOPPY].include?(regime)
                 # Chop is theta decay poison for buying, but exactly the regime selling profits
                 # from — route to the selling path when selling strategies are enabled.
-                position_side = 'short'
+                # NOTE: position_side must stay 'long' (the default from above) here — it is
+                # only ever meaningful for the SellingEntryPipeline call below, which always
+                # `return`s on success without reading the local variable again. Setting it to
+                # 'short' unconditionally used to leak into the standard buying entry below
+                # whenever selling was disabled or the selling attempt failed, mislabeling a
+                # long CE/PE buy as a short (wrong order side, wrong margin-based sizing cap).
                 route_decision = Entries::RegimeStrategyRouter.route(regime: regime, direction: final_direction, index_cfg: index_cfg)
 
                 if route_decision == :selling
@@ -231,6 +236,8 @@ module Signal
                     Signal::StateTracker.reset(index_cfg[:key])
                     return
                   end
+
+                  Rails.logger.warn("[Signal] SellingEntryPipeline failed for #{index_cfg[:key]} in #{regime}; falling back to standard (long) evaluation")
                 else
                   Rails.logger.info("[Signal] DirectionGate: #{regime} regime for #{index_cfg[:key]} — selling disabled, continuing standard evaluation")
                 end

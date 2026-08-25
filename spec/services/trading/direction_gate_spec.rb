@@ -222,5 +222,77 @@ RSpec.describe Trading::DirectionGate do
         expect(Signal::StateTracker).to have_received(:reset).with('NIFTY')
       end
     end
+
+    context 'when regime is CHOPPY and selling strategies are disabled (regression: position_side leak)' do
+      let(:mock_instrument) { instance_double(Instrument) }
+      let(:mock_series) { instance_double(CandleSeries, candles: [instance_double(Candle, close: 100, timestamp: Time.current)], atr: 25.0) }
+
+      before do
+        allow(Signal::Engine).to receive(:analyze_timeframe).and_return(
+          status: :ok,
+          series: mock_series,
+          supertrend: { trend: :bullish, last_value: 100.0 },
+          adx_value: 25.0,
+          direction: :bullish,
+          last_candle_timestamp: Time.current
+        )
+
+        allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).and_return(mock_instrument)
+
+        regime_detector = instance_double(MarketRegimeDetector, detect: { regime: 'CHOPPY', confidence: 60 })
+        allow(MarketRegimeDetector).to receive(:new).and_return(regime_detector)
+
+        allow(Market::Calendar).to receive(:trading_day_today?).and_return(true)
+        ist = Time.zone.parse('2026-04-06 10:30:00')
+        allow(TradingSession::Service).to receive_messages(market_closed?: false, current_ist_time: ist)
+
+        allow(AlgoConfig).to receive(:fetch).and_return(
+          signals: {
+            entry_strategy: { primary: 'legacy' },
+            primary_timeframe: '5m',
+            confirmation_timeframe: nil,
+            enable_confirmation_timeframe: false,
+            halt_on_validation_failure: false,
+            enable_direction_gate: true,
+            enable_index_ta: false,
+            enable_index_ta_filter: false,
+            use_strategy_recommendations: false,
+            supertrend: { period: 7, multiplier: 3 },
+            adx: { min_strength: 20 },
+            enable_adx_filter: true,
+            enable_smc_avrz_permission: false,
+            enable_no_trade_engine: false,
+            validation_mode: :balanced,
+            validation_modes: {
+              balanced: { require_iv_rank_check: false, require_theta_risk_check: false, require_trend_confirmation: false, adx_min_strength: 15 },
+              conservative: { require_iv_rank_check: false, require_theta_risk_check: false, require_trend_confirmation: false, adx_min_strength: 15 }
+            }
+            # no strategies_enabled key -> RegimeStrategyRouter#selling_enabled? is false
+          }
+        )
+
+        allow(Signal::StateTracker).to receive_messages(reset: nil, record: { count: 1, multiplier: 1 })
+        allow(Signal::ValidationGates).to receive(:comprehensive_validation).and_return(valid: true, reason: nil)
+        allow(Entries::EntryFilterEngine).to receive(:new).and_return(instance_double(Entries::EntryFilterEngine, valid_entry?: true))
+        allow(Trading::PermissionResolver).to receive(:resolve).and_return(:scale_ready)
+        allow(Signal::MomentumValidator).to receive(:validate).and_return(instance_double(Signal::MomentumValidator::Result, score: 2))
+        allow(TradingSignal).to receive(:create_from_analysis)
+        allow(Signal::ExpiryGate).to receive_messages(expiry_trade_allowed?: true, resolve_nearest_expiry_date: nil)
+        allow(Options::ChainAnalyzer).to receive(:pick_strikes_with_qualification).and_return(
+          Options::ChainAnalyzer::StrikePickResult.new(
+            [{ symbol: 'NIFTY-X-CE', security_id: '1', segment: 'IDX_I', derivative_id: 1, lot_size: 75 }], nil, nil
+          )
+        )
+        allow(Entries::BosEntryEngine).to receive(:run_for)
+        allow(Entries::EntryGuard).to receive(:try_enter)
+      end
+
+      it 'routes through the normal BosEntryEngine, NOT the direct-entry shortcut meant for supertrend/selling' do
+        Signal::Engine.run_for(index_cfg)
+
+        expect(Entries::BosEntryEngine).to have_received(:run_for)
+        expect(Entries::EntryGuard).not_to have_received(:try_enter)
+      end
+    end
   end
 end

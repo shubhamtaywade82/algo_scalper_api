@@ -350,7 +350,6 @@ module Options
     end
 
     def generate_candidate_strikes(atm_strike, interval, option_type, strike_config)
-      strike_config[:offset] || 2
       include_atm = strike_config[:include_atm] != false
       max_otm = strike_config[:max_otm] || 2
 
@@ -959,12 +958,6 @@ module Options
                                                flow_analyzer: nil, index_prices: nil)
         # Force reload - debugging index_cfg scope issue
         return [] unless option_chain_data
-
-        # Extract flow scores for lookup
-        flow_side = side.to_s.downcase # 'ce' or 'pe'
-        (flow_results&.[](flow_side) || []).to_h do |f|
-                        [f[:strike].to_f, f[:score]]
-        end
 
         # Extract flow scores for lookup
         flow_side = side.to_s.downcase # 'ce' or 'pe'
