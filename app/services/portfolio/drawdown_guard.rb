@@ -107,8 +107,16 @@ module Portfolio
           next unless tracker&.active?
 
           begin
-            exit_engine = Rails.application.config.x.trading_supervisor&.dig(:exit_manager) || Live::ExitEngine.instance
-            exit_engine.execute_exit(tracker, 'PORTFOLIO_FLOOR_BREACH')
+            exit_engine = Rails.application.config.x.trading_supervisor&.[](:exit_manager)
+
+            if exit_engine
+              exit_engine.execute_exit(tracker, 'PORTFOLIO_FLOOR_BREACH')
+            else
+              Rails.logger.error(
+                "[Portfolio::DrawdownGuard] CANNOT force-exit tracker=#{pos_data.tracker_id} " \
+                '- exit_manager unreachable, position stays active until the 5s enforcement loop catches it'
+              )
+            end
           rescue StandardError => e
             Rails.logger.error(
               "[Portfolio::DrawdownGuard] Exit failed for tracker=#{pos_data.tracker_id}: " \

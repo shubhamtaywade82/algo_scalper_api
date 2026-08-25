@@ -6,15 +6,18 @@ RSpec.describe Live::DailyLimits do
   let(:redis) { instance_double(Redis) }
   let(:daily_limits) { described_class.new(redis: redis) }
 
-  before do
-    allow(AlgoConfig).to receive(:fetch).and_return(
-      risk: {
-        max_daily_loss_pct: 5000.0, # ₹5000 max loss per index
-        max_global_daily_loss_pct: 10_000.0, # ₹10000 max loss globally
-        max_daily_trades: 10, # 10 trades per index
-        max_global_daily_trades: 20 # 20 trades globally
+  let(:base_risk_config) do
+    {
+      daily_limits: {
+        enabled: true,
+        per_index: { NIFTY: 0.02, BANKNIFTY: 0.04, SENSEX: 0.01 }, # matches config/algo.yml
+        global_limit_pct: 0.04
       }
-    )
+    }
+  end
+
+  before do
+    allow(AlgoConfig).to receive(:fetch).and_return(risk: base_risk_config)
     allow(redis).to receive(:get).and_return('0')
     allow(redis).to receive(:incrbyfloat)
     allow(redis).to receive(:incr)
@@ -23,6 +26,9 @@ RSpec.describe Live::DailyLimits do
     allow(Rails.logger).to receive(:info)
     allow(Rails.logger).to receive(:debug)
     allow(Rails.logger).to receive(:error)
+    # Capital base for pct-of-capital loss checks; ₹1,00,000 keeps the math simple (1% = ₹1,000).
+    allow(Capital::Allocator).to receive(:available_cash).and_return(100_000.0)
+    allow(Positions::ActiveCache.instance).to receive(:all_positions).and_return([])
   end
 
   describe '#can_trade?' do
@@ -43,6 +49,7 @@ RSpec.describe Live::DailyLimits do
 
     context 'when daily loss limit is not exceeded' do
       before do
+        # NIFTY per_index limit is 2% of ₹1,00,000 = ₹2,000; global limit is 4% = ₹4,000.
         allow(redis).to receive(:get).with(/daily_limits:loss:.*:NIFTY/).and_return('1000.0')
         allow(redis).to receive(:get).with(/daily_limits:loss:.*:global/).and_return('2000.0')
         allow(redis).to receive(:get).with(/daily_limits:trades:.*:NIFTY/).and_return('5')
@@ -59,8 +66,8 @@ RSpec.describe Live::DailyLimits do
 
     context 'when daily loss limit is exceeded (per-index)' do
       before do
-        allow(redis).to receive(:get).with(/daily_limits:loss:.*:NIFTY/).and_return('6000.0') # Exceeds 5000
-        allow(redis).to receive(:get).with(/daily_limits:loss:.*:global/).and_return('2000.0')
+        allow(redis).to receive(:get).with(/daily_limits:loss:.*:NIFTY/).and_return('2500.0') # 2.5% > 2%
+        allow(redis).to receive(:get).with(/daily_limits:loss:.*:global/).and_return('1000.0')
       end
 
       # rubocop:disable RSpec/MultipleExpectations
@@ -69,16 +76,36 @@ RSpec.describe Live::DailyLimits do
 
         expect(result[:allowed]).to be false
         expect(result[:reason]).to eq('daily_loss_limit_exceeded')
-        expect(result[:daily_loss]).to eq(6000.0)
-        expect(result[:max_daily_loss]).to eq(5000.0)
+        expect(result[:daily_loss]).to eq(2500.0)
+        expect(result[:daily_loss_pct]).to be_within(0.0001).of(0.025)
+        expect(result[:max_daily_loss_pct]).to eq(0.02)
         expect(result[:index_key]).to eq('NIFTY')
+      end
+    end
+
+    context 'when the daily loss limit is breached by unrealized PnL on open positions' do
+      let(:losing_position) { double('PositionData', index_key: 'NIFTY', pnl: -2500.0) }
+
+      before do
+        allow(redis).to receive(:get).with(/daily_limits:loss:.*:NIFTY/).and_return('0')
+        allow(redis).to receive(:get).with(/daily_limits:loss:.*:global/).and_return('0')
+        allow(Positions::ActiveCache.instance).to receive(:all_positions).and_return([losing_position])
+      end
+
+      it 'counts the open loss even though nothing has been realized yet' do
+        result = daily_limits.can_trade?(index_key: 'NIFTY')
+
+        expect(result[:allowed]).to be false
+        expect(result[:reason]).to eq('daily_loss_limit_exceeded')
+        expect(result[:daily_loss]).to eq(2500.0)
       end
     end
 
     context 'when global daily loss limit is exceeded' do
       before do
-        allow(redis).to receive(:get).with(/daily_limits:loss:.*:NIFTY/).and_return('1000.0')
-        allow(redis).to receive(:get).with(/daily_limits:loss:.*:global/).and_return('12000.0') # Exceeds 10000
+        # NIFTY per-index loss stays under its 2% limit, but the global 4% limit is breached.
+        allow(redis).to receive(:get).with(/daily_limits:loss:.*:NIFTY/).and_return('500.0')
+        allow(redis).to receive(:get).with(/daily_limits:loss:.*:global/).and_return('4500.0') # 4.5% > 4%
       end
 
       it 'returns not allowed with global_daily_loss_limit_exceeded reason' do
@@ -86,13 +113,18 @@ RSpec.describe Live::DailyLimits do
 
         expect(result[:allowed]).to be false
         expect(result[:reason]).to eq('global_daily_loss_limit_exceeded')
-        expect(result[:global_daily_loss]).to eq(12_000.0)
-        expect(result[:max_global_loss]).to eq(10_000.0)
+        expect(result[:global_daily_loss]).to eq(4500.0)
+        expect(result[:global_daily_loss_pct]).to be_within(0.0001).of(0.045)
+        expect(result[:max_global_loss_pct]).to eq(0.04)
       end
     end
 
     context 'when trade frequency limit is exceeded (per-index)' do
       before do
+        allow(AlgoConfig).to receive(:fetch).and_return(
+          risk: base_risk_config,
+          indices: [{ key: 'NIFTY', trade_limits: { max_trades_per_day: 10 } }]
+        )
         allow(redis).to receive(:get).with(/daily_limits:loss:.*:NIFTY/).and_return('1000.0')
         allow(redis).to receive(:get).with(/daily_limits:loss:.*:global/).and_return('2000.0')
         allow(redis).to receive(:get).with(/daily_limits:trades:.*:NIFTY/).and_return('12') # Exceeds 10
@@ -104,8 +136,8 @@ RSpec.describe Live::DailyLimits do
 
         expect(result[:allowed]).to be false
         expect(result[:reason]).to eq('trade_frequency_limit_exceeded')
-        expect(result[:daily_trades]).to eq(12)
-        expect(result[:max_daily_trades]).to eq(10)
+        expect(result[:current_trades]).to eq(12)
+        expect(result[:max_trades]).to eq(10)
         expect(result[:index_key]).to eq('NIFTY')
       end
       # rubocop:enable RSpec/MultipleExpectations
@@ -113,6 +145,10 @@ RSpec.describe Live::DailyLimits do
 
     context 'when global trade frequency limit is exceeded' do
       before do
+        allow(AlgoConfig).to receive(:fetch).and_return(
+          risk: base_risk_config,
+          trade_limits: { global_max_trades_per_day: 20 }
+        )
         allow(redis).to receive(:get).with(/daily_limits:loss:.*:NIFTY/).and_return('1000.0')
         allow(redis).to receive(:get).with(/daily_limits:loss:.*:global/).and_return('2000.0')
         allow(redis).to receive(:get).with(/daily_limits:trades:.*:NIFTY/).and_return('5')
@@ -124,31 +160,8 @@ RSpec.describe Live::DailyLimits do
 
         expect(result[:allowed]).to be false
         expect(result[:reason]).to eq('global_trade_frequency_limit_exceeded')
-        expect(result[:global_daily_trades]).to eq(25)
+        expect(result[:global_trades]).to eq(25)
         expect(result[:max_global_trades]).to eq(20)
-      end
-    end
-
-    context 'when config keys use alternative names' do
-      before do
-        allow(AlgoConfig).to receive(:fetch).and_return(
-          risk: {
-            daily_loss_limit_pct: 5000.0, # Alternative key name
-            global_daily_loss_limit_pct: 10_000.0,
-            daily_trade_limit: 10, # Alternative key name
-            global_daily_trade_limit: 20
-          }
-        )
-        allow(redis).to receive(:get).with(/daily_limits:loss:.*:NIFTY/).and_return('1000.0')
-        allow(redis).to receive(:get).with(/daily_limits:loss:.*:global/).and_return('2000.0')
-        allow(redis).to receive(:get).with(/daily_limits:trades:.*:NIFTY/).and_return('5')
-        allow(redis).to receive(:get).with(/daily_limits:trades:.*:global/).and_return('10')
-      end
-
-      it 'uses alternative config key names' do
-        result = daily_limits.can_trade?(index_key: 'NIFTY')
-
-        expect(result[:allowed]).to be true
       end
     end
 
@@ -157,13 +170,7 @@ RSpec.describe Live::DailyLimits do
 
       before do
         allow(AlgoConfig).to receive(:fetch).and_return(
-          risk: {
-            max_daily_profit: 5000.0,
-            max_daily_loss_pct: 5000.0,
-            max_global_daily_loss_pct: 10_000.0,
-            max_daily_trades: 10,
-            max_global_daily_trades: 20
-          },
+          risk: base_risk_config.merge(max_daily_profit: 5000.0),
           telegram: { enabled: true, notify_daily_profit_target: true }
         )
         allow(redis).to receive(:get).with(/daily_limits:profit:.*:global/).and_return('6000.0')

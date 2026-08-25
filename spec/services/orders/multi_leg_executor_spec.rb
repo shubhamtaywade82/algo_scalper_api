@@ -44,6 +44,62 @@ RSpec.describe Orders::MultiLegExecutor do
       end
     end
 
+    context 'when in live mode (regression: wait_for_fill called a private, wrong-shaped method)' do
+      let(:single_leg) { [legs.last] } # just the buy hedge leg
+      # DhanHQ::Models::Order defines attribute readers dynamically (not via def), so
+      # instance_double can't verify them — plain doubles, matching gateway_live_spec.rb's
+      # existing convention for stand-in Order objects.
+      let(:placed_order) { double('order', order_id: 'ORD-777') } # rubocop:disable RSpec/VerifiedDoubles
+      let(:traded_status) do
+        double('order', order_status: 'TRADED', average_traded_price: 15.25, # rubocop:disable RSpec/VerifiedDoubles
+                        filled_qty: 50, order_id: 'ORD-777')
+      end
+
+      before do
+        allow(Orders::Placer).to receive(:buy_market!).and_return(placed_order)
+        # wait_for_fill's poll loop runs on the executor instance, created internally by
+        # .execute — any_instance_of is the only way to stub its sleep before that instance exists.
+        allow_any_instance_of(described_class).to receive(:sleep) # rubocop:disable RSpec/AnyInstance
+      end
+
+      it 'polls order status via the public DhanHQ::Models::Order API and fills successfully' do
+        allow(DhanHQ::Models::Order).to receive(:find).with('ORD-777').and_return(traded_status)
+
+        result = described_class.execute(legs: single_leg, mode: :live)
+
+        expect(result[:success]).to be(true)
+        expect(result[:legs].first.dig(:result, :fill_price)).to eq(15.25)
+        expect(result[:legs].first.dig(:result, :fill_quantity)).to eq(50)
+      end
+
+      it 'falls back to find_by_correlation when the placed order has no order_id' do
+        allow(Orders::Placer).to receive(:buy_market!).and_return({}) # e.g. a bare Hash response
+        allow(DhanHQ::Models::Order).to receive(:find_by_correlation).with('ML_TEST_L1').and_return(traded_status)
+
+        result = described_class.execute(legs: single_leg, group_id: 'ML_TEST', mode: :live)
+
+        expect(result[:success]).to be(true)
+        expect(DhanHQ::Models::Order).to have_received(:find_by_correlation).with('ML_TEST_L1')
+      end
+
+      it 'treats a rejected order as a failed fill and rolls back' do
+        allow(DhanHQ::Models::Order).to receive(:find).with('ORD-777').and_return(
+          double('order', order_status: 'REJECTED') # rubocop:disable RSpec/VerifiedDoubles
+        )
+
+        result = described_class.execute(legs: single_leg, mode: :live)
+
+        expect(result[:success]).to be(false)
+        expect(result[:error]).to include('fill failed')
+      end
+
+      it 'does not crash when the order lookup itself errors' do
+        allow(DhanHQ::Models::Order).to receive(:find).and_raise(DhanHQ::OrderError, 'lookup failed')
+
+        expect { described_class.execute(legs: single_leg, mode: :live) }.not_to raise_error
+      end
+    end
+
     context 'when a leg placement fails' do
       it 'triggers rollback for previously filled legs' do
         gateway = instance_double(Orders::GatewayPaper)

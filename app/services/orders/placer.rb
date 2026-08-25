@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "digest"
+require "timeout"
 require "token_bucket"
 
 module Orders
@@ -26,43 +27,51 @@ module Orders
         normalized_id = normalize_client_order_id(client_order_id)
         return nil unless claim!(normalized_id)
 
-        unless seg && sid && qty && normalized_id
-          Rails.logger.error("[Orders::Placer] Missing required parameters for buy_market!: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{client_order_id}")
-          return nil
-        end
-
-        unless segment_tradable?(seg)
-          Rails.logger.error("[Orders::Placer] Segment #{seg} is not tradable. Valid segments: #{VALID_TRADABLE_SEGMENTS.join(', ')}")
-          return nil
-        end
-
-        payload = {
-          transaction_type: DhanHQ::Constants::TransactionType::BUY,
-          exchange_segment: seg,
-          security_id: sid.to_s,
-          quantity: qty.to_i,
-          order_type: DhanHQ::Constants::OrderType::MARKET,
-          product_type: product_type,
-          validity: DhanHQ::Constants::Validity::DAY,
-          correlation_id: normalized_id,
-          disclosed_quantity: 0
-        }
-        # DhanHQ 2.6.x PlaceOrderContract: MARKET orders must not send price
-        payload[:bo_profit_value] = target_price if target_price.present?
-        payload[:bo_stop_loss_value] = stop_loss_price if stop_loss_price.present?
-
-        Rails.logger.info("[Orders::Placer] BUY payload: #{payload.inspect}")
-
-        if order_placement_enabled?
-          order = with_token_auto_heal(context: 'orders.buy_market') do
-            DhanHQ::Models::Order.create!(payload)
+        order = nil
+        begin
+          unless seg && sid && qty && normalized_id
+            Rails.logger.error("[Orders::Placer] Missing required parameters for buy_market!: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{client_order_id}")
+            return nil
           end
-          Rails.logger.info("[Orders::Placer] BUY response: #{order.inspect}") if order
-        else
-          Rails.logger.warn('[Orders::Placer] BUY blocked because PLACE_ORDER is not enabled')
-          nil
+
+          unless segment_tradable?(seg)
+            Rails.logger.error("[Orders::Placer] Segment #{seg} is not tradable. Valid segments: #{VALID_TRADABLE_SEGMENTS.join(', ')}")
+            return nil
+          end
+
+          payload = {
+            transaction_type: DhanHQ::Constants::TransactionType::BUY,
+            exchange_segment: seg,
+            security_id: sid.to_s,
+            quantity: qty.to_i,
+            order_type: DhanHQ::Constants::OrderType::MARKET,
+            product_type: product_type,
+            validity: DhanHQ::Constants::Validity::DAY,
+            correlation_id: normalized_id,
+            disclosed_quantity: 0
+          }
+          # DhanHQ 2.6.x PlaceOrderContract: MARKET orders must not send price
+          payload[:bo_profit_value] = target_price if target_price.present?
+          payload[:bo_stop_loss_value] = stop_loss_price if stop_loss_price.present?
+
+          Rails.logger.info("[Orders::Placer] BUY payload: #{payload.inspect}")
+
+          if order_placement_enabled?
+            order = with_token_auto_heal(context: 'orders.buy_market') do
+              DhanHQ::Models::Order.create!(payload)
+            end
+            Rails.logger.info("[Orders::Placer] BUY response: #{order.inspect}") if order
+          else
+            Rails.logger.warn('[Orders::Placer] BUY blocked because PLACE_ORDER is not enabled')
+          end
+          order
+        ensure
+          # DhanHQ dedupes by correlation_id, so releasing the claim on failure lets a
+          # legitimate retry reuse the same client_order_id instead of permanently
+          # burning it for 20 minutes (previously: any failure — even one where the
+          # broker was never reached — blocked every subsequent attempt).
+          release_claim!(normalized_id) if order.nil?
         end
-        order
       end
 
       def sell_market!(seg:, sid:, qty:, client_order_id:, product_type: nil)
@@ -71,6 +80,7 @@ module Orders
 
         unless seg && sid && normalized_id
           Rails.logger.error("[Orders::Placer] Missing required parameters for sell_market!: seg=#{seg}, sid=#{sid}, client_order_id=#{client_order_id}")
+          release_claim!(normalized_id) # nothing was sent to the broker; safe to allow an immediate retry
           return nil
         end
 
@@ -79,6 +89,7 @@ module Orders
 
         unless segment_tradable?(actual_segment)
           Rails.logger.error("[Orders::Placer] Segment #{actual_segment} is not tradable. Valid segments: #{VALID_TRADABLE_SEGMENTS.join(', ')}")
+          release_claim!(normalized_id)
           return nil
         end
 
@@ -88,7 +99,10 @@ module Orders
           qty
                      end
 
-        nil
+        # NOTE: intentionally does not release the claim if slicing fails partway —
+        # a failure here may mean earlier slices already reached the broker, and a
+        # from-scratch resend under the same client_order_id would re-attempt them.
+        # alert_partial_slice_failure already flags that case for manual reconciliation.
         place_order_with_slicing(sid: sid, qty: actual_qty, client_order_id: normalized_id) do |slice_qty, slice_coid|
           payload = {
             transaction_type: DhanHQ::Constants::TransactionType::SELL,
@@ -312,59 +326,67 @@ module Orders
         normalized_id = normalize_client_order_id(client_order_id)
         return nil unless claim!(normalized_id)
 
-        unless sid && normalized_id
-          Rails.logger.error("[Orders::Placer] Missing required parameters for exit_position!: sid=#{sid}, client_order_id=#{client_order_id}")
-          return nil
-        end
-
-        position_details = fetch_position_details(sid)
-        unless position_details
-          Rails.logger.error("[Orders::Placer] Cannot find position to exit for sid=#{sid}")
-          return nil
-        end
-
-        actual_qty = position_details[:net_qty]
-        actual_segment = position_details[:exchange_segment]
-        position_type = position_details[:position_type]
-
-        unless segment_tradable?(actual_segment)
-          Rails.logger.error("[Orders::Placer] Segment #{actual_segment} is not tradable. Valid segments: #{VALID_TRADABLE_SEGMENTS.join(', ')}")
-          return nil
-        end
-
-        transaction_type = case position_type
-                           when "LONG" then "SELL"
-                           when "SHORT" then "BUY"
-                           else
-          Rails.logger.error("[Orders::Placer] Unknown position type #{position_type}")
-          return nil
-                           end
-
-        payload = {
-          transaction_type: transaction_type,
-          exchange_segment: actual_segment,
-          security_id: sid.to_s,
-          quantity: actual_qty.to_i,
-          order_type: DhanHQ::Constants::OrderType::MARKET,
-          product_type: position_details[:product_type],
-          validity: DhanHQ::Constants::Validity::DAY,
-          disclosed_quantity: 0,
-          correlation_id: normalized_id
-        }
-
-        Rails.logger.info("[Orders::Placer] EXIT payload: #{payload.inspect}")
-
-        if order_placement_enabled?
-          order = with_token_auto_heal(context: 'orders.exit_position') do
-            DhanHQ::Models::Order.create!(payload)
+        order = nil
+        begin
+          unless sid && normalized_id
+            Rails.logger.error("[Orders::Placer] Missing required parameters for exit_position!: sid=#{sid}, client_order_id=#{client_order_id}")
+            return nil
           end
-          Rails.logger.info("[Orders::Placer] EXIT response: #{order.inspect}") if order
-        else
-          Rails.logger.warn('[Orders::Placer] EXIT blocked because PLACE_ORDER is not enabled')
-          order = nil
-        end
 
-        order
+          position_details = fetch_position_details(sid)
+          unless position_details
+            Rails.logger.error("[Orders::Placer] Cannot find position to exit for sid=#{sid}")
+            return nil
+          end
+
+          actual_qty = position_details[:net_qty]
+          actual_segment = position_details[:exchange_segment]
+          position_type = position_details[:position_type]
+
+          unless segment_tradable?(actual_segment)
+            Rails.logger.error("[Orders::Placer] Segment #{actual_segment} is not tradable. Valid segments: #{VALID_TRADABLE_SEGMENTS.join(', ')}")
+            return nil
+          end
+
+          transaction_type = case position_type
+                             when "LONG" then "SELL"
+                             when "SHORT" then "BUY"
+                             else
+            Rails.logger.error("[Orders::Placer] Unknown position type #{position_type}")
+            return nil
+                             end
+
+          payload = {
+            transaction_type: transaction_type,
+            exchange_segment: actual_segment,
+            security_id: sid.to_s,
+            quantity: actual_qty.to_i,
+            order_type: DhanHQ::Constants::OrderType::MARKET,
+            product_type: position_details[:product_type],
+            validity: DhanHQ::Constants::Validity::DAY,
+            disclosed_quantity: 0,
+            correlation_id: normalized_id
+          }
+
+          Rails.logger.info("[Orders::Placer] EXIT payload: #{payload.inspect}")
+
+          if order_placement_enabled?
+            order = with_token_auto_heal(context: 'orders.exit_position') do
+              DhanHQ::Models::Order.create!(payload)
+            end
+            Rails.logger.info("[Orders::Placer] EXIT response: #{order.inspect}") if order
+          else
+            Rails.logger.warn('[Orders::Placer] EXIT blocked because PLACE_ORDER is not enabled')
+          end
+
+          order
+        ensure
+          # Exits are the most safety-critical path here: a released claim means the
+          # 5s enforcement loop's next retry (or reconciliation's stuck-exit repair)
+          # isn't blocked by our own 20-minute idempotency guard for a request that
+          # never actually reached the broker (or failed before any fill).
+          release_claim!(normalized_id) if order.nil?
+        end
       end
 
       private
@@ -387,16 +409,38 @@ module Orders
         nil
       end
 
+      # Self-imposed rate limit (not a broker rejection) — worth a short bounded wait
+      # rather than silently dropping a live entry/exit order. At 10 tokens/sec, a
+      # 150ms wait typically frees a token; 5 attempts caps the total wait at ~750ms.
+      RATE_LIMIT_MAX_WAIT_ATTEMPTS = 5
+      RATE_LIMIT_WAIT_SECONDS = 0.15
+
       def with_order_rate_limit(context: nil, &)
-        rate_limiter.consume!(&)
-      rescue TokenBucket::RateLimited => e
-        Rails.logger.warn("[Orders::Placer] rate limited: #{e.message}")
-        nil
+        attempts = 0
+        begin
+          rate_limiter.consume!(&)
+        rescue Orders::TokenBucket::RateLimited => e
+          attempts += 1
+          if attempts <= RATE_LIMIT_MAX_WAIT_ATTEMPTS
+            Rails.logger.warn("[Orders::Placer] rate limited (#{context}), waiting to retry (attempt #{attempts}): #{e.message}")
+            sleep RATE_LIMIT_WAIT_SECONDS
+            retry
+          end
+
+          Rails.logger.error("[Orders::Placer] rate limit still exceeded after #{attempts - 1} wait attempts (#{context}), giving up: #{e.message}")
+          nil
+        end
       end
 
       def rate_limiter
-        @rate_limiter ||= TokenBucket.new(rate: 10, per: 1.second)
+        # NOTE: this is Orders::TokenBucket (below in this namespace), not the unrelated
+        # ::TokenBucket in lib/token_bucket.rb — that file is loaded by the require above
+        # but shadowed by lexical scoping and never actually used. Referenced explicitly
+        # here to avoid relying on that shadowing.
+        @rate_limiter ||= Orders::TokenBucket.new(rate: 10, per: 1.second)
       end
+
+      RETRYABLE_ERROR_CLASSES = [Timeout::Error, SocketError, Errno::ECONNREFUSED, Errno::ETIMEDOUT].freeze
 
       def with_token_auto_heal(context:, &)
         retried = false
@@ -409,6 +453,12 @@ module Orders
 
           unless DhanhqErrorHandler.token_expired?(e)
             record_order_failure!
+            # Previously every error was swallowed to nil here, so GatewayLive#with_retries
+            # (which wraps buy_market!/sell_market!) never saw an exception to retry on.
+            # Network/timeout errors are re-raised so that retry logic actually engages;
+            # everything else (validation, broker rejection) still returns nil as before.
+            raise e if RETRYABLE_ERROR_CLASSES.any? { |klass| e.is_a?(klass) }
+
             return nil
           end
 
@@ -466,6 +516,16 @@ module Orders
         return true if client_order_id.blank?
 
         Rails.cache.write("coid:#{client_order_id}", true, expires_in: 20.minutes, unless_exist: true)
+      end
+
+      # Releases a claim taken by claim! so a legitimate retry can reuse the same
+      # client_order_id. Only call this when the attempt is known not to have reached
+      # a state where re-sending it risks a duplicate the broker wouldn't itself dedupe
+      # (DhanHQ dedupes by correlation_id — see claim! above).
+      def release_claim!(client_order_id)
+        return if client_order_id.blank?
+
+        Rails.cache.delete("coid:#{client_order_id}")
       end
 
       def normalize_client_order_id(client_order_id)

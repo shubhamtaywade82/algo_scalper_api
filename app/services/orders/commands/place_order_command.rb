@@ -57,7 +57,7 @@ module Orders
           meta: @meta
         )
 
-        if response.is_a?(Hash) && (response[:success] || response[:paper])
+        if response.is_a?(Hash) && response[:success]
           success(
             order_id: response[:order_id],
             paper: response[:paper],

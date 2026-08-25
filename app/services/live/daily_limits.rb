@@ -25,6 +25,7 @@ module Live
 
       index_key = normalize_index_key(index_key)
       risk_config = load_risk_config
+      daily_limits_cfg = risk_config[:daily_limits] || {}
 
       # Check daily profit target first (always enforced)
       global_daily_profit = get_global_daily_profit
@@ -40,35 +41,44 @@ module Live
         return result
       end
 
-      # 1. Check daily loss limit (per-index)
-      daily_loss = get_daily_loss(index_key)
-      max_daily_loss = risk_config[:max_daily_loss_pct] || risk_config[:daily_loss_limit_pct]
-      if max_daily_loss && (daily_loss >= max_daily_loss.to_f)
+      capital = capital_base
+
+      # 1. Check daily loss limit (per-index), as a percentage of capital.
+      # Includes unrealized PnL from open positions — a limit based on realized
+      # PnL alone can't stop trading while a large loss is still marked-to-market.
+      daily_loss = get_daily_loss(index_key) + unrealized_loss(index_key: index_key)
+      daily_loss_pct = capital.positive? ? daily_loss / capital : 0.0
+      max_daily_loss_pct = daily_limits_cfg.dig(:per_index, index_key.to_sym)
+      if max_daily_loss_pct && daily_loss_pct >= max_daily_loss_pct.to_f
         return {
           allowed: false,
           reason: 'daily_loss_limit_exceeded',
           daily_loss: daily_loss,
-          max_daily_loss: max_daily_loss.to_f,
+          daily_loss_pct: daily_loss_pct,
+          max_daily_loss_pct: max_daily_loss_pct.to_f,
           index_key: index_key
         }
       end
 
-      # 2. Check global daily loss limit
-      global_daily_loss = get_global_daily_loss
-      max_global_loss = risk_config[:max_global_daily_loss_pct] || risk_config[:global_daily_loss_limit_pct]
-      if max_global_loss && global_daily_loss >= max_global_loss.to_f
+      # 2. Check global daily loss limit, same treatment across all indices.
+      global_daily_loss = get_global_daily_loss + unrealized_loss(index_key: nil)
+      global_daily_loss_pct = capital.positive? ? global_daily_loss / capital : 0.0
+      max_global_loss_pct = daily_limits_cfg[:global_limit_pct]
+      if max_global_loss_pct && global_daily_loss_pct >= max_global_loss_pct.to_f
         return {
           allowed: false,
           reason: 'global_daily_loss_limit_exceeded',
           global_daily_loss: global_daily_loss,
-          max_global_loss: max_global_loss.to_f
+          global_daily_loss_pct: global_daily_loss_pct,
+          max_global_loss_pct: max_global_loss_pct.to_f
         }
       end
 
-      # Trade frequency limits
-      max_trades = risk_config[:max_daily_trades] || 10
+      # Trade frequency limits (per-index config lives under indices[].trade_limits,
+      # global under top-level trade_limits — not under risk:).
+      max_trades = get_index_max_trades(index_key) || 10
       current_trades = get_daily_trades(index_key)
-      if max_trades && current_trades >= max_trades.to_i
+      if current_trades >= max_trades.to_i
         return {
           allowed: false,
           reason: 'trade_frequency_limit_exceeded',
@@ -78,9 +88,9 @@ module Live
         }
       end
 
-      max_global_trades = risk_config[:max_global_daily_trades] || 20
+      max_global_trades = get_global_max_trades || 20
       global_trades = get_global_daily_trades
-      if max_global_trades && global_trades >= max_global_trades.to_i
+      if global_trades >= max_global_trades.to_i
         return {
           allowed: false,
           reason: 'global_trade_frequency_limit_exceeded',
@@ -326,6 +336,25 @@ module Live
     rescue StandardError => e
       Rails.logger.error("[DailyLimits] Failed to load risk config: #{e.class} - #{e.message}")
       {}
+    end
+
+    # Capital base for percentage-of-capital daily loss limits.
+    # Deliberately does not rescue: a failure here should fail can_trade? closed
+    # (via its own outer rescue) rather than silently skip the loss-pct check.
+    def capital_base
+      Capital::Allocator.available_cash.to_f
+    end
+
+    # Unrealized loss (rupees, positive number) from currently open positions.
+    # @param index_key [String, nil] Restrict to one index, or nil for all indices.
+    def unrealized_loss(index_key: nil)
+      positions = Positions::ActiveCache.instance.all_positions
+      positions = positions.select { |p| p.index_key.to_s.upcase == index_key } if index_key
+
+      positions.sum do |p|
+        pnl = p.pnl.to_f
+        pnl.negative? ? -pnl : 0.0
+      end
     end
 
     # Get max trades per day for specific index from config

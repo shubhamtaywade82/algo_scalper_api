@@ -12,6 +12,32 @@ module Live
         :underlying_price, :vwap, :is_long?
       )
 
+      # Risk::Rules::* classes with no equivalent hardcoded check elsewhere in this
+      # enforcement chain (as opposed to StructureInvalidationRule/PremiumMomentumFailureRule/
+      # TimeStopRule/PercentagePnlRule, which are already wired individually below, or
+      # PortfolioFloorRule/StopLossRule/TakeProfitRule/TrailingStopRule/TimeBasedExitRule/
+      # EarlyTrendFailureRule/SmcNavigatorRule/SessionEndRule/EmergencyPeakLossRule, which
+      # duplicate logic that already runs via UnifiedExitChecker/TrailingEngine/the enforce_*
+      # methods in this file). Evaluated in the rules' own PRIORITY order, first exit wins.
+      #
+      # Several of these are enabled by shipped config the moment they're evaluated for the
+      # first time — ZeroHwmFalseEntryRule (risk.zero_hwm_false_entry.enabled: true already
+      # shipped), GreeksDecayExitRule/FastProfitLockRule/DteZeroThetaFlatExitRule (default
+      # enabled with no config section to disable them). VixForceExitRule/IvCollapseRule/
+      # SecureProfitRule/StructuralKillSwitchRule/GreenTradeCapRule stay off by default
+      # (explicit config, or GreenTradeCapRule's own self-gating on unset thresholds).
+      NOVEL_RULE_CLASSES = [
+        Risk::Rules::VixForceExitRule,
+        Risk::Rules::ZeroHwmFalseEntryRule,
+        Risk::Rules::GreenTradeCapRule,
+        Risk::Rules::IvCollapseRule,
+        Risk::Rules::StructuralKillSwitchRule,
+        Risk::Rules::DteZeroThetaFlatExitRule,
+        Risk::Rules::GreeksDecayExitRule,
+        Risk::Rules::FastProfitLockRule,
+        Risk::Rules::SecureProfitRule
+      ].freeze
+
       # Enforcement methods always accept an exit_engine keyword. They do not fetch positions from caller.
       # If exit_engine is provided, they will delegate the actual exit to it. Otherwise they call internal execute_exit.
 
@@ -47,6 +73,44 @@ module Live
         end
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_selling_exits_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+
+      # Evaluates NOVEL_RULE_CLASSES via RuleEngine (priority-ordered, first exit wins).
+      # RuleEngine.evaluate already rescues per-rule errors internally, so one rule's bug
+      # can't block the others from running.
+      def novel_rule_engine
+        @novel_rule_engine ||= Risk::Rules::RuleEngine.new(
+          rules: NOVEL_RULE_CLASSES.map { |klass| klass.new(config: { enabled: true }) }
+        )
+      end
+
+      def enforce_novel_rule_exits(exit_engine:)
+        PositionTracker.active.find_each do |tracker|
+          enforce_novel_rule_exits_for(tracker, exit_engine: exit_engine)
+        end
+      end
+
+      def enforce_novel_rule_exits_for(tracker, exit_engine:)
+        snapshot = pnl_snapshot(tracker)
+        return unless snapshot
+
+        position_data = build_position_data_for_rule_engine(tracker, snapshot)
+        context = Risk::Rules::RuleContext.new(
+          position: position_data,
+          tracker: tracker,
+          risk_config: risk_config,
+          tracker_snapshot: snapshot
+        )
+
+        result = novel_rule_engine.evaluate(context)
+        return unless result.exit?
+
+        exit_path = result.rule_name || 'novel_rule'
+        Rails.logger.info("[RiskManager] #{result.reason} for #{tracker.order_no} | Path: #{exit_path}")
+        track_exit_path(tracker, exit_path, result.reason)
+        dispatch_exit(exit_engine, tracker, result.reason)
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_novel_rule_exits_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
       end
 
       def enforce_hard_limits_for(tracker, exit_engine:)

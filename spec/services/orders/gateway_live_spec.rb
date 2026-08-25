@@ -53,12 +53,32 @@ RSpec.describe Orders::GatewayLive do
       )
     end
 
-    it 'generates client order ID when not provided' do
+    it 'falls back to tracker.exit_coid when no client_order_id is provided' do
+      tracker.update!(exit_coid: 'AS-EXIT-FROM-TRACKER')
+
       gateway.exit_market(tracker)
 
-      expect(Orders::Placer).to have_received(:exit_position!) do |args|
-        expect(args[:client_order_id]).to match(/^AS-EXIT-#{tracker.security_id}-\d+-[a-f0-9]{4}$/)
+      expect(Orders::Placer).to have_received(:exit_position!).with(
+        seg: tracker.segment,
+        sid: tracker.security_id,
+        client_order_id: 'AS-EXIT-FROM-TRACKER'
+      )
+    end
+
+    it 'derives the same deterministic id on every call (not a fresh random one) when ' \
+       'neither client_order_id nor tracker.exit_coid is set' do
+      # Regression: the old fallback (AS-EXIT-{sid}-{timestamp}-{random}) minted a new id
+      # on every call, which defeats broker-side correlation-id dedup on a retried exit.
+      coids = []
+      allow(Orders::Placer).to receive(:exit_position!) do |**kwargs|
+        coids << kwargs[:client_order_id]
+        double('order', id: '123')
       end
+
+      3.times { gateway.exit_market(tracker) }
+
+      expect(coids).to all(match(/^AS-EXIT-[a-f0-9]{20}$/))
+      expect(coids.uniq.size).to eq(1) # same id every time for the same tracker
     end
 
     it 'returns success hash with order id when order is placed' do
@@ -83,6 +103,34 @@ RSpec.describe Orders::GatewayLive do
       result = gateway.exit_market(tracker)
 
       expect(result).to include(success: false, status: :failed, error: 'exit failed')
+    end
+  end
+
+  describe '#flat_position' do
+    it 'derives the same deterministic id (segment, security_id, day) on every call' do
+      coids = []
+      allow(Orders::Placer).to receive(:exit_position!) do |**kwargs|
+        coids << kwargs[:client_order_id]
+        double('order', id: '123')
+      end
+
+      3.times { gateway.flat_position(segment: 'NSE_FNO', security_id: '55111') }
+
+      expect(coids).to all(match(/^AS-FLAT-[a-f0-9]{20}$/))
+      expect(coids.uniq.size).to eq(1)
+    end
+
+    it 'derives a different id for a different security_id' do
+      coids = []
+      allow(Orders::Placer).to receive(:exit_position!) do |**kwargs|
+        coids << kwargs[:client_order_id]
+        double('order', id: '123')
+      end
+
+      gateway.flat_position(segment: 'NSE_FNO', security_id: '55111')
+      gateway.flat_position(segment: 'NSE_FNO', security_id: '99999')
+
+      expect(coids.uniq.size).to eq(2)
     end
   end
 
@@ -234,6 +282,33 @@ RSpec.describe Orders::GatewayLive do
         end.to raise_error(Timeout::Error)
 
         expect(attempts).to eq(3) # RETRY_COUNT
+      end
+    end
+
+    context 'when going end-to-end through the real Orders::Placer (regression: with_token_auto_heal used to swallow every error to nil, so this retry path never actually engaged)' do
+      before do
+        allow(Orders::Placer).to receive(:buy_market!).and_call_original
+        allow(Rails.cache).to receive(:read).and_return(nil)
+        allow(Rails.cache).to receive(:write).and_return(true)
+        allow(ENV).to receive(:[]).and_call_original
+        allow(ENV).to receive(:[]).with('PLACE_ORDER').and_return('true')
+        allow(Orders::Placer).to receive(:with_order_rate_limit).and_yield
+      end
+
+      it 'retries a broker timeout and succeeds on the second real attempt' do
+        attempts = 0
+        order_double = double('order', id: 'RETRY-OK')
+        allow(DhanHQ::Models::Order).to receive(:create!) do
+          attempts += 1
+          raise Timeout::Error, 'Timeout' if attempts == 1
+
+          order_double
+        end
+
+        result = gateway.place_market(side: 'buy', segment: 'NSE_FNO', security_id: '55111', qty: 50)
+
+        expect(result).to eq(order_double)
+        expect(attempts).to eq(2)
       end
     end
   end

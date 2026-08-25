@@ -60,7 +60,7 @@ module Orders
       private
 
       def exit_successful?(response)
-        response.is_a?(Hash) && (response[:success] || response[:paper])
+        response.is_a?(Hash) && response[:success]
       end
     end
   end

@@ -19,7 +19,7 @@ module Risk
 
       def evaluate(context)
         return skip_result unless context.active?
-        return no_action_result unless enabled?(context)
+        return skip_result unless enabled?
 
         tracker = context.tracker
         underlying_ltp = current_underlying_ltp(tracker)
@@ -38,7 +38,7 @@ module Risk
         ema9 = series.ema(9)
         return no_action_result unless vwap && ema9
 
-        tolerance = config.fetch(:tolerance_pct, DEFAULT_TOLERANCE_PCT).to_f
+        tolerance = rule_config.fetch(:tolerance_pct, DEFAULT_TOLERANCE_PCT).to_f
 
         if vwap_broken?(direction, underlying_ltp, vwap, tolerance)
           return exit_result(
@@ -68,7 +68,20 @@ module Risk
         no_action_result
       end
 
+      # Config-driven kill switch (config/algo.yml under risk.structural_kill_switch) —
+      # defaults OFF: this rule has no production track record yet, so it must be
+      # explicitly opted into rather than activating the moment it's wired in.
+      def enabled?(_context = nil)
+        rule_config[:enabled] == true
+      end
+
       private
+
+      def rule_config
+        AlgoConfig.fetch.dig(:risk, :structural_kill_switch) || {}
+      rescue StandardError
+        {}
+      end
 
       def current_underlying_ltp(tracker)
         if tracker.respond_to?(:watchable) && tracker.watchable.respond_to?(:instrument)

@@ -109,4 +109,59 @@ RSpec.describe Live::RiskManagerService::ExitEnforcement do
       end
     end
   end
+
+  describe '#enforce_novel_rule_exits_for' do
+    let(:tracker) { create(:position_tracker, position_side: 'long', status: 'active', created_at: 5.seconds.ago) }
+    let(:exit_engine) { instance_double(Live::ExitEngine) }
+
+    before do
+      allow(harness).to receive_messages(
+        risk_config: {},
+        pnl_snapshot: { ltp: 100.0, pnl: pnl, pnl_pct: pnl_pct, hwm_pnl: hwm_pnl }
+      )
+      allow(harness).to receive(:dispatch_exit)
+      allow(harness).to receive(:track_exit_path)
+      allow(AlgoConfig).to receive(:fetch).and_return(
+        risk: { green_trade_cap: { enabled: true, min_hwm_rupees: 500, max_adverse_pct: 0.05 } }
+      )
+    end
+
+    context 'when GreenTradeCapRule triggers (peak touched, then adverse move beyond its cap)' do
+      let(:hwm_pnl) { 600.0 }
+      let(:pnl) { -100.0 }
+      let(:pnl_pct) { -0.06 } # beyond the -5% cap
+
+      it 'dispatches an exit with the GreenTradeCapRule reason' do
+        harness.send(:enforce_novel_rule_exits_for, tracker, exit_engine: exit_engine)
+
+        expect(harness).to have_received(:dispatch_exit).with(exit_engine, tracker, a_string_matching(/GREEN_TRADE_CAP/))
+      end
+    end
+
+    context 'when no wired rule triggers' do
+      let(:hwm_pnl) { 50.0 }
+      let(:pnl) { 20.0 }
+      let(:pnl_pct) { 0.01 }
+
+      it 'does not dispatch an exit' do
+        harness.send(:enforce_novel_rule_exits_for, tracker, exit_engine: exit_engine)
+
+        expect(harness).not_to have_received(:dispatch_exit)
+      end
+    end
+
+    context 'when there is no PnL snapshot yet' do
+      let(:hwm_pnl) { 0.0 }
+      let(:pnl) { 0.0 }
+      let(:pnl_pct) { 0.0 }
+
+      before { allow(harness).to receive(:pnl_snapshot).and_return(nil) }
+
+      it 'does not evaluate any rule' do
+        harness.send(:enforce_novel_rule_exits_for, tracker, exit_engine: exit_engine)
+
+        expect(harness).not_to have_received(:dispatch_exit)
+      end
+    end
+  end
 end

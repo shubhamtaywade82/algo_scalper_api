@@ -42,8 +42,10 @@ module Risk
         current_profit_pct = context.pnl_pct
         return skip_result unless peak_profit_pct && current_profit_pct
 
-        # Use tighter drawdown threshold when profit is secured
-        tight_drawdown_pct = context.config_bigdecimal(:secure_profit_drawdown_pct, BigDecimal('3.0'))
+        # Use tighter drawdown threshold when profit is secured. peak/current profit_pct
+        # are DECIMAL (0.12 = 12%, see FastProfitLockRule) so the default here must be
+        # too — algo.yml's own secure_profit_drawdown_pct: 0.03 confirms the convention.
+        tight_drawdown_pct = context.config_bigdecimal(:secure_profit_drawdown_pct, BigDecimal('0.03'))
         drawdown = peak_profit_pct - current_profit_pct
 
         return no_action_result unless drawdown >= tight_drawdown_pct.to_f

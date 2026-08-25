@@ -88,7 +88,7 @@ module Live
           tracker = PositionTracker.find_by(id: position_data.tracker_id)
           if tracker&.active?
             reason = "emergency_peak_loss_exit (peak: #{(peak * 100).round(2)}%, current: #{(current * 100).round(2)}%)"
-            Live::ExitEngine.execute_exit(tracker: tracker, reason: reason, source: :trailing_engine)
+            exit_engine.execute_exit(tracker, reason)
             return true
           end
         end

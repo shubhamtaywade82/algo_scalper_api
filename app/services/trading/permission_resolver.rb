@@ -27,7 +27,7 @@ module Trading
         mtf = Smc::Context.new(mtf_series)
         ltf = Smc::Context.new(ltf_series)
 
-        avrz_state = Smc::AvrzStateResolver.resolve(symbol: key, ltf_series: avrz_series)
+        avrz_state = Smc::AvrzStateResolver.resolve(symbol: key, ltf_series: ltf_series)
 
         smc_result = Smc::PermissionSnapshot.from_contexts(htf: htf, mtf: mtf, ltf: ltf)
         avrz_result = { state: avrz_state }
