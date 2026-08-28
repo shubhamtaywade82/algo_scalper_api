@@ -89,14 +89,21 @@ module Live
 
     def stop
       @running = false
-      @thread&.kill
-      @thread = nil
-      @watchdog_thread&.kill
-      @watchdog_thread = nil
+
       if @event_subscription
         Core::EventBus.instance.unsubscribe(@event_subscription)
         @event_subscription = nil
       end
+
+      # Allow threads up to 5s to finish current cycle and exit naturally
+      [@thread, @watchdog_thread].compact.each do |th|
+        th.join(5)
+        th.kill if th.alive?
+      end
+
+      @thread = nil
+      @watchdog_thread = nil
+      Rails.logger.info '[RiskManager] Service stopped'
     end
 
     delegate :sleep, to: :Kernel

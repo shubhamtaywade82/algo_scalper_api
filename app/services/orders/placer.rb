@@ -136,11 +136,13 @@ module Orders
 
         unless seg && sid && qty && price && normalized_id
           Rails.logger.error("[Orders::Placer] Missing required parameters for buy_ioc_limit!: seg=#{seg}, sid=#{sid}, qty=#{qty}, price=#{price}, client_order_id=#{client_order_id}")
+          release_claim!(normalized_id)
           return nil
         end
 
         unless segment_tradable?(seg)
           Rails.logger.error("[Orders::Placer] Segment #{seg} is not tradable.")
+          release_claim!(normalized_id)
           return nil
         end
 
@@ -195,11 +197,13 @@ module Orders
 
         unless seg && sid && qty && price && normalized_id
           Rails.logger.error("[Orders::Placer] Missing required parameters for sell_ioc_limit!: seg=#{seg}, sid=#{sid}, qty=#{qty}, price=#{price}, client_order_id=#{client_order_id}")
+          release_claim!(normalized_id)
           return nil
         end
 
         unless segment_tradable?(seg)
           Rails.logger.error("[Orders::Placer] Segment #{seg} is not tradable.")
+          release_claim!(normalized_id)
           return nil
         end
 
@@ -238,11 +242,13 @@ module Orders
 
         unless seg && sid && qty && price && normalized_id
           Rails.logger.error("[Orders::Placer] Missing required parameters for sell_limit!: seg=#{seg}, sid=#{sid}, qty=#{qty}, price=#{price}, client_order_id=#{client_order_id}")
+          release_claim!(normalized_id)
           return nil
         end
 
         unless segment_tradable?(seg)
           Rails.logger.error("[Orders::Placer] Segment #{seg} is not tradable.")
+          release_claim!(normalized_id)
           return nil
         end
 
@@ -281,11 +287,13 @@ module Orders
 
         unless seg && sid && qty && price && normalized_id
           Rails.logger.error("[Orders::Placer] Missing required parameters for buy_limit!: seg=#{seg}, sid=#{sid}, qty=#{qty}, price=#{price}, client_order_id=#{client_order_id}")
+          release_claim!(normalized_id)
           return nil
         end
 
         unless segment_tradable?(seg)
           Rails.logger.error("[Orders::Placer] Segment #{seg} is not tradable.")
+          release_claim!(normalized_id)
           return nil
         end
 

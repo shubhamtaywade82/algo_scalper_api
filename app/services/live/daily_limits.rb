@@ -74,6 +74,21 @@ module Live
         }
       end
 
+      # Per-strategy trade frequency limits (keyed by strategy slug)
+      if (strategy_slug = strategy_slug_from_thread)
+        max_strategy_trades = get_strategy_max_trades(strategy_slug)
+        current_strategy_trades = get_strategy_daily_trades(strategy_slug)
+        if max_strategy_trades && current_strategy_trades >= max_strategy_trades.to_i
+          return {
+            allowed: false,
+            reason: 'strategy_trade_frequency_limit_exceeded',
+            current_trades: current_strategy_trades,
+            max_trades: max_strategy_trades.to_i,
+            strategy_slug: strategy_slug
+          }
+        end
+      end
+
       # Trade frequency limits (per-index config lives under indices[].trade_limits,
       # global under top-level trade_limits — not under risk:).
       max_trades = get_index_max_trades(index_key) || 10
@@ -184,8 +199,9 @@ module Live
 
     # Record a trade for the given index
     # @param index_key [Symbol, String] Index key
+    # @param strategy_slug [String, nil] Optional strategy slug for per-strategy tracking
     # @return [Boolean] True if recorded successfully
-    def record_trade(index_key:)
+    def record_trade(index_key:, strategy_slug: nil)
       return false unless @redis
 
       index_key = normalize_index_key(index_key)
@@ -199,6 +215,13 @@ module Live
       global_trades_key = global_daily_trades_key
       @redis.incr(global_trades_key)
       @redis.expire(global_trades_key, TTL_SECONDS)
+
+      # Increment per-strategy trade counter
+      if strategy_slug.present?
+        strategy_key = strategy_daily_trades_key(strategy_slug)
+        @redis.incr(strategy_key)
+        @redis.expire(strategy_key, TTL_SECONDS)
+      end
 
       Rails.logger.debug do
         "[DailyLimits] Recorded trade for #{index_key} " \
@@ -312,6 +335,18 @@ module Live
       0.0
     end
 
+    # Get daily trade count for a specific strategy
+    def get_strategy_daily_trades(strategy_slug)
+      return 0 unless @redis
+
+      key = strategy_daily_trades_key(strategy_slug)
+      value = @redis.get(key)
+      (value || 0).to_i
+    rescue StandardError => e
+      Rails.logger.error("[DailyLimits] get_strategy_daily_trades error: #{e.class} - #{e.message}")
+      0
+    end
+
     private
 
     def notify_daily_profit_target_telegram(result)
@@ -323,6 +358,26 @@ module Live
       )
     rescue StandardError => e
       Rails.logger.warn("[DailyLimits] Daily profit Telegram notify failed: #{e.message}")
+    end
+
+    # Extract strategy slug from current thread (set by Signal::Engine during entry flow)
+    def strategy_slug_from_thread
+      Thread.current[:current_strategy_slug]
+    end
+
+    # Get max trades per day for a specific strategy from config
+    def get_strategy_max_trades(strategy_slug)
+      strategy_limits = AlgoConfig.fetch[:strategy_limits] || {}
+      strategy_limits.dig(strategy_slug.to_sym, :max_trades_per_day) ||
+        strategy_limits.dig(strategy_slug, 'max_trades_per_day')
+    rescue StandardError => e
+      Rails.logger.error("[DailyLimits] Failed to get strategy max trades: #{e.class} - #{e.message}")
+      nil
+    end
+
+    # Redis key for daily trades (per-strategy)
+    def strategy_daily_trades_key(strategy_slug)
+      "#{REDIS_KEY_PREFIX}:trades:#{Time.zone.today}:strategy:#{strategy_slug}"
     end
 
     # Normalize index key to string

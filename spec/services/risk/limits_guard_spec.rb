@@ -190,9 +190,9 @@ RSpec.describe Risk::LimitsGuard do
       allow(Redis).to receive(:new).and_raise(Redis::CannotConnectError, 'connection refused')
     end
 
-    it 'returns { blocked: false } for trades/positions check (Redis nil returns 0)' do
+    it 'returns { blocked: true } for trades/positions check (fail-closed on Redis failure)' do
       result = described_class.check_all!
-      expect(result).to eq({ blocked: false })
+      expect(result).to eq({ blocked: 'daily_max_trades_reached' })
     end
   end
 
@@ -203,11 +203,11 @@ RSpec.describe Risk::LimitsGuard do
       allow(Rails.logger).to receive(:error)
     end
 
-    it 'logs the error at least once and returns nil' do
+    it 'logs the error at least once and returns blocked (fail-closed)' do
       result = described_class.check_all!
 
       expect(Rails.logger).to have_received(:error).with(/Redis error/).at_least(:once)
-      expect(result).to eq({ blocked: false })
+      expect(result).to eq({ blocked: 'daily_max_trades_reached' })
     end
   end
 

@@ -111,7 +111,7 @@ module Orders
 
       # NEW: Record trade in DailyLimits
       daily_limits = Live::DailyLimits.new
-      daily_limits.record_trade(index_key: index_cfg[:key])
+      daily_limits.record_trade(index_key: index_cfg[:key], strategy_slug: tracker.entry_strategy)
 
       # Emit entry_filled event
       emit_entry_filled_event(tracker, pick, index_cfg, direction, sl_price, tp_price, risk_pct)

@@ -322,25 +322,46 @@ module Live
 
       # EOD force-close: at or after market close, close all active positions.
       # Ensures intraday positions never carry overnight regardless of time-stop bypass or other rules.
+      # For physical-settled instruments, force-close T-1 (day before expiry).
       def enforce_eod_force_close(exit_engine:)
         risk = risk_config
         market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
         return unless market_close_time
 
         now = Time.current
-        return unless now >= market_close_time
+        close_today = now >= market_close_time
+        physical_t1_close = physical_settlement_t1_close?
+
+        return unless close_today || physical_t1_close
 
         PositionTracker.active.find_each do |tracker|
           next if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
 
-          reason = "MARKET_CLOSE (EOD #{market_close_time.strftime('%H:%M')} IST)"
-          exit_path = 'eod_force_close'
+          reason = if physical_t1_close
+                     "PHYSICAL_SETTLEMENT_T1 (EOD #{market_close_time.strftime('%H:%M')} IST)"
+                   else
+                     "MARKET_CLOSE (EOD #{market_close_time.strftime('%H:%M')} IST)"
+                   end
+          exit_path = physical_t1_close ? 'physical_settlement_t1' : 'eod_force_close'
           Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
           track_exit_path(tracker, exit_path, reason)
           dispatch_exit(exit_engine, tracker, reason)
         rescue StandardError => e
           Rails.logger.error("[RiskManager] enforce_eod_force_close error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
         end
+      end
+
+      def physical_settlement_t1_close?
+        instrument = Instrument.find_by(settlement_type: 'physical')
+        return false unless instrument
+
+        today = Time.current.to_date
+        PositionTracker.active
+                      .where(expiry_date: today + 1)
+                      .where.not(security_id: instrument.security_id)
+                      .exists?
+      rescue StandardError
+        false
       end
 
       def trailing_armed_for?(tracker, position_data)

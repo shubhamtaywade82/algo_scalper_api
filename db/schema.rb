@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_24_171901) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_28_000003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -259,6 +259,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_24_171901) do
     t.decimal "sell_co_sl_range_max_perc", precision: 8, scale: 2
     t.decimal "sell_co_sl_range_min_perc", precision: 8, scale: 2
     t.string "series"
+    t.string "settlement_type", default: "cash", null: false
     t.decimal "strike_price", precision: 15, scale: 5
     t.string "symbol_name"
     t.decimal "tick_size"
@@ -269,6 +270,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_24_171901) do
     t.index ["instrument_code"], name: "index_instruments_on_instrument_code"
     t.index ["security_id", "segment"], name: "index_instruments_on_security_id_and_segment"
     t.index ["security_id", "symbol_name", "exchange", "segment"], name: "index_instruments_unique", unique: true
+    t.index ["settlement_type"], name: "index_instruments_on_settlement_type"
     t.index ["symbol_name"], name: "index_instruments_on_symbol_name"
     t.index ["underlying_symbol", "expiry_date"], name: "index_instruments_on_underlying_symbol_and_expiry_date", where: "(underlying_symbol IS NOT NULL)"
   end
@@ -367,10 +369,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_24_171901) do
   end
 
   create_table "order_intents", force: :cascade do |t|
+    t.string "aasm_state", default: "created", null: false
     t.string "correlation_id"
     t.datetime "created_at", null: false
     t.bigint "instrument_id", null: false
     t.decimal "limit_price", precision: 12, scale: 4
+    t.integer "lock_version", default: 0, null: false
     t.boolean "margin_approved", default: false, null: false
     t.jsonb "meta", default: {}, null: false
     t.string "order_type", default: "MARKET", null: false
@@ -386,6 +390,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_24_171901) do
     t.decimal "trigger_price", precision: 12, scale: 4
     t.datetime "updated_at", null: false
     t.string "validity", default: "DAY", null: false
+    t.index ["aasm_state"], name: "index_order_intents_on_aasm_state"
     t.index ["correlation_id"], name: "index_order_intents_on_correlation_id", unique: true, where: "(correlation_id IS NOT NULL)"
     t.index ["instrument_id", "status"], name: "index_order_intents_on_instrument_id_and_status"
     t.index ["instrument_id"], name: "index_order_intents_on_instrument_id"
@@ -434,6 +439,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_24_171901) do
     t.text "error_message"
     t.decimal "executed_price", precision: 15, scale: 2
     t.bigint "instrument_id", null: false
+    t.integer "lock_version", default: 0, null: false
     t.jsonb "meta", default: {}
     t.string "order_no", null: false
     t.string "order_type", default: "MARKET"
@@ -584,6 +590,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_24_171901) do
     t.integer "leg_group_id"
     t.integer "leg_index", default: 0
     t.string "leg_role"
+    t.integer "lock_version", default: 0, null: false
     t.decimal "lowest_price", precision: 12, scale: 4
     t.decimal "margin_required", precision: 12, scale: 2, default: "0.0"
     t.jsonb "meta", default: {}
@@ -1090,6 +1097,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_24_171901) do
     t.index ["stream", "created_at"], name: "index_smc_events_on_stream_and_created_at"
   end
 
+  create_table "solid_cable_messages", force: :cascade do |t|
+    t.binary "channel", null: false
+    t.bigint "channel_hash", null: false
+    t.datetime "created_at", null: false
+    t.binary "payload", null: false
+    t.index ["channel"], name: "index_solid_cable_messages_on_channel"
+    t.index ["channel_hash"], name: "index_solid_cable_messages_on_channel_hash"
+    t.index ["created_at"], name: "index_solid_cable_messages_on_created_at"
+  end
+
   create_table "solid_queue_blocked_executions", force: :cascade do |t|
     t.string "concurrency_key", null: false
     t.datetime "created_at", null: false
@@ -1215,6 +1232,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_24_171901) do
     t.datetime "created_at", null: false
     t.bigint "current_version_id"
     t.string "desired_status"
+    t.integer "lock_version", default: 0, null: false
     t.string "name", null: false
     t.string "slug", null: false
     t.string "status", default: "draft", null: false
@@ -1364,7 +1382,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_24_171901) do
   create_table "trading_strategies", force: :cascade do |t|
     t.string "author", default: "System"
     t.jsonb "backtest_results", default: {}
-    t.jsonb "checks", default: {"risk"=>"not_run", "logic"=>"not_run", "syntax"=>"not_run", "backtest"=>"not_run"}
+    t.jsonb "checks", default: {"risk" => "not_run", "logic" => "not_run", "syntax" => "not_run", "backtest" => "not_run"}
     t.text "code", default: ""
     t.datetime "created_at", null: false
     t.text "description"

@@ -1,4 +1,4 @@
-import { DhanClient } from "@shubhamtaywade82/dhanhq-ts";
+import { DhanClient } from "@nemesis-oss/dhanhq-sdk";
 import Redis from "ioredis";
 
 const redisUrl = process.env.REDIS_URL || "redis://127.0.0.1:6379/0";

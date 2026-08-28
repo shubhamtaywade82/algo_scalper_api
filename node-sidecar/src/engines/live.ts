@@ -1,4 +1,4 @@
-import { DhanClient, OrderTracker, PositionMonitor } from "@shubhamtaywade82/dhanhq-ts";
+import { DhanClient, OrderTracker, PositionMonitor } from "@nemesis-oss/dhanhq-sdk";
 import { redisPublisher } from "../auth";
 
 export class LiveExecutionEngine {

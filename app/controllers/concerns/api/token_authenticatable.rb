@@ -20,7 +20,14 @@ module Api
 
     def require_api_token!(expected, tier:)
       expected = expected.presence
-      return if expected.blank?
+      if expected.blank?
+        if Rails.env.production?
+          Rails.logger.warn("[#{self.class.name}] No #{tier} token configured - denying request in production")
+          render json: { error: 'server_configuration_error' }, status: :forbidden
+          return nil
+        end
+        return
+      end
       return if token_matches?(provided_api_token, expected)
 
       Rails.logger.warn("[#{self.class.name}] #{tier} API token missing or invalid from #{request.remote_ip}")

@@ -307,6 +307,7 @@ module Signal
 
         permission = :exit_testing
         smc_decision = final_direction == :bullish ? :call : :put
+        momentum_score = 0
 
         if exit_testing_mode?
           Rails.logger.info("[Signal] Exit-testing mode: skipping entry filter, permission/SMC gating, and momentum validation.")

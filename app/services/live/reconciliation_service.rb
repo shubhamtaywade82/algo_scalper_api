@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'singleton'
+require 'concurrent/map'
 
 module Live
   # ReconciliationService ensures data consistency across:
@@ -17,9 +18,13 @@ module Live
     # RiskManagerService already ensures caches every 5 seconds
     # This service is primarily for on-demand reconciliation
     RECONCILIATION_INTERVAL = 30.seconds
+    RECONCILIATION_COOLDOWN_SECONDS = 60
+    MAX_RECONCILE_EXIT_ATTEMPTS = 3
 
     def initialize
       @last_reconciliation = nil
+      @exit_attempts = Concurrent::Map.new
+      @exit_cooldowns = Concurrent::Map.new
       @stats = {
         reconciliations: 0,
         positions_fixed: 0,
@@ -171,7 +176,30 @@ module Live
     end
 
     def fix_stuck_exit(tracker)
-      Rails.logger.warn("[ReconciliationService] Auto-correcting stuck exit for #{tracker.order_no}")
+      now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      last_attempt_at = @exit_cooldowns[tracker.id]
+
+      if last_attempt_at && (now - last_attempt_at) < RECONCILIATION_COOLDOWN_SECONDS
+        Rails.logger.info("[ReconciliationService] Cooldown active for #{tracker.order_no} stuck exit; skipping this cycle")
+        return
+      end
+
+      attempts = (@exit_attempts[tracker.id] || 0) + 1
+      @exit_attempts[tracker.id] = attempts
+      @exit_cooldowns[tracker.id] = now
+
+      if attempts > MAX_RECONCILE_EXIT_ATTEMPTS
+        msg = "[ReconciliationService] Exceeded max exit attempts (#{MAX_RECONCILE_EXIT_ATTEMPTS}) for #{tracker.order_no}. Manual intervention required."
+        Rails.logger.error(msg)
+        Notifications::TelegramNotifier.instance.notify_error(msg, context: 'Live::ReconciliationService#fix_stuck_exit')
+        AuditLog.create!(
+          event_type: 'reconciliation_max_attempts_exceeded',
+          metadata: { order_no: tracker.order_no, tracker_id: tracker.id, attempts: attempts }
+        )
+        return
+      end
+
+      Rails.logger.warn("[ReconciliationService] Auto-correcting stuck exit for #{tracker.order_no} (attempt #{attempts}/#{MAX_RECONCILE_EXIT_ATTEMPTS})")
 
       exit_engine = Rails.application.config.x.trading_supervisor&.[](:exit_manager)
 
@@ -188,7 +216,7 @@ module Live
 
       AuditLog.create!(
         event_type: 'reconciliation_mismatch',
-        metadata: { order_no: tracker.order_no, tracker_id: tracker.id, kind: 'stuck_exit' }
+        metadata: { order_no: tracker.order_no, tracker_id: tracker.id, kind: 'stuck_exit', attempt: attempts }
       )
     rescue StandardError => e
       Rails.logger.error("[ReconciliationService] Failed to auto-correct stuck exit for #{tracker.order_no}: #{e.class} - #{e.message}")

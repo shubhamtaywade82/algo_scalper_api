@@ -41,18 +41,24 @@ module Risk
       end
 
       def record_trade!
-        redis&.incr(trades_count_key)
-        redis&.expire(trades_count_key, TTL)
+        return if redis.nil?
+
+        redis.incr(trades_count_key)
+        redis.expire(trades_count_key, TTL)
       end
 
       def record_win!
-        redis&.set(consecutive_losses_key, 0)
-        redis&.expire(consecutive_losses_key, TTL)
+        return if redis.nil?
+
+        redis.set(consecutive_losses_key, 0)
+        redis.expire(consecutive_losses_key, TTL)
       end
 
       def record_loss!
-        redis&.incr(consecutive_losses_key)
-        redis&.expire(consecutive_losses_key, TTL)
+        return if redis.nil?
+
+        redis.incr(consecutive_losses_key)
+        redis.expire(consecutive_losses_key, TTL)
       end
 
       def current_stats
@@ -73,7 +79,9 @@ module Risk
       end
 
       def max_trades_reached?(limit)
-        redis&.get(trades_count_key).to_i >= limit
+        return true if redis.nil?
+
+        redis.get(trades_count_key).to_i >= limit
       end
 
       def max_open_positions_reached?(limit)
@@ -81,7 +89,9 @@ module Risk
       end
 
       def consecutive_losses_breached?(limit)
-        redis&.get(consecutive_losses_key).to_i >= limit
+        return true if redis.nil?
+
+        redis.get(consecutive_losses_key).to_i >= limit
       end
     end
   end

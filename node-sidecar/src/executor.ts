@@ -1,4 +1,4 @@
-import { DhanClient, OrderTracker, PositionMonitor, Pipeline, createSkillRegistry } from "@shubhamtaywade82/dhanhq-ts";
+import { DhanClient, OrderTracker, PositionMonitor, Pipeline, createSkillRegistry } from "@nemesis-oss/dhanhq-sdk";
 import Redis from "ioredis";
 import { redisPublisher } from "./auth";
 import { PaperExecutionEngine } from "./engines/paper";
@@ -49,7 +49,10 @@ export async function startExecutor(client: DhanClient): Promise<void> {
 
       // Pre-trade risk pipeline check
       const pipeline = new Pipeline({
-        limits: { maxQuantity: 500, dailyMaxLoss: 10000 }
+        limits: {
+          maxQuantity: Number(process.env.RISK_MAX_QUANTITY) || 500,
+          dailyMaxLoss: Number(process.env.RISK_DAILY_MAX_LOSS) || 10000
+        }
       });
       await pipeline.run({ args: intent.params });
 
