@@ -1,0 +1,3616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Axis Nexus — Unified Options Trading & Agentic Control Plane</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: {
+        mono: ['JetBrains Mono', 'monospace'],
+        sans: ['Space Grotesk', 'sans-serif'],
+      },
+      colors: {
+        bg: '#06090f',
+        surface: {
+          50: '#0a0f18',
+          100: '#0f1624',
+          200: '#151f33',
+          300: '#1c2a45',
+          400: '#253759',
+          500: '#2f456e'
+        },
+        accent: { DEFAULT: '#00e5a0', dim: '#00b37d', bright: '#33ffbb' },
+        teal: { DEFAULT: '#00d4aa', dim: '#00a886', bright: '#33ffcc' },
+        sky: { DEFAULT: '#38bdf8', dim: '#0284c7' },
+        gold: { DEFAULT: '#f0b429', dim: '#c4911f' },
+        danger: { DEFAULT: '#ff3b5c', dim: '#cc2e4a' },
+        purple: { DEFAULT: '#a855f7', dim: '#9333ea' },
+        pink: { DEFAULT: '#f472b6', dim: '#db2777' },
+        border: '#1c283f',
+        muted: '#64748b',
+      }
+    }
+  }
+}
+</script>
+<style>
+  :root {
+    --bg: #06090f;
+    --fg: #e2e8f0;
+    --muted: #64748b;
+    --accent: #00e5a0;
+    --teal: #00d4aa;
+    --danger: #ff3b5c;
+    --gold: #f0b429;
+    --sky: #38bdf8;
+    --purple: #a855f7;
+    --card: #0f1624;
+    --card-hover: #151f33;
+    --border: #1c283f;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--fg); font-family: 'Space Grotesk', sans-serif; overflow-x: hidden; height: 100vh; }
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #2f456e; }
+
+  /* Glows & Animations */
+  .glow-accent { box-shadow: 0 0 20px rgba(0, 229, 160, 0.15), 0 0 60px rgba(0, 229, 160, 0.05); }
+  .glow-danger { box-shadow: 0 0 20px rgba(255, 59, 92, 0.2); }
+  .glow-gold { box-shadow: 0 0 20px rgba(240, 180, 41, 0.15); }
+  
+  @keyframes pulse-live { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .pulse-live { animation: pulse-live 1.5s ease-in-out infinite; }
+  
+  @keyframes slide-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .slide-in { animation: slide-in 0.2s ease-out forwards; }
+  
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+  .blink { animation: blink 1s step-end infinite; }
+
+  @keyframes scanline { 0% { top: -1px; } 100% { top: 100vh; } }
+  body::after {
+    content: ''; position: fixed; left: 0; right: 0; height: 1px; z-index: 9999; pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgba(0, 229, 160, 0.06), transparent);
+    animation: scanline 12s linear infinite;
+  }
+
+  .bg-grid {
+    background-image: linear-gradient(rgba(0, 229, 160, 0.02) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(0, 229, 160, 0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    transition: all 0.15s ease;
+  }
+  .card:hover { border-color: #2a3d5e; }
+
+  /* Buttons */
+  .btn {
+    padding: 7px 16px; border-radius: 6px; border: none; cursor: pointer;
+    font-family: 'Space Grotesk', sans-serif; font-size: 12px; font-weight: 600;
+    transition: all 0.15s ease; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-primary { background: var(--accent); color: #06090f; }
+  .btn-primary:hover { background: #33ffbb; }
+  .btn-danger { background: var(--danger); color: #ffffff; }
+  .btn-danger:hover { background: #ff5c78; }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .btn-ghost:hover { color: var(--fg); border-color: #2a3d5e; background: var(--card-hover); }
+  .btn-gold { background: var(--gold); color: #06090f; }
+  .btn-gold:hover { background: #fbbf24; }
+
+  /* Inputs & Selects */
+  .input-field {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 7px 12px; color: var(--fg); font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; outline: none; transition: border-color 0.15s ease; width: 100%;
+  }
+  .input-field:focus { border-color: var(--accent); }
+  .input-field::placeholder { color: #3b4d6e; }
+
+  .select-field {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 7px 28px 7px 10px; color: var(--fg); font-family: 'Space Grotesk', sans-serif;
+    font-size: 12px; outline: none; cursor: pointer; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 8px center;
+  }
+  .select-field:focus { border-color: var(--accent); }
+
+  /* Status Indicators */
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .status-dot.live { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .status-dot.warn { background: var(--gold); box-shadow: 0 0 6px var(--gold); }
+  .status-dot.error { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+  .status-dot.idle { background: var(--muted); }
+
+  /* Navigation Item */
+  .nav-item {
+    display: flex; align-items: center; gap: 9px; padding: 8px 14px;
+    border-radius: 6px; cursor: pointer; color: var(--muted); transition: all 0.15s ease;
+    font-size: 12.5px; font-weight: 500; white-space: nowrap;
+  }
+  .nav-item:hover { color: var(--fg); background: var(--card-hover); }
+  .nav-item.active { color: var(--accent); background: rgba(0, 229, 160, 0.08); font-weight: 600; }
+  .nav-item i { width: 16px; text-align: center; font-size: 13px; }
+
+  /* Data Table */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+  .data-table th {
+    text-align: left; padding: 8px 10px; color: var(--muted); font-weight: 500;
+    border-bottom: 1px solid var(--border); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .data-table td { padding: 7px 10px; border-bottom: 1px solid rgba(28, 40, 63, 0.6); }
+  .data-table tr:hover td { background: rgba(21, 31, 51, 0.5); }
+
+  /* Badges */
+  .badge { padding: 2px 7px; border-radius: 4px; font-size: 9.5px; font-family: 'JetBrains Mono', monospace; font-weight: 600; white-space: nowrap; }
+  .badge-filled { background: rgba(0, 229, 160, 0.12); color: var(--accent); }
+  .badge-open { background: rgba(56, 189, 248, 0.12); color: var(--sky); }
+  .badge-rejected { background: rgba(255, 59, 92, 0.12); color: var(--danger); }
+  .badge-cancelled { background: rgba(100, 116, 139, 0.12); color: var(--muted); }
+  .badge-transit { background: rgba(240, 180, 41, 0.12); color: var(--gold); }
+  .badge-purple { background: rgba(168, 85, 247, 0.12); color: var(--purple); }
+
+  /* Toast & Modals */
+  .toast-container { position: fixed; top: 16px; right: 16px; z-index: 10000; display: flex; flex-direction: column; gap: 6px; }
+  .toast {
+    padding: 10px 18px; border-radius: 8px; font-size: 12px; font-weight: 500;
+    animation: slide-in 0.25s ease-out; max-width: 400px; border: 1px solid;
+  }
+  .toast.success { background: rgba(0, 229, 160, 0.08); border-color: rgba(0, 229, 160, 0.25); color: var(--accent); }
+  .toast.error { background: rgba(255, 59, 92, 0.08); border-color: rgba(255, 59, 92, 0.25); color: var(--danger); }
+  .toast.warning { background: rgba(240, 180, 41, 0.08); border-color: rgba(240, 180, 41, 0.25); color: var(--gold); }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75); z-index: 9000;
+    display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);
+  }
+  .modal-content {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 24px; max-width: 560px; width: 92%; animation: slide-in 0.2s ease-out; max-height: 88vh; overflow-y: auto;
+  }
+
+  /* Subtabs */
+  .subtab {
+    padding: 5px 12px; cursor: pointer; color: var(--muted); font-size: 11px; font-weight: 600;
+    border-radius: 5px; transition: all 0.12s; text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .subtab:hover { color: var(--fg); background: var(--card-hover); }
+  .subtab.active { color: var(--accent); background: rgba(0, 229, 160, 0.08); }
+
+  /* Option Chain Highlights */
+  .ce-cell { color: var(--accent); }
+  .pe-cell { color: var(--danger); }
+  .atm-row { background: rgba(240, 180, 41, 0.05) !important; border-top: 1px solid rgba(240, 180, 41, 0.2); border-bottom: 1px solid rgba(240, 180, 41, 0.2); }
+  .itm-ce { background: rgba(0, 229, 160, 0.03); }
+  .itm-pe { background: rgba(255, 59, 92, 0.03); }
+
+  /* Code Block & Event stream */
+  .code-blk {
+    background: #04060b; border: 1px solid var(--border); border-radius: 5px;
+    padding: 8px 12px; font-size: 10px; line-height: 1.5; font-family: 'JetBrains Mono', monospace;
+    overflow-x: auto; white-space: pre-wrap; word-break: break-all;
+  }
+  .tool-tag {
+    display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px;
+    border-radius: 3px; font-size: 9px; font-weight: 600; font-family: 'JetBrains Mono', monospace;
+  }
+  .tag-dhan { background: rgba(6, 182, 212, 0.1); color: #06b6d4; }
+  .tag-ollama { background: rgba(168, 85, 247, 0.1); color: #a855f7; }
+  .tag-risk { background: rgba(255, 59, 92, 0.1); color: #ff3b5c; }
+  .tag-sys { background: rgba(100, 116, 139, 0.1); color: #94a3b8; }
+
+  .gauge-ring { transform: rotate(-90deg); transition: stroke-dashoffset 0.8s ease; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body class="bg-grid flex flex-col h-screen overflow-hidden">
+
+<!-- Toast Notification Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Modal Container -->
+<div id="modalContainer"></div>
+
+<!-- Top Bar -->
+<header class="h-14 min-h-[56px] bg-surface-100 border-b border-border flex items-center justify-between px-5 z-20">
+  <div class="flex items-center gap-4">
+    <!-- Brand Logo -->
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center">
+        <i class="fa-solid fa-bolt text-accent text-sm"></i>
+      </div>
+      <div>
+        <div class="text-sm font-bold tracking-wider text-white flex items-center gap-2">
+          <span>AXIS NEXUS</span>
+          <span class="text-[9px] font-mono bg-accent/10 text-accent border border-accent/20 px-1.5 py-0.2 rounded">v4.2 PROD</span>
+        </div>
+        <div class="text-[9.5px] font-mono text-muted tracking-wide">Options Engine & Multi-Agent Control Plane</div>
+      </div>
+    </div>
+
+    <!-- Divider -->
+    <div class="h-6 w-[1px] bg-border mx-2"></div>
+
+    <!-- Active Page Title -->
+    <div class="flex items-center gap-2">
+      <h1 class="text-xs font-semibold text-white" id="pageTitle">Dashboard</h1>
+      <span class="text-[9px] font-mono text-muted bg-surface-300 px-2 py-0.5 rounded border border-border" id="pageSubtitle">LIVE OVERVIEW</span>
+    </div>
+  </div>
+
+  <!-- Real-time Index Tickers & Telemetry -->
+  <div class="flex items-center gap-5">
+    <!-- Mini Tickers -->
+    <div class="hidden lg:flex items-center gap-4 font-mono text-xs" id="headerTickers">
+      <div class="flex items-center gap-1.5">
+        <span class="text-muted text-[10px]">NIFTY</span>
+        <span class="text-white font-semibold" id="tkNifty">24,248.50</span>
+        <span class="text-accent text-[10px]" id="tkNiftyChg">+0.35%</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="text-muted text-[10px]">BANKNIFTY</span>
+        <span class="text-white font-semibold" id="tkBnf">51,842.15</span>
+        <span class="text-danger text-[10px]" id="tkBnfChg">-0.23%</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="text-muted text-[10px]">INDIA VIX</span>
+        <span class="text-gold font-semibold" id="tkVix">13.42</span>
+        <span class="text-accent text-[10px]">-1.8%</span>
+      </div>
+    </div>
+
+    <!-- Clock & Market Status -->
+    <div class="flex items-center gap-3 border-l border-border pl-4">
+      <div class="font-mono text-xs text-muted" id="marketClock">09:15:00</div>
+      <div class="flex items-center gap-1.5" id="marketStatusBadge">
+        <span class="status-dot live pulse-live"></span>
+        <span class="text-accent text-[11px] font-mono font-semibold">MARKET OPEN</span>
+      </div>
+    </div>
+
+    <!-- Emergency Kill Switch -->
+    <button class="btn btn-danger text-[11px] px-3.5 py-1.5 flex items-center gap-2" onclick="emergencyKillSwitch()" id="killSwitchBtn">
+      <i class="fa-solid fa-power-off"></i> KILL SWITCH
+    </button>
+  </div>
+</header>
+
+<!-- Main App Wrapper -->
+<div class="flex-1 flex overflow-hidden">
+
+  <!-- Sidebar Navigation -->
+  <aside class="w-[215px] min-w-[215px] bg-surface-100 border-r border-border flex flex-col justify-between" id="sidebar">
+    <!-- Navigation Links -->
+    <nav class="p-3 space-y-0.5 overflow-y-auto flex-1">
+      
+      <!-- Domain: Trading -->
+      <div class="text-[9px] font-mono text-muted uppercase tracking-[0.15em] px-3 py-2 font-semibold">Trading Core</div>
+      <div class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard')">
+        <i class="fa-solid fa-chart-line"></i> Dashboard
+      </div>
+      <div class="nav-item" data-page="strategies" onclick="switchPage('strategies')">
+        <i class="fa-solid fa-chess-knight"></i> Strategies
+      </div>
+      <div class="nav-item" data-page="options-chain" onclick="switchPage('options-chain')">
+        <i class="fa-solid fa-layer-group"></i> Option Chain
+      </div>
+      <div class="nav-item" data-page="positions" onclick="switchPage('positions')">
+        <i class="fa-solid fa-wallet"></i> Positions
+      </div>
+      <div class="nav-item" data-page="orders" onclick="switchPage('orders')">
+        <i class="fa-solid fa-receipt"></i> Order Book
+      </div>
+
+      <!-- Domain: AI & Agents -->
+      <div class="text-[9px] font-mono text-muted uppercase tracking-[0.15em] px-3 py-2 mt-2.5 font-semibold">Agentic Intel</div>
+      <div class="nav-item" data-page="agent-console" onclick="switchPage('agent-console')">
+        <i class="fa-solid fa-brain"></i> Agent Console
+      </div>
+      <div class="nav-item" data-page="agent-monitor" onclick="switchPage('agent-monitor')">
+        <i class="fa-solid fa-satellite-dish"></i> Ops Telemetry
+      </div>
+      <div class="nav-item" data-page="agent-tools-memory" onclick="switchPage('agent-tools-memory')">
+        <i class="fa-solid fa-database"></i> Tools & Memory
+      </div>
+
+      <!-- Domain: Analytics & Risk -->
+      <div class="text-[9px] font-mono text-muted uppercase tracking-[0.15em] px-3 py-2 mt-2.5 font-semibold">Analytics & Risk</div>
+      <div class="nav-item" data-page="greeks-analytics" onclick="switchPage('greeks-analytics')">
+        <i class="fa-solid fa-calculator"></i> Greeks & Vol
+      </div>
+      <div class="nav-item" data-page="margin-risk" onclick="switchPage('margin-risk')">
+        <i class="fa-solid fa-shield-halved"></i> Margin & Risk
+      </div>
+
+      <!-- Domain: Infrastructure & System -->
+      <div class="text-[9px] font-mono text-muted uppercase tracking-[0.15em] px-3 py-2 mt-2.5 font-semibold">Infrastructure</div>
+      <div class="nav-item" data-page="sidekiq-infra" onclick="switchPage('sidekiq-infra')">
+        <i class="fa-solid fa-list-check"></i> Sidekiq Jobs
+      </div>
+      <div class="nav-item" data-page="alerts" onclick="switchPage('alerts')">
+        <i class="fa-solid fa-bell"></i> Alerts
+        <span class="ml-auto bg-danger/20 text-danger text-[9.5px] font-mono px-1.5 py-0.2 rounded" id="alertCounter">3</span>
+      </div>
+      <div class="nav-item" data-page="logs" onclick="switchPage('logs')">
+        <i class="fa-solid fa-terminal"></i> Logs & Traces
+      </div>
+      <div class="nav-item" data-page="config" onclick="switchPage('config')">
+        <i class="fa-solid fa-gear"></i> Configuration
+      </div>
+    </nav>
+
+    <!-- Bottom Status Cards (Infra & Broker status) -->
+    <div class="p-3 border-t border-border bg-surface-50 space-y-1.5">
+      <div class="text-[8.5px] font-mono text-muted uppercase tracking-widest font-semibold">System Connectivity</div>
+      
+      <div class="flex items-center justify-between text-[10px] font-mono">
+        <span class="flex items-center gap-1.5"><span class="status-dot live pulse-live" id="bDot"></span>DhanHQ API</span>
+        <span class="text-accent" id="bLatency">18ms</span>
+      </div>
+      <div class="flex items-center justify-between text-[10px] font-mono">
+        <span class="flex items-center gap-1.5"><span class="status-dot live pulse-live" id="wsDot"></span>WS Ticks</span>
+        <span class="text-accent">3.2ms</span>
+      </div>
+      <div class="flex items-center justify-between text-[10px] font-mono">
+        <span class="flex items-center gap-1.5"><span class="status-dot live pulse-live"></span>Sidekiq</span>
+        <span class="text-sky">12/25 busy</span>
+      </div>
+      <div class="flex items-center justify-between text-[10px] font-mono">
+        <span class="flex items-center gap-1.5"><span class="status-dot live pulse-live"></span>Ollama LLM</span>
+        <span class="text-purple">llama3.1</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content Scroll Area -->
+  <main class="flex-1 overflow-y-auto p-5" id="mainContent">
+
+    <!-- ======================================================== -->
+    <!-- 1. DASHBOARD PAGE -->
+    <!-- ======================================================== -->
+    <div id="page-dashboard" class="page-content space-y-5">
+      <!-- 6 Metrics Cards Grid -->
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <!-- Day P&L -->
+        <div class="card p-3.5">
+          <div class="text-[9px] font-mono text-muted uppercase tracking-widest mb-1 font-semibold">Day P&L</div>
+          <div class="text-xl font-bold font-mono text-accent" id="dashDayPnl">+24,850</div>
+          <div class="text-[10px] font-mono text-muted mt-1">Realized <span class="text-accent">+18.2K</span> · Unr <span class="text-accent">+6.6K</span></div>
+        </div>
+        <!-- Margin Used -->
+        <div class="card p-3.5">
+          <div class="text-[9px] font-mono text-muted uppercase tracking-widest mb-1 font-semibold">Margin Used</div>
+          <div class="text-xl font-bold font-mono text-white" id="dashMargin">2,45,000</div>
+          <div class="h-1 bg-border rounded mt-2">
+            <div class="h-full bg-gold rounded transition-all" style="width: 49%" id="dashMarginBar"></div>
+          </div>
+          <div class="text-[10px] font-mono text-muted mt-1">49% · Avail: <span class="text-accent">2.55L</span></div>
+        </div>
+        <!-- Portfolio Net Delta -->
+        <div class="card p-3.5">
+          <div class="text-[9px] font-mono text-muted uppercase tracking-widest mb-1 font-semibold">Portfolio Delta</div>
+          <div class="text-xl font-bold font-mono text-sky" id="dashNetDelta">+0.03</div>
+          <div class="text-[10px] font-mono text-muted mt-1">Status: <span class="text-sky font-semibold">Delta-Neutral</span></div>
+        </div>
+        <!-- Max Drawdown -->
+        <div class="card p-3.5">
+          <div class="text-[9px] font-mono text-muted uppercase tracking-widest mb-1 font-semibold">Max Drawdown</div>
+          <div class="text-xl font-bold font-mono text-gold" id="dashMaxDd">-12,400</div>
+          <div class="text-[10px] font-mono text-muted mt-1">Limit: <span class="text-muted">50,000 (24.8%)</span></div>
+        </div>
+        <!-- Active Strategies -->
+        <div class="card p-3.5">
+          <div class="text-[9px] font-mono text-muted uppercase tracking-widest mb-1 font-semibold">Active Strats</div>
+          <div class="text-xl font-bold font-mono text-white" id="dashActiveStrats">3</div>
+          <div class="text-[10px] font-mono text-muted mt-1">Sidekiq Enqueued: <span class="text-accent">12 jobs</span></div>
+        </div>
+        <!-- Trades Today -->
+        <div class="card p-3.5">
+          <div class="text-[9px] font-mono text-muted uppercase tracking-widest mb-1 font-semibold">Trades Today</div>
+          <div class="text-xl font-bold font-mono text-white">47</div>
+          <div class="text-[10px] font-mono text-muted mt-1">Win <span class="text-accent">31</span> · Loss <span class="text-danger">16</span></div>
+        </div>
+      </div>
+
+      <!-- Mid Row: Intraday P&L Canvas Chart + Active Strategies Summary -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <!-- P&L Chart -->
+        <div class="card col-span-2 p-4">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="text-[9.5px] font-mono text-muted uppercase tracking-widest font-semibold">Intraday P&L Performance Curve</span>
+              <span class="text-[9px] font-mono text-accent bg-accent/10 px-1.5 py-0.5 rounded">REALTIME</span>
+            </div>
+            <div class="flex gap-1.5">
+              <button class="btn btn-ghost text-[10px] py-0.5 px-2.5">1H</button>
+              <button class="btn btn-ghost text-[10px] py-0.5 px-2.5 border-accent/30 text-accent">SESSION</button>
+              <button class="btn btn-ghost text-[10px] py-0.5 px-2.5">1W</button>
+            </div>
+          </div>
+          <canvas id="dashPnlChart" height="190"></canvas>
+        </div>
+
+        <!-- Active Strategies List -->
+        <div class="card p-4 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-[9.5px] font-mono text-muted uppercase tracking-widest font-semibold">Active Strategies</span>
+              <button class="text-[10px] font-mono text-accent hover:underline" onclick="switchPage('strategies')">View All &rarr;</button>
+            </div>
+            <div class="space-y-2.5" id="dashStratList">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+          <button class="btn btn-primary text-xs w-full mt-3" onclick="openDeployStrategyModal()">
+            <i class="fa-solid fa-plus"></i> Deploy New Strategy
+          </button>
+        </div>
+      </div>
+
+      <!-- Bottom Row: Index Watchlist + Recent Fills Table -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <!-- Index Watchlist -->
+        <div class="card p-4">
+          <div class="text-[9.5px] font-mono text-muted uppercase tracking-widest mb-3 font-semibold">Market Spot Indices</div>
+          <div class="space-y-2.5" id="dashIndexPrices">
+            <!-- Rendered via JS -->
+          </div>
+        </div>
+
+        <!-- Recent Executed Fills -->
+        <div class="card col-span-2 p-4">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-[9.5px] font-mono text-muted uppercase tracking-widest font-semibold">Recent Order Fills (Audit Stream)</span>
+            <button class="text-[10px] font-mono text-accent hover:underline" onclick="switchPage('orders')">Full Order Book &rarr;</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Instrument</th>
+                  <th>Side</th>
+                  <th>Qty</th>
+                  <th>Price</th>
+                  <th>Strategy / Corr ID</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="dashRecentFills">
+                <!-- Rendered via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Insights Banner -->
+      <div class="card p-3.5 bg-surface-50 border-purple/20">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2 text-xs font-semibold text-purple">
+            <i class="fa-solid fa-brain text-sm"></i>
+            <span>Real-time Multi-Agent Insights Digest</span>
+          </div>
+          <span class="text-[9px] font-mono text-muted">Auto-updated via Agent Memory</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-[10.5px]" id="dashAiInsights">
+          <!-- Rendered via JS -->
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ======================================================== -->
+    <!-- 2. STRATEGIES PAGE -->
+    <!-- ======================================================== -->
+    <div id="page-strategies" class="page-content hidden space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs font-mono text-muted uppercase tracking-widest font-semibold">Strategy Orchestrator</div>
+          <div class="text-xs text-muted mt-0.5">Sidekiq-backed lifecycle with AASM state machine transitions</div>
+        </div>
+        <div class="flex gap-2">
+          <select class="select-field text-xs" id="stratFilterSymbol" onchange="renderStrategies()">
+            <option value="ALL">All Symbols</option>
+            <option value="NIFTY">NIFTY</option>
+            <option value="BANKNIFTY">BANKNIFTY</option>
+            <option value="FINNIFTY">FINNIFTY</option>
+          </select>
+          <button class="btn btn-primary" onclick="openDeployStrategyModal()">
+            <i class="fa-solid fa-plus"></i> Deploy Strategy
+          </button>
+        </div>
+      </div>
+
+      <!-- Strategies Grid Cards -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4" id="strategyCardsGrid">
+        <!-- Rendered via JS -->
+      </div>
+    </div>
+
+
+    <!-- ======================================================== -->
+    <!-- 3. OPTIONS CHAIN PAGE -->
+    <!-- ======================================================== -->
+    <div id="page-options-chain" class="page-content hidden space-y-4">
+      <!-- Chain Controls Header -->
+      <div class="card p-3.5 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <select class="select-field" id="ocSymbol" onchange="renderOptionsChain()">
+            <option value="NIFTY">NIFTY 50</option>
+            <option value="BANKNIFTY">BANK NIFTY</option>
+            <option value="FINNIFTY">FIN NIFTY</option>
+          </select>
+          <select class="select-field" id="ocExpiry" onchange="renderOptionsChain()">
+            <option value="2025-01-30">30 JAN 2025 (Weekly)</option>
+            <option value="2025-02-06">06 FEB 2025 (Next)</option>
+            <option value="2025-02-27">27 FEB 2025 (Monthly)</option>
+          </select>
+          <div class="text-xs font-mono text-muted pl-2 border-l border-border">
+            ATM: <span class="text-gold font-bold" id="ocAtmStrike">24,250</span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-4 text-xs font-mono text-muted">
+          <div>Spot: <span class="text-white font-semibold" id="ocSpotPrice">24,248.50</span></div>
+          <div>IV Rank: <span class="text-sky font-semibold" id="ocIvRank">42.3</span></div>
+          <div>PCR: <span class="text-accent font-semibold" id="ocPcrRatio">1.12</span></div>
+          <div>Max Pain: <span class="text-gold font-semibold">24,200</span></div>
+          <button class="btn btn-ghost text-xs py-1" onclick="refreshOptionsChain()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+        </div>
+      </div>
+
+      <!-- Visual Charts Toggle / Expandable: OI & Skew -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- OI Distribution Chart -->
+        <div class="card p-3.5">
+          <div class="text-[9px] font-mono text-muted uppercase tracking-widest mb-2 font-semibold flex items-center justify-between">
+            <span>Open Interest Distribution (CE vs PE)</span>
+            <span class="text-accent text-[9px]">DHAN /v2/optionchain</span>
+          </div>
+          <canvas id="ocOiChart" height="130"></canvas>
+        </div>
+
+        <!-- IV Skew Curve -->
+        <div class="card p-3.5">
+          <div class="text-[9px] font-mono text-muted uppercase tracking-widest mb-2 font-semibold flex items-center justify-between">
+            <span>Implied Volatility Smile / Skew</span>
+            <span class="text-gold text-[9px]">ATM IV: 13.8%</span>
+          </div>
+          <canvas id="ocIvSkewChart" height="130"></canvas>
+        </div>
+      </div>
+
+      <!-- Main Option Chain Table -->
+      <div class="card overflow-x-auto">
+        <table class="data-table" id="optionsChainTable">
+          <thead>
+            <tr>
+              <th class="ce-cell text-right">OI (CE)</th>
+              <th class="ce-cell text-right">Chg OI</th>
+              <th class="ce-cell text-right">Vol</th>
+              <th class="ce-cell text-right">IV%</th>
+              <th class="ce-cell text-right">Delta</th>
+              <th class="ce-cell text-right">Gamma</th>
+              <th class="ce-cell text-right font-bold">LTP (CE)</th>
+              <th class="text-center font-bold text-gold">STRIKE</th>
+              <th class="pe-cell text-left font-bold">LTP (PE)</th>
+              <th class="pe-cell text-right">Gamma</th>
+              <th class="pe-cell text-right">Delta</th>
+              <th class="pe-cell text-right">IV%</th>
+              <th class="pe-cell text-right">Vol</th>
+              <th class="pe-cell text-right">Chg OI</th>
+              <th class="pe-cell text-right">OI (PE)</th>
+            </tr>
+          </thead>
+          <tbody id="optionsChainBody">
+            <!-- Rendered via JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+
+    <!-- ======================================================== -->
+    <!-- 4. GREEKS & VOLATILITY ANALYTICS PAGE -->
+    <!-- ======================================================== -->
+    <div id="page-greeks-analytics" class="page-content hidden space-y-4">
+      <!-- Top Greek Summary Cards -->
+      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div class="card p-3 text-center">
+          <div class="text-[8.5px] font-mono text-muted uppercase tracking-wider mb-0.5 font-semibold">Net Delta</div>
+          <div class="text-lg font-bold font-mono text-sky">+0.03</div>
+          <div class="text-[9px] font-mono text-muted">Neutral</div>
+        </div>
+        <div class="card p-3 text-center">
+          <div class="text-[8.5px] font-mono text-muted uppercase tracking-wider mb-0.5 font-semibold">Net Gamma</div>
+          <div class="text-lg font-bold font-mono text-danger">-2.14</div>
+          <div class="text-[9px] font-mono text-danger">Short Gamma</div>
+        </div>
+        <div class="card p-3 text-center">
+          <div class="text-[8.5px] font-mono text-muted uppercase tracking-wider mb-0.5 font-semibold">Net Theta</div>
+          <div class="text-lg font-bold font-mono text-accent">+845/d</div>
+          <div class="text-[9px] font-mono text-accent">Decay Income</div>
+        </div>
+        <div class="card p-3 text-center">
+          <div class="text-[8.5px] font-mono text-muted uppercase tracking-wider mb-0.5 font-semibold">Net Vega</div>
+          <div class="text-lg font-bold font-mono text-danger">-18.7</div>
+          <div class="text-[9px] font-mono text-muted">Short Vol</div>
+        </div>
+        <div class="card p-3 text-center">
+          <div class="text-[8.5px] font-mono text-muted uppercase tracking-wider mb-0.5 font-semibold">Vanna</div>
+          <div class="text-lg font-bold font-mono text-purple">-0.42</div>
+          <div class="text-[9px] font-mono text-muted">dDelta/dVol</div>
+        </div>
+        <div class="card p-3 text-center">
+          <div class="text-[8.5px] font-mono text-muted uppercase tracking-wider mb-0.5 font-semibold">Charm</div>
+          <div class="text-lg font-bold font-mono text-gold">+0.18</div>
+          <div class="text-[9px] font-mono text-muted">dDelta/dTime</div>
+        </div>
+        <div class="card p-3 text-center">
+          <div class="text-[8.5px] font-mono text-muted uppercase tracking-wider mb-0.5 font-semibold">Volga</div>
+          <div class="text-lg font-bold font-mono text-sky">+0.09</div>
+          <div class="text-[9px] font-mono text-muted">dVega/dVol</div>
+        </div>
+      </div>
+
+      <!-- Sub-Tabs Navigation for Volatility Tools -->
+      <div class="card p-3">
+        <div class="flex items-center gap-2 border-b border-border pb-2.5 mb-3.5">
+          <button class="subtab active" onclick="switchGreekSubtab(this, 'gt-breakdown')">Greeks Breakdown</button>
+          <button class="subtab" onclick="switchGreekSubtab(this, 'gt-surface')">IV Surface (Heatmap)</button>
+          <button class="subtab" onclick="switchGreekSubtab(this, 'gt-term')">Term Structure</button>
+          <button class="subtab" onclick="switchGreekSubtab(this, 'gt-skew')">Volatility Smile & Skew</button>
+          <button class="subtab" onclick="switchGreekSubtab(this, 'gt-expired')">5-Year Expired Rolling IV</button>
+        </div>
+
+        <!-- Tab 1: Breakdown -->
+        <div id="gt-breakdown" class="greek-tab-pane">
+          <div class="text-[9.5px] font-mono text-muted uppercase tracking-widest mb-2 font-semibold">Strategy Greek Exposure Distribution</div>
+          <canvas id="greekBarChart" height="190"></canvas>
+        </div>
+
+        <!-- Tab 2: IV Surface -->
+        <div id="gt-surface" class="greek-tab-pane hidden">
+          <div class="text-[9.5px] font-mono text-muted uppercase tracking-widest mb-2 font-semibold">Implied Volatility Surface (Moneyness Strike vs Expiry)</div>
+          <canvas id="ivSurfaceChart" height="240"></canvas>
+        </div>
+
+        <!-- Tab 3: Term Structure -->
+        <div id="gt-term" class="greek-tab-pane hidden">
+          <div class="text-[9.5px] font-mono text-muted uppercase tracking-widest mb-2 font-semibold">Expiry Term Structure (W1 to M3)</div>
+          <canvas id="termStructureChart" height="200"></canvas>
+        </div>
+
+        <!-- Tab 4: Skew -->
+        <div id="gt-skew" class="greek-tab-pane hidden">
+          <div class="text-[9.5px] font-mono text-muted uppercase tracking-widest mb-2 font-semibold">CE vs PE Skew Comparison</div>
+          <canvas id="skewComparisonChart" height="200"></canvas>
+        </div>
+
+        <!-- Tab 5: Expired Rolling IV -->
+        <div id="gt-expired" class="greek-tab-pane hidden">
+          <div class="text-[9.5px] font-mono text-muted uppercase tracking-widest mb-2 font-semibold">Historical ATM IV Rolling Curve (Dhan /v2/charts/rollingoption)</div>
+          <canvas id="expiredRollingChart" height="220"></canvas>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ======================================================== -->
+    <!-- 5. POSITIONS PAGE -->
+    <!-- ======================================================== -->
+    <div id="page-positions" class="page-content hidden space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs font-mono text-muted uppercase tracking-widest font-semibold">Active Positions & MTM</div>
+          <div class="text-xs text-muted mt-0.5">ActiveRecord optimistic locking with real-time Greek sensitivities</div>
+        </div>
+        <div class="flex gap-2">
+          <button class="btn btn-ghost" onclick="reconcilePositions()"><i class="fa-solid fa-rotate mr-1"></i> Reconcile with Broker</button>
+          <button class="btn btn-danger" onclick="closeAllPositionsModal()"><i class="fa-solid fa-power-off mr-1"></i> Close All Positions</button>
+        </div>
+      </div>
+
+      <div class="card overflow-x-auto">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Strategy</th>
+              <th>Instrument</th>
+              <th>Side</th>
+              <th>Qty</th>
+              <th>Buy Avg</th>
+              <th>Sell Avg</th>
+              <th>LTP</th>
+              <th>Unrealized P&L</th>
+              <th>Delta</th>
+              <th>Theta</th>
+              <th>Product</th>
+              <th>lock_version</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="positionsTableBody">
+            <!-- Rendered via JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+
+    <!-- ======================================================== -->
+    <!-- 6. ORDER BOOK PAGE -->
+    <!-- ======================================================== -->
+    <div id="page-orders" class="page-content hidden space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs font-mono text-muted uppercase tracking-widest font-semibold">Order Book & Audit Trail</div>
+          <div class="text-xs text-muted mt-0.5">Full execution history mapped by idempotency key and correlationId</div>
+        </div>
+        <div class="flex gap-2">
+          <select class="select-field text-xs" id="orderStatusFilter" onchange="renderOrders()">
+            <option value="ALL">All Statuses</option>
+            <option value="TRADED">TRADED / FILLED</option>
+            <option value="PENDING">PENDING / OPEN</option>
+            <option value="REJECTED">REJECTED</option>
+            <option value="CANCELLED">CANCELLED</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card overflow-x-auto">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Order ID</th>
+              <th>Correlation ID</th>
+              <th>Time</th>
+              <th>Instrument</th>
+              <th>Type</th>
+              <th>Side</th>
+              <th>Qty</th>
+              <th>Price</th>
+              <th>Filled</th>
+              <th>Avg Price</th>
+              <th>Leg Type</th>
+              <th>AASM State</th>
+              <th>Sidekiq JID</th>
+              <th>Latency</th>
+            </tr>
+          </thead>
+          <tbody id="ordersTableBody">
+            <!-- Rendered via JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+
+    <!-- ======================================================== -->
+    <!-- 7. AGENT CONSOLE (Interactive ReAct Loop) -->
+    <!-- ======================================================== -->
+    <div id="page-agent-console" class="page-content hidden flex flex-col h-[calc(100vh-100px)] space-y-3">
+      <!-- Agent Personas Header -->
+      <div class="card p-3 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-3">
+          <div class="w-7 h-7 rounded bg-purple/10 border border-purple/20 flex items-center justify-center">
+            <i class="fa-solid fa-brain text-purple text-xs"></i>
+          </div>
+          <div>
+            <div class="text-xs font-bold text-white">Multi-Agent ReAct Execution Engine</div>
+            <div class="text-[9.5px] font-mono text-muted">Ollama (Cognition) + DhanHQ SDK (Tools) + Rails (State)</div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 flex-wrap text-[10px] font-mono">
+          <div class="flex items-center gap-1.5"><span class="status-dot" style="background:#38bdf8"></span>Planner</div>
+          <div class="flex items-center gap-1.5"><span class="status-dot" style="background:#00d4aa"></span>Analyst</div>
+          <div class="flex items-center gap-1.5"><span class="status-dot" style="background:#f0b429"></span>Strategy</div>
+          <div class="flex items-center gap-1.5"><span class="status-dot" style="background:#a855f7"></span>Execution</div>
+          <div class="flex items-center gap-1.5"><span class="status-dot" style="background:#ff3b5c"></span>Risk</div>
+          <div class="flex items-center gap-1.5"><span class="status-dot" style="background:#f472b6"></span>Critic</div>
+        </div>
+      </div>
+
+      <!-- Agent Trace Scroll Container -->
+      <div class="flex-1 card p-4 overflow-y-auto space-y-3 font-mono text-xs" id="agentConsoleTrace">
+        <!-- Initial Welcome Placeholder -->
+        <div class="text-center py-8 space-y-3 max-w-xl mx-auto" id="agentTracePlaceholder">
+          <div class="w-12 h-12 rounded-xl bg-surface-200 border border-border flex items-center justify-center mx-auto text-purple text-xl">
+            <i class="fa-solid fa-network-wired"></i>
+          </div>
+          <div class="text-sm font-semibold text-white">Autonomous Options Trading Agents</div>
+          <div class="text-xs text-muted">
+            Submit a high-level natural language prompt below. The hierarchical multi-agent loop will decompose, research, formulate math, calculate risk margins, and execute trades safely through the critic gate.
+          </div>
+          <div class="flex justify-center gap-2 flex-wrap text-[10.5px]">
+            <button class="btn btn-ghost" onclick="setAgentPrompt('Analyze NIFTY option chain and find highest probability trade')">💡 Analyze NIFTY Chain</button>
+            <button class="btn btn-ghost" onclick="setAgentPrompt('Deploy BANKNIFTY Iron Condor 2 lots with hedge verification')">🎯 Deploy Iron Condor</button>
+            <button class="btn btn-ghost" onclick="setAgentPrompt('Audit portfolio Greek risk exposure and short gamma')">🛡️ Audit Greeks Risk</button>
+            <button class="btn btn-ghost" onclick="setAgentPrompt('Close paused Bull Put Spread and calculate realized P&L')">🛑 Close Spread</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Agent Command Input Bar -->
+      <div class="card p-3 flex items-center gap-2">
+        <div class="relative flex-1">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-muted"><i class="fa-solid fa-terminal"></i></span>
+          <input type="text" class="input-field pl-8 text-xs" id="agentConsoleInput" placeholder="Enter objective for the agent system (e.g. 'Analyze NIFTY option chain and recommend strategy')..." onkeydown="if(event.key==='Enter')executeAgentObjective()">
+        </div>
+        <button class="btn btn-primary text-xs" id="agentExecBtn" onclick="executeAgentObjective()">
+          <i class="fa-solid fa-play"></i> Run Objective
+        </button>
+      </div>
+    </div>
+
+
+    <!-- ======================================================== -->
+    <!-- 8. AGENT OPS MONITOR (Telemetry & Stream) -->
+    <!-- ======================================================== -->
+    <div id="page-agent-monitor" class="page-content hidden space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        
+        <!-- Left Panel: Agent Statuses & Session Metrics -->
+        <div class="space-y-4">
+          <!-- Active Agents -->
+          <div class="card p-3.5 space-y-2">
+            <div class="text-[9px] font-mono text-muted uppercase tracking-widest font-semibold">Active Agent Instances</div>
+            <div class="space-y-2" id="agentMonitorStatusList">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+          <!-- Event Filters -->
+          <div class="card p-3.5 space-y-2">
+            <div class="text-[9px] font-mono text-muted uppercase tracking-widest font-semibold">Event Stream Filter</div>
+            <div class="flex flex-wrap gap-1.5" id="agentEventFilters">
+              <button class="subtab active text-[10px]" data-filter="all" onclick="setEventFilter('all', this)">ALL</button>
+              <button class="subtab text-[10px]" data-filter="THINK" onclick="setEventFilter('THINK', this)">THINK</button>
+              <button class="subtab text-[10px]" data-filter="ACT" onclick="setEventFilter('ACT', this)">ACT (TOOL)</button>
+              <button class="subtab text-[10px]" data-filter="OBSERVE" onclick="setEventFilter('OBSERVE', this)">OBSERVE</button>
+              <button class="subtab text-[10px]" data-filter="CRITIQUE" onclick="setEventFilter('CRITIQUE', this)">CRITIQUE</button>
+              <button class="subtab text-[10px]" data-filter="ERROR" onclick="setEventFilter('ERROR', this)">ERROR</button>
+            </div>
+          </div>
+
+          <!-- Session Telemetry -->
+          <div class="card p-3.5 space-y-2 font-mono text-xs">
+            <div class="text-[9px] font-mono text-muted uppercase tracking-widest font-semibold">Session Metrics</div>
+            <div class="flex justify-between"><span class="text-muted">Total Steps</span><span class="text-white font-bold" id="monSteps">0</span></div>
+            <div class="flex justify-between"><span class="text-muted">Elapsed Time</span><span class="text-white" id="monTime">0.0s</span></div>
+            <div class="flex justify-between"><span class="text-muted">Tool Invocations</span><span class="text-sky font-bold" id="monTools">0</span></div>
+            <div class="flex justify-between"><span class="text-muted">Est. Tokens</span><span class="text-purple font-bold" id="monTokens">~0</span></div>
+            <div class="flex justify-between"><span class="text-muted">Dhan Rate</span><span class="text-accent" id="monDhanRate">0.0 / 10s</span></div>
+            <div class="flex justify-between"><span class="text-muted">Ollama State</span><span class="text-accent" id="monOllamaState">IDLE</span></div>
+          </div>
+        </div>
+
+        <!-- Right Panel: Live Event Telemetry Stream -->
+        <div class="card col-span-3 p-4 flex flex-col h-[calc(100vh-140px)]">
+          <div class="flex items-center justify-between pb-3 border-b border-border mb-3">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-semibold text-white">Event Log Telemetry Stream</span>
+              <span class="text-[9px] font-mono text-accent bg-accent/10 px-2 py-0.5 rounded" id="monStreamStatus">READY</span>
+            </div>
+            <button class="btn btn-ghost text-[10px] py-1" onclick="clearTelemetryEvents()"><i class="fa-solid fa-trash mr-1"></i> Clear</button>
+          </div>
+
+          <!-- Events Stream -->
+          <div class="flex-1 overflow-y-auto space-y-2.5" id="telemetryEventStream">
+            <div class="text-center py-12 text-muted font-mono text-xs" id="emptyTelemetryNotice">
+              No agent events recorded yet. Run an objective in Agent Console to stream telemetry.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+
+    <!-- ======================================================== -->
+    <!-- 9. AGENT TOOLS & MEMORY PAGE -->
+    <!-- ======================================================== -->
+    <div id="page-agent-tools-memory" class="page-content hidden space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        
+        <!-- Left: Tool Registry -->
+        <div class="card p-4 space-y-3">
+          <div class="flex items-center justify-between border-b border-border pb-2">
+            <div>
+              <div class="text-xs font-bold text-white">Tool Registry (Pillar 2: The Hands)</div>
+              <div class="text-[9.5px] font-mono text-muted">DhanHQ SDK, Ollama LLM, and Risk Engine function tools</div>
+            </div>
+            <span class="badge badge-filled">18 Tools Loaded</span>
+          </div>
+
+          <div class="space-y-2.5 max-h-[calc(100vh-220px)] overflow-y-auto pr-1" id="toolRegistryList">
+            <!-- Rendered via JS -->
+          </div>
+        </div>
+
+        <!-- Right: Memory Architecture -->
+        <div class="space-y-4">
+          <div class="card p-4 space-y-3">
+            <div class="text-xs font-bold text-white border-b border-border pb-2">Agent Memory System (Pillar 3: Memory)</div>
+            
+            <div class="grid grid-cols-3 gap-2.5">
+              <div class="bg-surface-50 p-2.5 rounded border border-border">
+                <div class="text-[8.5px] font-mono text-sky uppercase mb-1 font-semibold">Working Memory</div>
+                <div class="text-[9px] text-muted">Current loop context (~8K tokens). Cleared on completion.</div>
+                <div class="mt-2 text-[9px] font-mono text-sky" id="memWorkingStatus">[Idle]</div>
+              </div>
+              <div class="bg-surface-50 p-2.5 rounded border border-border">
+                <div class="text-[8.5px] font-mono text-gold uppercase mb-1 font-semibold">Short-Term Memory</div>
+                <div class="text-[9px] text-muted">Session context window with sliding summarization (~32K).</div>
+                <div class="mt-2 text-[9px] font-mono text-gold" id="memStmCount">3 items</div>
+              </div>
+              <div class="bg-surface-50 p-2.5 rounded border border-border">
+                <div class="text-[8.5px] font-mono text-purple uppercase mb-1 font-semibold">Long-Term Memory</div>
+                <div class="text-[9px] text-muted">Vector embeddings + KV store across historical trading sessions.</div>
+                <div class="mt-2 text-[9px] font-mono text-purple" id="memLtmCount">4 indexed</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Long-Term Memory Vector Browser -->
+          <div class="card p-4 space-y-2.5">
+            <div class="text-[9.5px] font-mono text-muted uppercase tracking-widest font-semibold">Historical Vector Memory Recall</div>
+            <div class="space-y-2" id="ltmMemoryList">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+          <!-- Memory Operations Audit Log -->
+          <div class="card p-4 space-y-2">
+            <div class="text-[9.5px] font-mono text-muted uppercase tracking-widest font-semibold">Memory Operations Log</div>
+            <div class="font-mono text-[10px] text-muted space-y-1 max-h-36 overflow-y-auto" id="memoryOpsLog">
+              <div>[09:15:00] Vector index initialized with 4 historical strategy patterns</div>
+              <div>[10:30:00] Morning risk check embedding indexed into LTM</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+
+    <!-- ======================================================== -->
+    <!-- 10. MARGIN & RISK ENGINE PAGE -->
+    <!-- ======================================================== -->
+    <div id="page-margin-risk" class="page-content hidden space-y-4">
+      <!-- 4 Circuit Breaker Gauges -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <!-- Daily Loss Limit -->
+        <div class="card p-4">
+          <div class="text-[9px] font-mono text-muted uppercase tracking-widest mb-2 font-semibold">Daily Loss Limit</div>
+          <div class="flex items-center justify-center">
+            <svg width="110" height="110" viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="50" fill="none" stroke="#1c283f" stroke-width="7"/>
+              <circle cx="60" cy="60" r="50" fill="none" stroke="#00e5a0" stroke-width="7" stroke-dasharray="314" stroke-dashoffset="236" stroke-linecap="round" class="gauge-ring"/>
+              <text x="60" y="56" text-anchor="middle" fill="white" font-family="JetBrains Mono" font-size="15" font-weight="700">-12.4K</text>
+              <text x="60" y="72" text-anchor="middle" fill="#64748b" font-family="JetBrains Mono" font-size="9">of 50K (24.8%)</text>
+            </svg>
+          </div>
+          <div class="text-center text-[10px] font-mono text-accent mt-1">Normal Operating Zone</div>
+        </div>
+
+        <!-- Margin Utilization -->
+        <div class="card p-4">
+          <div class="text-[9px] font-mono text-muted uppercase tracking-widest mb-2 font-semibold">Margin Utilization</div>
+          <div class="flex items-center justify-center">
+            <svg width="110" height="110" viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="50" fill="none" stroke="#1c283f" stroke-width="7"/>
+              <circle cx="60" cy="60" r="50" fill="none" stroke="#f0b429" stroke-width="7" stroke-dasharray="314" stroke-dashoffset="160" stroke-linecap="round" class="gauge-ring"/>
+              <text x="60" y="56" text-anchor="middle" fill="white" font-family="JetBrains Mono" font-size="15" font-weight="700">49%</text>
+              <text x="60" y="72" text-anchor="middle" fill="#64748b" font-family="JetBrains Mono" font-size="9">of 5,00,000</text>
+            </svg>
+          </div>
+          <div class="text-center text-[10px] font-mono text-gold mt-1">Warning threshold: 70%</div>
+        </div>
+
+        <!-- Single Strat Exposure -->
+        <div class="card p-4">
+          <div class="text-[9px] font-mono text-muted uppercase tracking-widest mb-2 font-semibold">Max Single Strat Limit</div>
+          <div class="flex items-center justify-center">
+            <svg width="110" height="110" viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="50" fill="none" stroke="#1c283f" stroke-width="7"/>
+              <circle cx="60" cy="60" r="50" fill="none" stroke="#00e5a0" stroke-width="7" stroke-dasharray="314" stroke-dashoffset="235" stroke-linecap="round" class="gauge-ring"/>
+              <text x="60" y="56" text-anchor="middle" fill="white" font-family="JetBrains Mono" font-size="15" font-weight="700">25%</text>
+              <text x="60" y="72" text-anchor="middle" fill="#64748b" font-family="JetBrains Mono" font-size="9">of 2,00,000</text>
+            </svg>
+          </div>
+          <div class="text-center text-[10px] font-mono text-accent mt-1">Well within limits</div>
+        </div>
+
+        <!-- Volatility Regime -->
+        <div class="card p-4">
+          <div class="text-[9px] font-mono text-muted uppercase tracking-widest mb-2 font-semibold">Vol Regime (IVR)</div>
+          <div class="flex items-center justify-center">
+            <svg width="110" height="110" viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="50" fill="none" stroke="#1c283f" stroke-width="7"/>
+              <circle cx="60" cy="60" r="50" fill="none" stroke="#38bdf8" stroke-width="7" stroke-dasharray="314" stroke-dashoffset="181" stroke-linecap="round" class="gauge-ring"/>
+              <text x="60" y="56" text-anchor="middle" fill="white" font-family="JetBrains Mono" font-size="14" font-weight="700">MED</text>
+              <text x="60" y="72" text-anchor="middle" fill="#64748b" font-family="JetBrains Mono" font-size="9">IVR 42.3</text>
+            </svg>
+          </div>
+          <div class="text-center text-[10px] font-mono text-sky mt-1">Straddles & Spreads OK</div>
+        </div>
+      </div>
+
+      <!-- Margin Calculators & Rate Limit Sub-tabs -->
+      <div class="card p-4">
+        <div class="flex items-center gap-2 border-b border-border pb-2.5 mb-4">
+          <button class="subtab active" onclick="switchMarginSubtab(this, 'mt-single')">Single Order Margin</button>
+          <button class="subtab" onclick="switchMarginSubtab(this, 'mt-multi')">Multi-Leg Basket Margin & Hedge</button>
+          <button class="subtab" onclick="switchMarginSubtab(this, 'mt-pnlexit')">Dhan P&L Exit & Kill Switch</button>
+          <button class="subtab" onclick="switchMarginSubtab(this, 'mt-ratelimit')">Dhan API Rate Limit Monitor</button>
+        </div>
+
+        <!-- Tab 1: Single Order Margin -->
+        <div id="mt-single" class="margin-tab-pane">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="space-y-3">
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="text-[9px] font-mono text-muted uppercase block mb-1">exchangeSegment</label>
+                  <select class="select-field w-full" id="mcSeg"><option>NSE_FNO</option><option>NSE_EQ</option><option>BSE_FNO</option></select>
+                </div>
+                <div>
+                  <label class="text-[9px] font-mono text-muted uppercase block mb-1">transactionType</label>
+                  <select class="select-field w-full" id="mcTx"><option>SELL</option><option>BUY</option></select>
+                </div>
+              </div>
+              <div class="grid grid-cols-3 gap-3">
+                <div>
+                  <label class="text-[9px] font-mono text-muted uppercase block mb-1">securityId</label>
+                  <input type="text" class="input-field" value="49081" id="mcSec">
+                </div>
+                <div>
+                  <label class="text-[9px] font-mono text-muted uppercase block mb-1">quantity</label>
+                  <input type="number" class="input-field" value="50" id="mcQty">
+                </div>
+                <div>
+                  <label class="text-[9px] font-mono text-muted uppercase block mb-1">productType</label>
+                  <select class="select-field w-full" id="mcProd"><option>MARGIN</option><option>INTRADAY</option></select>
+                </div>
+              </div>
+              <div>
+                <label class="text-[9px] font-mono text-muted uppercase block mb-1">price (optional)</label>
+                <input type="number" class="input-field" value="198.2" id="mcPx">
+              </div>
+              <button class="btn btn-primary text-xs" onclick="calculateSingleMargin()">Calculate Single Margin</button>
+            </div>
+
+            <!-- Single Result Card -->
+            <div class="bg-surface-50 p-4 rounded-lg border border-border" id="mcSingleResult">
+              <div class="text-xs font-semibold text-white mb-3">Response — 200 OK (Simulated Dhan API)</div>
+              <div class="space-y-2 font-mono text-xs">
+                <div class="flex justify-between"><span class="text-muted">totalMargin</span><span class="text-gold font-bold">1,15,400</span></div>
+                <div class="flex justify-between"><span class="text-muted">spanMargin</span><span class="text-white">85,200</span></div>
+                <div class="flex justify-between"><span class="text-muted">exposureMargin</span><span class="text-white">30,200</span></div>
+                <div class="flex justify-between"><span class="text-muted">availableBalance</span><span class="text-accent">5,00,248</span></div>
+                <div class="flex justify-between"><span class="text-muted">insufficientBalance</span><span class="text-accent">0.00</span></div>
+              </div>
+              <div class="mt-3 p-2 bg-bg rounded text-[9px] font-mono text-muted">POST /v2/margincalculator</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Multi-Leg Margin -->
+        <div id="mt-multi" class="margin-tab-pane hidden space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-white">Multi-Order Basket Margin (POST /v2/margincalculator/multi)</span>
+            <button class="btn btn-ghost text-xs" onclick="addMultiMarginRow()"><i class="fa-solid fa-plus mr-1"></i> Add Leg</button>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Segment</th>
+                <th>Side</th>
+                <th>Security ID</th>
+                <th>Qty</th>
+                <th>Product</th>
+                <th>Price</th>
+                <th>Remove</th>
+              </tr>
+            </thead>
+            <tbody id="multiMarginTableBody">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+          <button class="btn btn-primary text-xs" onclick="calculateMultiMargin()">Calculate Combined Hedge Margin</button>
+          
+          <div class="bg-surface-50 p-4 rounded-lg border border-border mt-3" id="multiMarginResult">
+            <!-- Rendered via JS -->
+          </div>
+        </div>
+
+        <!-- Tab 3: P&L Exit -->
+        <div id="mt-pnlexit" class="margin-tab-pane hidden space-y-3">
+          <div class="text-xs font-semibold text-white mb-2">Configure Automated Dhan Broker P&L Exit (POST /v2/pnlExit)</div>
+          <div class="grid grid-cols-2 gap-4 max-w-lg">
+            <div>
+              <label class="text-[9px] font-mono text-muted uppercase block mb-1">Profit Target Threshold (INR)</label>
+              <input type="number" class="input-field" value="50000" id="peProfit">
+            </div>
+            <div>
+              <label class="text-[9px] font-mono text-muted uppercase block mb-1">Loss Stop Threshold (INR)</label>
+              <input type="number" class="input-field" value="25000" id="peLoss">
+            </div>
+          </div>
+          <div class="flex items-center gap-2 mt-2">
+            <input type="checkbox" id="peKill" checked class="accent-accent">
+            <label class="text-xs text-white" for="peKill">Enable Broker Kill Switch on Trigger (Cancels orders + closes all positions)</label>
+          </div>
+          <button class="btn btn-primary text-xs mt-2" onclick="savePnlExit()">Save P&L Exit Rule</button>
+        </div>
+
+        <!-- Tab 4: Rate Limits -->
+        <div id="mt-ratelimit" class="margin-tab-pane hidden space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-white">Dhan API Rate Limit Live Monitor (Rolling 60s)</span>
+            <div class="flex items-center gap-3 text-[10px] font-mono">
+              <span class="text-accent">● Order API (10/s max)</span>
+              <span class="text-sky">● Data Quotes (5/s max)</span>
+            </div>
+          </div>
+          <canvas id="rateLimitChart" height="140"></canvas>
+        </div>
+      </div>
+
+      <!-- Circuit Breaker Rules Table -->
+      <div class="card p-4">
+        <div class="text-[9.5px] font-mono text-muted uppercase tracking-widest mb-3 font-semibold">Circuit Breaker & Risk Governance Rules</div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Circuit Breaker Rule</th>
+              <th>Threshold</th>
+              <th>Current Measured</th>
+              <th>Gate State</th>
+              <th>Automated Action on Trigger</th>
+            </tr>
+          </thead>
+          <tbody id="circuitBreakersTableBody">
+            <!-- Rendered via JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+
+    <!-- ======================================================== -->
+    <!-- 11. SIDEKIQ & INFRASTRUCTURE PAGE -->
+    <!-- ======================================================== -->
+    <div id="page-sidekiq-infra" class="page-content hidden space-y-4">
+      <!-- Sidekiq Top Metric Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div class="card p-3.5">
+          <div class="text-[9px] font-mono text-muted uppercase tracking-widest mb-1 font-semibold">Processed Jobs</div>
+          <div class="text-2xl font-bold font-mono text-accent" id="skProcessed">1,247</div>
+          <div class="text-[10px] font-mono text-muted mt-1">Since 09:15 IST (0 failures)</div>
+        </div>
+        <div class="card p-3.5">
+          <div class="text-[9px] font-mono text-muted uppercase tracking-widest mb-1 font-semibold">Failed / Retried</div>
+          <div class="text-2xl font-bold font-mono text-danger" id="skFailed">1</div>
+          <div class="text-[10px] font-mono text-muted mt-1">1 in retry set, 0 dead</div>
+        </div>
+        <div class="card p-3.5">
+          <div class="text-[9px] font-mono text-muted uppercase tracking-widest mb-1 font-semibold">Busy Workers</div>
+          <div class="text-2xl font-bold font-mono text-gold" id="skBusy">12</div>
+          <div class="text-[10px] font-mono text-muted mt-1">of 25 concurrency threads</div>
+        </div>
+        <div class="card p-3.5">
+          <div class="text-[9px] font-mono text-muted uppercase tracking-widest mb-1 font-semibold">Redis Adapter</div>
+          <div class="text-2xl font-bold font-mono text-sky">0.4ms</div>
+          <div class="text-[10px] font-mono text-muted mt-1">3 ActionCable channels</div>
+        </div>
+      </div>
+
+      <!-- Active Workers Table -->
+      <div class="card p-4 space-y-2.5">
+        <div class="text-[9.5px] font-mono text-muted uppercase tracking-widest font-semibold">Active Sidekiq Workers</div>
+        <div class="overflow-x-auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>JID</th>
+                <th>Worker Class</th>
+                <th>Queue</th>
+                <th>Started</th>
+                <th>Arguments Payload</th>
+                <th>Elapsed</th>
+              </tr>
+            </thead>
+            <tbody id="sidekiqWorkersTable">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Retry Set Table -->
+      <div class="card p-4 space-y-2.5">
+        <div class="text-[9.5px] font-mono text-muted uppercase tracking-widest font-semibold">Sidekiq Retry Set</div>
+        <div class="overflow-x-auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>JID</th>
+                <th>Worker Class</th>
+                <th>Queue</th>
+                <th>Exception Error</th>
+                <th>Retries</th>
+                <th>Next Execution</th>
+              </tr>
+            </thead>
+            <tbody id="sidekiqRetriesTable">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Puma & DB Pool Telemetry -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="card p-4 space-y-2 font-mono text-xs">
+          <div class="text-xs font-semibold text-white mb-2"><i class="fa-solid fa-server mr-2 text-accent"></i>Puma 6.4 & Rails Environment</div>
+          <div class="flex justify-between"><span class="text-muted">Puma Workers</span><span class="text-white">2 clustered</span></div>
+          <div class="flex justify-between"><span class="text-muted">Threads per Worker</span><span class="text-white">5 (10 total)</span></div>
+          <div class="flex justify-between"><span class="text-muted">Rails Mode</span><span class="text-accent">production (API-only)</span></div>
+          <div class="flex justify-between"><span class="text-muted">ActionCable Adapter</span><span class="text-accent">Redis</span></div>
+        </div>
+        <div class="card p-4 space-y-2 font-mono text-xs">
+          <div class="text-xs font-semibold text-white mb-2"><i class="fa-solid fa-database mr-2 text-sky"></i>PostgreSQL & Cache Pool</div>
+          <div class="flex justify-between"><span class="text-muted">Connection Pool</span><span class="text-white">8 / 20 connections</span></div>
+          <div class="flex justify-between"><span class="text-muted">Prepared Statements</span><span class="text-accent">ON</span></div>
+          <div class="flex justify-between"><span class="text-muted">Optimistic Locking</span><span class="text-accent">Enabled (lock_version)</span></div>
+          <div class="flex justify-between"><span class="text-muted">Solid Queue fallback</span><span class="text-accent">Standby</span></div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ======================================================== -->
+    <!-- 12. ALERTS PAGE -->
+    <!-- ======================================================== -->
+    <div id="page-alerts" class="page-content hidden space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs font-mono text-muted uppercase tracking-widest font-semibold">ActiveSupport::Notifications & Risk Alerts</div>
+          <div class="text-xs text-muted mt-0.5">Real-time system, execution, and risk notifications</div>
+        </div>
+        <button class="btn btn-ghost" onclick="markAllAlertsRead()"><i class="fa-solid fa-check-double mr-1"></i> Mark All as Read</button>
+      </div>
+
+      <div class="space-y-2.5" id="alertsListContainer">
+        <!-- Rendered via JS -->
+      </div>
+    </div>
+
+
+    <!-- ======================================================== -->
+    <!-- 13. LOGS & TRACES PAGE -->
+    <!-- ======================================================== -->
+    <div id="page-logs" class="page-content hidden space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs font-mono text-muted uppercase tracking-widest font-semibold">Correlated System Logs</div>
+          <div class="text-xs text-muted mt-0.5">Tagged with request_id and execution correlationId</div>
+        </div>
+        <div class="flex gap-2">
+          <select class="select-field text-xs" id="logLevelFilter" onchange="renderLogs()">
+            <option value="all">All Levels</option>
+            <option value="info">INFO</option>
+            <option value="warn">WARN</option>
+            <option value="error">ERROR</option>
+            <option value="trade">TRADE</option>
+          </select>
+          <button class="btn btn-ghost text-xs" onclick="clearLogs()"><i class="fa-solid fa-trash mr-1"></i> Clear</button>
+        </div>
+      </div>
+
+      <div class="card p-4 h-[calc(100vh-210px)] overflow-y-auto font-mono text-xs space-y-1" id="logsContainer">
+        <!-- Rendered via JS -->
+      </div>
+    </div>
+
+
+    <!-- ======================================================== -->
+    <!-- 14. CONFIGURATION PAGE -->
+    <!-- ======================================================== -->
+    <div id="page-config" class="page-content hidden space-y-4">
+      <div class="text-xs font-mono text-muted uppercase tracking-widest font-semibold">System Configuration & Governance</div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Broker Connection -->
+        <div class="card p-4 space-y-3">
+          <div class="text-xs font-semibold text-white flex items-center gap-2"><i class="fa-solid fa-plug text-accent"></i> Broker & DhanHQ Credentials</div>
+          <div>
+            <label class="text-[9px] font-mono text-muted uppercase block mb-1">Dhan Client ID</label>
+            <input type="password" class="input-field" value="••••••••1002" id="cfgClientId">
+          </div>
+          <div>
+            <label class="text-[9px] font-mono text-muted uppercase block mb-1">Access Token (Redis session:access_token)</label>
+            <input type="password" class="input-field" value="••••••••••••••••••••••••" id="cfgAccessToken">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-[9px] font-mono text-muted uppercase block mb-1">Broker Engine</label>
+              <select class="select-field w-full"><option>DhanHQ (Primary)</option><option>Zerodha Kite</option></select>
+            </div>
+            <div>
+              <label class="text-[9px] font-mono text-muted uppercase block mb-1">Static IP Binding</label>
+              <input type="text" class="input-field" value="103.14.120.45" readonly>
+            </div>
+          </div>
+          <button class="btn btn-primary text-xs" onclick="testBrokerConnection()">Test Broker Connection</button>
+        </div>
+
+        <!-- Risk Parameters -->
+        <div class="card p-4 space-y-3">
+          <div class="text-xs font-semibold text-white flex items-center gap-2"><i class="fa-solid fa-shield-halved text-gold"></i> Risk Engine Limits (config/risk.yml)</div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-[9px] font-mono text-muted uppercase block mb-1">daily_loss_limit (INR)</label>
+              <input type="number" class="input-field" value="50000" id="cfgDailyLoss">
+            </div>
+            <div>
+              <label class="text-[9px] font-mono text-muted uppercase block mb-1">max_margin_pct (%)</label>
+              <input type="number" class="input-field" value="70" id="cfgMaxMargin">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-[9px] font-mono text-muted uppercase block mb-1">per_strategy_limit (INR)</label>
+              <input type="number" class="input-field" value="200000" id="cfgStratLimit">
+            </div>
+            <div>
+              <label class="text-[9px] font-mono text-muted uppercase block mb-1">max_open_lots</label>
+              <input type="number" class="input-field" value="50" id="cfgMaxLots">
+            </div>
+          </div>
+          <button class="btn btn-primary text-xs" onclick="saveRiskConfig()">Save Risk Config</button>
+        </div>
+
+        <!-- Ollama Agent Guardrails -->
+        <div class="card p-4 space-y-3">
+          <div class="text-xs font-semibold text-white flex items-center gap-2"><i class="fa-solid fa-brain text-purple"></i> Ollama AI & Agentic Guardrails</div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-[9px] font-mono text-muted uppercase block mb-1">Ollama Base URL</label>
+              <input type="text" class="input-field" value="http://localhost:11434">
+            </div>
+            <div>
+              <label class="text-[9px] font-mono text-muted uppercase block mb-1">Model</label>
+              <select class="select-field w-full"><option>llama3.1:8b</option><option>qwen2.5:14b</option></select>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-[9px] font-mono text-muted uppercase block mb-1">Max Execution Steps</label>
+              <input type="number" class="input-field" value="12">
+            </div>
+            <div>
+              <label class="text-[9px] font-mono text-muted uppercase block mb-1">Temperature</label>
+              <input type="number" class="input-field" value="0.1" step="0.05">
+            </div>
+          </div>
+          <button class="btn btn-primary text-xs" onclick="showToast('Ollama parameters synchronized with agent loop', 'success')">Save Agent Config</button>
+        </div>
+
+        <!-- System & Gems -->
+        <div class="card p-4 space-y-2.5 font-mono text-xs">
+          <div class="text-xs font-semibold text-white mb-2 flex items-center gap-2"><i class="fa-solid fa-code text-sky"></i> Stack Version Metadata</div>
+          <div class="flex justify-between"><span class="text-muted">Rails</span><span class="text-white">8.1.3 (API)</span></div>
+          <div class="flex justify-between"><span class="text-muted">Ruby</span><span class="text-white">3.3.4</span></div>
+          <div class="flex justify-between"><span class="text-muted">dhanhq-sdk</span><span class="text-accent">1.4.2</span></div>
+          <div class="flex justify-between"><span class="text-muted">Sidekiq</span><span class="text-white">7.2.1</span></div>
+          <div class="flex justify-between"><span class="text-muted">AASM State Machine</span><span class="text-white">5.5.0</span></div>
+          <div class="flex justify-between"><span class="text-muted">Ollama SDK</span><span class="text-purple">0.4.1</span></div>
+          <div class="flex justify-between"><span class="text-muted">Last Deployment</span><span class="text-white">2025-01-28 08:45 IST</span></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ============================================================ -->
+<!-- JAVASCRIPT: APPLICATION LOGIC, STATE & CANVAS CHARTS -->
+<!-- ============================================================ -->
+<script>
+// ===========================
+// UNIFIED STATE MODEL
+// ===========================
+const APP_STATE = {
+  live: true,
+  killed: false,
+  uptimeSeconds: 0,
+  latency: 18,
+
+  // Market indices
+  indices: {
+    NIFTY: { spot: 24248.50, change: 85.30, pct: 0.35, ltp: 24248.50 },
+    BANKNIFTY: { spot: 51842.15, change: -120.45, pct: -0.23, ltp: 51842.15 },
+    FINNIFTY: { spot: 23156.80, change: 42.10, pct: 0.18, ltp: 23156.80 },
+    INDIAVIX: { spot: 13.42, change: -0.25, pct: -1.80, ltp: 13.42 },
+  },
+
+  // Strategies
+  strategies: [
+    {
+      id: 's001',
+      name: 'NIFTY ATM Straddle',
+      symbol: 'NIFTY',
+      type: 'STRADDLE',
+      status: 'RUNNING',
+      pnl: 12450,
+      lots: 4,
+      entryTime: '09:15:32',
+      legs: [
+        { instrument: 'NIFTY24JAN24250CE', side: 'BUY', qty: 100, bAvg: 185.50, sAvg: 0, ltp: 198.20, delta: 0.52, gamma: 0.003, theta: -8.2, vega: 12.4 },
+        { instrument: 'NIFTY24JAN24250PE', side: 'BUY', qty: 100, bAvg: 172.30, sAvg: 0, ltp: 165.80, delta: -0.48, gamma: 0.003, theta: -7.8, vega: 11.9 },
+      ]
+    },
+    {
+      id: 's002',
+      name: 'BANKNIFTY Iron Condor',
+      symbol: 'BANKNIFTY',
+      type: 'IRON_CONDOR',
+      status: 'RUNNING',
+      pnl: 8200,
+      lots: 2,
+      entryTime: '09:22:18',
+      legs: [
+        { instrument: 'BNF24JAN51300PE', side: 'BUY', qty: 30, bAvg: 142.50, sAvg: 0, ltp: 128.00, delta: -0.18, gamma: 0.001, theta: -3.1, vega: 5.2 },
+        { instrument: 'BNF24JAN51800PE', side: 'SELL', qty: 30, bAvg: 0, sAvg: 88.20, ltp: 72.50, delta: 0.22, gamma: -0.001, theta: 3.5, vega: -6.1 },
+        { instrument: 'BNF24JAN52300CE', side: 'SELL', qty: 30, bAvg: 0, sAvg: 95.60, ltp: 82.30, delta: -0.20, gamma: -0.001, theta: 3.8, vega: -5.8 },
+        { instrument: 'BNF24JAN52800CE', side: 'BUY', qty: 30, bAvg: 52.40, sAvg: 0, ltp: 38.90, delta: 0.12, gamma: 0.0005, theta: -1.8, vega: 3.1 },
+      ]
+    },
+    {
+      id: 's003',
+      name: 'NIFTY Bull Put Spread',
+      symbol: 'NIFTY',
+      type: 'PUT_SPREAD',
+      status: 'PAUSED',
+      pnl: -3800,
+      lots: 6,
+      entryTime: '10:05:44',
+      legs: [
+        { instrument: 'NIFTY24JAN24150PE', side: 'SELL', qty: 150, bAvg: 0, sAvg: 62.40, ltp: 78.50, delta: -0.32, gamma: -0.002, theta: 9.2, vega: -15.1 },
+        { instrument: 'NIFTY24JAN24050PE', side: 'BUY', qty: 150, bAvg: 28.30, sAvg: 0, ltp: 42.10, delta: -0.18, gamma: -0.001, theta: -4.5, vega: 8.3 },
+      ]
+    }
+  ],
+
+  // Recent fills
+  recentFills: [
+    { time: '11:42:18', instrument: 'NIFTY24JAN24250CE', side: 'BUY', qty: 100, price: 198.20, corr: 'corr_a7f3c9', strategy: 'Straddle', status: 'TRADED' },
+    { time: '11:42:17', instrument: 'NIFTY24JAN24250PE', side: 'BUY', qty: 100, price: 165.80, corr: 'corr_a7f3c9', strategy: 'Straddle', status: 'TRADED' },
+    { time: '11:38:05', instrument: 'BNF24JAN52300CE', side: 'SELL', qty: 30, price: 82.30, corr: 'corr_ic_condor', strategy: 'Iron Condor', status: 'TRADED' },
+    { time: '11:35:22', instrument: 'NIFTY24JAN24300CE', side: 'SELL', qty: 50, price: 145.60, corr: 'corr_adj1', strategy: 'Straddle Adj', status: 'TRADED' },
+    { time: '11:30:10', instrument: 'BNF24JAN51800PE', side: 'SELL', qty: 30, price: 72.50, corr: 'corr_ic_condor', strategy: 'Iron Condor', status: 'TRADED' },
+    { time: '11:25:48', instrument: 'NIFTY24JAN24200CE', side: 'BUY', qty: 50, price: 210.30, corr: 'corr_straddle2', strategy: 'Straddle', status: 'PENDING' },
+    { time: '11:22:15', instrument: 'NIFTY24JAN24150PE', side: 'SELL', qty: 150, price: 78.50, corr: 'corr_bps', strategy: 'Put Spread', status: 'TRADED' },
+  ],
+
+  // Orders
+  orders: [
+    { id: 'ORD-240128-001', corr: 'corr_a7f3c9d2', time: '11:42:18', instrument: 'NIFTY24JAN24250CE', type: 'LIMIT', side: 'BUY', qty: 100, price: 198.20, filled: 100, avg: 198.20, leg: 'ENTRY_LEG', status: 'TRADED', jid: 'jid_a1b2c3', latency: '45ms' },
+    { id: 'ORD-240128-002', corr: 'corr_a7f3c9d2', time: '11:42:17', instrument: 'NIFTY24JAN24250PE', type: 'LIMIT', side: 'BUY', qty: 100, price: 165.80, filled: 100, avg: 165.80, leg: 'ENTRY_LEG', status: 'TRADED', jid: 'jid_d4e5f6', latency: '52ms' },
+    { id: 'ORD-240128-003', corr: 'corr_ic_condor', time: '11:38:05', instrument: 'BNF24JAN52300CE', type: 'LIMIT', side: 'SELL', qty: 30, price: 82.30, filled: 30, avg: 82.30, leg: 'ENTRY_LEG', status: 'TRADED', jid: 'jid_g7h8i9', latency: '38ms' },
+    { id: 'ORD-240128-004', corr: 'corr_adj1', time: '11:35:22', instrument: 'NIFTY24JAN24300CE', type: 'LIMIT', side: 'SELL', qty: 50, price: 145.60, filled: 50, avg: 145.60, leg: 'ENTRY_LEG', status: 'TRADED', jid: 'jid_j0k1l2', latency: '41ms' },
+    { id: 'ORD-240128-005', corr: 'corr_ic_condor', time: '11:30:10', instrument: 'BNF24JAN51800PE', type: 'LIMIT', side: 'SELL', qty: 30, price: 72.50, filled: 30, avg: 72.50, leg: 'ENTRY_LEG', status: 'TRADED', jid: 'jid_m3n4o5', latency: '39ms' },
+    { id: 'ORD-240128-006', corr: 'corr_straddle2', time: '11:25:48', instrument: 'NIFTY24JAN24200CE', type: 'LIMIT', side: 'BUY', qty: 50, price: 210.30, filled: 30, avg: 210.30, leg: 'ENTRY_LEG', status: 'PENDING', jid: 'jid_p6q7r8', latency: '-' },
+    { id: 'ORD-240128-007', corr: 'corr_fail1', time: '11:15:00', instrument: 'NIFTY24JAN24400CE', type: 'LIMIT', side: 'BUY', qty: 100, price: 95.00, filled: 0, avg: 0, leg: 'ENTRY_LEG', status: 'REJECTED', jid: 'jid_y5z6a7', latency: '12ms' },
+  ],
+
+  // Circuit Breakers
+  circuitBreakers: [
+    { rule: 'Daily Loss Limit', threshold: '50,000', current: '-12,400', state: 'OK', action: 'Close all positions, trigger Dhan P&L exit' },
+    { rule: 'Margin Utilization', threshold: '70%', current: '49%', state: 'OK', action: 'Block new position opens' },
+    { rule: 'Single Strategy Loss', threshold: '-20,000', current: '-3,800', state: 'OK', action: 'Close offending strategy' },
+    { rule: 'Consecutive Losses', threshold: '5 trades', current: '2 trades', state: 'OK', action: 'Pause strategy 15 min' },
+    { rule: 'Order Rejection Rate', threshold: '>10% in 5min', current: '1/9 (11%)', state: 'WARN', action: 'Throttle order placement to 5/sec' },
+    { rule: 'Stale Market Tick (>3s)', threshold: 'Any feed', current: 'All fresh', state: 'OK', action: 'Pause strategies using stale data' },
+    { rule: 'Physical Settlement Proximity', threshold: 'T-1 day', current: 'T-2', state: 'OK', action: 'Force close all positions / convert' },
+    { rule: 'Sidekiq Queue Depth', threshold: '>100 jobs', current: '12 jobs', state: 'OK', action: 'Alert ops team & auto-scale workers' },
+  ],
+
+  // Alerts
+  alerts: [
+    { id: 1, time: '11:40:22', level: 'WARN', msg: 'Order rejection rate elevated: 1 rejection in last 5 minutes (11%). Sidekiq throttle worker engaged.', read: false },
+    { id: 2, time: '11:35:18', level: 'WARN', msg: 'NIFTY Bull Put Spread approaching stop-loss (-3,800 / -5,000 limit). AASM transition to :paused.', read: false },
+    { id: 3, time: '11:20:05', level: 'ERROR', msg: 'OrderPlacementWorker raised Dhan::InsufficientMargin on ORD-240128-007. Moved to Sidekiq retry set (2/3).', read: false },
+    { id: 4, time: '10:55:33', level: 'INFO', msg: 'Iron Condor delta neutralized via AdjustDeltaWorker. Portfolio delta: +0.03.', read: true },
+    { id: 5, time: '10:30:00', level: 'INFO', msg: 'Morning risk check passed via RiskCheckWorker. All circuit breakers green. Margin: 49%.', read: true },
+  ],
+
+  // Sidekiq workers
+  skWorkers: [
+    { jid: 'jid_a1b2c3', w: 'OrderMonitorWorker', q: 'critical', started: '11:42:18', args: '{order_id: "ORD-001"}', el: '0.3s' },
+    { jid: 'jid_d4e5f6', w: 'TickProcessorWorker', q: 'ticks', started: '11:42:17', args: '{inst: "NIFTY", ltp: 24248.5}', el: '0.1s' },
+    { jid: 'jid_g7h8i9', w: 'PnlCalculationWorker', q: 'default', started: '11:42:15', args: '{strategy_ids: [1,2,3]}', el: '1.2s' },
+    { jid: 'jid_j0k1l2', w: 'PositionReconcileWorker', q: 'default', started: '11:42:00', args: '{}', el: '8.5s' },
+  ],
+  skRetries: [
+    { jid: 'jid_y5z6a7', w: 'OrderPlacementWorker', q: 'critical', err: 'Dhan::InsufficientMargin (Exceeds available limit)', ret: 2, next: '11:45:00' },
+  ],
+
+  // Multi-margin basket rows
+  mmRows: [
+    { seg: 'NSE_FNO', tx: 'SELL', sec: '49081', qty: 50, prod: 'MARGIN', px: '198.2' },
+    { seg: 'NSE_FNO', tx: 'BUY', sec: '49082', qty: 50, prod: 'MARGIN', px: '165.8' },
+  ],
+
+  // Agent Telemetry state
+  agentRunning: false,
+  agentStepNum: 0,
+  agentStartTime: 0,
+  agentTokens: 0,
+  agentDhanCalls: 0,
+  eventFilter: 'all',
+  telemetryEvents: [],
+  toolCallsLog: [],
+  agentStatus: {
+    planner: { status: 'idle', steps: 0 },
+    analyst: { status: 'idle', steps: 0 },
+    strategy: { status: 'idle', steps: 0 },
+    execution: { status: 'idle', steps: 0 },
+    risk: { status: 'idle', steps: 0 },
+    critic: { status: 'idle', steps: 0 },
+  },
+
+  // Long-term memories
+  ltmMemories: [
+    { date: 'Jan 27', note: 'NIFTY IVR dropped below 25 → straddle unprofitable, switched to credit spreads', sim: 0.89 },
+    { date: 'Jan 24', note: 'BANKNIFTY expiry day gamma spike → risk agent hedged wing protection', sim: 0.92 },
+    { date: 'Jan 20', note: 'Iron Condor on NIFTY at IVR 55 → best trade of month +12,400', sim: 0.85 },
+    { date: 'Jan 15', note: 'Physical settlement proximity auto-converted at T-1, avoided 2L block', sim: 0.78 },
+  ],
+
+  // Logs & history
+  logs: [],
+  logIdCounter: 0,
+  pnlHistory: [],
+  rateLimitHistory: [],
+};
+
+// ===========================
+// FORMATTING HELPERS
+// ===========================
+const fmt = (n, d = 2) => Number(n).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtINR = n => (n >= 0 ? '+' : '') + fmt(Math.abs(n), 0);
+const pnlClass = n => (n >= 0 ? 'text-accent' : 'text-danger');
+const sideClass = s => (s === 'BUY' ? 'text-accent' : 'text-danger');
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+function getStatusBadge(status) {
+  const map = {
+    'TRADED': 'badge-filled',
+    'FILLED': 'badge-filled',
+    'PENDING': 'badge-open',
+    'OPEN': 'badge-open',
+    'REJECTED': 'badge-rejected',
+    'CANCELLED': 'badge-cancelled',
+    'TRANSIT': 'badge-transit',
+  };
+  return `<span class="badge ${map[status] || 'badge-cancelled'}">${status}</span>`;
+}
+
+function getStratStatusBadge(status) {
+  const map = {
+    'RUNNING': { dot: 'live', cls: 'text-accent', label: 'RUNNING' },
+    'PAUSED': { dot: 'warn', cls: 'text-gold', label: 'PAUSED' },
+    'STOPPED': { dot: 'idle', cls: 'text-muted', label: 'STOPPED' },
+  };
+  const s = map[status] || map.STOPPED;
+  return `<span class="flex items-center gap-1.5"><span class="status-dot ${s.dot} ${status === 'RUNNING' ? 'pulse-live' : ''}"></span><span class="${s.cls} text-[10px] font-mono font-semibold">${s.label}</span></span>`;
+}
+
+// ===========================
+// TOASTS & MODALS
+// ===========================
+function showToast(msg, type = 'success') {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  const icons = { success: 'fa-check-circle', error: 'fa-times-circle', warning: 'fa-exclamation-triangle' };
+  toast.innerHTML = `<i class="fa-solid ${icons[type] || 'fa-info-circle'} mr-2"></i>${msg}`;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(20px)';
+    toast.style.transition = 'all 0.3s';
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+
+function openModal(content) {
+  const container = document.getElementById('modalContainer');
+  container.innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-content">${content}</div></div>`;
+}
+
+function closeModal() {
+  document.getElementById('modalContainer').innerHTML = '';
+}
+
+// ===========================
+// NAVIGATION / PAGE SWITCHING
+// ===========================
+function switchPage(page) {
+  document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden'));
+  const target = document.getElementById(`page-${page}`);
+  if (target) target.classList.remove('hidden');
+
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const nav = document.querySelector(`.nav-item[data-page="${page}"]`);
+  if (nav) nav.classList.add('active');
+
+  const titles = {
+    'dashboard': ['Dashboard', 'REAL-TIME CONTROL PLANE'],
+    'strategies': ['Strategies', 'AASM STATE MACHINE BACKED'],
+    'options-chain': ['Option Chain', 'LIVE DHAN /v2/optionchain'],
+    'positions': ['Positions', 'OPTIMISTIC LOCKING (AR)'],
+    'orders': ['Order Book', 'FULL AUDIT TRAIL'],
+    'agent-console': ['Agent Console', 'REACT MULTI-AGENT LOOP'],
+    'agent-monitor': ['Ops Telemetry', 'AGENT INTERNAL METRICS'],
+    'agent-tools-memory': ['Tools & Memory', 'PILLARS 2 & 3'],
+    'greeks-analytics': ['Greeks & Volatility', 'ANALYTICS & IV SURFACE'],
+    'margin-risk': ['Margin & Risk', 'DHAN HEDGE & CIRCUIT BREAKERS'],
+    'sidekiq-infra': ['Sidekiq & Infra', 'BACKGROUND JOBS & PUMA'],
+    'alerts': ['Alerts', 'ACTIVESUPPORT NOTIFICATIONS'],
+    'logs': ['Logs & Traces', 'TAGGED REQUEST_ID'],
+    'config': ['Configuration', 'SYSTEM & BROKER PARAMS'],
+  };
+
+  const [t, sub] = titles[page] || ['Overview', ''];
+  document.getElementById('pageTitle').textContent = t;
+  document.getElementById('pageSubtitle').textContent = sub;
+
+  // Trigger page specific renders / chart draws
+  if (page === 'dashboard') {
+    renderDashboard();
+    drawDashPnlChart();
+  } else if (page === 'strategies') {
+    renderStrategies();
+  } else if (page === 'options-chain') {
+    renderOptionsChain();
+  } else if (page === 'positions') {
+    renderPositions();
+  } else if (page === 'orders') {
+    renderOrders();
+  } else if (page === 'greeks-analytics') {
+    setTimeout(() => {
+      drawGreekBarChart();
+      drawIvSurfaceChart();
+      drawTermStructureChart();
+      drawSkewComparisonChart();
+      drawExpiredRollingChart();
+    }, 50);
+  } else if (page === 'margin-risk') {
+    renderCircuitBreakers();
+    renderMultiMarginRows();
+    if (!document.getElementById('mt-ratelimit').classList.contains('hidden')) {
+      drawRateLimitChart();
+    }
+  } else if (page === 'sidekiq-infra') {
+    renderSidekiq();
+  } else if (page === 'alerts') {
+    renderAlerts();
+  } else if (page === 'logs') {
+    renderLogs();
+    scrollLogsToBottom();
+  } else if (page === 'agent-monitor') {
+    renderAgentMonitorStatuses();
+    renderTelemetryStream();
+  } else if (page === 'agent-tools-memory') {
+    renderToolRegistry();
+    renderLtmMemories();
+  }
+}
+
+// Subtab switchers
+function switchGreekSubtab(btn, id) {
+  btn.parentElement.querySelectorAll('.subtab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.greek-tab-pane').forEach(p => p.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+  if (id === 'gt-breakdown') drawGreekBarChart();
+  if (id === 'gt-surface') drawIvSurfaceChart();
+  if (id === 'gt-term') drawTermStructureChart();
+  if (id === 'gt-skew') drawSkewComparisonChart();
+  if (id === 'gt-expired') drawExpiredRollingChart();
+}
+
+function switchMarginSubtab(btn, id) {
+  btn.parentElement.querySelectorAll('.subtab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.margin-tab-pane').forEach(p => p.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+  if (id === 'mt-ratelimit') drawRateLimitChart();
+}
+
+// ===========================
+// 1. DASHBOARD RENDERING
+// ===========================
+function renderDashboard() {
+  // Total P&L calculation
+  const totalPnl = APP_STATE.strategies.reduce((s, x) => s + (x.status !== 'STOPPED' ? x.pnl : 0), 0);
+  const pnlEl = document.getElementById('dashDayPnl');
+  if (pnlEl) {
+    pnlEl.textContent = fmtINR(totalPnl);
+    pnlEl.className = `text-xl font-bold font-mono ${pnlClass(totalPnl)}`;
+  }
+
+  // Active Strategies list in dashboard
+  const stratListEl = document.getElementById('dashStratList');
+  if (stratListEl) {
+    stratListEl.innerHTML = APP_STATE.strategies.map(s => `
+      <div class="p-2.5 rounded-lg bg-surface-50 border border-border hover:border-[#2a3d5e] transition-all cursor-pointer" onclick="switchPage('strategies')">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-xs font-semibold text-white">${s.name}</span>
+          ${getStratStatusBadge(s.status)}
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-[9.5px] font-mono text-muted">${s.symbol} · ${s.type} · ${s.lots}L</span>
+          <span class="text-xs font-mono font-bold ${pnlClass(s.pnl)}">${fmtINR(s.pnl)}</span>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // Indices
+  const indexEl = document.getElementById('dashIndexPrices');
+  if (indexEl) {
+    indexEl.innerHTML = Object.entries(APP_STATE.indices).map(([sym, d]) => {
+      const chgColor = d.change >= 0 ? 'text-accent' : 'text-danger';
+      const arrow = d.change >= 0 ? 'fa-caret-up' : 'fa-caret-down';
+      return `
+        <div class="flex items-center justify-between p-2 rounded bg-surface-50 border border-border">
+          <div>
+            <div class="text-xs font-semibold text-white">${sym}</div>
+            <div class="text-[9px] font-mono text-muted">SPOT</div>
+          </div>
+          <div class="text-right">
+            <div class="text-xs font-mono font-bold text-white">${fmt(d.ltp)}</div>
+            <div class="${chgColor} text-[10px] font-mono">
+              <i class="fa-solid ${arrow} mr-0.5"></i>${fmt(Math.abs(d.change))} (${fmt(Math.abs(d.pct))}%)
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // Recent fills
+  const fillsEl = document.getElementById('dashRecentFills');
+  if (fillsEl) {
+    fillsEl.innerHTML = APP_STATE.recentFills.map(f => `
+      <tr>
+        <td class="text-muted">${f.time}</td>
+        <td class="text-white">${f.instrument}</td>
+        <td class="${sideClass(f.side)} font-semibold">${f.side}</td>
+        <td class="text-white">${f.qty}</td>
+        <td class="text-white">${fmt(f.price)}</td>
+        <td class="text-sky text-[9.5px]">${f.strategy} (${f.corr.substring(0, 10)})</td>
+        <td>${getStatusBadge(f.status)}</td>
+      </tr>
+    `).join('');
+  }
+
+  // AI insights
+  const aiEl = document.getElementById('dashAiInsights');
+  if (aiEl) {
+    aiEl.innerHTML = [
+      { agent: 'Planner', color: 'text-sky', text: 'Target theta decay rate: +845 INR/day on Iron Condor. Next rebalance checkpoint at 14:00.' },
+      { agent: 'Analyst', color: 'text-accent', text: 'PCR 1.12 with spot at 24,248 > max pain (24,200). Put writers maintaining support at 24,100.' },
+      { agent: 'Strategy', color: 'text-gold', text: 'IVR 42.3 remains in sell-friendly regime. Bull Put Spread & Iron Condor optimal.' },
+      { agent: 'Risk', color: 'text-danger', text: 'Short gamma (-2.14) active in straddle. Auto-hedge triggers if |spot - ATM| > 200 pts.' },
+    ].map(item => `
+      <div class="bg-surface-100 p-2 rounded border border-border">
+        <span class="font-mono font-bold ${item.color} mr-1">[${item.agent}]</span>
+        <span class="text-muted">${item.text}</span>
+      </div>
+    `).join('');
+  }
+}
+
+// Canvas P&L Chart
+function initPnlHistory() {
+  APP_STATE.pnlHistory = [];
+  let pnl = 0;
+  for (let i = 0; i < 120; i++) {
+    pnl += (Math.random() - 0.42) * 800;
+    APP_STATE.pnlHistory.push(Math.round(pnl));
+  }
+  APP_STATE.pnlHistory[APP_STATE.pnlHistory.length - 1] = 24850;
+}
+
+function drawDashPnlChart() {
+  const canvas = document.getElementById('dashPnlChart');
+  if (!canvas || canvas.offsetParent === null) return;
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width - 32;
+  canvas.height = 190;
+
+  const data = APP_STATE.pnlHistory;
+  const w = canvas.width;
+  const h = canvas.height;
+  const pad = { top: 15, right: 60, bottom: 25, left: 10 };
+  const cw = w - pad.left - pad.right;
+  const ch = h - pad.top - pad.bottom;
+
+  ctx.clearRect(0, 0, w, h);
+
+  const min = Math.min(...data, 0);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+
+  // Grid
+  ctx.strokeStyle = 'rgba(28, 40, 63, 0.7)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (ch / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(w - pad.right, y);
+    ctx.stroke();
+  }
+
+  // Zero line
+  const zeroY = pad.top + ch * (1 - (0 - min) / range);
+  ctx.strokeStyle = 'rgba(100, 116, 139, 0.3)';
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(pad.left, zeroY);
+  ctx.lineTo(w - pad.right, zeroY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Area
+  const isPos = data[data.length - 1] >= 0;
+  const grad = ctx.createLinearGradient(0, pad.top, 0, h - pad.bottom);
+  if (isPos) {
+    grad.addColorStop(0, 'rgba(0, 229, 160, 0.16)');
+    grad.addColorStop(1, 'rgba(0, 229, 160, 0.0)');
+  } else {
+    grad.addColorStop(0, 'rgba(255, 59, 92, 0.0)');
+    grad.addColorStop(1, 'rgba(255, 59, 92, 0.16)');
+  }
+
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = pad.left + (i / (data.length - 1)) * cw;
+    const y = pad.top + ch * (1 - (v - min) / range);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.lineTo(pad.left + cw, h - pad.bottom);
+  ctx.lineTo(pad.left, h - pad.bottom);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = pad.left + (i / (data.length - 1)) * cw;
+    const y = pad.top + ch * (1 - (v - min) / range);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = isPos ? '#00e5a0' : '#ff3b5c';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Endpoint
+  const lastX = pad.left + cw;
+  const lastY = pad.top + ch * (1 - (data[data.length - 1] - min) / range);
+  ctx.beginPath();
+  ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+  ctx.fillStyle = isPos ? '#00e5a0' : '#ff3b5c';
+  ctx.fill();
+
+  // Labels
+  ctx.font = '10px JetBrains Mono';
+  ctx.fillStyle = '#64748b';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const v = max - (range / 4) * i;
+    ctx.fillText(fmt(v, 0), w - 6, pad.top + (ch / 4) * i + 3);
+  }
+  ctx.textAlign = 'center';
+  ['09:15', '10:00', '10:45', '11:30'].forEach((l, i) => {
+    ctx.fillText(l, pad.left + (i / 3) * cw, h - 6);
+  });
+}
+
+// ===========================
+// 2. STRATEGIES ORCHESTRATOR
+// ===========================
+function renderStrategies() {
+  const container = document.getElementById('strategyCardsGrid');
+  if (!container) return;
+  const filterSym = document.getElementById('stratFilterSymbol')?.value || 'ALL';
+
+  const filtered = filterSym === 'ALL'
+    ? APP_STATE.strategies
+    : APP_STATE.strategies.filter(s => s.symbol === filterSym);
+
+  container.innerHTML = filtered.map(s => {
+    const borderCls = s.pnl >= 0 ? 'border-accent/20' : 'border-danger/20';
+    return `
+      <div class="card p-5 ${borderCls} slide-in">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <div class="text-sm font-bold text-white">${s.name}</div>
+            <div class="text-[9.5px] font-mono text-muted mt-0.5">${s.id} · ${s.symbol} · ${s.type} · Entry: ${s.entryTime}</div>
+          </div>
+          ${getStratStatusBadge(s.status)}
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 mb-3 bg-surface-50 p-2.5 rounded border border-border">
+          <div>
+            <div class="text-[9px] font-mono text-muted uppercase">P&L MTM</div>
+            <div class="text-lg font-mono font-bold ${pnlClass(s.pnl)}">${fmtINR(s.pnl)}</div>
+          </div>
+          <div>
+            <div class="text-[9px] font-mono text-muted uppercase">Lots / Qty</div>
+            <div class="text-lg font-mono font-bold text-white">${s.lots} Lots</div>
+          </div>
+          <div>
+            <div class="text-[9px] font-mono text-muted uppercase">Net Greeks</div>
+            <div class="text-xs font-mono text-sky mt-1">Δ ${s.legs.reduce((t, l) => t + (l.delta * (l.side === 'SELL' ? -1 : 1) * l.qty / 100), 0).toFixed(2)} | Θ +${s.legs.reduce((t, l) => t + (l.theta * (l.side === 'SELL' ? -1 : 1) * l.qty / 100), 0).toFixed(0)}</div>
+          </div>
+        </div>
+
+        <div class="text-[9px] font-mono text-muted uppercase tracking-wider mb-1.5 font-semibold">Legs Breakdown (AR Transaction Wrapped)</div>
+        <div class="space-y-1 mb-4">
+          ${s.legs.map(l => {
+            const legPnl = (l.ltp - (l.bAvg || l.sAvg || l.ltp)) * l.qty * (l.side === 'SELL' ? -1 : 1);
+            return `
+              <div class="flex items-center justify-between text-[10px] font-mono p-1.5 rounded bg-surface-50 border border-border">
+                <div class="flex items-center gap-2">
+                  <span class="${sideClass(l.side)} font-bold w-9">${l.side}</span>
+                  <span class="text-white">${l.instrument}</span>
+                  <span class="text-muted">x${l.qty}</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="text-muted">@${fmt(l.bAvg || l.sAvg)} &rarr; ${fmt(l.ltp)}</span>
+                  <span class="${pnlClass(legPnl)} font-semibold">${fmtINR(legPnl)}</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+
+        <div class="flex gap-2">
+          ${s.status === 'RUNNING' ? `
+            <button class="btn btn-ghost flex-1 text-xs" onclick="pauseStrategy('${s.id}')"><i class="fa-solid fa-pause"></i> Pause</button>
+          ` : s.status === 'PAUSED' ? `
+            <button class="btn btn-ghost flex-1 text-xs border-accent/30 text-accent" onclick="resumeStrategy('${s.id}')"><i class="fa-solid fa-play"></i> Resume</button>
+          ` : ''}
+          <button class="btn btn-ghost flex-1 text-xs" onclick="adjustStrategyModal('${s.id}')"><i class="fa-solid fa-sliders"></i> Adjust SL/TP</button>
+          <button class="btn btn-danger text-xs px-3.5" onclick="stopStrategyModal('${s.id}')"><i class="fa-solid fa-stop"></i></button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function pauseStrategy(id) {
+  const s = APP_STATE.strategies.find(x => x.id === id);
+  if (s) {
+    s.status = 'PAUSED';
+    renderStrategies();
+    addSystemLog('WARN', `Strategy ${s.name} PAUSED — AASM :running → :paused`, 'strategy_worker');
+    showToast(`${s.name} paused`, 'warning');
+  }
+}
+
+function resumeStrategy(id) {
+  const s = APP_STATE.strategies.find(x => x.id === id);
+  if (s) {
+    s.status = 'RUNNING';
+    renderStrategies();
+    addSystemLog('INFO', `Strategy ${s.name} RESUMED — AASM :paused → :running`, 'strategy_worker');
+    showToast(`${s.name} resumed`, 'success');
+  }
+}
+
+function stopStrategyModal(id) {
+  const s = APP_STATE.strategies.find(x => x.id === id);
+  openModal(`
+    <div class="text-sm font-bold text-white mb-2">Stop Strategy & Exit Positions</div>
+    <div class="text-xs text-muted mb-4">This will enqueue ClosePositionWorker via Sidekiq and close all ${s ? s.legs.length : 0} legs at market. Confirm?</div>
+    <div class="flex gap-2 justify-end">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmStopStrategy('${id}')">Stop & Close All</button>
+    </div>
+  `);
+}
+
+function confirmStopStrategy(id) {
+  const s = APP_STATE.strategies.find(x => x.id === id);
+  if (s) {
+    s.status = 'STOPPED';
+    s.pnl = 0;
+  }
+  closeModal();
+  renderStrategies();
+  renderPositions();
+  addSystemLog('ERROR', `Strategy ${s ? s.name : id} STOPPED — all positions closed`, 'strategy_worker');
+  showToast('Strategy stopped and positions closed', 'error');
+}
+
+function adjustStrategyModal(id) {
+  openModal(`
+    <div class="text-sm font-bold text-white mb-3">Adjust Strategy Parameters — PATCH /api/strategies/${id}</div>
+    <div class="space-y-3">
+      <div>
+        <label class="text-[9px] font-mono text-muted uppercase block mb-1">Stop Loss (Points)</label>
+        <input type="number" class="input-field" value="150" id="adjSl">
+      </div>
+      <div>
+        <label class="text-[9px] font-mono text-muted uppercase block mb-1">Target (Points)</label>
+        <input type="number" class="input-field" value="250" id="adjTarget">
+      </div>
+      <div>
+        <label class="text-[9px] font-mono text-muted uppercase block mb-1">Trailing SL Rule</label>
+        <select class="select-field w-full">
+          <option>Trail 50% of profits</option>
+          <option>Trail 75% of profits</option>
+          <option>Disabled</option>
+        </select>
+      </div>
+    </div>
+    <div class="flex gap-2 justify-end mt-4">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="closeModal();showToast('Strategy parameters updated in PostgreSQL & Redis', 'success');addSystemLog('INFO', 'Strategy params updated', 'activerecord')">Update</button>
+    </div>
+  `);
+}
+
+function openDeployStrategyModal() {
+  openModal(`
+    <div class="text-sm font-bold text-white mb-3">Deploy Strategy — Sidekiq StrategyDeployWorker</div>
+    <div class="space-y-3">
+      <div>
+        <label class="text-[9px] font-mono text-muted uppercase block mb-1">Strategy Name</label>
+        <input type="text" class="input-field" placeholder="e.g. NIFTY Short Straddle" id="newStratName" value="NIFTY Short Straddle">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[9px] font-mono text-muted uppercase block mb-1">Symbol</label>
+          <select class="select-field w-full" id="newStratSymbol">
+            <option>NIFTY</option>
+            <option>BANKNIFTY</option>
+            <option>FINNIFTY</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[9px] font-mono text-muted uppercase block mb-1">Strategy Type</label>
+          <select class="select-field w-full" id="newStratType">
+            <option>STRADDLE</option>
+            <option>STRANGLE</option>
+            <option>IRON_CONDOR</option>
+            <option>CALL_SPREAD</option>
+            <option>PUT_SPREAD</option>
+            <option>IRON_BUTTERFLY</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[9px] font-mono text-muted uppercase block mb-1">Lots</label>
+          <input type="number" class="input-field" value="2" id="newStratLots">
+        </div>
+        <div>
+          <label class="text-[9px] font-mono text-muted uppercase block mb-1">Expiry</label>
+          <select class="select-field w-full">
+            <option>Weekly (Current)</option>
+            <option>Weekly (Next)</option>
+            <option>Monthly</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[9px] font-mono text-muted uppercase block mb-1">Stop Loss (Points)</label>
+          <input type="number" class="input-field" value="150">
+        </div>
+        <div>
+          <label class="text-[9px] font-mono text-muted uppercase block mb-1">Target (Points)</label>
+          <input type="number" class="input-field" value="250">
+        </div>
+      </div>
+    </div>
+    <div class="flex gap-2 justify-end mt-4">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmDeployStrategy()">Deploy Strategy</button>
+    </div>
+  `);
+}
+
+function confirmDeployStrategy() {
+  const name = document.getElementById('newStratName').value || 'New Strategy';
+  const sym = document.getElementById('newStratSymbol').value || 'NIFTY';
+  const type = document.getElementById('newStratType').value || 'STRADDLE';
+  const lots = parseInt(document.getElementById('newStratLots').value) || 2;
+
+  closeModal();
+  showToast('StrategyDeployWorker enqueued to Sidekiq', 'success');
+  addSystemLog('TRADE', `StrategyDeployWorker: ${name} (${sym} ${type}) pre-trade risk passed, order placements initiated`, 'sidekiq');
+
+  APP_STATE.strategies.push({
+    id: `s00${APP_STATE.strategies.length + 1}`,
+    name,
+    symbol: sym,
+    type,
+    status: 'RUNNING',
+    pnl: 0,
+    lots,
+    entryTime: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+    legs: [
+      { instrument: `${sym}24JAN24250CE`, side: 'SELL', qty: lots * 25, bAvg: 0, sAvg: 195.0, ltp: 195.0, delta: -0.48, gamma: -0.003, theta: 8.2, vega: -12.4 },
+      { instrument: `${sym}24JAN24250PE`, side: 'SELL', qty: lots * 25, bAvg: 0, sAvg: 170.0, ltp: 170.0, delta: 0.45, gamma: -0.003, theta: 7.8, vega: -11.9 }
+    ]
+  });
+
+  renderStrategies();
+  renderDashboard();
+}
+
+// ===========================
+// 3. OPTIONS CHAIN RENDERING
+// ===========================
+function renderOptionsChain() {
+  const sym = document.getElementById('ocSymbol')?.value || 'NIFTY';
+  const spot = APP_STATE.indices[sym === 'BANKNIFTY' ? 'BANKNIFTY' : 'NIFTY'].ltp;
+  const step = sym === 'BANKNIFTY' ? 100 : 50;
+  const atm = Math.round(spot / step) * step;
+
+  document.getElementById('ocAtmStrike').textContent = fmt(atm, 0);
+  document.getElementById('ocSpotPrice').textContent = fmt(spot);
+
+  const tbody = document.getElementById('optionsChainBody');
+  if (!tbody) return;
+
+  const strikes = [];
+  for (let i = -7; i <= 7; i++) {
+    strikes.push(atm + i * step);
+  }
+
+  tbody.innerHTML = strikes.map(strike => {
+    const isATM = strike === atm;
+    const isItmCE = strike < spot;
+    const isItmPE = strike > spot;
+    const dist = strike - spot;
+
+    const ceLTP = Math.max(1, Math.round((spot - strike) * 0.4 + 50 + Math.random() * 80));
+    const peLTP = Math.max(1, Math.round((strike - spot) * 0.4 + 50 + Math.random() * 80));
+    const ceOI = Math.round((10000 + Math.random() * 50000) * (isItmCE ? 1.3 : 0.8));
+    const peOI = Math.round((10000 + Math.random() * 50000) * (isItmPE ? 1.3 : 0.8));
+    const ceIV = (12 + Math.abs(dist) / spot * 200 + Math.random() * 5).toFixed(1);
+    const peIV = (12 + Math.abs(dist) / spot * 200 + Math.random() * 5).toFixed(1);
+    const ceDelta = Math.max(-1, Math.min(1, 0.5 - (dist / spot) * 8 + Math.random() * 0.05)).toFixed(2);
+    const peDelta = Math.max(-1, Math.min(1, -0.5 + (dist / spot) * 8 + Math.random() * 0.05)).toFixed(2);
+    const ceGamma = Math.abs(0.002 + Math.random() * 0.003).toFixed(4);
+    const peGamma = Math.abs(0.002 + Math.random() * 0.003).toFixed(4);
+    const ceVol = Math.round(500 + Math.random() * 5000);
+    const peVol = Math.round(500 + Math.random() * 5000);
+
+    return `
+      <tr class="${isATM ? 'atm-row' : ''} ${isItmCE ? 'itm-ce' : ''} ${isItmPE ? 'itm-pe' : ''}">
+        <td class="ce-cell text-right">${fmt(ceOI, 0)}</td>
+        <td class="ce-cell text-right">${Math.round((Math.random() - 0.4) * 3000)}</td>
+        <td class="ce-cell text-right">${fmt(ceVol, 0)}</td>
+        <td class="ce-cell text-right">${ceIV}%</td>
+        <td class="ce-cell text-right">${ceDelta}</td>
+        <td class="ce-cell text-right">${ceGamma}</td>
+        <td class="ce-cell text-right font-semibold">${fmt(ceLTP)}</td>
+        <td class="text-center font-bold ${isATM ? 'text-gold' : 'text-white'}">${fmt(strike, 0)}</td>
+        <td class="pe-cell text-left font-semibold">${fmt(peLTP)}</td>
+        <td class="pe-cell text-right">${peGamma}</td>
+        <td class="pe-cell text-right">${peDelta}</td>
+        <td class="pe-cell text-right">${peIV}%</td>
+        <td class="pe-cell text-right">${fmt(peVol, 0)}</td>
+        <td class="pe-cell text-right">${Math.round((Math.random() - 0.4) * 3000)}</td>
+        <td class="pe-cell text-right">${fmt(peOI, 0)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  drawOiChart();
+  drawIvSkewChart();
+}
+
+function refreshOptionsChain() {
+  renderOptionsChain();
+  showToast('Options chain refreshed from Dhan API cache', 'success');
+}
+
+function drawOiChart() {
+  const canvas = document.getElementById('ocOiChart');
+  if (!canvas || canvas.offsetParent === null) return;
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width - 24;
+  canvas.height = 130;
+  const w = canvas.width;
+  const h = canvas.height;
+  const mid = w / 2;
+
+  ctx.clearRect(0, 0, w, h);
+
+  const strikes = [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5];
+  const barH = 7;
+  const gap = (h - 20) / strikes.length;
+
+  strikes.forEach((s, i) => {
+    const y = 10 + i * gap;
+    const ceOI = Math.round(15000 + Math.random() * 45000);
+    const peOI = Math.round(15000 + Math.random() * 45000);
+    const ceW = (ceOI / 60000) * (mid - 35);
+    const peW = (peOI / 60000) * (mid - 35);
+
+    // CE
+    ctx.fillStyle = s === 0 ? '#f0b429' : 'rgba(0, 229, 160, 0.4)';
+    ctx.fillRect(mid - 15 - ceW, y, ceW, barH);
+
+    // PE
+    ctx.fillStyle = s === 0 ? '#f0b429' : 'rgba(255, 59, 92, 0.4)';
+    ctx.fillRect(mid + 15, y, peW, barH);
+
+    // Label
+    ctx.font = '8.5px JetBrains Mono';
+    ctx.fillStyle = s === 0 ? '#f0b429' : '#64748b';
+    ctx.textAlign = 'center';
+    ctx.fillText(s === 0 ? 'ATM' : s > 0 ? `+${s}` : String(s), mid, y + 6.5);
+  });
+
+  ctx.strokeStyle = 'rgba(100, 116, 139, 0.2)';
+  ctx.beginPath();
+  ctx.moveTo(mid, 0);
+  ctx.lineTo(mid, h);
+  ctx.stroke();
+}
+
+function drawIvSkewChart() {
+  const canvas = document.getElementById('ocIvSkewChart');
+  if (!canvas || canvas.offsetParent === null) return;
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width - 24;
+  canvas.height = 130;
+  const w = canvas.width;
+  const h = canvas.height;
+  const pad = { top: 10, right: 15, bottom: 20, left: 35 };
+  const cw = w - pad.left - pad.right;
+  const ch = h - pad.top - pad.bottom;
+
+  ctx.clearRect(0, 0, w, h);
+
+  const pts = [];
+  for (let i = -7; i <= 7; i++) {
+    const m = i * 0.5;
+    pts.push({ x: m, y: 12 + Math.abs(m) * 2.8 + Math.random() * 1.5 });
+  }
+
+  const mnY = 10;
+  const mxY = 30;
+  const rngY = mxY - mnY;
+
+  ctx.strokeStyle = 'rgba(28, 40, 63, 0.7)';
+  for (let i = 0; i <= 3; i++) {
+    const y = pad.top + (ch / 3) * i;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(w - pad.right, y);
+    ctx.stroke();
+    ctx.font = '8.5px JetBrains Mono';
+    ctx.fillStyle = '#64748b';
+    ctx.textAlign = 'right';
+    ctx.fillText(fmt(mxY - (rngY / 3) * i, 0) + '%', pad.left - 4, y + 3);
+  }
+
+  ctx.beginPath();
+  pts.forEach((p, i) => {
+    const x = pad.left + ((p.x - pts[0].x) / (pts[pts.length - 1].x - pts[0].x)) * cw;
+    const y = pad.top + ch * (1 - (p.y - mnY) / rngY);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#f0b429';
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+}
+
+// ===========================
+// 4. GREEKS & VOLATILITY ANALYTICS
+// ===========================
+function drawGreekBarChart() {
+  const canvas = document.getElementById('greekBarChart');
+  if (!canvas || canvas.offsetParent === null) return;
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width - 24;
+  canvas.height = 190;
+  const w = canvas.width;
+  const h = canvas.height;
+
+  const data = APP_STATE.strategies.filter(s => s.status !== 'STOPPED').map(s => {
+    const d = s.legs.reduce((t, l) => t + l.delta * (l.side === 'SELL' ? -1 : 1) * l.qty / 100, 0);
+    const g = s.legs.reduce((t, l) => t + l.gamma * (l.side === 'SELL' ? -1 : 1) * l.qty / 100, 0);
+    const th = s.legs.reduce((t, l) => t + l.theta * (l.side === 'SELL' ? -1 : 1) * l.qty / 100, 0);
+    const v = s.legs.reduce((t, l) => t + l.vega * (l.side === 'SELL' ? -1 : 1) * l.qty / 100, 0);
+    return { name: s.name.replace('NIFTY ', 'N.').replace('BANKNIFTY ', 'BN.'), d, g, th, v };
+  });
+
+  const metrics = [
+    { k: 'd', label: 'Delta', color: '#38bdf8' },
+    { k: 'g', label: 'Gamma', color: '#ff3b5c' },
+    { k: 'th', label: 'Theta', color: '#00e5a0' },
+    { k: 'v', label: 'Vega', color: '#f0b429' },
+  ];
+
+  ctx.clearRect(0, 0, w, h);
+  const groupW = 90;
+  const gap = 24;
+  const totalW = data.length * (groupW + gap) - gap;
+  const startX = Math.max(70, (w - totalW) / 2);
+
+  metrics.forEach((m, mi) => {
+    const barH = 16;
+    const yBase = 15 + mi * 34;
+    ctx.font = 'bold 9.5px JetBrains Mono';
+    ctx.fillStyle = m.color;
+    ctx.textAlign = 'right';
+    ctx.fillText(m.label, startX - 10, yBase + barH / 2 + 3);
+
+    data.forEach((d, di) => {
+      const x = startX + di * (groupW + gap);
+      const val = d[m.k];
+      const maxAbs = Math.max(...data.map(dd => Math.abs(dd[m.k])), 0.01);
+      const bWidth = Math.max(2, (Math.abs(val) / maxAbs) * (groupW / 2 - 6));
+
+      ctx.fillStyle = m.color + '33';
+      if (val >= 0) {
+        ctx.fillRect(x + groupW / 2, yBase, bWidth, barH);
+      } else {
+        ctx.fillRect(x + groupW / 2 - bWidth, yBase, bWidth, barH);
+      }
+
+      ctx.fillStyle = m.color;
+      ctx.font = '8.5px JetBrains Mono';
+      ctx.textAlign = 'center';
+      ctx.fillText((val >= 0 ? '+' : '') + fmt(val, Math.abs(val) > 10 ? 0 : 2), x + groupW / 2, yBase + barH / 2 + 3);
+    });
+  });
+
+  data.forEach((d, di) => {
+    const x = startX + di * (groupW + gap) + groupW / 2;
+    ctx.font = '9px JetBrains Mono';
+    ctx.fillStyle = '#64748b';
+    ctx.textAlign = 'center';
+    ctx.fillText(d.name, x, h - 6);
+  });
+}
+
+function drawIvSurfaceChart() {
+  const canvas = document.getElementById('ivSurfaceChart');
+  if (!canvas || canvas.offsetParent === null) return;
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width - 24;
+  canvas.height = 240;
+  const w = canvas.width;
+  const h = canvas.height;
+
+  const strikes = [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5];
+  const expiries = ['W1 (Current)', 'W2 (Next)', 'W3', 'M1 (Monthly)', 'M2'];
+  const cellW = (w - 70) / strikes.length;
+  const cellH = (h - 30) / expiries.length;
+
+  ctx.clearRect(0, 0, w, h);
+
+  strikes.forEach((s, si) => {
+    expiries.forEach((e, ei) => {
+      const iv = 12 + Math.abs(s) * 1.6 + ei * 1.3 + Math.random() * 1.2;
+      const t = Math.min(1, (iv - 10) / 20);
+      const r = Math.round(240 * t + 15 * (1 - t));
+      const g = Math.round(180 * t + 22 * (1 - t));
+      const b = Math.round(41 * t + 36 * (1 - t));
+
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.15 + t * 0.4})`;
+      ctx.fillRect(70 + si * cellW, 10 + ei * cellH, cellW - 1.5, cellH - 1.5);
+
+      ctx.font = '9px JetBrains Mono';
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.fillText(iv.toFixed(1) + '%', 70 + si * cellW + cellW / 2, 10 + ei * cellH + cellH / 2 + 3);
+    });
+  });
+
+  ctx.font = '8.5px JetBrains Mono';
+  ctx.fillStyle = '#64748b';
+  ctx.textAlign = 'center';
+  strikes.forEach((s, i) => {
+    ctx.fillText(s === 0 ? 'ATM' : s > 0 ? `+${s}` : String(s), 70 + i * cellW + cellW / 2, h - 4);
+  });
+  ctx.textAlign = 'right';
+  expiries.forEach((e, i) => {
+    ctx.fillText(e, 65, 10 + i * cellH + cellH / 2 + 3);
+  });
+}
+
+function drawTermStructureChart() {
+  const canvas = document.getElementById('termStructureChart');
+  if (!canvas || canvas.offsetParent === null) return;
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width - 24;
+  canvas.height = 200;
+  const w = canvas.width;
+  const h = canvas.height;
+  const pad = { top: 15, right: 20, bottom: 25, left: 40 };
+  const cw = w - pad.left - pad.right;
+  const ch = h - pad.top - pad.bottom;
+
+  const exps = ['W1 (2 DTE)', 'W2 (9 DTE)', 'W3 (16 DTE)', 'M1 (30 DTE)', 'M2 (58 DTE)', 'M3 (86 DTE)'];
+  const ivs = [13.2, 13.8, 14.5, 15.1, 15.8, 16.4];
+  const mn = 12, mx = 18, rng = mx - mn;
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.strokeStyle = 'rgba(28, 40, 63, 0.7)';
+  for (let i = 0; i <= 3; i++) {
+    const y = pad.top + (ch / 3) * i;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(w - pad.right, y);
+    ctx.stroke();
+    ctx.font = '8.5px JetBrains Mono';
+    ctx.fillStyle = '#64748b';
+    ctx.textAlign = 'right';
+    ctx.fillText(fmt(mx - (rng / 3) * i, 1) + '%', pad.left - 4, y + 3);
+  }
+
+  ctx.beginPath();
+  ivs.forEach((iv, i) => {
+    const x = pad.left + (i / (ivs.length - 1)) * cw;
+    const y = pad.top + ch * (1 - (iv - mn) / rng);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#f0b429';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ivs.forEach((iv, i) => {
+    const x = pad.left + (i / (ivs.length - 1)) * cw;
+    const y = pad.top + ch * (1 - (iv - mn) / rng);
+    ctx.beginPath();
+    ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#f0b429';
+    ctx.fill();
+  });
+
+  ctx.font = '8.5px JetBrains Mono';
+  ctx.fillStyle = '#64748b';
+  ctx.textAlign = 'center';
+  exps.forEach((e, i) => {
+    ctx.fillText(e, pad.left + (i / (ivs.length - 1)) * cw, h - 5);
+  });
+}
+
+function drawSkewComparisonChart() {
+  const canvas = document.getElementById('skewComparisonChart');
+  if (!canvas || canvas.offsetParent === null) return;
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width - 24;
+  canvas.height = 200;
+  const w = canvas.width;
+  const h = canvas.height;
+  const pad = { top: 15, right: 20, bottom: 25, left: 40 };
+  const cw = w - pad.left - pad.right;
+  const ch = h - pad.top - pad.bottom;
+
+  ctx.clearRect(0, 0, w, h);
+  const strikes = [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5];
+  const ceIvs = strikes.map(s => 13.5 + Math.abs(s) * 1.8 - s * 0.4);
+  const peIvs = strikes.map(s => 14.1 + Math.abs(s) * 2.2 + s * 0.5);
+
+  const mn = 10, mx = 28, rng = mx - mn;
+
+  ctx.strokeStyle = 'rgba(28, 40, 63, 0.7)';
+  for (let i = 0; i <= 3; i++) {
+    const y = pad.top + (ch / 3) * i;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(w - pad.right, y);
+    ctx.stroke();
+    ctx.font = '8.5px JetBrains Mono';
+    ctx.fillStyle = '#64748b';
+    ctx.textAlign = 'right';
+    ctx.fillText(fmt(mx - (rng / 3) * i, 0) + '%', pad.left - 4, y + 3);
+  }
+
+  // CE line
+  ctx.beginPath();
+  ceIvs.forEach((iv, i) => {
+    const x = pad.left + (i / (strikes.length - 1)) * cw;
+    const y = pad.top + ch * (1 - (iv - mn) / rng);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#00e5a0';
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+
+  // PE line
+  ctx.beginPath();
+  peIvs.forEach((iv, i) => {
+    const x = pad.left + (i / (strikes.length - 1)) * cw;
+    const y = pad.top + ch * (1 - (iv - mn) / rng);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#ff3b5c';
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+
+  ctx.font = '8.5px JetBrains Mono';
+  ctx.fillStyle = '#64748b';
+  ctx.textAlign = 'center';
+  strikes.forEach((s, i) => {
+    ctx.fillText(s === 0 ? 'ATM' : s > 0 ? `+${s}` : String(s), pad.left + (i / (strikes.length - 1)) * cw, h - 5);
+  });
+
+  // Legend
+  ctx.fillStyle = '#00e5a0';
+  ctx.fillText('● CE IV Curve', w - 120, 20);
+  ctx.fillStyle = '#ff3b5c';
+  ctx.fillText('● PE IV Curve', w - 40, 20);
+}
+
+function drawExpiredRollingChart() {
+  const canvas = document.getElementById('expiredRollingChart');
+  if (!canvas || canvas.offsetParent === null) return;
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width - 24;
+  canvas.height = 220;
+  const w = canvas.width;
+  const h = canvas.height;
+  const pad = { top: 15, right: 20, bottom: 25, left: 40 };
+  const cw = w - pad.left - pad.right;
+  const ch = h - pad.top - pad.bottom;
+
+  ctx.clearRect(0, 0, w, h);
+
+  const points = [];
+  let cur = 14.5;
+  for (let i = 0; i < 80; i++) {
+    cur += (Math.random() - 0.48) * 0.7;
+    cur = Math.max(8, Math.min(26, cur));
+    points.push(cur);
+  }
+
+  const mn = 8, mx = 28, rng = mx - mn;
+
+  ctx.strokeStyle = 'rgba(28, 40, 63, 0.7)';
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (ch / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(w - pad.right, y);
+    ctx.stroke();
+    ctx.font = '8.5px JetBrains Mono';
+    ctx.fillStyle = '#64748b';
+    ctx.textAlign = 'right';
+    ctx.fillText(fmt(mx - (rng / 4) * i, 0) + '%', pad.left - 4, y + 3);
+  }
+
+  const grad = ctx.createLinearGradient(0, pad.top, 0, h - pad.bottom);
+  grad.addColorStop(0, 'rgba(168, 85, 247, 0.15)');
+  grad.addColorStop(1, 'rgba(168, 85, 247, 0.0)');
+
+  ctx.beginPath();
+  points.forEach((v, i) => {
+    const x = pad.left + (i / (points.length - 1)) * cw;
+    const y = pad.top + ch * (1 - (v - mn) / rng);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.lineTo(pad.left + cw, h - pad.bottom);
+  ctx.lineTo(pad.left, h - pad.bottom);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  ctx.beginPath();
+  points.forEach((v, i) => {
+    const x = pad.left + (i / (points.length - 1)) * cw;
+    const y = pad.top + ch * (1 - (v - mn) / rng);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#a855f7';
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+
+  ctx.font = '8.5px JetBrains Mono';
+  ctx.fillStyle = '#64748b';
+  ctx.textAlign = 'center';
+  ['5Y Ago', '4Y', '3Y', '2Y', '1Y', 'Current'].forEach((l, i) => {
+    ctx.fillText(l, pad.left + (i / 5) * cw, h - 5);
+  });
+}
+
+// ===========================
+// 5. POSITIONS RENDERING
+// ===========================
+function renderPositions() {
+  const tbody = document.getElementById('positionsTableBody');
+  if (!tbody) return;
+
+  const allLegs = [];
+  APP_STATE.strategies.filter(s => s.status !== 'STOPPED').forEach(s => {
+    s.legs.forEach(l => {
+      const pnl = (l.ltp - (l.bAvg || l.sAvg || l.ltp)) * l.qty * (l.side === 'SELL' ? -1 : 1);
+      allLegs.push({
+        strategy: s.name,
+        instrument: l.instrument,
+        side: l.side,
+        qty: l.qty,
+        bAvg: l.bAvg,
+        sAvg: l.sAvg,
+        ltp: l.ltp,
+        pnl,
+        delta: (l.delta * (l.side === 'SELL' ? -1 : 1) * l.qty / 100).toFixed(2),
+        theta: (l.theta * (l.side === 'SELL' ? -1 : 1) * l.qty / 100).toFixed(0),
+        prod: 'MARGIN',
+        lockVersion: 3
+      });
+    });
+  });
+
+  tbody.innerHTML = allLegs.map(p => `
+    <tr>
+      <td class="text-muted text-[10px]">${p.strategy}</td>
+      <td class="text-white font-semibold">${p.instrument}</td>
+      <td class="${sideClass(p.side)} font-bold">${p.side}</td>
+      <td class="text-white">${p.qty}</td>
+      <td class="text-white">${p.bAvg ? fmt(p.bAvg) : '-'}</td>
+      <td class="text-white">${p.sAvg ? fmt(p.sAvg) : '-'}</td>
+      <td class="text-white font-semibold">${fmt(p.ltp)}</td>
+      <td class="${pnlClass(p.pnl)} font-bold">${fmtINR(p.pnl)}</td>
+      <td class="text-sky">${p.delta}</td>
+      <td class="text-accent">${p.theta}</td>
+      <td class="text-muted">${p.prod}</td>
+      <td class="text-muted text-center">${p.lockVersion}</td>
+      <td>
+        <button class="btn btn-ghost text-[9px] px-2 py-0.5" onclick="squareOffPosition('${p.instrument}')">Close</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function squareOffPosition(inst) {
+  showToast(`Close order sent for ${inst}`, 'warning');
+  addSystemLog('TRADE', `ClosePositionWorker enqueued for ${inst}`, 'sidekiq');
+}
+
+function closeAllPositionsModal() {
+  openModal(`
+    <div class="text-center">
+      <div class="w-12 h-12 rounded-full bg-danger/10 flex items-center justify-center mx-auto mb-3 text-danger text-xl">
+        <i class="fa-solid fa-power-off"></i>
+      </div>
+      <div class="text-base font-bold text-danger mb-1">Close All Positions (Emergency Flush)</div>
+      <div class="text-xs text-muted mb-4">This will immediately send market orders to close ALL open legs across all strategies and rollback DB transactions.</div>
+      <div class="bg-surface-50 border border-danger/20 rounded p-3 mb-4">
+        <div class="text-[9px] font-mono text-muted uppercase mb-1">Type CONFIRM to execute:</div>
+        <input type="text" class="input-field text-center font-bold" id="closeAllConfirmInput" placeholder="CONFIRM">
+      </div>
+      <div class="flex gap-2 justify-center">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-danger" onclick="confirmCloseAllPositions()">Close All Now</button>
+      </div>
+    </div>
+  `);
+}
+
+function confirmCloseAllPositions() {
+  const input = document.getElementById('closeAllConfirmInput');
+  if (!input || input.value !== 'CONFIRM') {
+    showToast('Please type CONFIRM to proceed', 'error');
+    return;
+  }
+  closeModal();
+  APP_STATE.strategies.forEach(s => {
+    if (s.status !== 'STOPPED') {
+      s.status = 'STOPPED';
+      s.pnl = 0;
+    }
+  });
+  renderPositions();
+  renderStrategies();
+  renderDashboard();
+  addSystemLog('ERROR', 'ALL POSITIONS CLOSED via CloseAllPositionsWorker', 'risk_engine');
+  showToast('All open positions flushed and closed', 'error');
+}
+
+function reconcilePositions() {
+  showToast('PositionReconcileWorker enqueued to Sidekiq...', 'success');
+  addSystemLog('INFO', 'PositionReconcileWorker comparing local PostgreSQL positions vs GET /v2/positions', 'sidekiq');
+  setTimeout(() => {
+    addSystemLog('INFO', 'Reconciliation complete: Local=8 legs, Dhan=8 legs, delta=0. MATCH VERIFIED.', 'reconciliation');
+    showToast('Reconciliation PASS: Local state matches broker exactly', 'success');
+  }, 1200);
+}
+
+// ===========================
+// 6. ORDER BOOK RENDERING
+// ===========================
+function renderOrders() {
+  const tbody = document.getElementById('ordersTableBody');
+  if (!tbody) return;
+  const filter = document.getElementById('orderStatusFilter')?.value || 'ALL';
+
+  const filtered = filter === 'ALL'
+    ? APP_STATE.orders
+    : APP_STATE.orders.filter(o => o.status === filter);
+
+  tbody.innerHTML = filtered.map(o => `
+    <tr>
+      <td class="text-white font-mono">${o.id}</td>
+      <td class="text-sky text-[9.5px] font-mono">${o.corr}</td>
+      <td class="text-muted">${o.time}</td>
+      <td class="text-white">${o.instrument}</td>
+      <td class="text-muted">${o.type}</td>
+      <td class="${sideClass(o.side)} font-bold">${o.side}</td>
+      <td class="text-white">${o.qty}</td>
+      <td class="text-white">${fmt(o.price)}</td>
+      <td class="text-white">${o.filled}/${o.qty}</td>
+      <td class="text-white">${o.avg ? fmt(o.avg) : '-'}</td>
+      <td><span class="badge ${o.leg === 'ENTRY_LEG' ? 'badge-filled' : 'badge-transit'}">${o.leg}</span></td>
+      <td>${getStatusBadge(o.status)}</td>
+      <td class="text-muted text-[9px]">${o.jid}</td>
+      <td class="text-muted">${o.latency}</td>
+    </tr>
+  `).join('');
+}
+
+// ===========================
+// 7. AGENT CONSOLE (Interactive ReAct Loop)
+// ===========================
+const AGENT_PERSONAS = {
+  planner: { name: 'Planner Agent', color: '#38bdf8' },
+  analyst: { name: 'Market Analyst', color: '#00d4aa' },
+  strategy: { name: 'Strategy Agent', color: '#f0b429' },
+  execution: { name: 'Execution Agent', color: '#a855f7' },
+  risk: { name: 'Risk Agent', color: '#ff3b5c' },
+  critic: { name: 'Critic Agent', color: '#f472b6' },
+};
+
+function setAgentPrompt(prompt) {
+  const input = document.getElementById('agentConsoleInput');
+  if (input) {
+    input.value = prompt;
+    executeAgentObjective();
+  }
+}
+
+async function addConsoleStep(agentKey, type, content, toolCall = null, response = null) {
+  const trace = document.getElementById('agentConsoleTrace');
+  const placeholder = document.getElementById('agentTracePlaceholder');
+  if (placeholder) placeholder.style.display = 'none';
+
+  APP_STATE.agentStepNum++;
+  const a = AGENT_PERSONAS[agentKey] || AGENT_PERSONAS.planner;
+  const div = document.createElement('div');
+  div.className = 'card p-3 slide-in border-l-4';
+  div.style.borderLeftColor = a.color;
+
+  const typeLabels = { THINK: 'REASONING', ACT: 'TOOL INVOCATION', OBSERVE: 'TOOL RESPONSE', CRITIQUE: 'CRITIC VALIDATION' };
+  const typeColors = { THINK: a.color, ACT: '#06b6d4', OBSERVE: '#94a3b8', CRITIQUE: '#f472b6' };
+
+  let bodyHTML = '';
+  if (type === 'THINK') {
+    bodyHTML = `<div class="text-xs text-white/90 whitespace-pre-wrap leading-relaxed" id="step-text-${APP_STATE.agentStepNum}"></div>`;
+  } else if (type === 'ACT') {
+    bodyHTML = `<div class="text-xs text-muted">${content}<div class="code-blk mt-1 text-sky">${escapeHtml(toolCall)}</div></div>`;
+  } else if (type === 'OBSERVE') {
+    bodyHTML = `<div class="text-xs text-muted">${content}<div class="code-blk mt-1 text-muted">${escapeHtml(response)}</div></div>`;
+  } else if (type === 'CRITIQUE') {
+    bodyHTML = `<div class="text-xs text-pink whitespace-pre-wrap leading-relaxed">${content}</div>`;
+  }
+
+  div.innerHTML = `
+    <div class="flex items-center justify-between pb-1.5 mb-1.5 border-b border-border text-[10px]">
+      <div class="flex items-center gap-1.5 font-bold" style="color: ${a.color}">
+        <span class="status-dot" style="background: ${a.color}"></span>
+        <span>${a.name}</span>
+      </div>
+      <span style="color: ${typeColors[type]}" class="font-semibold">${typeLabels[type]}</span>
+    </div>
+    ${bodyHTML}
+  `;
+
+  trace.appendChild(div);
+  trace.scrollTop = trace.scrollHeight;
+
+  // Stream text typing animation for reasoning
+  if (type === 'THINK') {
+    const textEl = document.getElementById(`step-text-${APP_STATE.agentStepNum}`);
+    for (let i = 0; i < content.length; i++) {
+      textEl.textContent += content[i];
+      if (i % 6 === 0) trace.scrollTop = trace.scrollHeight;
+      await sleep(10 + Math.random() * 12);
+    }
+  }
+
+  // Also log to Telemetry stream
+  addTelemetryEvent(agentKey, type, { summary: content, tool: toolCall, response, duration: Math.round(15 + Math.random() * 45) });
+}
+
+function escapeHtml(s) {
+  return s ? String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : '';
+}
+
+async function executeAgentObjective() {
+  const input = document.getElementById('agentConsoleInput');
+  const obj = input.value.trim();
+  if (!obj || APP_STATE.agentRunning) return;
+
+  APP_STATE.agentRunning = true;
+  APP_STATE.agentStepNum = 0;
+  APP_STATE.agentStartTime = Date.now();
+  document.getElementById('agentExecBtn').disabled = true;
+  input.value = '';
+
+  // Header user message
+  const trace = document.getElementById('agentConsoleTrace');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'bg-surface-200 border border-accent/30 rounded-lg p-3 text-xs text-white slide-in';
+  userDiv.innerHTML = `<span class="text-accent font-bold font-mono mr-2">&gt; USER OBJECTIVE:</span>${escapeHtml(obj)}`;
+  trace.appendChild(userDiv);
+  trace.scrollTop = trace.scrollHeight;
+
+  try {
+    const lower = obj.toLowerCase();
+    if (lower.includes('deploy') || lower.includes('condor') || lower.includes('open')) {
+      await runDeployScenario();
+    } else if (lower.includes('risk') || lower.includes('gamma') || lower.includes('exposure')) {
+      await runRiskScenario();
+    } else if (lower.includes('close') || lower.includes('stop') || lower.includes('flush')) {
+      await runCloseScenario();
+    } else {
+      await runAnalyzeScenario();
+    }
+  } catch (err) {
+    console.error(err);
+  }
+
+  APP_STATE.agentRunning = false;
+  document.getElementById('agentExecBtn').disabled = false;
+  showToast('Agent task execution completed', 'success');
+}
+
+async function runAnalyzeScenario() {
+  await addConsoleStep('planner', 'THINK', 'Decomposing task objective into subtask DAG:\n  1. Fetch NIFTY spot + ATM options LTP via Dhan API\n  2. Query option chain with Greeks, IV, OI\n  3. Query historical IV distribution percentile\n  4. Run Ollama LLM sentiment & strategy scoring\n  5. Execute pre-trade multi-leg margin hedge calculation\n  6. Submit to Critic Agent for safety validation');
+  await addConsoleStep('analyst', 'ACT', 'Fetching NIFTY spot and ATM options LTPs from marketfeed.', 'dhan.get_ltp({ "NSE_FNO": [49081, 49082] })');
+  await addConsoleStep('analyst', 'OBSERVE', 'Spot received at 24,248.50. 24250CE @ 198.20, 24250PE @ 165.80.', '{\n  "spot": 24248.50,\n  "49081": { "ltp": 198.20, "sym": "NIFTY24JAN24250CE" },\n  "49082": { "ltp": 165.80, "sym": "NIFTY24JAN24250PE" }\n}');
+  await addConsoleStep('analyst', 'ACT', 'Retrieving option chain with Greeks and OI for weekly expiry.', 'dhan.get_option_chain({ "UnderlyingScrip": 13, "Expiry": "2025-01-30" })');
+  await addConsoleStep('analyst', 'OBSERVE', '17 strikes retrieved. ATM IV 13.8%, PCR 1.12, max pain 24,200.', '{\n  "ATM_IV_CE": 13.8,\n  "PCR": 1.12,\n  "maxPain": 24200,\n  "CE_OI_wall": 24400,\n  "PE_OI_wall": 24100\n}');
+  await addConsoleStep('strategy', 'ACT', 'Scoring candidate option strategies via Ollama LLM.', 'ollama.generate_strategy({ "ivr": 42.3, "pcr": 1.12, "spot": 24248.5, "dte": 2 })');
+  await addConsoleStep('strategy', 'OBSERVE', 'LLM recommends Bull Put Spread (Score 0.84) or Iron Condor (0.78).', '{\n  "sentiment": "moderately_bullish",\n  "confidence": 0.72,\n  "top_strategy": "BULL_PUT_SPREAD",\n  "score": 0.84\n}');
+  await addConsoleStep('risk', 'ACT', 'Calculating combined margin with hedge benefit on proposed Bull Put Spread.', 'dhan.calc_multi_margin({\n  "scripList": [\n    { "tx": "SELL", "sec": "49085", "qty": 150, "prod": "MARGIN", "price": 62.4 },\n    { "tx": "BUY",  "sec": "49086", "qty": 150, "prod": "MARGIN", "price": 28.3 }\n  ]\n})');
+  await addConsoleStep('risk', 'OBSERVE', 'Margin requirement: 18,540 INR. Hedge benefit discount: 35.8%.', '{\n  "totalMargin": 18540,\n  "hedgeBenefit": 10360,\n  "individualSum": 28900\n}');
+  await addConsoleStep('critic', 'CRITIQUE', '✅ PLAN VALIDATED BY CRITIC GATE:\n• IV Rank (42.3) > 30 minimum threshold — PASS\n• Required margin (18.5K) < 5.0L available funds — PASS\n• Post-trade utilization: 52.6% < 70% circuit breaker — PASS\n• T-2 expiry: No physical delivery risk — PASS\n\nVerdict: APPROVED FOR DEPLOYMENT');
+  await addConsoleStep('planner', 'THINK', 'Synthesis Complete:\nRecommendation: DEPLOY BULL PUT SPREAD\n• Sell NIFTY 24150PE @ 62.40 × 150 Qty\n• Buy NIFTY 24050PE @ 28.30 × 150 Qty\n• Net Credit: +5,115 INR | Max Risk: 9,885 INR | Margin: 18,540 INR');
+}
+
+async function runDeployScenario() {
+  await addConsoleStep('planner', 'THINK', 'Deploying BANKNIFTY Iron Condor (2 lots):\n  1. Query BANKNIFTY spot price\n  2. Select 100pt body / 500pt wings\n  3. Check combined margin hedge discount\n  4. Place 4 legs atomically with shared correlationId\n  5. Verify fill status & reconcile');
+  await addConsoleStep('analyst', 'ACT', 'Querying spot for strike selection.', 'dhan.get_ltp({ "NSE_FNO": [51345] })');
+  await addConsoleStep('analyst', 'OBSERVE', 'BANKNIFTY Spot: 51,842.15 (ATM Strike: 51,800).', '{ "51345": { "ltp": 51842.15 } }');
+  await addConsoleStep('execution', 'ACT', 'Placing 4 legs with correlationId "ic_bnf_1706421".', 'dhan.place_order(4_legs_basket)');
+  await addConsoleStep('execution', 'OBSERVE', 'All 4 legs TRADED. Total latency 164ms. 0 slippage.', '{\n  "ORD-101": "TRADED",\n  "ORD-102": "TRADED",\n  "ORD-103": "TRADED",\n  "ORD-104": "TRADED"\n}');
+  await addConsoleStep('critic', 'CRITIQUE', '✅ Post-execution verification:\n• 4/4 legs confirmed on Dhan API — PASS\n• Hedge structure verified — PASS\n• Margin locked: 45,200 INR (Hedge benefit: 45.8%) — PASS');
+}
+
+async function runRiskScenario() {
+  await addConsoleStep('planner', 'THINK', 'Auditing portfolio-level Greeks and stress-testing market scenarios.');
+  await addConsoleStep('risk', 'ACT', 'Aggregating open positions from PostgreSQL.', 'dhan.get_positions()');
+  await addConsoleStep('risk', 'OBSERVE', '11 active legs retrieved across 3 strategies.', '{\n  "netDelta": 0.03,\n  "netGamma": -2.14,\n  "netTheta": 845,\n  "netVega": -18.7\n}');
+  await addConsoleStep('risk', 'THINK', 'Risk Analysis:\n• Delta +0.03 is near neutral\n• Gamma -2.14 is SHORT GAMMA — Primary concern if market moves >1.5%\n• Theta +845 INR/day offsets gamma for moves <150 pts\n• Margin: 49% of 5L limit (21% headroom)');
+  await addConsoleStep('critic', 'CRITIQUE', '✅ Risk Audit Accepted. Automated hedge alert armed for NIFTY ±200 pts.');
+}
+
+async function runCloseScenario() {
+  await addConsoleStep('planner', 'THINK', 'Selective closure of paused Bull Put Spread strategy to free up capital.');
+  await addConsoleStep('execution', 'ACT', 'Sending market orders to close 2 legs of Bull Put Spread.', 'dhan.place_order({ "transactionType": "BUY", "sec": "49085", "qty": 150 })');
+  await addConsoleStep('execution', 'OBSERVE', 'Both legs closed. Realized P&L: -3,800 INR. Margin freed: 18,540 INR.', '{ "status": "CLOSED" }');
+  await addConsoleStep('critic', 'CRITIQUE', '✅ Strategy closed. Remaining active strategies: 2.');
+}
+
+// ===========================
+// 8. AGENT OPS MONITOR (Telemetry)
+// ===========================
+function renderAgentMonitorStatuses() {
+  const container = document.getElementById('agentMonitorStatusList');
+  if (!container) return;
+
+  container.innerHTML = Object.entries(AGENT_PERSONAS).map(([k, a]) => {
+    const s = APP_STATE.agentStatus[k] || { status: 'idle', steps: 0 };
+    const dot = s.status === 'active' ? 'live pulse-live' : 'idle';
+    const statusText = s.status === 'active' ? '<span class="text-accent blink">RUNNING</span>' : '<span class="text-muted">IDLE</span>';
+    return `
+      <div class="flex items-center justify-between text-xs font-mono p-1.5 rounded bg-surface-50 border border-border">
+        <div class="flex items-center gap-2">
+          <span class="status-dot ${dot}"></span>
+          <span style="color: ${a.color}" class="font-bold">${a.name}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-[9px] text-muted">${s.steps}s</span>
+          <span class="text-[10px]">${statusText}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function setEventFilter(f, btn) {
+  APP_STATE.eventFilter = f;
+  btn.parentElement.querySelectorAll('.subtab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTelemetryStream();
+}
+
+function addTelemetryEvent(agentKey, type, opt = {}) {
+  const ev = {
+    id: `ev_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+    agent: agentKey,
+    type,
+    time: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+    ...opt
+  };
+
+  APP_STATE.telemetryEvents.push(ev);
+  APP_STATE.agentTokens += opt.tool ? 350 : 180;
+  if (opt.tool) APP_STATE.agentDhanCalls++;
+
+  const stepCount = APP_STATE.telemetryEvents.length;
+  document.getElementById('monSteps').textContent = stepCount;
+  document.getElementById('monTokens').textContent = `~${APP_STATE.agentTokens}`;
+  document.getElementById('monTools').textContent = APP_STATE.agentDhanCalls;
+
+  renderTelemetryStream();
+}
+
+function renderTelemetryStream() {
+  const stream = document.getElementById('telemetryEventStream');
+  if (!stream) return;
+
+  const emptyNotice = document.getElementById('emptyTelemetryNotice');
+  if (APP_STATE.telemetryEvents.length > 0 && emptyNotice) {
+    emptyNotice.style.display = 'none';
+  }
+
+  const filtered = APP_STATE.eventFilter === 'all'
+    ? APP_STATE.telemetryEvents
+    : APP_STATE.telemetryEvents.filter(e => e.type === APP_STATE.eventFilter);
+
+  stream.innerHTML = filtered.map(ev => {
+    const a = AGENT_PERSONAS[ev.agent] || AGENT_PERSONAS.planner;
+    return `
+      <div class="card p-3 slide-in border-l-2 text-xs font-mono" style="border-left-color: ${a.color}">
+        <div class="flex items-center justify-between pb-1 mb-1 border-b border-border text-[9.5px]">
+          <div class="flex items-center gap-1.5">
+            <span class="status-dot" style="background: ${a.color}"></span>
+            <span style="color: ${a.color}" class="font-bold">${a.name}</span>
+          </div>
+          <div class="flex items-center gap-2 text-muted">
+            <span class="badge ${ev.type === 'THINK' ? 'badge-open' : ev.type === 'ACT' ? 'badge-filled' : 'badge-transit'}">${ev.type}</span>
+            <span>${ev.time}</span>
+            ${ev.duration ? `<span>${ev.duration}ms</span>` : ''}
+          </div>
+        </div>
+        <div class="text-white/80">${escapeHtml(ev.summary || '')}</div>
+        ${ev.tool ? `<div class="code-blk mt-1.5 text-sky">${escapeHtml(ev.tool)}</div>` : ''}
+        ${ev.response ? `<div class="code-blk mt-1 text-muted">${escapeHtml(ev.response)}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  stream.scrollTop = stream.scrollHeight;
+}
+
+function clearTelemetryEvents() {
+  APP_STATE.telemetryEvents = [];
+  renderTelemetryStream();
+  showToast('Telemetry event stream cleared', 'success');
+}
+
+// ===========================
+// 9. TOOLS REGISTRY & MEMORY
+// ===========================
+const TOOLS_CATALOG = [
+  { name: 'dhan.get_option_chain', desc: 'POST /v2/optionchain — Real-time chain with Greeks, IV, OI, Volume', type: 'dhan', params: ['UnderlyingScrip', 'Expiry'] },
+  { name: 'dhan.get_ltp', desc: 'POST /v2/marketfeed/ltp — Last traded prices with low latency', type: 'dhan', params: ['NSE_FNO[]'] },
+  { name: 'dhan.get_positions', desc: 'GET /v2/positions — All open positions with realized & unrealized P&L', type: 'dhan', params: [] },
+  { name: 'dhan.get_orders', desc: 'GET /v2/orders — Order book with correlationId mapping', type: 'dhan', params: [] },
+  { name: 'dhan.place_order', desc: 'POST /v2/orders — Place order with idempotency correlationId', type: 'dhan', params: ['order_params', 'correlationId'] },
+  { name: 'dhan.calc_multi_margin', desc: 'POST /v2/margincalculator/multi — Combined basket margin with hedge benefits', type: 'dhan', params: ['scripList[]', 'includePosition'] },
+  { name: 'dhan.get_fund_limits', desc: 'GET /v2/fundlimit — Available cash, collateral, margin utilized', type: 'dhan', params: [] },
+  { name: 'dhan.get_rolling_options', desc: 'POST /v2/charts/rollingoption — Expired options IV/OI/Vol (5Y History)', type: 'dhan', params: ['securityId', 'strike', 'requiredData[]'] },
+  { name: 'dhan.configure_pnl_exit', desc: 'POST /v2/pnlExit — Auto exit on P&L threshold + broker kill switch', type: 'dhan', params: ['profitValue', 'lossValue', 'enableKillSwitch'] },
+  { name: 'ollama.analyze_sentiment', desc: 'LLM market context analysis → Sentiment score + confidence', type: 'ollama', params: ['context'] },
+  { name: 'ollama.generate_strategy', desc: 'LLM strategy recommendation based on IV regime & Greeks', type: 'ollama', params: ['market_analysis', 'risk_constraints'] },
+  { name: 'ollama.evaluate_risk', desc: 'LLM portfolio risk assessment with short gamma evaluation', type: 'ollama', params: ['positions', 'greeks'] },
+];
+
+function renderToolRegistry() {
+  const container = document.getElementById('toolRegistryList');
+  if (!container) return;
+
+  container.innerHTML = TOOLS_CATALOG.map(t => {
+    const tagCls = t.type === 'dhan' ? 'tag-dhan' : t.type === 'ollama' ? 'tag-ollama' : 'tag-risk';
+    return `
+      <div class="p-2.5 rounded bg-surface-50 border border-border">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="tool-tag ${tagCls}">${t.type.toUpperCase()}</span>
+          <span class="text-xs font-mono font-bold text-white">${t.name}</span>
+        </div>
+        <div class="text-[10px] text-muted">${t.desc}</div>
+        ${t.params.length ? `
+          <div class="flex gap-1 mt-1.5 flex-wrap">
+            ${t.params.map(p => `<span class="text-[8.5px] font-mono bg-bg text-muted px-1.5 py-0.5 rounded border border-border">${p}</span>`).join('')}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function renderLtmMemories() {
+  const container = document.getElementById('ltmMemoryList');
+  if (!container) return;
+
+  container.innerHTML = APP_STATE.ltmMemories.map(m => `
+    <div class="p-2.5 rounded bg-surface-50 border border-border text-xs">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-[9.5px] font-mono text-muted">${m.date}</span>
+        <span class="text-[9px] font-mono text-purple bg-purple/10 px-1.5 py-0.2 rounded">Sim: ${m.sim}</span>
+      </div>
+      <div class="text-white/90 text-[11px]">${m.note}</div>
+    </div>
+  `).join('');
+}
+
+// ===========================
+// 10. MARGIN & RISK ENGINE
+// ===========================
+function renderCircuitBreakers() {
+  const tbody = document.getElementById('circuitBreakersTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = APP_STATE.circuitBreakers.map(cb => {
+    const sc = cb.state === 'OK' ? 'text-accent' : cb.state === 'WARN' ? 'text-gold' : 'text-danger';
+    const dot = cb.state === 'OK' ? 'live' : cb.state === 'WARN' ? 'warn' : 'error';
+    return `
+      <tr>
+        <td class="text-white font-medium">${cb.rule}</td>
+        <td class="text-muted font-mono">${cb.threshold}</td>
+        <td class="text-white font-mono font-semibold">${cb.current}</td>
+        <td>
+          <span class="flex items-center gap-1.5">
+            <span class="status-dot ${dot} ${cb.state === 'OK' ? 'pulse-live' : ''}"></span>
+            <span class="${sc} text-[10px] font-mono font-semibold">${cb.state}</span>
+          </span>
+        </td>
+        <td class="text-muted text-[10px]">${cb.action}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function calculateSingleMargin() {
+  const seg = document.getElementById('mcSeg').value;
+  const tx = document.getElementById('mcTx').value;
+  const sec = document.getElementById('mcSec').value;
+  const qty = parseInt(document.getElementById('mcQty').value) || 50;
+
+  const span = qty * 1500;
+  const exposure = qty * 600;
+  const total = span + exposure;
+
+  document.getElementById('mcSingleResult').innerHTML = `
+    <div class="text-xs font-semibold text-white mb-3">Response — 200 OK (Calculated from Dhan API)</div>
+    <div class="space-y-2 font-mono text-xs">
+      <div class="flex justify-between"><span class="text-muted">totalMargin</span><span class="text-gold font-bold">${fmt(total)}</span></div>
+      <div class="flex justify-between"><span class="text-muted">spanMargin</span><span class="text-white">${fmt(span)}</span></div>
+      <div class="flex justify-between"><span class="text-muted">exposureMargin</span><span class="text-white">${fmt(exposure)}</span></div>
+      <div class="flex justify-between"><span class="text-muted">availableBalance</span><span class="text-accent">5,00,248</span></div>
+      <div class="flex justify-between"><span class="text-muted">insufficientBalance</span><span class="text-accent">0.00</span></div>
+    </div>
+    <div class="mt-3 p-2 bg-bg rounded text-[9px] font-mono text-muted">POST /v2/margincalculator &rarr; ${seg} ${tx} ${sec} x${qty}</div>
+  `;
+  showToast(`Margin calculated: ${fmt(total)} INR`, 'success');
+}
+
+function renderMultiMarginRows() {
+  const tbody = document.getElementById('multiMarginTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = APP_STATE.mmRows.map((r, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>
+        <select class="select-field text-xs py-1" onchange="APP_STATE.mmRows[${i}].seg=this.value">
+          <option ${r.seg === 'NSE_FNO' ? 'selected' : ''}>NSE_FNO</option>
+          <option ${r.seg === 'NSE_EQ' ? 'selected' : ''}>NSE_EQ</option>
+        </select>
+      </td>
+      <td>
+        <select class="select-field text-xs py-1" onchange="APP_STATE.mmRows[${i}].tx=this.value">
+          <option ${r.tx === 'SELL' ? 'selected' : ''}>SELL</option>
+          <option ${r.tx === 'BUY' ? 'selected' : ''}>BUY</option>
+        </select>
+      </td>
+      <td><input type="text" class="input-field text-xs py-1" value="${r.sec}" onchange="APP_STATE.mmRows[${i}].sec=this.value"></td>
+      <td><input type="number" class="input-field text-xs py-1 w-16" value="${r.qty}" onchange="APP_STATE.mmRows[${i}].qty=+this.value"></td>
+      <td>
+        <select class="select-field text-xs py-1" onchange="APP_STATE.mmRows[${i}].prod=this.value">
+          <option ${r.prod === 'MARGIN' ? 'selected' : ''}>MARGIN</option>
+          <option ${r.prod === 'INTRADAY' ? 'selected' : ''}>INTRADAY</option>
+        </select>
+      </td>
+      <td><input type="text" class="input-field text-xs py-1 w-20" value="${r.px}" onchange="APP_STATE.mmRows[${i}].px=this.value"></td>
+      <td><button class="btn btn-danger text-[9px] px-1.5 py-0.5" onclick="APP_STATE.mmRows.splice(${i},1);renderMultiMarginRows()"><i class="fa-solid fa-trash"></i></button></td>
+    </tr>
+  `).join('');
+}
+
+function addMultiMarginRow() {
+  APP_STATE.mmRows.push({ seg: 'NSE_FNO', tx: 'BUY', sec: '49083', qty: 50, prod: 'MARGIN', px: '145.0' });
+  renderMultiMarginRows();
+}
+
+function calculateMultiMargin() {
+  const individual = APP_STATE.mmRows.reduce((t, r) => t + r.qty * 1800, 0);
+  const combined = APP_STATE.mmRows.length > 1 ? individual * 0.62 : individual;
+  const hedge = individual - combined;
+
+  document.getElementById('multiMarginResult').innerHTML = `
+    <div class="text-xs font-semibold text-white mb-2">Hedge Optimization Result (POST /v2/margincalculator/multi)</div>
+    <div class="grid grid-cols-3 gap-3 mb-3">
+      <div class="bg-bg p-2.5 rounded text-center border border-border">
+        <div class="text-[8.5px] font-mono text-muted uppercase">Individual Sum</div>
+        <div class="text-base font-bold font-mono text-danger">${fmt(individual)}</div>
+      </div>
+      <div class="bg-bg p-2.5 rounded text-center border border-border">
+        <div class="text-[8.5px] font-mono text-muted uppercase">Combined (Hedged)</div>
+        <div class="text-base font-bold font-mono text-accent">${fmt(combined)}</div>
+      </div>
+      <div class="bg-bg p-2.5 rounded text-center border border-border">
+        <div class="text-[8.5px] font-mono text-muted uppercase">Hedge Benefit</div>
+        <div class="text-base font-bold font-mono text-gold">-${fmt(hedge)} (38%)</div>
+      </div>
+    </div>
+    <div class="text-[9.5px] font-mono text-muted">scripList: ${APP_STATE.mmRows.length} legs analyzed against Dhan risk matrix. Available Balance: 5,00,248.</div>
+  `;
+  showToast(`Combined hedged margin: ${fmt(combined)} INR`, 'success');
+}
+
+function savePnlExit() {
+  showToast('Broker P&L exit rules written to Dhan /v2/pnlExit', 'success');
+  addSystemLog('INFO', 'POST /v2/pnlExit — Profit: 50K, Loss: 25K, KillSwitch: Enabled', 'dhan');
+}
+
+function drawRateLimitChart() {
+  const canvas = document.getElementById('rateLimitChart');
+  if (!canvas || canvas.offsetParent === null) return;
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width - 24;
+  canvas.height = 140;
+  const w = canvas.width;
+  const h = canvas.height;
+  const pad = { top: 10, right: 10, bottom: 20, left: 35 };
+  const cw = w - pad.left - pad.right;
+  const ch = h - pad.top - pad.bottom;
+
+  if (APP_STATE.rateLimitHistory.length === 0) {
+    for (let i = 0; i < 60; i++) {
+      APP_STATE.rateLimitHistory.push({
+        orders: Math.floor(Math.random() * 5),
+        data: Math.floor(Math.random() * 3)
+      });
+    }
+  }
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Ceiling line 10/s
+  const oLimit = pad.top + ch * (1 - 10 / 12);
+  ctx.strokeStyle = 'rgba(255, 59, 92, 0.3)';
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath();
+  ctx.moveTo(pad.left, oLimit);
+  ctx.lineTo(w - pad.right, oLimit);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Line for orders
+  ctx.beginPath();
+  APP_STATE.rateLimitHistory.forEach((r, i) => {
+    const x = pad.left + (i / 59) * cw;
+    const y = pad.top + ch * (1 - r.orders / 12);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#00e5a0';
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+
+  // Line for data
+  ctx.beginPath();
+  APP_STATE.rateLimitHistory.forEach((r, i) => {
+    const x = pad.left + (i / 59) * cw;
+    const y = pad.top + ch * (1 - r.data / 12);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  ctx.font = '8.5px JetBrains Mono';
+  ctx.fillStyle = '#64748b';
+  ctx.textAlign = 'right';
+  ctx.fillText('10/s Max', pad.left - 4, oLimit + 3);
+  ctx.fillText('0', pad.left - 4, h - pad.bottom);
+  ctx.textAlign = 'center';
+  ctx.fillText('-60s', pad.left, h - 4);
+  ctx.fillText('Now', w - pad.right, h - 4);
+}
+
+// ===========================
+// 11. SIDEKIQ & INFRASTRUCTURE
+// ===========================
+function renderSidekiq() {
+  const workersTbody = document.getElementById('sidekiqWorkersTable');
+  if (workersTbody) {
+    workersTbody.innerHTML = APP_STATE.skWorkers.map(w => `
+      <tr>
+        <td class="text-muted text-[9.5px] font-mono">${w.jid}</td>
+        <td class="text-white font-semibold">${w.w}</td>
+        <td><span class="badge ${w.q === 'critical' ? 'badge-rejected' : w.q === 'ticks' ? 'badge-filled' : 'badge-open'}">${w.q}</span></td>
+        <td class="text-muted">${w.started}</td>
+        <td class="text-muted text-[9.5px] font-mono">${w.args}</td>
+        <td class="text-white">${w.el}</td>
+      </tr>
+    `).join('');
+  }
+
+  const retriesTbody = document.getElementById('sidekiqRetriesTable');
+  if (retriesTbody) {
+    retriesTbody.innerHTML = APP_STATE.skRetries.map(r => `
+      <tr>
+        <td class="text-muted text-[9.5px] font-mono">${r.jid}</td>
+        <td class="text-white font-semibold">${r.w}</td>
+        <td><span class="badge badge-rejected">${r.q}</span></td>
+        <td class="text-danger text-[10px] font-mono">${r.err}</td>
+        <td class="text-gold font-bold">${r.ret}/3</td>
+        <td class="text-muted">${r.next}</td>
+      </tr>
+    `).join('');
+  }
+}
+
+// ===========================
+// 12. ALERTS RENDERING
+// ===========================
+function renderAlerts() {
+  const container = document.getElementById('alertsListContainer');
+  if (!container) return;
+
+  const icons = { INFO: 'fa-circle-info text-sky', WARN: 'fa-triangle-exclamation text-gold', ERROR: 'fa-circle-xmark text-danger' };
+  const bgs = { INFO: 'border-sky/20', WARN: 'border-gold/20', ERROR: 'border-danger/20' };
+
+  container.innerHTML = APP_STATE.alerts.map(a => `
+    <div class="card p-3.5 ${bgs[a.level]} ${a.read ? 'opacity-50' : ''} slide-in">
+      <div class="flex items-start gap-3">
+        <i class="fa-solid ${icons[a.level]} mt-0.5 text-sm"></i>
+        <div class="flex-1">
+          <div class="text-xs text-white">${a.msg}</div>
+          <div class="text-[9.5px] font-mono text-muted mt-1">${a.time} · Level: ${a.level}</div>
+        </div>
+        ${!a.read ? '<div class="w-2 h-2 rounded-full bg-accent mt-1"></div>' : ''}
+      </div>
+    </div>
+  `).join('');
+
+  const unreadCount = APP_STATE.alerts.filter(a => !a.read).length;
+  document.getElementById('alertCounter').textContent = unreadCount;
+}
+
+function markAllAlertsRead() {
+  APP_STATE.alerts.forEach(a => a.read = true);
+  renderAlerts();
+  showToast('All alerts marked as read', 'success');
+}
+
+// ===========================
+// 13. LOGS & TRACES
+// ===========================
+function addSystemLog(level, message, source = 'system') {
+  const id = ++APP_STATE.logIdCounter;
+  const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
+  const reqId = `req_${Math.random().toString(36).substring(2, 8)}`;
+  APP_STATE.logs.push({ id, time, level, message, source, reqId });
+  if (APP_STATE.logs.length > 400) APP_STATE.logs.shift();
+  renderLogs();
+}
+
+function renderLogs() {
+  const container = document.getElementById('logsContainer');
+  if (!container) return;
+  const filter = document.getElementById('logLevelFilter')?.value || 'all';
+
+  const filtered = filter === 'all'
+    ? APP_STATE.logs
+    : APP_STATE.logs.filter(l => l.level.toLowerCase() === filter);
+
+  const colors = {
+    INFO: 'text-accent',
+    WARN: 'text-gold',
+    ERROR: 'text-danger',
+    TRADE: 'text-purple',
+    SYSTEM: 'text-muted'
+  };
+
+  container.innerHTML = filtered.map(l => `
+    <div class="leading-relaxed">
+      <span class="text-muted">${l.time}</span>
+      <span class="${colors[l.level] || 'text-white'} font-semibold"> [${l.level.padEnd(5)}]</span>
+      <span class="text-muted"> [${l.source}]</span>
+      <span class="text-slate-600"> (${l.reqId})</span>
+      <span class="text-slate-300"> ${l.message}</span>
+    </div>
+  `).join('');
+}
+
+function clearLogs() {
+  APP_STATE.logs = [];
+  renderLogs();
+  showToast('System logs cleared', 'success');
+}
+
+function scrollLogsToBottom() {
+  const c = document.getElementById('logsContainer');
+  if (c) setTimeout(() => c.scrollTop = c.scrollHeight, 40);
+}
+
+// ===========================
+// 14. CONFIG & KILL SWITCH
+// ===========================
+function testBrokerConnection() {
+  showToast('Testing broker API connectivity...', 'warning');
+  addSystemLog('INFO', 'Broker connection test initiated: DhanHQ API /v2/fundlimit', 'broker');
+  setTimeout(() => {
+    showToast('Broker connection PASSED — DhanHQ API responding in 18ms', 'success');
+    addSystemLog('INFO', 'Broker connection verified: Session valid, Static IP authorized, 18ms latency', 'broker');
+  }, 1000);
+}
+
+function saveRiskConfig() {
+  showToast('Risk parameters saved to config/risk.yml & broadcast to Redis', 'success');
+  addSystemLog('INFO', 'Risk parameters updated via API', 'risk_engine');
+}
+
+function emergencyKillSwitch() {
+  openModal(`
+    <div class="text-center">
+      <div class="w-14 h-14 rounded-full bg-danger/10 flex items-center justify-center mx-auto mb-3 text-danger text-2xl">
+        <i class="fa-solid fa-power-off"></i>
+      </div>
+      <div class="text-base font-bold text-danger mb-1">EMERGENCY KILL SWITCH</div>
+      <div class="text-xs text-muted mb-4">
+        This will immediately execute:
+        <br>1. DELETE /v2/orders (cancel all pending limit orders)
+        <br>2. DELETE /v2/positions (market flush all open positions)
+        <br>3. Sidekiq::Batch#kill_all & stop all active strategies
+      </div>
+      <div class="bg-surface-50 border border-danger/20 rounded p-3 mb-4">
+        <div class="text-[9.5px] font-mono text-muted uppercase mb-1">Type CONFIRM to execute:</div>
+        <input type="text" class="input-field text-center font-bold" id="killSwitchInput" placeholder="CONFIRM" autocomplete="off">
+      </div>
+      <div class="flex gap-2 justify-center">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-danger" onclick="executeKillSwitchAction()">Execute Kill Switch</button>
+      </div>
+    </div>
+  `);
+}
+
+function executeKillSwitchAction() {
+  const input = document.getElementById('killSwitchInput');
+  if (!input || input.value !== 'CONFIRM') {
+    showToast('Please type CONFIRM to proceed', 'error');
+    return;
+  }
+  closeModal();
+  APP_STATE.killed = true;
+  APP_STATE.live = false;
+
+  APP_STATE.strategies.forEach(s => {
+    s.status = 'STOPPED';
+    s.pnl = 0;
+  });
+
+  document.getElementById('killSwitchBtn').classList.add('opacity-40');
+  document.getElementById('bDot').className = 'status-dot error';
+  document.getElementById('wsDot').className = 'status-dot error';
+  document.getElementById('marketStatusBadge').innerHTML = '<span class="status-dot error"></span><span class="text-danger text-[11px] font-mono font-semibold">SYSTEM HALTED</span>';
+
+  addSystemLog('ERROR', '*** EMERGENCY KILL SWITCH ACTIVATED *** All open orders cancelled, positions closed, threads paused', 'risk_engine');
+  showToast('EMERGENCY KILL SWITCH ACTIVATED — Trading halted', 'error');
+
+  renderDashboard();
+  renderStrategies();
+  renderPositions();
+}
+
+// ===========================
+// SIMULATION TICKS & CLOCKS
+// ===========================
+function updateMarketClock() {
+  const now = new Date();
+  const h = (now.getUTCHours() + 5) % 24;
+  const m = String(now.getUTCMinutes()).padStart(2, '0');
+  const s = String(now.getUTCSeconds()).padStart(2, '0');
+  document.getElementById('marketClock').textContent = `${String(h).padStart(2, '0')}:${m}:${s}`;
+
+  APP_STATE.uptimeSeconds++;
+}
+
+function simulateMarketTick() {
+  if (!APP_STATE.live || APP_STATE.killed) return;
+
+  // Indices fluctuation
+  Object.values(APP_STATE.indices).forEach(idx => {
+    const delta = (Math.random() - 0.49) * 4;
+    idx.ltp = Math.max(1, idx.ltp + delta);
+    idx.change += delta;
+    idx.pct = (idx.change / (idx.ltp - idx.change)) * 100;
+  });
+
+  document.getElementById('tkNifty').textContent = fmt(APP_STATE.indices.NIFTY.ltp);
+  document.getElementById('tkNiftyChg').textContent = (APP_STATE.indices.NIFTY.change >= 0 ? '+' : '') + fmt(APP_STATE.indices.NIFTY.pct) + '%';
+  document.getElementById('tkBnf').textContent = fmt(APP_STATE.indices.BANKNIFTY.ltp);
+  document.getElementById('tkBnfChg').textContent = (APP_STATE.indices.BANKNIFTY.change >= 0 ? '+' : '') + fmt(APP_STATE.indices.BANKNIFTY.pct) + '%';
+
+  // Strategy leg prices and P&L update
+  APP_STATE.strategies.forEach(s => {
+    if (s.status === 'STOPPED') return;
+    s.legs.forEach(l => {
+      l.ltp = Math.max(0.5, l.ltp + (Math.random() - 0.48) * 2.5);
+    });
+    s.pnl = s.legs.reduce((total, l) => {
+      return total + (l.ltp - (l.bAvg || l.sAvg || l.ltp)) * l.qty * (l.side === 'SELL' ? -1 : 1);
+    }, 0);
+  });
+
+  // P&L History update
+  const totalPnl = APP_STATE.strategies.reduce((sum, s) => sum + s.pnl, 0);
+  APP_STATE.pnlHistory.push(Math.round(totalPnl));
+  if (APP_STATE.pnlHistory.length > 180) APP_STATE.pnlHistory.shift();
+
+  // Rate limits
+  APP_STATE.rateLimitHistory.push({
+    orders: Math.floor(Math.random() * 6),
+    data: Math.floor(Math.random() * 4)
+  });
+  if (APP_STATE.rateLimitHistory.length > 60) APP_STATE.rateLimitHistory.shift();
+}
+
+function simulateRandomLogs() {
+  if (!APP_STATE.live || APP_STATE.killed) return;
+  const templates = [
+    { lv: 'INFO', msg: 'Redis GET ltp:NIFTY24JAN24250CE → 198.20 (0.3ms)', src: 'redis' },
+    { lv: 'INFO', msg: 'OrderMonitorWorker: ORD-240128-006 still in :acknowledged state', src: 'sidekiq' },
+    { lv: 'TRADE', msg: 'Straddle MTM recalculated via PnlCalculationWorker: +12,450 INR', src: 'sidekiq' },
+    { lv: 'INFO', msg: 'ActionCable broadcasting to positions channel: 8 active legs', src: 'action_cable' },
+    { lv: 'INFO', msg: 'ActiveRecord: Position Load (0.8ms) SELECT * FROM positions', src: 'activerecord' },
+    { lv: 'INFO', msg: 'Delta neutralization check: Portfolio delta +0.03 — tolerance PASS', src: 'risk_engine' },
+    { lv: 'INFO', msg: 'HealthCheck endpoint: PG=8ms, Redis=0.4ms, Puma=5thr', src: 'system' }
+  ];
+  const t = templates[Math.floor(Math.random() * templates.length)];
+  addSystemLog(t.lv, t.msg, t.src);
+}
+
+// ===========================
+// INITIALIZATION
+// ===========================
+function initApp() {
+  initPnlHistory();
+  renderDashboard();
+  drawDashPnlChart();
+  renderStrategies();
+  renderOptionsChain();
+  renderPositions();
+  renderOrders();
+  renderCircuitBreakers();
+  renderMultiMarginRows();
+  renderSidekiq();
+  renderAlerts();
+  renderToolRegistry();
+  renderLtmMemories();
+  renderAgentMonitorStatuses();
+
+  // Initial startup log entries
+  addSystemLog('SYSTEM', 'Axis Nexus Trading Control Plane & Agentic Engine booted', 'rails');
+  addSystemLog('INFO', 'Puma 6.4.2 started with 2 clustered workers, 5 threads each', 'puma');
+  addSystemLog('INFO', 'Sidekiq 7.2.1 active with concurrency=25 [critical, ticks, default]', 'sidekiq');
+  addSystemLog('INFO', 'DhanHQ API & WebSocket feed connected (18ms latency)', 'broker');
+  addSystemLog('INFO', 'Ollama LLM connected (llama3.1:8b) for autonomous agent loop', 'ollama');
+  addSystemLog('INFO', 'Risk engine initialized: 8 circuit breakers loaded from config/risk.yml', 'risk_engine');
+
+  // Timers
+  setInterval(updateMarketClock, 1000);
+  setInterval(simulateMarketTick, 1500);
+  setInterval(() => {
+    const dash = document.getElementById('page-dashboard');
+    if (dash && !dash.classList.contains('hidden')) {
+      renderDashboard();
+      drawDashPnlChart();
+    }
+  }, 2000);
+  setInterval(simulateRandomLogs, 3500);
+
+  window.addEventListener('resize', () => {
+    drawDashPnlChart();
+    drawOiChart();
+    drawIvSkewChart();
+    drawGreekBarChart();
+  });
+}
+
+document.addEventListener('DOMContentLoaded', initApp);
+</script>
+</body>
+</html>
