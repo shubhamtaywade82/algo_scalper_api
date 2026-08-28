@@ -12,9 +12,16 @@ RSpec.describe Options::StrikeSelector do
     allow(Options::DerivativeChainAnalyzer).to receive(:new).and_return(mock_analyzer)
     allow(Options::PremiumFilter).to receive(:new).and_return(mock_premium_filter)
     allow(Live::TickCache).to receive(:ltp).and_return(25_000.0)
+    allow(Live::TickQuery).to receive(:for_security).with(segment: 'NSE_INDEX', security_id: anything).and_return(
+      instance_double(MarketTick, ltp: 25_000.0)
+    )
+    allow(Live::TickQuery).to receive(:for_security).with(segment: 'NSE_FNO', security_id: anything).and_return(nil)
     allow(mock_premium_filter).to receive(:valid?).and_return(true)
 
-    # Mock AlgoConfig for spot price lookup
+    # Mock IndexConfigLoader for spot price lookup
+    allow(IndexConfigLoader).to receive(:load_indices).and_return([
+      { key: 'NIFTY', segment: 'NSE_INDEX', sid: '26000' }
+    ])
     allow(AlgoConfig).to receive(:fetch).and_return(
       indices: [
         { key: 'NIFTY', segment: 'NSE_INDEX', sid: '26000' }
@@ -139,6 +146,10 @@ RSpec.describe Options::StrikeSelector do
 
       before do
         allow(Live::TickCache).to receive(:ltp).with('NSE_INDEX', '26000').and_return(25_025.0) # Spot price
+        allow(Live::TickQuery).to receive(:for_security).with(segment: 'NSE_INDEX', security_id: anything).and_return(
+          instance_double(MarketTick, ltp: 25_025.0)
+        )
+        allow(Live::TickQuery).to receive(:for_security).with(segment: 'NSE_FNO', security_id: anything).and_return(nil)
         allow(mock_rules).to receive(:atm).with(25_025.0).and_return(25_000.0)
         allow(mock_rules).to receive(:candidate_strikes).with(25_000.0,
                                                               anything).and_return([25_000.0, 25_050.0, 25_100.0])

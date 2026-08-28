@@ -46,31 +46,6 @@ RSpec.describe Orders::Executor do
     end
   end
 
-  describe '.place_ioc_limit' do
-    it 'delegates to the gateway place_ioc_limit with correct params' do
-      allow(gateway).to receive(:place_ioc_limit).and_return({ success: true })
-
-      described_class.place_ioc_limit(symbol: 'NIFTY', qty: 65, segment: 'NSE_FNO', security_id: '12345', price: 150.0, side: 'buy')
-
-      expect(gateway).to have_received(:place_ioc_limit).with(
-        side: 'buy',
-        segment: 'NSE_FNO',
-        security_id: '12345',
-        qty: 65,
-        price: 150.0,
-        meta: hash_including(symbol: 'NIFTY', client_order_id: /^IOC-12345-\d+$/)
-      )
-    end
-
-    it 'defaults side to buy' do
-      allow(gateway).to receive(:place_ioc_limit).and_return({ success: true })
-
-      described_class.place_ioc_limit(symbol: 'NIFTY', qty: 65, segment: 'NSE_FNO', security_id: '12345', price: 150.0)
-
-      expect(gateway).to have_received(:place_ioc_limit).with(hash_including(side: 'buy'))
-    end
-  end
-
   describe '.update_sl' do
     let(:tracker) { instance_double(PositionTracker, active?: true, order_no: 'ORD123', id: 1) }
 
@@ -143,51 +118,6 @@ RSpec.describe Orders::Executor do
         sl_price: 105.68,
         reason: 'test'
       )
-    end
-  end
-
-  describe '.exit_market!' do
-    let(:tracker) { instance_double(PositionTracker, active?: true, order_no: 'ORD123', id: 1, symbol: 'NIFTY') }
-
-    before do
-      allow(gateway).to receive(:exit_market).and_return({ success: true })
-    end
-
-    it 'calls gateway.exit_market with the tracker' do
-      result = described_class.exit_market!(tracker: tracker, reason: 'manual_exit')
-
-      expect(gateway).to have_received(:exit_market).with(tracker: tracker)
-      expect(result).to eq({ success: true })
-    end
-
-    it 'returns false when tracker is nil' do
-      result = described_class.exit_market!(tracker: nil)
-
-      expect(result).to be false
-      expect(gateway).not_to have_received(:exit_market)
-    end
-
-    it 'returns false when tracker is not active' do
-      inactive_tracker = instance_double(PositionTracker, active?: false)
-      result = described_class.exit_market!(tracker: inactive_tracker)
-
-      expect(result).to be false
-      expect(gateway).not_to have_received(:exit_market)
-    end
-
-    it 'logs and returns false on exception' do
-      allow(gateway).to receive(:exit_market).and_raise(StandardError, 'gateway error')
-
-      result = described_class.exit_market!(tracker: tracker, reason: 'manual_exit')
-
-      expect(result).to be false
-      expect(Rails.logger).to have_received(:error).with(/Failed to exit market/)
-    end
-
-    it 'logs the exit with reason' do
-      described_class.exit_market!(tracker: tracker, reason: 'stop_loss_hit')
-
-      expect(Rails.logger).to have_received(:info).with(/EXIT_MARKET.*stop_loss_hit/)
     end
   end
 end

@@ -82,12 +82,21 @@ module Live
     end
 
     # Check if ETF checks are applicable (before trailing activation)
-    # pnl_pct is percentage (e.g. 5.0 for 5%)
+    # Handles both percentage (e.g. 5.0 for 5%) and decimal (0.05 for 5%)
     def applicable?(pnl_pct, activation_profit_pct: nil)
       activation = (activation_profit_pct || etf_cfg[:activation_profit_pct]).to_f
       return false if activation.zero?
 
-      pnl_pct.to_f < activation
+      pnl = pnl_pct.to_f
+      # Normalize decimal vs percentage units:
+      # If one is decimal (<= 1.0) and other is percentage (> 1.0), normalize to same scale
+      if activation > 1.0 && pnl.abs <= 1.0 && !pnl.zero?
+        pnl *= 100.0
+      elsif activation <= 1.0 && pnl.abs > 1.0
+        pnl /= 100.0
+      end
+
+      pnl < activation
     end
   end
 end

@@ -216,14 +216,8 @@ module Live
         end
 
         risk = risk_config
-        drop_threshold = begin
-          BigDecimal(risk[:exit_drop_pct].to_s)
-        rescue StandardError
-          BigDecimal(999) # Disabled by default
-        end
-
-        # Skip if trailing is disabled (threshold too high)
-        return if drop_threshold >= 100
+        drop_threshold = risk[:exit_drop_pct] ? BigDecimal(risk[:exit_drop_pct].to_s) : nil
+        return if drop_threshold && drop_threshold >= 100
 
         PositionTracker.active.find_each do |tracker|
           enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine)
@@ -240,14 +234,17 @@ module Live
         cache = active_cache
         return unless cache
 
-        position_data = cache.get_by_tracker_id(tracker.id)
+        ltp = (Live::TickQuery.ltp_for(tracker) if tracker.respond_to?(:segment)) || (tracker.entry_price if tracker.respond_to?(:entry_price))
+        peak = tracker.respond_to?(:entry_price) && tracker.entry_price.to_f.positive? ? ((tracker.meta&.dig('highest_price').to_f - tracker.entry_price.to_f) / tracker.entry_price.to_f) : 0.0
+        pnl_pct = tracker.respond_to?(:entry_price) && tracker.entry_price.to_f.positive? && ltp ? ((ltp.to_f - tracker.entry_price.to_f) / tracker.entry_price.to_f) : 0.0
+        position_data ||= cache.upsert_from_tracker(tracker, current_ltp: ltp, peak_profit_pct: peak, pnl_pct: pnl_pct)
         return unless position_data
 
-        # engine = @trailing_engine ||= Live::TrailingEngine.new
         # process_tick handles peak updates and SL adjustments
         result = (@trailing_engine ||= Live::TrailingEngine.new).process_tick(position_data, exit_engine: exit_engine, tracker: tracker, pending_meta: pending_meta)
 
         if result[:exit_triggered]
+          track_exit_path(tracker, 'trailing_stop_institutional', result[:reason])
           Rails.logger.info("[RiskManager] TrailingEngine triggered exit for #{tracker.order_no}: #{result[:reason]}")
         end
       rescue StandardError => e

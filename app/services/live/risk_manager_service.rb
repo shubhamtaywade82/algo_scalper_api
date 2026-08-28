@@ -118,33 +118,46 @@ module Live
       tracker_id = event[:tracker_id]
       return unless tracker_id
 
-      @last_realtime_tick_at = Time.current
+      # Atomic lock for per-tracker concurrency guard
+      return unless @active_enforcements.put_if_absent(tracker_id, true).nil?
 
-      # Use ActiveCache to avoid DB load in the high-frequency path
-      tracker = PositionTracker.find_by(id: tracker_id)
-      return unless tracker&.active?
+      begin
+        @last_realtime_tick_at = Time.current
 
-      # Evaluate immediate exits (Hard SL, TP, Trailing)
-      # We use UnifiedExitChecker for sub-second logic
-      exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker)
+        if event[:pnl]
+          Portfolio::PnlTracker.update_unrealized(tracker_id: tracker_id, pnl: event[:pnl].to_f)
+          Portfolio::ProfitLockEngine.evaluate!
+        end
 
-      if exit_decision && exit_decision[:exit]
-        reason = "#{exit_decision[:reason]} (Sub-second Trigger)"
-        Rails.logger.info("[RiskManager] ⚡ HIGH-FREQUENCY EXIT for #{tracker.order_no}: #{reason}")
+        # Use ActiveCache/ActivePositionsCache to avoid DB load in the high-frequency path
+        tracker = Positions::ActivePositionsCache.instance.active_trackers.find { |t| t.id == tracker_id } ||
+                  PositionTracker.find_by(id: tracker_id)
+        return unless tracker&.active?
 
-        # Execute exit immediately
-        engine = @exit_engine || self
-        dispatch_exit(engine, tracker, reason)
-        tracker.reload
-        return unless tracker.active?
+        # Evaluate immediate exits (Hard SL, TP, Trailing)
+        # We use UnifiedExitChecker for sub-second logic
+        exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker)
+
+        if exit_decision && exit_decision[:exit]
+          reason = "#{exit_decision[:reason]} (Sub-second Trigger)"
+          Rails.logger.info("[RiskManager] ⚡ HIGH-FREQUENCY EXIT for #{tracker.order_no}: #{reason}")
+
+          # Execute exit immediately
+          engine = @exit_engine || self
+          dispatch_exit(engine, tracker, reason)
+          tracker.reload
+          return unless tracker.active?
+        end
+
+        return unless realtime_tick_first_enabled?
+        return unless should_run_realtime_enforcement?(tracker_id)
+
+        run_enforcement_for_tracker(tracker, @exit_engine || self)
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] Event-driven evaluation failed for tracker=#{tracker_id}: #{e.class} - #{e.message}")
+      ensure
+        @active_enforcements.delete(tracker_id)
       end
-
-      return unless realtime_tick_first_enabled?
-      return unless should_run_realtime_enforcement?(tracker_id)
-
-      run_enforcement_for_tracker(tracker, @exit_engine || self)
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] Event-driven evaluation failed for tracker=#{tracker_id}: #{e.class} - #{e.message}")
     end
 
     def should_run_realtime_enforcement?(tracker_id)

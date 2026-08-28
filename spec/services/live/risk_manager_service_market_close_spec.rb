@@ -10,22 +10,22 @@ RSpec.describe Live::RiskManagerService do
     context 'when market is closed and no active positions' do
       before do
         allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
+        allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([])
         allow(PositionTracker).to receive_message_chain(:active, :includes, :to_a).and_return([])
-        allow(service).to receive(:monitor_loop)
-        # Stub demand_driven_enabled? to prevent it from affecting the test
+        allow(service).to receive(:update_paper_positions_pnl_if_due)
         allow(service).to receive(:demand_driven_enabled?).and_return(false)
       end
 
-      it 'does not call monitor_loop (sleeps instead)' do
-        expect(service).not_to receive(:monitor_loop)
-        service.start
-        service.stop
+      it 'does not monitor when no active positions exist' do
+        service.send(:monitor_loop, Time.current)
+        expect(service).not_to have_received(:update_paper_positions_pnl_if_due)
       end
     end
 
     context 'when market is closed but positions exist' do
       before do
         allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
+        allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([instance_double(PositionTracker)])
         allow(PositionTracker).to receive_message_chain(:active, :includes, :to_a).and_return([instance_double(PositionTracker)])
         allow(service).to receive(:update_paper_positions_pnl_if_due)
         allow(service).to receive(:ensure_all_positions_in_redis)
@@ -33,6 +33,7 @@ RSpec.describe Live::RiskManagerService do
         allow(service).to receive(:ensure_all_positions_subscribed)
         allow(service).to receive(:process_trailing_for_all_positions)
         allow(service).to receive(:enforce_session_end_exit)
+        allow(service).to receive(:enforce_eod_force_close)
       end
 
       it 'continues monitoring for exits' do

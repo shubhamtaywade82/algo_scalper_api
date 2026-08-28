@@ -366,7 +366,7 @@ module Live
     end
 
     def resolved_entry_tf(tracker)
-      tf = tracker.entry_tf || tracker.meta&.dig('timeframe')
+      tf = (tracker.entry_tf if tracker.respond_to?(:entry_tf)) || tracker.meta&.dig('timeframe') || tracker.meta&.dig('entry_tf')
       return tf if tf.present?
 
       '1m'

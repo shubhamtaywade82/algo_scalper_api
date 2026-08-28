@@ -116,10 +116,10 @@ RSpec.describe Live::TrailingEngine do
       end
 
       it 'does not exit if activation thresholds are not met' do
-        # peak 0.40, current 0.22, sl_offset 0.08
+        # peak 0.20 (< 0.25), current 0.10, sl_offset 0.08 (< 0.10)
         # activation_profit_pct is 0.25 (default)
-        # sl_offset_pct 0.08 >= activation_sl_offset_pct 0.10 (False)
-        position = build_position(peak_profit_pct: 0.40, pnl_pct: 0.22, sl_offset_pct: 0.08)
+        # neither peak >= 0.25 nor sl_offset_pct >= 0.10 is satisfied
+        position = build_position(peak_profit_pct: 0.20, pnl_pct: 0.10, sl_offset_pct: 0.08)
 
         result = engine.process_tick(position, exit_engine: exit_engine)
 

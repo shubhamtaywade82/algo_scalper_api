@@ -76,8 +76,8 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
     end
 
     it 'does not exit when loss is less than stop loss threshold' do
-      position = build_position(pnl: -0.10 * buy_value, pnl_pct: -0.10, ltp: 90.0)
-      snapshot = { pnl_pct: -0.10, pnl: -0.10 * buy_value, ltp: 90.0 }
+      position = build_position(pnl: -0.05 * buy_value, pnl_pct: -0.05, ltp: 95.0)
+      snapshot = { pnl_pct: -0.05, pnl: -0.05 * buy_value, ltp: 95.0 }
 
       result = rule_engine.evaluate(context_for(position, snapshot: snapshot))
       expect(result.no_action?).to be true

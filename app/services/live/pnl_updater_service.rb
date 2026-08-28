@@ -123,7 +123,8 @@ module Live
           # Use cached active positions to avoid redundant query
           active_count = Positions::ActivePositionsCache.instance.active_trackers.size
           if active_count.zero?
-            # Market closed and no active positions - sleep longer
+            # Market closed and no active positions - flush remaining queue then sleep longer
+            flush!
             sleep 60 # Check every minute when market is closed and no positions
             next
           end

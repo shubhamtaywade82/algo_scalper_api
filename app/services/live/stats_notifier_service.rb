@@ -84,5 +84,52 @@ module Live
     rescue StandardError => e
       Rails.logger.error("[StatsNotifier] Failed to send stats: #{e.class} - #{e.message}")
     end
+
+    def handle_regime_transition(from_regime, _to_regime)
+      config = AlgoConfig.fetch[:telegram] || {}
+      return unless config[:enabled] != false && config[:notify_no_trade_sessions] != false
+      return unless Notifications::TelegramNotifier.instance.enabled?
+
+      regime_cfg = Live::TimeRegimeService.instance.regime_config(from_regime)
+      return unless regime_cfg.is_a?(Hash) && regime_cfg[:start] && regime_cfg[:end]
+
+      start_time = Time.zone.parse(regime_cfg[:start])
+      end_time = Time.zone.parse(regime_cfg[:end])
+      return if PositionTracker.where(created_at: start_time..end_time).count.positive?
+
+      signals = Strategies::Signal.where(created_at: start_time..end_time)
+      regime_label = from_regime.to_s.tr('_', ' ').upcase
+
+      if signals.none?
+        Notifications::TelegramNotifier.instance.send_message("<b>No Trades in Session: #{regime_label}</b>\n\nNo strategy signals were generated.")
+        return
+      end
+
+      msg = build_session_summary_message(regime_label, signals)
+      Notifications::TelegramNotifier.instance.send_message(msg)
+    rescue StandardError => e
+      Rails.logger.error("[StatsNotifier] handle_regime_transition error: #{e.class} - #{e.message}")
+    end
+
+    def build_session_summary_message(regime_label, signals)
+      total = signals.count
+      holds = signals.where(outcome: 'ignored_hold').or(signals.where(action: 'hold')).count
+      blocked = signals.where(outcome: 'blocked_by_guard').count
+
+      reasons = Hash.new(0)
+      signals.where(outcome: 'blocked_by_guard').find_each do |sig|
+        r = sig.metadata&.dig('entry_result_reason').presence || sig.reason
+        reasons[r] += 1 if r.present?
+      end
+
+      lines = [
+        "<b>No Trades in Session: #{regime_label}</b>",
+        "<b>Total Signals:</b> #{total}",
+        "<b>Filtered (Holds):</b> #{holds}",
+        "<b>Blocked by Guards:</b> #{blocked}"
+      ]
+      reasons.each { |r, c| lines << "#{r}: #{c} times" }
+      lines.join("\n")
+    end
   end
 end

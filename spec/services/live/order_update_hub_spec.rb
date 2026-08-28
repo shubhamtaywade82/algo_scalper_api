@@ -27,6 +27,7 @@ RSpec.describe Live::OrderUpdateHub do
     allow(ws_client).to receive(:on)
     allow(ws_client).to receive(:start)
     allow(ws_client).to receive(:stop)
+    allow(ws_client).to receive(:disconnect!)
   end
 
   describe '#initialize' do
@@ -189,7 +190,7 @@ RSpec.describe Live::OrderUpdateHub do
     it 'stops WebSocket client' do
       hub.stop!
 
-      expect(ws_client).to have_received(:stop)
+      expect(ws_client).to have_received(:disconnect!)
     end
 
     it 'sets running to false' do
@@ -205,14 +206,14 @@ RSpec.describe Live::OrderUpdateHub do
     end
 
     it 'handles stop errors gracefully' do
-      allow(ws_client).to receive(:stop).and_raise(StandardError.new('Stop failed'))
+      allow(ws_client).to receive(:disconnect!).and_raise(StandardError.new('Stop failed'))
 
       expect { hub.stop! }.not_to raise_error
       expect(hub.running?).to be false
     end
 
     it 'logs warning on stop error' do
-      allow(ws_client).to receive(:stop).and_raise(StandardError.new('Stop failed'))
+      allow(ws_client).to receive(:disconnect!).and_raise(StandardError.new('Stop failed'))
 
       expect(Rails.logger).to receive(:warn).with(/OrderUpdateHub.*Error while stopping/)
 

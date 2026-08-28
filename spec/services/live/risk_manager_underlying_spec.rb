@@ -94,7 +94,7 @@ RSpec.describe Live::RiskManagerService, 'Underlying and Structure Exits' do
     end
 
     it 'delegates to TrailingEngine' do
-      expect(@trailing_engine).to receive(:process_tick).with(position_data, exit_engine: exit_engine).and_return({ exit_triggered: false })
+      expect(@trailing_engine).to receive(:process_tick).with(position_data, hash_including(exit_engine: exit_engine)).and_return({ exit_triggered: false })
 
       service.send(:enforce_dynamic_trailing_stops, exit_engine: exit_engine)
     end

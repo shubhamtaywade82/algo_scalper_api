@@ -200,7 +200,8 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
 
         it 'uses :bullish when SupertrendTrend returns :long' do
           allow(AlgoConfig).to receive(:fetch).and_return({ signals: supertrend_signals_config })
-          primary_series = double('series', closes: [1, 2, 3], candles: [], atr: 10.0)
+          primary_series = double('series', closes: [1, 2, 3], candles: [])
+          allow(primary_series).to receive(:atr).and_return(10.0)
           allow(described_class).to receive(:analyze_timeframe).and_return(
             status: :ok,
             series: primary_series,
@@ -212,7 +213,9 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
           allow(SupertrendTrend).to receive(:direction).and_return(:long)
           allow(Trading::PermissionResolver).to receive(:resolve).and_return(:scale_ready)
           allow(Options::ChainAnalyzer).to receive(:pick_strikes_with_qualification).and_return(
-            [{ symbol: 'NIFTY-X-CE', security_id: '1', segment: 'IDX_I', derivative_id: 1 }]
+            Options::ChainAnalyzer::StrikePickResult.new(
+              [{ symbol: 'NIFTY-X-CE', security_id: '1', segment: 'IDX_I', derivative_id: 1, lot_size: 75 }], nil, nil
+            )
           )
           allow(Entries::EntryGuard).to receive(:try_enter).and_return(false)
 
@@ -677,6 +680,36 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
 
       context 'when comprehensive validation fails' do
         before do
+          allow(AlgoConfig).to receive(:fetch).and_return({
+            signals: {
+              halt_on_validation_failure: true,
+              primary_timeframe: '1m',
+              confirmation_timeframe: '5m',
+              validation_mode: 'aggressive',
+              supertrend: {
+                period: 10,
+                base_multiplier: 2.0,
+                training_period: 50,
+                num_clusters: 3,
+                performance_alpha: 0.1,
+                multiplier_candidates: [1.5, 2.0, 2.5, 3.0, 3.5]
+              },
+              adx: {
+                min_strength: 18.0,
+                confirmation_min_strength: 20.0
+              },
+              validation_modes: {
+                aggressive: {
+                  require_iv_rank_check: false,
+                  require_theta_risk_check: false,
+                  require_trend_confirmation: false,
+                  theta_risk_cutoff_hour: 15,
+                  theta_risk_cutoff_minute: 0
+                }
+              },
+              enable_direction_gate: false
+            }
+          })
           allow(Signal::ValidationGates).to receive(:comprehensive_validation).and_return(
             { valid: false, reason: 'Test validation failure' }
           )

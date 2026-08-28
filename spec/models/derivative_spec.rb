@@ -102,7 +102,7 @@ RSpec.describe Derivative do
           meta: hash_including(
             :client_order_id,
             ltp: BigDecimal('120.75'),
-            product_type: 'INTRADAY'
+            product_type: 'NORMAL'
           )
         ).and_return(order_response)
 
@@ -115,7 +115,8 @@ RSpec.describe Derivative do
           qty: 50,
           entry_price: BigDecimal('120.75'),
           symbol: derivative.symbol_name,
-          index_key: nil
+          index_key: nil,
+          meta: {}
         ).and_return(instance_double(PositionTracker))
 
         result = derivative.buy_option!(qty: 50)
@@ -133,7 +134,7 @@ RSpec.describe Derivative do
           segment: derivative.exchange_segment,
           security_id: derivative.security_id.to_s,
           qty: 75,
-          meta: hash_including(:client_order_id, ltp: BigDecimal('120.75'), product_type: 'INTRADAY')
+          meta: hash_including(:client_order_id, ltp: BigDecimal('120.75'), product_type: 'NORMAL')
         ).and_return(order_response)
 
         allow(derivative).to receive(:after_order_track!).and_return(instance_double(PositionTracker))
@@ -162,7 +163,8 @@ RSpec.describe Derivative do
           qty: 75,
           entry_price: BigDecimal('120.75'),
           symbol: derivative.symbol_name,
-          index_key: 'NIFTY'
+          index_key: 'NIFTY',
+          meta: {}
         ).and_return(instance_double(PositionTracker))
 
         derivative.buy_option!(index_cfg: index_cfg)

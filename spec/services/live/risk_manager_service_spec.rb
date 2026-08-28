@@ -7,13 +7,12 @@ RSpec.describe Live::RiskManagerService do
   let(:service) { described_class.new(exit_engine: exit_engine) }
   let(:event_bus) { Core::EventBus.instance }
   let(:active_cache) { instance_double(Positions::ActiveCache) }
-  let(:mock_thread) { instance_double(Thread, alive?: true, name: 'risk-manager', kill: true) }
+  let(:mock_thread) { instance_double(Thread, alive?: true, name: 'risk-manager', kill: true, join: true) }
 
   before do
     allow(Positions::ActiveCache).to receive(:instance).and_return(active_cache)
     allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: { enabled: true } })
     allow(Notifications::TelegramNotifier.instance).to receive(:notify_error)
-    allow(Thread).to receive(:new).and_return(mock_thread)
   end
 
   describe '#initialize' do
@@ -25,8 +24,11 @@ RSpec.describe Live::RiskManagerService do
   end
 
   describe '#start' do
+    before do
+      allow(Thread).to receive(:new).and_return(mock_thread)
+    end
+
     it 'sets running to true and starts a thread' do
-      allow(Thread).to receive(:new)
       service.start
       expect(Thread).to have_received(:new).at_least(:once)
       expect(service.instance_variable_get(:@running)).to be true
@@ -40,7 +42,10 @@ RSpec.describe Live::RiskManagerService do
   end
 
   describe '#stop' do
-    before { service.start }
+    before do
+      allow(Thread).to receive(:new).and_return(mock_thread)
+      service.start
+    end
 
     it 'sets running to false' do
       service.stop

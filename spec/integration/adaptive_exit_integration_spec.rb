@@ -18,6 +18,7 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
 
   before do
     allow(exit_engine).to receive(:execute_exit)
+    allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
     allow(service).to receive_messages(seconds_below_entry: 0, calculate_atr_ratio: 1.0)
 
     # Mock MarketFeedHub to avoid real WebSocket calls and leaks

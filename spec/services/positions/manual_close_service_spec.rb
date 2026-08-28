@@ -36,8 +36,7 @@ RSpec.describe Positions::ManualCloseService do
         expect(outcome[:json][:success]).to be(true)
         expect(exit_engine).to have_received(:execute_exit).with(
           an_object_having_attributes(id: tracker.id),
-          'MANUAL_DASHBOARD_CLOSE',
-          operator_retry: true
+          'MANUAL_DASHBOARD_CLOSE'
         )
       end
 

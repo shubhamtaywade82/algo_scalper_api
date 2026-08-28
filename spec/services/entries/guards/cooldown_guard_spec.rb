@@ -11,20 +11,20 @@ RSpec.describe Entries::Guards::CooldownGuard do
       }
     end
 
-    context 'when index-level cooldown is active' do
+    context 'when cooldown is active' do
       before do
-        allow(Entries::EntryGuard).to receive(:cooldown_active_for_index?).and_return(true)
+        allow(Entries::EntryGuard).to receive(:cooldown_active?).with('NIFTY24MAR24000CE', 180).and_return(true)
       end
 
-      it 'blocks entry due to index cooldown' do
+      it 'blocks entry due to cooldown' do
         result = described_class.call(context)
-        expect(result).to include(blocked: /cooldown active for index NIFTY/)
+        expect(result).to include(blocked: /cooldown active for NIFTY/)
       end
     end
 
-    context 'when index-level cooldown is not active' do
+    context 'when cooldown is not active' do
       before do
-        Rails.cache.delete('reentry:index:NIFTY')
+        allow(Entries::EntryGuard).to receive(:cooldown_active?).with('NIFTY24MAR24000CE', 180).and_return(false)
       end
 
       it 'allows entry' do

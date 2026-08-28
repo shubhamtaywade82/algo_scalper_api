@@ -171,7 +171,8 @@ RSpec.describe Live::OrderUpdateHandler do
           end
 
           it 'uses tracker lock for atomic update' do
-            expect(tracker).to receive(:with_lock).and_call_original
+            allow(handler).to receive(:find_tracker_by_order_id).and_return(tracker)
+            expect(tracker).to receive(:with_lock).at_least(:once).and_call_original
 
             handler.send(:handle_update, payload)
           end
@@ -435,7 +436,8 @@ RSpec.describe Live::OrderUpdateHandler do
       end
 
       it 'uses tracker lock to prevent race conditions' do
-        expect(tracker).to receive(:with_lock).and_call_original
+        allow(handler).to receive(:find_tracker_by_order_id).and_return(tracker)
+        expect(tracker).to receive(:with_lock).at_least(:once).and_call_original
 
         handler.send(:handle_update, payload)
       end

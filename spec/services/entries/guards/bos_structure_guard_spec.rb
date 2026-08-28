@@ -16,12 +16,12 @@ RSpec.describe Entries::Guards::BosStructureGuard do
     let(:instrument) { create(:instrument, :nifty_index) }
     let(:direction) { :bullish }
     let(:entry_metadata) { { primary_timeframe: '5m', effective_timeframe: '5m' } }
-    let(:candle_series) { instance_double(Live::CandleSeriesCache) }
+    let(:candle_series) { instance_double(CandleSeries) }
     let(:candles) { [] }
     let(:bos_extractor) { class_double(Entries::BosExtractor) }
 
     before do
-      allow(instrument).to receive(:candle_series).with(interval: '5m').and_return(candle_series)
+      allow(instrument).to receive(:candle_series).with(interval: anything).and_return(candle_series)
       allow(candle_series).to receive(:candles).and_return(candles)
       allow(Entries::BosExtractor).to receive(:last_confirmed_bos).and_return(nil)
       allow(Entries::BosExtractor).to receive(:bos_id).and_return('bos_123')

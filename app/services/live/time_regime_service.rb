@@ -140,12 +140,18 @@ module Live
       time ||= current_ist_time
       time_str = time.strftime('%H:%M')
 
-      # No new trades after 14:50 IST (unless exceptional conditions)
-      return false if time_str >= NO_NEW_TRADES_AFTER
+      cfg = AlgoConfig.fetch || {}
+      overrides = cfg.dig(:risk, :time_overrides) || cfg.dig('risk', 'time_overrides') || {}
+      earliest = overrides[:earliest_entry_time] || overrides['earliest_entry_time'] || MARKET_OPEN
+      latest = overrides[:no_new_trades_after] || overrides['no_new_trades_after'] || NO_NEW_TRADES_AFTER
+
+      return false if time_str < earliest
+      return false if time_str >= latest
 
       # Check regime-specific entry rules
-      allow_entries?
-    rescue StandardError
+      allow_entries?(current_regime(time: time))
+    rescue StandardError => e
+      Rails.logger.error("[TimeRegimeService] allow_new_trades? error: #{e.class} - #{e.message}")
       true
     end
 

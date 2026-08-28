@@ -56,7 +56,7 @@ module Options
         atm_stats: { ce: atm_result[:ce], pe: atm_result[:pe] },
         otm1_stats: otm1_result ? { ce: otm1_result[:ce], pe: otm1_result[:pe] } : nil,
         otm2_stats: otm2_result ? { ce: otm2_result[:ce], pe: otm2_result[:pe] } : nil
-      ).merge(weeks_available: expiry_dates.size)
+      ).merge(weeks_available: historical_weekly_expiry_dates.size)
 
       regime = Options::RegimeDetector.check(symbol: @symbol, combined_stats: combined_stats)
       patch  = Options::CalibrationConfigPatchBuilder.build(
@@ -225,6 +225,10 @@ module Options
 
     def pct(v, base)
       base.zero? ? 0.0 : ((v - base) / base.to_f * 100).round(2)
+    end
+
+    def historical_weekly_expiry_dates
+      Options::ExpiryCalendar.windows(symbol: @symbol, weeks: @weeks).map { |w| w[:expiry] }
     end
   end
 end

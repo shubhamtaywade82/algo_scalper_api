@@ -95,7 +95,7 @@ RSpec.describe Instrument do
           meta: hash_including(
             :client_order_id,
             ltp: BigDecimal('200.5'),
-            product_type: 'INTRADAY'
+            product_type: 'NORMAL'
           )
         ).and_return(order_response)
 
@@ -107,7 +107,9 @@ RSpec.describe Instrument do
           side: 'LONG',
           qty: 2,
           entry_price: BigDecimal('200.5'),
-          symbol: instrument.symbol_name
+          symbol: instrument.symbol_name,
+          index_key: nil,
+          meta: {}
         ).and_return(instance_double(PositionTracker))
 
         result = instrument.buy_market!(qty: 2)

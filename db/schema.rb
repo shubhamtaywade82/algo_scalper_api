@@ -993,8 +993,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_000003) do
   end
 
   create_table "risk_events", force: :cascade do |t|
+    t.string "action_taken"
+    t.jsonb "context", default: {}, null: false
     t.datetime "created_at", null: false
+    t.text "description"
+    t.string "event_type", null: false
+    t.bigint "instrument_id"
+    t.bigint "position_tracker_id"
+    t.string "severity", default: "warning", null: false
+    t.string "source", null: false
     t.datetime "updated_at", null: false
+    t.index ["created_at"], name: "index_risk_events_on_created_at"
+    t.index ["event_type"], name: "index_risk_events_on_event_type"
+    t.index ["instrument_id"], name: "index_risk_events_on_instrument_id"
+    t.index ["position_tracker_id"], name: "index_risk_events_on_position_tracker_id"
+    t.index ["severity"], name: "index_risk_events_on_severity"
   end
 
   create_table "ruby_llm_agents_execution_details", force: :cascade do |t|
@@ -1309,7 +1322,36 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_000003) do
 
   create_table "trade_journals", force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.jsonb "entry_context", default: {}
+    t.decimal "entry_price", precision: 12, scale: 4, null: false
+    t.datetime "entry_time", null: false
+    t.jsonb "exit_context", default: {}
+    t.decimal "exit_price", precision: 12, scale: 4
+    t.string "exit_reason"
+    t.datetime "exit_time"
+    t.decimal "fees", precision: 12, scale: 4
+    t.decimal "gross_pnl", precision: 12, scale: 4
+    t.integer "hold_duration_seconds"
+    t.bigint "instrument_id", null: false
+    t.string "market_regime"
+    t.decimal "max_adverse_excursion", precision: 12, scale: 4
+    t.decimal "max_favorable_excursion", precision: 12, scale: 4
+    t.jsonb "meta", default: {}
+    t.decimal "net_pnl", precision: 12, scale: 4
+    t.text "notes"
+    t.boolean "paper", default: false, null: false
+    t.decimal "pnl_percent", precision: 8, scale: 4
+    t.bigint "position_tracker_id", null: false
+    t.integer "quantity", null: false
+    t.string "side", null: false
+    t.string "strategy_name"
     t.datetime "updated_at", null: false
+    t.index ["created_at"], name: "index_trade_journals_on_created_at"
+    t.index ["instrument_id"], name: "index_trade_journals_on_instrument_id"
+    t.index ["paper", "created_at"], name: "index_trade_journals_on_paper_and_created_at"
+    t.index ["paper"], name: "index_trade_journals_on_paper"
+    t.index ["position_tracker_id"], name: "index_trade_journals_on_position_tracker_id"
+    t.index ["strategy_name"], name: "index_trade_journals_on_strategy_name"
   end
 
   create_table "trade_memories", force: :cascade do |t|
@@ -1478,6 +1520,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_000003) do
   add_foreign_key "reconciliation_discrepancies", "reconciliation_runs"
   add_foreign_key "research_option_bars", "research_raw_fetches"
   add_foreign_key "research_option_candidates", "research_signals"
+  add_foreign_key "risk_events", "instruments"
+  add_foreign_key "risk_events", "position_trackers"
   add_foreign_key "ruby_llm_agents_execution_details", "ruby_llm_agents_executions", column: "execution_id", on_delete: :cascade
   add_foreign_key "ruby_llm_agents_executions", "ruby_llm_agents_executions", column: "parent_execution_id", on_delete: :nullify
   add_foreign_key "ruby_llm_agents_executions", "ruby_llm_agents_executions", column: "root_execution_id", on_delete: :nullify
@@ -1488,6 +1532,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_000003) do
   add_foreign_key "solid_queue_recurring_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "trade_analytics", "position_trackers"
+  add_foreign_key "trade_journals", "instruments"
+  add_foreign_key "trade_journals", "position_trackers"
   add_foreign_key "trade_memories", "position_trackers"
   add_foreign_key "trade_memories", "trade_analytics"
   add_foreign_key "trade_telemetry", "position_trackers", column: "tracker_id"

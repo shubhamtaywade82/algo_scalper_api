@@ -38,16 +38,25 @@ module Positions
         return if sanitized.empty?
 
         column_updates = {}
+        jsonb_patch = {}
+
         sanitized.each do |key, val|
-          next unless PositionTracker::PROMOTED_META_KEYS.include?(key)
-          column_updates[key] = cast_value(key, val)
+          if PositionTracker::PROMOTED_META_KEYS.include?(key)
+            column_updates[key] = cast_value(key, val)
+          else
+            jsonb_patch[key] = val
+          end
         end
 
-        return unless column_updates.any?
+        updates = column_updates.dup
+        updates['updated_at'] = Time.current
 
-        PositionTracker.where(id: tracker_id).update_all( # rubocop:disable Rails/SkipsModelValidations
-          column_updates.merge('updated_at' => Time.current)
-        )
+        if jsonb_patch.any?
+          sql = PositionTracker.sanitize_sql_array(["COALESCE(meta, '{}'::jsonb) || ?::jsonb", jsonb_patch.to_json])
+          updates['meta'] = Arel.sql(sql)
+        end
+
+        PositionTracker.where(id: tracker_id).update_all(updates) # rubocop:disable Rails/SkipsModelValidations
       end
 
       private

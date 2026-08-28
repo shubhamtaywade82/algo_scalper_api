@@ -30,6 +30,17 @@ class MarketRegimeDetector
     regime_data
   end
 
+  def bollinger_band_breakout?
+    # Uses 20-period BB with 2.0 std dev
+    bb = series.bollinger_bands(period: 20, std_dev: 2.0)
+    return false unless bb && bb[:upper] && bb[:lower]
+
+    current_close = series.candles.last.close.to_f
+
+    # We define a breakout as closing outside the bands
+    current_close > bb[:upper] || current_close < bb[:lower]
+  end
+
   private
 
   def cache_key
@@ -108,16 +119,6 @@ class MarketRegimeDetector
     { regime: "TRENDING_#{direction}", confidence: metrics[:adx_value] }
   end
 
-  def bollinger_band_breakout?
-    # Uses 20-period BB with 2.0 std dev
-    bb = series.bollinger_bands(period: 20, std_dev: 2.0)
-    return false unless bb && bb[:upper] && bb[:lower]
-
-    current_close = series.candles.last.close.to_f
-
-    # We define a breakout as closing outside the bands
-    current_close > bb[:upper] || current_close < bb[:lower]
-  end
 
   def price_in_range
     # Calculate where current price is relative to the recent high/low range (e.g. last 20 candles)

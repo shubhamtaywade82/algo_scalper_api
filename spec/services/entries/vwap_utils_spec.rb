@@ -84,8 +84,8 @@ RSpec.describe Entries::VWAPUtils do
 
       avwap = described_class.calculate_avwap(bars, anchor_time: anchor_time)
 
-      # Should only include candles from anchor_time onwards
-      expect(avwap).to be_within(1).of(25_050)
+      # Should only include candles from anchor_time onwards (typical price avg: (25016.67 + 25100) / 2 = 25058.33)
+      expect(avwap).to be_within(1).of(25_058)
     end
 
     it 'uses first candle timestamp as default anchor' do

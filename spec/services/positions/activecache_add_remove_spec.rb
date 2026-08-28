@@ -17,6 +17,14 @@ RSpec.describe Positions::ActiveCache do
       high_water_mark_pnl: 0,
       breakeven_locked?: false,
       trailing_stop_price: nil,
+      watchable: nil,
+      instrument: nil,
+      index_key: nil,
+      symbol: 'NIFTY',
+      side: 'LONG',
+      direction: 'bullish',
+      position_side: 'long',
+      meta: {},
       created_at: Time.current
     )
   end

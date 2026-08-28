@@ -51,8 +51,8 @@ Rails.application.routes.draw do
     get 'market/vix', to: 'market#vix'
     post 'drawdown_guard/reset', to: 'drawdown_guard#reset'
     get 'public_ip/audit', to: 'public_ip#audit'
-    # REMOVED: Exposes raw broker access token - use Dhan::TokenManager.current_token internally
-    # get 'dhan_access_token', to: 'dhan_access_token#show'
+    # Requires API_OPERATOR_TOKEN — never expose this endpoint without that env var set
+    get 'dhan_access_token', to: 'dhan_access_token#show'
     get 'smc/decision', to: 'smc#decision'
 
     get 'alpha/status', to: 'alpha#status'

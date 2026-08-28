@@ -102,7 +102,7 @@ module Live
         end
       end
 
-      @redis.hset(key, **data)
+      @redis.hset(key, data)
       # ensure TTL
       ttl = @redis.ttl(key).to_i
       @redis.expire(key, TTL_SECONDS) if ttl < (TTL_SECONDS / 2)
@@ -169,6 +169,8 @@ module Live
     def sync_pnl_to_database_throttled(tracker_id, pnl, pnl_pct, hwm, hwm_pnl_pct = nil)
       return unless tracker_id
 
+      @sync_mutex ||= Mutex.new
+      @sync_timestamps ||= {}
       @sync_mutex.synchronize do
         last_sync = @sync_timestamps[tracker_id]
         now = Time.current

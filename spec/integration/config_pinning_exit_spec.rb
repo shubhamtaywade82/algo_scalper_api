@@ -28,7 +28,10 @@ RSpec.describe 'Config pinning on exit path' do
           }
         },
         instrument: nil,
-        watchable: nil
+        watchable: nil,
+        index_key: 'NIFTY',
+        high_water_mark_pnl: 0.0,
+        current_pnl_pct: -0.25
       )
     end
 

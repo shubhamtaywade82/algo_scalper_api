@@ -160,7 +160,7 @@ broker_fees:
   enabled: true
   fee_per_order: 20
 risk:
-  sl_pct: 0.10
+  sl_pct: 0.1
   tp_pct: 0.5
   per_trade_risk_pct: 0.15
   percentage_pnl_exit:
@@ -180,7 +180,7 @@ risk:
     min_hold_seconds: 120
     hwm_threshold_rupees: 0
   structural_kill_switch:
-    enabled: false # opt-in: exits on underlying VWAP/9-EMA/swing-level break, no live track record yet
+    enabled: false
     tolerance_pct: 0.002
   exits:
     structure_invalidation:

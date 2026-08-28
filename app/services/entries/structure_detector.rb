@@ -13,6 +13,27 @@ module Entries
 
         lookback_count = [lookback_minutes, bars.size].min
         recent_bars = bars.last(lookback_count)
+        return false if recent_bars.size < 3
+
+        current = recent_bars.last
+        return false unless current
+
+        previous_bars = recent_bars[0..-2]
+        return false if previous_bars.empty?
+
+        previous_swing_high = previous_bars.map(&:high).max
+        previous_swing_low = previous_bars.map(&:low).min
+
+        return false unless previous_swing_high && previous_swing_low
+
+        (current.close > previous_swing_high) || (current.close < previous_swing_low)
+      end
+
+      def bos_direction(bars, lookback_minutes: 10)
+        return :neutral if bars.blank? || bars.size < 3
+
+        lookback_count = [lookback_minutes, bars.size].min
+        recent_bars = bars.last(lookback_count)
         return :neutral if recent_bars.size < 3
 
         current = recent_bars.last
@@ -26,16 +47,13 @@ module Entries
 
         return :neutral unless previous_swing_high && previous_swing_low
 
-        # Bullish BOS: price breaks above previous swing high
-        bullish_bos = current.close > previous_swing_high
-
-        # Bearish BOS: price breaks below previous swing low
-        bearish_bos = current.close < previous_swing_low
-
-        return :bullish if bullish_bos
-        return :bearish if bearish_bos
-
-        :neutral
+        if current.close > previous_swing_high
+          :bullish
+        elsif current.close < previous_swing_low
+          :bearish
+        else
+          :neutral
+        end
       end
 
       # Change of Character (CHOCH) - structure shift with confirmation

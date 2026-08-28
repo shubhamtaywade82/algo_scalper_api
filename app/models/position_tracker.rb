@@ -90,10 +90,11 @@ class PositionTracker < ApplicationRecord
   after_update_commit :analyze_trade_if_exited
 
   # Associations
-  belongs_to :instrument # Kept for backward compatibility during transition
+  belongs_to :instrument, optional: false # Kept for backward compatibility during transition
   belongs_to :leg_group, optional: true
   belongs_to :watchable, polymorphic: true
   has_one :trade_analytic, dependent: :destroy
+  has_one :trade_telemetry, foreign_key: :tracker_id, class_name: 'TradeTelemetry', dependent: :destroy
   has_one :trade_memory, dependent: :destroy
   has_one :meta_snapshot, class_name: 'PositionMetaSnapshot', dependent: :destroy
 

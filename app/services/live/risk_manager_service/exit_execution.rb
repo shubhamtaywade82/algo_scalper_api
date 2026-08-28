@@ -96,7 +96,7 @@ module Live
 
       # Track exit path for analysis
       def track_exit_path(tracker, exit_path, reason)
-        meta = tracker.meta || {}
+        meta = (tracker.meta || {}).dup
         meta = {} unless meta.is_a?(Hash)
 
         direction = if exit_path.include?('upward')
@@ -111,35 +111,36 @@ module Live
                end
 
         # Ensure entry metadata is preserved (in case it wasn't set during creation)
-        # This is a safety net - entry metadata should already be set in EntryGuard
         entry_meta = {}
-        unless meta['entry_path'] || meta['entry_strategy']
-          # Try to find matching TradingSignal to get entry metadata
-          signal = TradingSignal.where("metadata->>'index_key' = ?", meta['index_key'] || tracker.index_key)
-                                .where(created_at: (tracker.created_at - 5.minutes)..)
-                                .where(created_at: ..(tracker.created_at + 1.minute))
-                                .order(created_at: :desc)
-                                .first
+        if (!meta['entry_path'] || !meta['entry_strategy']) && defined?(::TradingSignal) && tracker.created_at
+          begin
+            signal = ::TradingSignal.where("metadata->>'index_key' = ?", meta['index_key'] || tracker.index_key)
+                                    .where(created_at: (tracker.created_at - 5.minutes)..)
+                                    .where(created_at: ..(tracker.created_at + 1.minute))
+                                    .order(created_at: :desc)
+                                    .first
 
-          if signal && signal.metadata.is_a?(Hash)
-            entry_meta['entry_path'] = signal.metadata['entry_path']
-            entry_meta['entry_strategy'] = signal.metadata['strategy']
-            entry_meta['entry_strategy_mode'] = signal.metadata['strategy_mode']
-            entry_meta['entry_timeframe'] = signal.metadata['effective_timeframe'] || signal.metadata['primary_timeframe']
-            entry_meta['entry_confirmation_timeframe'] = signal.metadata['confirmation_timeframe']
-            entry_meta['entry_validation_mode'] = signal.metadata['validation_mode']
+            if signal && signal.metadata.is_a?(Hash)
+              entry_meta['entry_path'] = signal.metadata['entry_path']
+              entry_meta['entry_strategy'] = signal.metadata['strategy']
+              entry_meta['entry_strategy_mode'] = signal.metadata['strategy_mode']
+              entry_meta['entry_timeframe'] = signal.metadata['effective_timeframe'] || signal.metadata['primary_timeframe']
+              entry_meta['entry_confirmation_timeframe'] = signal.metadata['confirmation_timeframe']
+              entry_meta['entry_validation_mode'] = signal.metadata['validation_mode']
+            end
+          rescue StandardError => e
+            Rails.logger.debug { "[RiskManager] Could not find TradingSignal for #{tracker.order_no}: #{e.message}" }
           end
         end
 
-        tracker.update(
-          meta: meta.merge(entry_meta).merge(
-            'exit_path' => exit_path,
-            'exit_reason' => reason,
-            'exit_direction' => direction,
-            'exit_type' => type,
-            'exit_triggered_at' => Time.current
-          )
+        updated_meta = meta.merge(entry_meta).merge(
+          'exit_path' => exit_path,
+          'exit_reason' => reason,
+          'exit_direction' => direction,
+          'exit_type' => type,
+          'exit_triggered_at' => Time.current
         )
+        tracker.update_column(:meta, updated_meta)
       rescue StandardError => e
         Rails.logger.error("[RiskManager] Failed to track exit path for #{tracker.order_no}: #{e.message}")
       end

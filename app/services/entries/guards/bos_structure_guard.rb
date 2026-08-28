@@ -79,7 +79,7 @@ module Entries
         entry_underlying_price = series.candles.last&.close
         return nil unless entry_underlying_price
 
-        entry_distance_r = (entry_underlying_price.to_f - origin_price).abs / risk_points
+        entry_distance_r = (entry_underlying_price.to_f - broken_price).abs / risk_points
         return nil if entry_distance_r > BOS_MAX_ENTRY_DISTANCE_R
 
         bos_id = Entries::BosExtractor.bos_id(timeframe: timeframe, confirmed_at: bos[:confirmed_at], direction: bos[:direction])

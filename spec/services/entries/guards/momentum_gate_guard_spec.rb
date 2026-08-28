@@ -12,7 +12,7 @@ RSpec.describe Entries::Guards::MomentumGateGuard do
     end
     let(:index_key) { 'NIFTY' }
     let(:instrument) { create(:instrument, :nifty_index) }
-    let(:candle_series) { instance_double(CandleSeries) }
+    let(:candle_series) { instance_double(CandleSeries, symbol: 'NIFTY', interval: '15', adx: 20.0) }
 
     before do
       allow(instrument).to receive(:candle_series).with(interval: '15').and_return(candle_series)

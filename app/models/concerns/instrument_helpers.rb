@@ -199,7 +199,7 @@ module InstrumentHelpers
   # @param meta [Hash] Additional metadata (alpha_source, signal_confidence, etc.)
   # @return [PositionTracker]
   def after_order_track!(instrument:, order_no:, segment:, security_id:, side:, qty:, entry_price:, symbol:, # rubocop:disable Metrics/ParameterLists
-                         index_key: nil)
+                         index_key: nil, meta: {})
     # Determine watchable: if self is a Derivative, use self; otherwise use instrument
     watchable = is_a?(Derivative) ? self : instrument
 

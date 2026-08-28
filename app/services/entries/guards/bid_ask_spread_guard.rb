@@ -29,7 +29,9 @@ module Entries
         end
 
         spread_pct = (ask - bid) / ltp
-        return PASS if spread_pct <= max_spread_pct(context)
+        if spread_pct > max_spread_pct(context)
+          return { blocked: "bid-ask spread too wide: #{(spread_pct * 100).round(2)}% > #{(max_spread_pct(context) * 100).round(2)}%" }
+        end
 
         # Quantity / order-depth-aware checks (enabled only when config threshold > 0 and tick has data)
         min_bid_qty = min_bid_qty(context)

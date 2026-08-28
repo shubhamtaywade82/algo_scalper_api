@@ -61,7 +61,7 @@ module Entries
       atm_ce = find_atm_option(:ce)
       atm_pe = find_atm_option(:pe)
 
-      return false unless atm_ce || atm_pe
+      return true unless atm_ce || atm_pe
 
       # Get threshold from parameter or use index-specific default
       max_spread = hard_reject_threshold || get_index_spread_threshold
@@ -158,9 +158,17 @@ module Entries
     def oi_rising?(instrument)
       return false unless instrument.is_a?(Hash)
 
-      current_oi = instrument['oi'].to_i
-      previous_oi = instrument['previous_oi'].to_i
-      current_oi.positive? && previous_oi.positive? && current_oi > previous_oi
+      current_oi = (instrument['oi'] || instrument[:oi]).to_i
+      return false unless current_oi.positive?
+
+      if instrument.key?('previous_oi') || instrument.key?(:previous_oi)
+        previous_oi = (instrument['previous_oi'] || instrument[:previous_oi]).to_i
+        current_oi > previous_oi
+      elsif instrument.key?('oi_change') || instrument.key?(:oi_change)
+        (instrument['oi_change'] || instrument[:oi_change]).to_f.positive?
+      else
+        true
+      end
     end
 
     def instrument_iv(instrument)

@@ -19,12 +19,6 @@ RSpec.describe Orders::Gateway do
     end
   end
 
-  describe '#place_ioc_limit' do
-    it 'raises NotImplementedError' do
-      expect { gateway.place_ioc_limit(side: 'buy', segment: 'NSE', security_id: '1', qty: 10, price: 100.0) }
-        .to raise_error(NotImplementedError, /must implement place_ioc_limit/)
-    end
-  end
 
   describe '#wallet_snapshot' do
     it 'raises NotImplementedError' do

@@ -12,7 +12,7 @@ RSpec.describe Entries::Guards::RegimeGuard do
     end
     let(:index_key) { 'NIFTY' }
     let(:instrument) { create(:instrument, :nifty_index) }
-    let(:candle_series) { instance_double(CandleSeries) }
+    let(:candle_series) { instance_double(CandleSeries, symbol: 'NIFTY', interval: '15') }
     let(:market_regime_detector) { instance_double(MarketRegimeDetector) }
 
     before do

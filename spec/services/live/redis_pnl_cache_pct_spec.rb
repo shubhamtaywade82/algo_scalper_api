@@ -25,6 +25,7 @@ RSpec.describe Live::RedisPnlCache, type: :integration do
   let(:tracker_double) do
     instance_double(
       PositionTracker,
+      id: tracker_id,
       entry_price: BigDecimal('100.0'),
       quantity: 75,
       segment: 'NSE_FNO',
@@ -39,6 +40,7 @@ RSpec.describe Live::RedisPnlCache, type: :integration do
   end
 
   before do
+    cache.instance_variable_set(:@redis, Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0')))
     cache.clear_tracker(tracker_id)
     allow(Positions::MetadataResolver).to receive_messages(index_key: 'NIFTY', direction: 'long')
   end

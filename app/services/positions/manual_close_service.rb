@@ -40,7 +40,7 @@ module Positions
       router = TradingSystem::OrderRouter.new
       exit_engine = Live::ExitEngine.new(order_router: router)
       exit_engine.start
-      translate(exit_engine.execute_exit(tracker, REASON, operator_retry: true))
+      translate(exit_engine.execute_exit(tracker, REASON))
     ensure
       exit_engine&.stop
     end

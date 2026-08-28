@@ -55,7 +55,9 @@ module Live
       @lock.synchronize do
         @running = false
         @connection_state = :disconnected
-        return unless @ws_client
+        ws_client = @ws_client
+        @ws_client = nil
+        return unless ws_client
 
         begin
           if ws_client.respond_to?(:disconnect!)
@@ -67,8 +69,6 @@ module Live
           end
         rescue StandardError => e
           Rails.logger.warn("[OrderUpdateHub] Error while stopping DhanHQ order update feed: #{e.message}")
-        ensure
-          @ws_client = nil
         end
       end
     end

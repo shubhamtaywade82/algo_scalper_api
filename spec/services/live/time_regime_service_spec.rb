@@ -16,6 +16,7 @@ RSpec.describe Live::TimeRegimeService do
           time_regimes: { enabled: true, trend_continuation: { allow_entries: true } }
         }
       )
+      allow(service).to receive(:allow_new_trades?).and_call_original
       allow(service).to receive(:allow_entries?).and_return(true)
     end
 

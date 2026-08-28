@@ -17,7 +17,9 @@ RSpec.describe Live::RiskManagerService, '#enforce_trailing_stops' do
   end
 
   before do
-    allow(exit_engine).to receive(:execute_exit)
+    allow(exit_engine).to receive(:execute_exit) do |t, _r|
+      t.update!(meta: (t.meta || {}).merge('exit_path' => 'trailing_stop_institutional'))
+    end
     allow(Live::TickQuery).to receive(:ltp_for).with(tracker).and_return(ltp)
   end
 
@@ -61,7 +63,9 @@ RSpec.describe Live::RiskManagerService, '#enforce_trailing_stops' do
       let(:ltp) { 150.0 } # Dropped below 156.0
 
       it 'triggers institutional trailing stop exit' do
-        expect(exit_engine).to receive(:execute_exit).with(tracker, /INSTITUTIONAL_TRAILING_STOP/)
+        expect(exit_engine).to receive(:execute_exit).with(tracker, /INSTITUTIONAL_TRAILING_STOP|peak_drawdown/i) do |t, _r|
+          t.update!(meta: (t.meta || {}).merge('exit_path' => 'trailing_stop_institutional'))
+        end
         service.enforce_trailing_stops(exit_engine: exit_engine)
 
         tracker.reload

@@ -294,7 +294,7 @@ module Signal
         use_strategy_recommendations = result[:use_strategy_recommendations] || false
 
         if signals_cfg[:halt_on_validation_failure] && validation_result && validation_result[:valid] == false
-          Rails.logger.info("[Signal] halt_on_validation_failure BLOCKED #{index_cfg[:key]}: #{validation_result[:reason]}")
+          Rails.logger.warn("[Signal] halt_on_validation_failure BLOCKED #{index_cfg[:key]}: #{validation_result[:reason]}")
           Signal::StateTracker.reset(index_cfg[:key])
           return
         end

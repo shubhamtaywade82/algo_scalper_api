@@ -35,9 +35,8 @@ RSpec.configure do |config|
         else
           # Generic fallback for other singletons
           instance.instance_variables.each do |ivar|
-            next if %i[@lock @mutex @index].include?(ivar)
-
             val = instance.instance_variable_get(ivar)
+            next if %i[@lock @mutex @index].include?(ivar) || ivar.to_s.end_with?('mutex', 'lock') || val.is_a?(Mutex)
             if val.is_a?(Concurrent::Map)
               val.clear
             elsif val.is_a?(Concurrent::Array) || val.is_a?(Array)

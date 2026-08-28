@@ -87,6 +87,20 @@ module Live
       return if seg.blank? || sid.blank?
 
       ltp = Live::TickQuery.for_security(segment: seg, security_id: sid)&.ltp
+      if ltp.blank?
+        tradable = (tracker.tradable if tracker.respond_to?(:tradable)) || (tracker.watchable if tracker.respond_to?(:watchable))
+        if tradable.respond_to?(:fetch_ltp_from_api_for_segment)
+          api_val = begin
+            tradable.fetch_ltp_from_api_for_segment(segment: seg, security_id: sid)
+          rescue ArgumentError
+            tradable.fetch_ltp_from_api_for_segment
+          end
+          if api_val.present?
+            ltp = api_val.to_f
+            Live::TickCache.put(segment: seg, security_id: sid, ltp: ltp, timestamp: Time.current)
+          end
+        end
+      end
       return if ltp.blank?
 
       entry = BigDecimal(tracker.entry_price.to_s)

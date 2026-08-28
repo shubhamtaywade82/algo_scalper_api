@@ -34,6 +34,11 @@ module Entries
           cache_key = "exposure_check_#{instrument.id}_#{side}"
           return context[cache_key] if context&.key?(cache_key)
 
+          if context && rupee_exposure_exceeded?(context)
+            context[cache_key] = false
+            return false
+          end
+
           max_allowed = max_same_side.to_i
           max_allowed = 1 if max_allowed <= 0
 
@@ -49,7 +54,7 @@ module Entries
           end
 
           if current_count == 1
-            first_position = active_positions.first
+            first_position = active_positions.to_a.first
             first_position.reload
             first_position.hydrate_pnl_from_cache!
 
@@ -71,6 +76,21 @@ module Entries
 
         private
 
+        def rupee_exposure_exceeded?(context)
+          index_key = context.dig(:index_cfg, :key).to_s
+          max_limit = max_exposure_limit_for(index_key)
+          return false unless max_limit.positive?
+
+          current_exposure = PositionTracker.active.where(index_key: index_key).sum('quantity * entry_price').to_f
+          new_exposure = context[:quantity].to_f * context[:ltp].to_f
+          (current_exposure + new_exposure) > max_limit
+        end
+
+        def max_exposure_limit_for(index_key)
+          cfg = AlgoConfig.fetch.dig(:risk, :max_exposure_rupees) || {}
+          (cfg[index_key] || cfg[index_key.to_sym] || cfg[:default] || cfg['default'] || 0).to_f
+        end
+
         def pyramiding_allowed?(first_position)
           return false unless first_position.last_pnl_rupees&.positive?
           min_profit_duration = 5.minutes
@@ -82,7 +102,7 @@ module Entries
         def calculate_current_pnl(tracker)
           return unless tracker.entry_price.present? && tracker.quantity.present?
 
-          if tracker.paper?
+          if tracker.respond_to?(:paper?) && tracker.paper?
             ltp = get_paper_ltp_for_tracker(tracker)
             return unless ltp
 
@@ -141,7 +161,11 @@ module Entries
         end
 
         def active_supertrend_position?(index_key)
-          PositionTracker.active.where("(meta->>'index_key') = ?", index_key.to_s).exists?
+          if PositionTracker.active.respond_to?(:by_index_key)
+            PositionTracker.active.by_index_key(index_key.to_s).exists?
+          else
+            PositionTracker.active.where(index_key: index_key.to_s).exists?
+          end
         end
       end
     end
