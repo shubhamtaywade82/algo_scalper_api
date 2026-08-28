@@ -25,14 +25,14 @@ bundle exec rspec
 bundle exec rspec spec/path/file_spec.rb
 bundle exec rubocop
 bin/brakeman --no-pager                # security scan
-./bin/dev                              # start all processes (web + trading + jobs + dashboard + sidecar)
+./bin/dev                              # start all processes (web + trading + jobs + dashboard)
 bin/jobs                               # start Solid Queue worker standalone
 ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon  # trading daemon standalone
 ```
 
 ## Process Model
 
-`./bin/dev` starts 5 processes via `Procfile.dev`:
+`./bin/dev` starts 4 processes via `Procfile.dev`:
 
 | Process | Command | Purpose |
 |---------|---------|---------|
@@ -40,35 +40,16 @@ ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon  # trading daemon s
 | `trading` | `ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon` | Trading brain (11 services in threads) |
 | `jobs` | `bin/jobs` | Solid Queue worker (recurring tasks) |
 | `dashboard` | `cd dashboard && npm run dev` | SolidJS + Vite frontend (dev server on :5181, proxies `/api` and `/cable` to :3001) |
-| `sidecar` | `cd node-sidecar && npm start` | Node.js execution sidecar — Redis-only today, see below |
 
 Web and trading are separate OS processes sharing PostgreSQL and Redis — no shared in-process objects.
 
-### node-sidecar
+### node-sidecar (moved)
 
-`node-sidecar/` is a TypeScript process (`@shubhamtaywade82/dhanhq-ts`) meant to
-execute multi-leg option spread skills (bull_call_spread, iron_condor, etc.)
-that the Ruby `dhanhq` gem doesn't support. It communicates with Rails purely
-over Redis pub/sub — it has no HTTP surface and Rails never calls it directly:
-
-| Channel | Direction | Payload |
-|---|---|---|
-| `dhan:execution:intents` | Rails → sidecar | `{intent_id, strategy, params, correlation_id, risk_limits, created_at}` |
-| `dhan:execution:fills` | sidecar → Rails | `{intent_id, correlation_id, is_paper, fill_price, quantity, security_id, filled_at}` |
-| `dhan:execution:exits` | sidecar → Rails | `{position_id, correlation_id, exit_price, pnl, reason, is_paper, exited_at}` |
-| `dhan:auth:rotated` | Rails → sidecar | Rails' `Dhan::TokenManager` publishes on token refresh; sidecar re-reads `dhan:auth:access_token` |
-
-**Currently dormant**: nothing in `app/` or `lib/` calls
-`Dhan::SidecarPublisher.publish_intent`, so `dhan:execution:intents` never
-receives a message and the sidecar's execution engines never run.
-`Entries::EntryGuard` places every order directly through
-`Orders::GatewayLive`/`GatewayPaper`. The sidecar opens no Dhan WebSocket
-connection (removed — it collided with Rails' own `Live::MarketFeedHub`/
-`Live::OrderUpdateHub` on reconnect). Wiring spreads up for real is future
-work: it needs an `EntryGuard` → `SidecarPublisher` call site, and the
-sidecar's own exit-payload field mismatch (`executor.ts` reads
-`signal.positionId`/`correlationId`/`exitPrice`, none of which exist on
-`PositionMonitor`'s actual `"exit"` event) needs fixing first.
+The Node.js execution sidecar was moved to `/home/nemesis/project/trading-workspace/bots/dhanhq-node`.
+It was never wired up — `Dhan::SidecarPublisher.publish_intent` was never called from this repo.
+All order execution goes through `Orders::GatewayLive`/`GatewayPaper` (Ruby).
+Redis pub/sub channels (`dhan:execution:intents`, `dhan:execution:fills`, `dhan:execution:exits`)
+are no longer used by this codebase.
 
 ## Architecture
 

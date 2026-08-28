@@ -2,5 +2,4 @@ web: until bundle exec rails server -p 3001; do echo "[web] crashed (exit $?), r
 trading: until ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon; do echo "[trading] crashed (exit $?), restarting in 2s..."; sleep 2; done
 jobs: sh -c 'if [ "${ENABLE_JOBS:-true}" != "true" ]; then printf "jobs disabled (set ENABLE_JOBS=true to run)\n"; sleep infinity; fi; until bundle exec bin/jobs; do echo "[jobs] crashed (exit $?), restarting in 2s..."; sleep 2; done'
 dashboard: cd dashboard && until npm run dev; do echo "[dashboard] crashed (exit $?), restarting in 2s..."; sleep 2; done
-sidecar: cd node-sidecar && until npm start; do echo "[sidecar] crashed (exit $?), restarting in 2s..."; sleep 2; done
 
