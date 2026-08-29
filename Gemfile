@@ -6,6 +6,8 @@ source 'https://rubygems.org'
 gem 'rails', '~> 8.1.3'
 # Use postgresql as the database for Active Record
 gem 'pg', '~> 1.6'
+# SQLite for local-agent-stack shared memory & self-healing
+gem 'sqlite3', '~> 2.0'
 # Use the Puma web server [https://github.com/puma/puma]
 gem 'puma', '>= 5.0'
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
