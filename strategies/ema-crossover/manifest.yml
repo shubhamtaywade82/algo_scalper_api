@@ -1,0 +1,29 @@
+---
+slug: ema-crossover
+name: EMA Crossover
+class_name: EmaCrossoverStrategy
+timeframes:
+- 5m
+instruments:
+- NIFTY
+- BANKNIFTY
+- SENSEX
+params:
+  fast_ema_period:
+    type: Integer
+    default: '9'
+  slow_ema_period:
+    type: Integer
+    default: '26'
+  min_separation_pct:
+    type: Float
+    default: '0.02'
+  adx_threshold:
+    type: Float
+    default: '20.0'
+  dead_zone_start_hour:
+    type: Integer
+    default: '11'
+  dead_zone_end_hour:
+    type: Integer
+    default: '13'
