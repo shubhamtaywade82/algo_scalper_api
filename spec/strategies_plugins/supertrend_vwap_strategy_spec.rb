@@ -7,14 +7,14 @@ load Rails.root.join('strategies/supertrend-vwap/strategy.rb').to_s
 RSpec.describe SupertrendVwapStrategy do
   include PluginTestHelper
 
-  let(:default_params) {
+  let(:default_params) do
     {
       supertrend_period: 10,
       supertrend_multiplier: 3.0,
       dead_zone_start_hour: 11,
       dead_zone_end_hour: 13
     }
-  }
+  end
   let(:strategy) { described_class.new(params: default_params) }
   let(:base_date) { Date.parse('2026-07-06') }
 
@@ -55,8 +55,8 @@ RSpec.describe SupertrendVwapStrategy do
       let(:series) do
         build_series(
           base_date: base_date, count: 50, interval: 5,
-          &->(i, prev_close) {
-            close = 25_000.0 + i * 5
+          &lambda { |i, prev_close|
+            close = 25_000.0 + (i * 5)
             { open: prev_close, high: close + 10, low: close - 10, close: close, volume: 100_000 }
           }
         )
@@ -75,8 +75,8 @@ RSpec.describe SupertrendVwapStrategy do
       let(:series) do
         build_series(
           base_date: base_date, count: 80, interval: 5,
-          &->(i, prev_close) {
-            close = 25_000.0 + i * 3
+          &lambda { |i, prev_close|
+            close = 25_000.0 + (i * 3)
             { open: prev_close, high: close + 5, low: close - 5, close: close, volume: 100_000 }
           }
         )
@@ -110,13 +110,13 @@ RSpec.describe SupertrendVwapStrategy do
       let(:series) do
         build_series(
           base_date: base_date, count: 45, interval: 5,
-          &->(i, prev_close) {
+          &lambda { |i, prev_close|
             # Strong steady uptrend with volume
-            close = 25_000.0 + i * 10
+            close = 25_000.0 + (i * 10)
             {
               open: prev_close,
               high: close + 8,
-              low: close - 3,   # small wicks — clean bullish
+              low: close - 3, # small wicks — clean bullish
               close: close,
               volume: 150_000
             }

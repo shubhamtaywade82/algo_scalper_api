@@ -145,7 +145,7 @@ module Api
     private
 
     def find_strategy
-      @strategy = ::Strategies::Record.find_by!(slug: params[:slug])
+      @strategy = ::Strategies::Record.find_by!(slug: params.expect(:slug))
     rescue ActiveRecord::RecordNotFound
       render json: { success: false, error: "Strategy not found: #{params[:slug]}" }, status: :not_found
     end
@@ -195,7 +195,7 @@ module Api
         desired_status: r.desired_status,
         current_version: r.current_version ? serialize_version(r.current_version) : nil,
         version: r.current_version&.version || 1,
-        instruments: ["NIFTY", "BANKNIFTY", "SENSEX"],
+        instruments: %w[NIFTY BANKNIFTY SENSEX],
         description: "Adaptive Supertrend & technical indicators signal generator for index options scalping.",
         runtime: "Ruby 3.3 / Rails 8",
         timeframe: "1m",
@@ -204,7 +204,6 @@ module Api
         runner_status: runner
       }
     end
-
 
     def serialize_version(v)
       {

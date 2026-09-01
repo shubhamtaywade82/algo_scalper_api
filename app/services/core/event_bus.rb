@@ -8,7 +8,7 @@ module Core
   # Central pub/sub event bus for NEMESIS V3 architecture
   # Provides internal event broadcasting for system components
   # Thread-safe singleton for high-performance tick processing
-  # rubocop:disable Metrics/ClassLength
+  # rubocop:disable-next Metrics/ClassLength
   class EventBus
     include Singleton
 
@@ -172,5 +172,4 @@ module Core
       @subscribers[event_type]&.size || 0
     end
   end
-  # rubocop:enable Metrics/ClassLength
 end

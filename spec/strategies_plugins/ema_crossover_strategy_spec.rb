@@ -7,7 +7,7 @@ load Rails.root.join('strategies/ema-crossover/strategy.rb').to_s
 RSpec.describe EmaCrossoverStrategy do
   include PluginTestHelper
 
-  let(:default_params) {
+  let(:default_params) do
     {
       fast_ema_period: 9,
       slow_ema_period: 26,
@@ -16,7 +16,7 @@ RSpec.describe EmaCrossoverStrategy do
       dead_zone_start_hour: 11,
       dead_zone_end_hour: 13
     }
-  }
+  end
   let(:strategy) { described_class.new(params: default_params) }
   let(:base_date) { Date.parse('2026-07-06') }
 
@@ -58,8 +58,8 @@ RSpec.describe EmaCrossoverStrategy do
       let(:series) do
         build_series(
           base_date: base_date, count: 60, interval: 5,
-          &->(i, prev_close) {
-            close = 25_000.0 + i * 5
+          &lambda { |i, prev_close|
+            close = 25_000.0 + (i * 5)
             { open: prev_close, high: close + 10, low: close - 10, close: close, volume: 100_000 }
           }
         )
@@ -79,8 +79,8 @@ RSpec.describe EmaCrossoverStrategy do
       let(:series) do
         build_series(
           base_date: base_date, count: 80, interval: 5,
-          &->(i, prev_close) {
-            close = 25_000.0 + i * 3
+          &lambda { |i, prev_close|
+            close = 25_000.0 + (i * 3)
             { open: prev_close, high: close + 5, low: close - 5, close: close, volume: 100_000 }
           }
         )
@@ -100,9 +100,9 @@ RSpec.describe EmaCrossoverStrategy do
       let(:series) do
         build_series(
           base_date: base_date, count: 40, interval: 5,
-          &->(i, prev_close) {
+          &lambda { |i, prev_close|
             # Steady uptrend — fast EMA stays above slow, no crossover
-            close = 25_000.0 + i * 10
+            close = 25_000.0 + (i * 10)
             { open: prev_close, high: close + 5, low: close - 5, close: close, volume: 100_000 }
           }
         )
@@ -115,22 +115,23 @@ RSpec.describe EmaCrossoverStrategy do
         expect(result).to be_a(Signals::Hold)
         # May be no_crossover or ema_unavailable depending on data shape
         expect(result.reason).to include('no_crossover').or(include('ema'))
-        end
+      end
     end
   end
+
   describe 'crossover detection with crafted data' do
     # Build data where we KNOW a crossover happens: prices decline for 30 bars
     # then reverse sharply, causing fast EMA to cross above slow EMA.
     let(:series) do
       build_series(
         base_date: base_date, count: 50, interval: 5,
-        &->(i, prev_close) {
+        &lambda { |i, prev_close|
           if i < 28
             # Declining
-            close = 25_000.0 - i * 8
+            close = 25_000.0 - (i * 8)
           elsif i == 28
             # Sharp reversal candle
-            close = 25_000.0 - 28 * 8 + 300
+            close = 25_000.0 - (28 * 8) + 300
           else
             # Rising after reversal
             close = prev_close + 20

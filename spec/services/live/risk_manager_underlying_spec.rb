@@ -105,7 +105,7 @@ RSpec.describe Live::RiskManagerService, 'Underlying and Structure Exits' do
 
       service.send(:enforce_dynamic_trailing_stops, exit_engine: exit_engine)
 
-      expect(Rails.logger).to have_received(:info).with(match(/TrailingEngine triggered exit/))
+      expect(Rails.logger).to have_received(:info).with(include('TrailingEngine triggered exit'))
     end
   end
 end

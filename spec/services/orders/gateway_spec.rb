@@ -19,7 +19,6 @@ RSpec.describe Orders::Gateway do
     end
   end
 
-
   describe '#wallet_snapshot' do
     it 'raises NotImplementedError' do
       expect { gateway.wallet_snapshot }

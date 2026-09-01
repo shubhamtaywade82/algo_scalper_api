@@ -45,11 +45,11 @@ module Api
       scope = scope.where(exited_at: filter_date.all_day)
 
       # Index key filter (stored in meta JSONB)
-      scope = scope.where("meta->>'index_key' = ?", params[:index_key].upcase) if params[:index_key].present?
+      scope = scope.where("meta->>'index_key' = ?", params.expect(:index_key).upcase) if params[:index_key].present?
 
       # Option type: CE or PE suffix on symbol
       if params[:option_type].present?
-        type = params[:option_type].upcase
+        type = params.expect(:option_type).upcase
         scope = scope.where("symbol ILIKE ?", "%#{type}") if %w[CE PE].include?(type)
       end
 
@@ -64,7 +64,7 @@ module Api
       end
 
       # Side filter (BUY/SELL)
-      scope = scope.where(side: params[:side].upcase) if params[:side].present?
+      scope = scope.where(side: params.expect(:side).upcase) if params[:side].present?
 
       # Sorting
       col = ALLOWED_SORT_COLS.include?(params[:sort_by]) ? params[:sort_by] : "exited_at"
@@ -92,11 +92,11 @@ module Api
     def filter_summary
       base = PositionTracker.exited.where(exited_at: filter_date.all_day)
       {
-        date:         filter_date.to_s,
-        total:        base.count,
+        date: filter_date.to_s,
+        total: base.count,
         profit_count: base.where("last_pnl_rupees > 0").count,
-        loss_count:   base.where("last_pnl_rupees < 0").count,
-        total_pnl:    base.sum(:last_pnl_rupees).to_f.round(2)
+        loss_count: base.where("last_pnl_rupees < 0").count,
+        total_pnl: base.sum(:last_pnl_rupees).to_f.round(2)
       }
     end
 

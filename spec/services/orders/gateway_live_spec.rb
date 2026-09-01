@@ -288,8 +288,7 @@ RSpec.describe Orders::GatewayLive do
     context 'when going end-to-end through the real Orders::Placer (regression: with_token_auto_heal used to swallow every error to nil, so this retry path never actually engaged)' do
       before do
         allow(Orders::Placer).to receive(:buy_market!).and_call_original
-        allow(Rails.cache).to receive(:read).and_return(nil)
-        allow(Rails.cache).to receive(:write).and_return(true)
+        allow(Rails.cache).to receive_messages(read: nil, write: true)
         allow(ENV).to receive(:[]).and_call_original
         allow(ENV).to receive(:[]).with('PLACE_ORDER').and_return('true')
         allow(Orders::Placer).to receive(:with_order_rate_limit).and_yield

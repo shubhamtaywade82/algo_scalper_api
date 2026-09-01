@@ -4,7 +4,7 @@ require 'rails_helper'
 require 'rake'
 require 'tempfile'
 
-# rubocop:disable RSpec/DescribeClass
+# rubocop:disable-next RSpec/DescribeClass
 RSpec.describe 'options:calibrate_from_csv rake task' do
   let(:rake) { Rake::Application.new }
   let(:task_name) { 'options:calibrate_from_csv' }
@@ -78,4 +78,3 @@ RSpec.describe 'options:calibrate_from_csv rake task' do
     $stdout = original_stdout
   end
 end
-# rubocop:enable RSpec/DescribeClass

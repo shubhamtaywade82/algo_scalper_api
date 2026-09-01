@@ -451,7 +451,7 @@ RSpec.describe Signal::EntryQualityFilter do
         s = build_series([candle])
         result = described_class.evaluate(**default_params, series: s, supertrend_result: st, adx_value: 20.0)
         expect(result[:pass]).to be false
-        expect(result[:reject_reason]).to match(/score_below_threshold/)
+        expect(result[:reject_reason]).to include('score_below_threshold')
       end
 
       it 'passes when total score >= min_score (40)' do
@@ -506,7 +506,7 @@ RSpec.describe Signal::EntryQualityFilter do
       s = build_series([candle])
       result = described_class.evaluate(**default_params, series: s, supertrend_result: st, adx_value: 22.0)
       expect(result[:pass]).to be false
-      expect(result[:reject_reason]).to match(/score_below_threshold/)
+      expect(result[:reject_reason]).to include('score_below_threshold')
     end
   end
 

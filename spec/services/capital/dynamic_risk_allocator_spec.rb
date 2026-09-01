@@ -144,7 +144,7 @@ RSpec.describe Capital::DynamicRiskAllocator do
         allow(Capital::Allocator).to receive(:available_cash).and_raise(StandardError.new('API error'))
       end
 
-      # rubocop:disable RSpec/MultipleExpectations
+      # rubocop:disable-next RSpec/MultipleExpectations
       it 'returns fallback base risk on error' do
         # Should still return a value (falls back to default 0.03 = 3%)
         result = allocator.risk_pct_for(index_key: :NIFTY, trend_score: 15.0)
@@ -155,7 +155,6 @@ RSpec.describe Capital::DynamicRiskAllocator do
         expect(result).to be > 0.03
         expect(result).to be < 0.05
       end
-      # rubocop:enable RSpec/MultipleExpectations
 
       it 'returns default base risk when trend_score is nil' do
         result = allocator.risk_pct_for(index_key: :NIFTY, trend_score: nil)

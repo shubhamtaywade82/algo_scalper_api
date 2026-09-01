@@ -281,9 +281,8 @@ module Research
     def self.simulate_gamma_state(entry_price, entry_idx, active_candles, *, **)
       cfg = GAMMA_STATE_CFG
       peak = entry_price
-      # rubocop:disable Rails/Pluck -- array of hashes, not AR relation; pluck won't work
+      # rubocop:disable-next Rails/Pluck -- array of hashes, not AR relation; pluck won't work
       closes = active_candles.first(entry_idx).map { |c| c[:close] }
-      # rubocop:enable Rails/Pluck
 
       active_candles[entry_idx..].each do |c|
         closes << c[:close]
@@ -326,9 +325,8 @@ module Research
       peak = entry_price
       floor = nil
       neg_velocity_run = 0
-      # rubocop:disable Rails/Pluck -- array of hashes, not AR relation; pluck won't work
+      # rubocop:disable-next Rails/Pluck -- array of hashes, not AR relation; pluck won't work
       closes = active_candles.first(entry_idx).map { |c| c[:close] }
-      # rubocop:enable Rails/Pluck
 
       active_candles[entry_idx..].each do |c|
         closes << c[:close]

@@ -4,14 +4,6 @@ require 'rails_helper'
 
 RSpec.describe Backtest::StrategyContextAdapter do
   let(:base_ts) { Time.zone.parse('2026-07-06 09:15:00') }
-
-  def candle(offset_minutes, close:)
-    Candle.new(
-      timestamp: base_ts + offset_minutes.minutes,
-      open: close, high: close, low: close, close: close, volume: 100
-    )
-  end
-
   let(:candles) { (0..5).map { |i| candle(i, close: 100 + i) } } # 09:15..09:20
   let(:series_1m) do
     CandleSeries.new(symbol: 'NIFTY', interval: '1').tap do |s|
@@ -19,6 +11,13 @@ RSpec.describe Backtest::StrategyContextAdapter do
     end
   end
   let(:adapter) { described_class.new(series_1m: series_1m, symbol: 'NIFTY') }
+
+  def candle(offset_minutes, close:)
+    Candle.new(
+      timestamp: base_ts + offset_minutes.minutes,
+      open: close, high: close, low: close, close: close, volume: 100
+    )
+  end
 
   describe '#build' do
     it 'excludes the candle exactly at the cutoff timestamp (exclusive upper bound)' do

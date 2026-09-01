@@ -7,7 +7,7 @@ load Rails.root.join('strategies/vwap-rsi-pullback/strategy.rb').to_s
 RSpec.describe VwapRsiPullbackStrategy do
   include PluginTestHelper
 
-  let(:default_params) {
+  let(:default_params) do
     {
       rsi_period: 14,
       rsi_pullback_zone_low: 40.0,
@@ -17,7 +17,7 @@ RSpec.describe VwapRsiPullbackStrategy do
       dead_zone_start_hour: 11,
       dead_zone_end_hour: 13
     }
-  }
+  end
   let(:strategy) { described_class.new(params: default_params) }
   let(:base_date) { Date.parse('2026-07-06') }
 
@@ -76,9 +76,9 @@ RSpec.describe VwapRsiPullbackStrategy do
       let(:series) do
         build_series(
           base_date: base_date, count: 50, interval: 3,
-          &->(i, prev_close) {
+          &lambda { |i, prev_close|
             # Steady uptrend to establish VWAP slope
-            close = 25_000.0 + i * 3
+            close = 25_000.0 + (i * 3)
             { open: prev_close, high: close + 5, low: close - 5, close: close, volume: 100_000 }
           }
         )
@@ -100,8 +100,8 @@ RSpec.describe VwapRsiPullbackStrategy do
       let(:series) do
         build_series(
           base_date: base_date, count: 100, interval: 3,
-          &->(i, prev_close) {
-            close = 25_000.0 + i * 2
+          &lambda { |i, prev_close|
+            close = 25_000.0 + (i * 2)
             { open: prev_close, high: close + 5, low: close - 5, close: close, volume: 100_000 }
           }
         )
@@ -126,14 +126,15 @@ RSpec.describe VwapRsiPullbackStrategy do
         expect(result).to be_a(Signals::Hold)
       end
     end
+
     context 'uptrend with pullback to VWAP' do
       let(:series) do
         build_series(
           base_date: base_date, count: 40, interval: 3,
-          &->(i, prev_close) {
+          &lambda { |i, prev_close|
             if i < 20
               # Strong uptrend
-              close = 25_000.0 + i * 5
+              close = 25_000.0 + (i * 5)
             elsif i == 25
               # Pullback to near VWAP (VWAP should be around 25040 ish)
               close = 25_035.0

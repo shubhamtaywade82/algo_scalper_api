@@ -40,9 +40,8 @@ RSpec.describe Options::AutoCalibrator do
 
     # Self-contained: do not depend on Derivative rows for weekly NIFTY expiries
     fake_expiries = Array.new(8) { |i| Date.current - (i * 7) }
-    # rubocop:disable RSpec/AnyInstance -- isolates spec from derivative fixture drift
+    # rubocop:disable-next RSpec/AnyInstance -- isolates spec from derivative fixture drift
     allow_any_instance_of(described_class).to receive(:historical_weekly_expiry_dates).and_return(fake_expiries)
-    # rubocop:enable RSpec/AnyInstance
   end
 
   describe '.call' do

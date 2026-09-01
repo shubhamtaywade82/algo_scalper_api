@@ -30,7 +30,7 @@ RSpec.describe Backtest::OptionTradeSimulator do
     let(:candle) do
       Candle.new(
         timestamp: Time.zone.parse('2026-07-06 10:00:00'),
-        open: 25000, high: 25050, low: 24950, close: 25025, volume: 500
+        open: 25_000, high: 25_050, low: 24_950, close: 25_025, volume: 500
       )
     end
 
@@ -72,7 +72,7 @@ RSpec.describe Backtest::OptionTradeSimulator do
   describe '#check_exit (same-strike filtering)' do
     let(:base_time) { Time.zone.parse('2026-07-06 10:00:00') }
     let(:candle_entry) do
-      Candle.new(timestamp: base_time, open: 25000, high: 25050, low: 24950, close: 25025, volume: 500)
+      Candle.new(timestamp: base_time, open: 25_000, high: 25_050, low: 24_950, close: 25_025, volume: 500)
     end
 
     # Simulate rolling ATM: strike flips between 24500 and 24600 as spot drifts
@@ -83,7 +83,7 @@ RSpec.describe Backtest::OptionTradeSimulator do
         { timestamp: base_time + 2.minutes, close: 100.0, strike: '24600' }, # different strike (cheap)
         { timestamp: base_time + 3.minutes, close: 90.0,  strike: '24600' }, # different strike
         { timestamp: base_time + 4.minutes, close: 240.0, strike: '24500' }, # back to entry strike
-        { timestamp: base_time + 5.minutes, close: 250.0, strike: '24500' }, # entry strike hits target
+        { timestamp: base_time + 5.minutes, close: 250.0, strike: '24500' } # entry strike hits target
       ]
     end
 
@@ -95,8 +95,8 @@ RSpec.describe Backtest::OptionTradeSimulator do
         entry_price: 210.0,
         entry_strike: '24500',
         option_data: option_data,
-        stop_loss: 210.0 * 0.70,  # 147
-        target: 210.0 * 1.50       # 315
+        stop_loss: 210.0 * 0.70, # 147
+        target: 210.0 * 1.50 # 315
       }
     end
 
@@ -112,7 +112,7 @@ RSpec.describe Backtest::OptionTradeSimulator do
       # seeing a fake drop to 100.
       check_candle = Candle.new(
         timestamp: base_time + 2.minutes,
-        open: 25100, high: 25150, low: 25050, close: 25100, volume: 500
+        open: 25_100, high: 25_150, low: 25_050, close: 25_100, volume: 500
       )
       result = simulator.check_exit(position, check_candle, 2, nil)
       # The 24600 bar at close=100 is skipped, so no exit triggered
@@ -130,7 +130,7 @@ RSpec.describe Backtest::OptionTradeSimulator do
 
       check_candle = Candle.new(
         timestamp: base_time + 5.minutes,
-        open: 25300, high: 25350, low: 25250, close: 25300, volume: 500
+        open: 25_300, high: 25_350, low: 25_250, close: 25_300, volume: 500
       )
       result = simulator.check_exit(position_target, check_candle, 5, nil)
       expect(result).not_to be_nil
@@ -142,7 +142,7 @@ RSpec.describe Backtest::OptionTradeSimulator do
       # Check at a time when only 24600 bars exist
       check_candle = Candle.new(
         timestamp: base_time + 3.minutes,
-        open: 25080, high: 25130, low: 25030, close: 25080, volume: 500
+        open: 25_080, high: 25_130, low: 25_030, close: 25_080, volume: 500
       )
       result = simulator.check_exit(position, check_candle, 3, nil)
       # No same-strike bar at this time → returns nil
@@ -155,7 +155,7 @@ RSpec.describe Backtest::OptionTradeSimulator do
     let(:option_data) do
       [
         { timestamp: base_time,             close: 200.0, strike: '24500' },
-        { timestamp: base_time + 5.minutes, close: 100.0, strike: '24600' }, # different strike
+        { timestamp: base_time + 5.minutes, close: 100.0, strike: '24600' } # different strike
       ]
     end
     let(:position) do
@@ -174,7 +174,7 @@ RSpec.describe Backtest::OptionTradeSimulator do
     it 'falls back to 50% of entry when no same-strike bar is available' do
       last_candle = Candle.new(
         timestamp: base_time + 5.minutes,
-        open: 25100, high: 25150, low: 25050, close: 25100, volume: 500
+        open: 25_100, high: 25_150, low: 25_050, close: 25_100, volume: 500
       )
       result = simulator.force_exit(position, last_candle, 5, 'end_of_data')
       expect(result[:exit_reason]).to eq('end_of_data')
@@ -202,8 +202,8 @@ RSpec.describe Backtest::OptionTradeSimulator do
       (0..10).each do |i|
         s.add_candle(Candle.new(
           timestamp: base_time + i.minutes,
-          open: 25000 + i * 5, high: 25020 + i * 5,
-          low: 24980 + i * 5, close: 25010 + i * 5, volume: 500
+          open: 25_000 + (i * 5), high: 25_020 + (i * 5),
+          low: 24_980 + (i * 5), close: 25_010 + (i * 5), volume: 500
         ))
       end
       s

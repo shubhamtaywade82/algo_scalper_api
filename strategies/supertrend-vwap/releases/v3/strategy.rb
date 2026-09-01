@@ -27,10 +27,10 @@ class SupertrendVwapStrategy < BaseStrategy
 
   def self.params_schema
     {
-      supertrend_period:     { type: :integer, default: 10 },
-      supertrend_multiplier: { type: :float,   default: 3.0 },
-      dead_zone_start_hour:  { type: :integer, default: 11 },
-      dead_zone_end_hour:    { type: :integer, default: 13 }
+      supertrend_period: { type: :integer, default: 10 },
+      supertrend_multiplier: { type: :float, default: 3.0 },
+      dead_zone_start_hour: { type: :integer, default: 11 },
+      dead_zone_end_hour: { type: :integer, default: 13 }
     }
   end
 
@@ -83,7 +83,7 @@ class SupertrendVwapStrategy < BaseStrategy
     st_bearish = st_signal == :short_entry
 
     # CE: Supertrend bullish AND price above VWAP AND VWAP sloping up
-    if st_bullish && above_vwap && slope > 0
+    if st_bullish && above_vwap && slope.positive?
       confidence = 0.55
       confidence += 0.10 if slope > min_slope * 3
       confidence += 0.05 if (close - current_vwap).abs / current_vwap > 0.003
@@ -96,7 +96,7 @@ class SupertrendVwapStrategy < BaseStrategy
     end
 
     # PE: Supertrend bearish AND price below VWAP AND VWAP sloping down
-    if st_bearish && below_vwap && slope < 0
+    if st_bearish && below_vwap && slope.negative?
       confidence = 0.55
       confidence += 0.10 if slope < -min_slope * 3
       confidence += 0.05 if (current_vwap - close).abs / current_vwap > 0.003

@@ -2,19 +2,19 @@
 
 require 'rails_helper'
 
-RSpec.describe TradeJournal, type: :model do
+RSpec.describe TradeJournal do
   describe 'validations' do
-    it { should validate_presence_of(:side) }
-    it { should validate_presence_of(:quantity) }
-    it { should validate_numericality_of(:quantity).is_greater_than(0) }
-    it { should validate_presence_of(:entry_price) }
-    it { should validate_numericality_of(:entry_price).is_greater_than(0) }
-    it { should validate_presence_of(:entry_time) }
+    it { is_expected.to validate_presence_of(:side) }
+    it { is_expected.to validate_presence_of(:quantity) }
+    it { is_expected.to validate_numericality_of(:quantity).is_greater_than(0) }
+    it { is_expected.to validate_presence_of(:entry_price) }
+    it { is_expected.to validate_numericality_of(:entry_price).is_greater_than(0) }
+    it { is_expected.to validate_presence_of(:entry_time) }
   end
 
   describe 'associations' do
-    it { should belong_to(:position_tracker) }
-    it { should belong_to(:instrument) }
+    it { is_expected.to belong_to(:position_tracker) }
+    it { is_expected.to belong_to(:instrument) }
   end
 
   describe '#winner? and #loser?' do

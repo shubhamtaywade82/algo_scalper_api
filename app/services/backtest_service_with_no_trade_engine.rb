@@ -828,13 +828,12 @@ class BacktestServiceWithNoTradeEngine
     signal_type = position[:signal_type]
 
     # Simplified PnL calculation (assumes 1:1 delta for ATM options)
-    # rubocop:disable Layout/EndAlignment
+    # rubocop:disable-next Layout/EndAlignment
     pnl_percent = if signal_type == :ce
                     ((current_spot - entry_spot) / entry_spot * 100)
                   else # :pe
                     ((entry_spot - current_spot) / entry_spot * 100)
                    end
-    # rubocop:enable Layout/EndAlignment
 
     # Check target hit
     target_hit =
@@ -862,13 +861,12 @@ class BacktestServiceWithNoTradeEngine
     entry_spot = position[:spot_entry_price]
     signal_type = position[:signal_type]
 
-    # rubocop:disable Layout/EndAlignment
+    # rubocop:disable-next Layout/EndAlignment
     pnl_percent = if signal_type == :ce
                     ((current_spot - entry_spot) / entry_spot * 100)
                   else
                     ((entry_spot - current_spot) / entry_spot * 100)
                    end
-    # rubocop:enable Layout/EndAlignment
 
     build_exit_result(position, candle, index, pnl_percent, reason)
   end

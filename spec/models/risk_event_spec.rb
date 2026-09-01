@@ -2,16 +2,16 @@
 
 require 'rails_helper'
 
-RSpec.describe RiskEvent, type: :model do
+RSpec.describe RiskEvent do
   describe 'validations' do
-    it { should validate_presence_of(:event_type) }
-    it { should validate_presence_of(:source) }
-    it { should validate_inclusion_of(:severity).in_array(RiskEvent::SEVERITIES) }
+    it { is_expected.to validate_presence_of(:event_type) }
+    it { is_expected.to validate_presence_of(:source) }
+    it { is_expected.to validate_inclusion_of(:severity).in_array(RiskEvent::SEVERITIES) }
   end
 
   describe 'associations' do
-    it { should belong_to(:instrument).optional }
-    it { should belong_to(:position_tracker).optional }
+    it { is_expected.to belong_to(:instrument).optional }
+    it { is_expected.to belong_to(:position_tracker).optional }
   end
 
   describe '#critical?' do

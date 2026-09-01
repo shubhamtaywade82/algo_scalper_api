@@ -47,7 +47,7 @@ module PluginTestHelper
 
     Strategies::StrategyContext.new(
       instrument_key: series.symbol,
-      candles: ->(tf = '1m') {
+      candles: lambda { |tf = '1m'|
         # In the real adapter, candles are resampled. For tests, we return the
         # series as-is if the timeframe matches, or a rollup approximation.
         if tf == series.interval || tf == '1m'
@@ -69,31 +69,31 @@ module PluginTestHelper
 
   # Default price function: gentle uptrend with realistic volatility
   def gentle_uptrend_1m
-    ->(i, prev_close) {
+    lambda { |i, prev_close|
       drift = i * 0.5
       noise = (rand - 0.5) * 10
       close = prev_close + drift + noise
-      spread = 5 + rand * 10
+      spread = 5 + (rand * 10)
       {
         open: prev_close,
         high: [close, prev_close].max + spread,
-        low:  [close, prev_close].min - spread,
+        low: [close, prev_close].min - spread,
         close: close,
-        volume: 100_000 + rand(50_000)
+        volume: rand(100_000..149_999)
       }
     }
   end
 
   # Steady price with no real trend (for dead-zone / flat VWAP tests)
   def flat_market_1m
-    ->(i, _prev_close) {
+    lambda { |_i, _prev_close|
       base = 25_000.0
       noise = (rand - 0.5) * 5
       close = base + noise
       {
         open: base,
         high: close + 3,
-        low:  close - 3,
+        low: close - 3,
         close: close,
         volume: 80_000
       }

@@ -5,7 +5,7 @@ module Options
   # Uses existing DerivativeChainAnalyzer and applies index-specific rules
   # Returns normalized instrument hash for EntryManager/Orders::Placer
   # Enhanced with ATM/1OTM/2OTM selection based on trend strength
-  # rubocop:disable Metrics/ClassLength
+  # rubocop:disable-next Metrics/ClassLength
   class StrikeSelector
     class SelectionError < StandardError; end
 
@@ -42,7 +42,7 @@ module Options
     # @param trend_score [Float, nil] Trend score from TrendScorer (0-21)
     # @param config [Hash] Additional config for DerivativeChainAnalyzer
     # @return [Hash, nil] Normalized instrument hash or nil if no valid strike
-    # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+    # rubocop:disable-next Metrics/AbcSize, Metrics/MethodLength
     def select(index_key:, direction:, expiry: nil, trend_score: nil, config: {})
       index_key = normalize_index(index_key)
       rules = load_rules_for(index_key)
@@ -107,7 +107,6 @@ module Options
       Rails.logger.debug { e.backtrace.first(5).join("\n") }
       nil
     end
-    # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
     # Select selling strikes for credit spreads (Bull Put or Bear Call)
     # @param index_key [String, Symbol]
@@ -115,7 +114,7 @@ module Options
     # @param expiry [String, Date, nil]
     # @param spread_width [Integer, nil]
     # @return [Hash, nil] { short_leg:, long_leg:, spread_width: }
-    # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+    # rubocop:disable-next Metrics/AbcSize, Metrics/MethodLength
     def select_selling_strikes(index_key:, strategy_type:, expiry: nil, spread_width: nil)
       index_key = normalize_index(index_key)
       rules = load_rules_for(index_key)
@@ -148,7 +147,6 @@ module Options
       Rails.logger.error("[Options::StrikeSelector] select_selling_strikes failed: #{e.class} - #{e.message}")
       nil
     end
-    # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
     private
 
@@ -248,7 +246,7 @@ module Options
     # Get spot price for index
     # @param index_key [String] Index key
     # @return [Float, nil] Spot price
-    # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+    # rubocop:disable-next Metrics/AbcSize, Metrics/MethodLength
     def get_spot_price(index_key)
       index_cfg = IndexConfigLoader.load_indices.find { |idx| idx[:key].to_s.upcase == index_key.to_s.upcase }
       return nil unless index_cfg
@@ -274,7 +272,6 @@ module Options
 
       nil
     end
-    # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
     def candidate_valid?(candidate, rules, premium_filter)
       # Validate liquidity
@@ -306,7 +303,7 @@ module Options
       candidate[:ltp]&.to_f || candidate[:last_price]&.to_f
     end
 
-    # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+    # rubocop:disable-next Metrics/AbcSize, Metrics/MethodLength
     def build_instrument_hash(candidate, index_key, ltp, rules, max_otm_depth)
       {
         index: index_key,
@@ -329,14 +326,13 @@ module Options
         max_otm_allowed: max_otm_depth
       }
     end
-    # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
     # Calculate OTM depth for selected strike (0=ATM, 1=1OTM, 2=2OTM)
     # @param candidate [Hash] Selected candidate
     # @param index_key [String] Index key
     # @param rules [IndexRules] Index rules instance
     # @return [Integer] OTM depth (0, 1, or 2)
-    # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength
+    # rubocop:disable-next Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength
     def calculate_otm_depth(candidate, index_key, rules)
       strike = candidate[:strike]&.to_f || candidate[:strike_price]&.to_f
       return 0 unless strike
@@ -358,7 +354,5 @@ module Options
         -1 # Deeper OTM (should not happen after filtering)
       end
     end
-    # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength
   end
-  # rubocop:enable Metrics/ClassLength
 end

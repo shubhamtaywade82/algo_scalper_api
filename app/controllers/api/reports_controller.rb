@@ -46,7 +46,7 @@ module Api
       scope = date_filtered_scope(PositionTracker.exited.includes(:watchable, :instrument))
               .order(exited_at: :desc)
 
-      scope = scope.where(side: params[:side].upcase) if params[:side].present?
+      scope = scope.where(side: params.expect(:side).upcase) if params[:side].present?
 
       page = [params[:page].to_i, 1].max
       per_page = [params[:per_page].to_i, 1].max

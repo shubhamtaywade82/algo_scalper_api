@@ -4,7 +4,7 @@ require 'redis'
 
 module Dev
   # Development-only full reset: Redis, PostgreSQL, seeds, recurring jobs, ledger, instruments.
-  # rubocop:disable Rails/Output
+  # rubocop:disable-next Rails/Output
   class FreshStart
     class Error < StandardError; end
 
@@ -175,5 +175,4 @@ module Dev
       puts "\nRestart ./bin/dev before trading."
     end
   end
-  # rubocop:enable Rails/Output
 end

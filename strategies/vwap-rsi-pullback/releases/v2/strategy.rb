@@ -29,13 +29,13 @@ class VwapRsiPullbackStrategy < BaseStrategy
 
   def self.params_schema
     {
-      rsi_period:            { type: :integer, default: 14 },
-      rsi_pullback_zone_low:  { type: :float,   default: 40.0 },
-      rsi_pullback_zone_high: { type: :float,   default: 60.0 },
-      vwap_band_pct:         { type: :float,   default: 0.1 },
-      min_slope_per_bar:     { type: :float,   default: 0.002 },
-      dead_zone_start_hour:  { type: :integer, default: 11 },
-      dead_zone_end_hour:    { type: :integer, default: 13 }
+      rsi_period: { type: :integer, default: 14 },
+      rsi_pullback_zone_low: { type: :float, default: 40.0 },
+      rsi_pullback_zone_high: { type: :float, default: 60.0 },
+      vwap_band_pct: { type: :float, default: 0.1 },
+      min_slope_per_bar: { type: :float, default: 0.002 },
+      dead_zone_start_hour: { type: :integer, default: 11 },
+      dead_zone_end_hour: { type: :integer, default: 13 }
     }
   end
 
@@ -93,7 +93,7 @@ class VwapRsiPullbackStrategy < BaseStrategy
 
     zone_low  = (params[:rsi_pullback_zone_low] || 40.0).to_f
     zone_high = (params[:rsi_pullback_zone_high] || 60.0).to_f
-    rsi_in_zone = rsi_val >= zone_low && rsi_val <= zone_high
+    rsi_in_zone = rsi_val.between?(zone_low, zone_high)
 
     band_pct = (params[:vwap_band_pct] || 0.1).to_f
     near_vwap = distance_pct.abs <= band_pct
@@ -103,7 +103,7 @@ class VwapRsiPullbackStrategy < BaseStrategy
       # Confirming candle: last candle closed higher than previous (bullish rejection)
       confirming = candles.size >= 2 && candles.last.close > candles[-2].close
       confidence = confirming ? 0.70 : 0.60
-      confidence += 0.05 if slope > min_slope * 2  # strong slope bonus
+      confidence += 0.05 if slope > min_slope * 2 # strong slope bonus
 
       return Signals::BuyCall.new(
         confidence: confidence.clamp(0.5, 0.90).round(2),
@@ -116,7 +116,7 @@ class VwapRsiPullbackStrategy < BaseStrategy
       # Confirming candle: last candle closed lower than previous (bearish rejection)
       confirming = candles.size >= 2 && candles.last.close < candles[-2].close
       confidence = confirming ? 0.70 : 0.60
-      confidence += 0.05 if slope < -min_slope * 2  # strong slope bonus
+      confidence += 0.05 if slope < -min_slope * 2 # strong slope bonus
 
       return Signals::BuyPut.new(
         confidence: confidence.clamp(0.5, 0.90).round(2),

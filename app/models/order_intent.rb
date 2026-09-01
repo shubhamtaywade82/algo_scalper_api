@@ -58,7 +58,7 @@ class OrderIntent < ApplicationRecord
     end
 
     event :aasm_approve_risk do
-      transitions from: [:created, :risk_pending], to: :risk_approved
+      transitions from: %i[created risk_pending], to: :risk_approved
       after do
         update_column(:risk_approved, true)
         sync_status!
@@ -71,7 +71,7 @@ class OrderIntent < ApplicationRecord
     end
 
     event :aasm_approve_margin do
-      transitions from: [:risk_approved, :margin_pending], to: :approved
+      transitions from: %i[risk_approved margin_pending], to: :approved
       after do
         update_column(:margin_approved, true)
         sync_status!
@@ -94,22 +94,22 @@ class OrderIntent < ApplicationRecord
     end
 
     event :aasm_fill do
-      transitions from: [:submitted, :acknowledged, :partially_filled], to: :filled
+      transitions from: %i[submitted acknowledged partially_filled], to: :filled
       after { sync_status! }
     end
 
     event :partial_fill do
-      transitions from: [:submitted, :acknowledged], to: :partially_filled
+      transitions from: %i[submitted acknowledged], to: :partially_filled
       after { sync_status! }
     end
 
     event :request_cancel do
-      transitions from: [:submitted, :acknowledged, :partially_filled], to: :cancel_pending
+      transitions from: %i[submitted acknowledged partially_filled], to: :cancel_pending
       after { sync_status! }
     end
 
     event :aasm_cancel do
-      transitions from: [:submitted, :acknowledged, :partially_filled, :cancel_pending], to: :cancelled
+      transitions from: %i[submitted acknowledged partially_filled cancel_pending], to: :cancelled
       after { sync_status! }
     end
 
@@ -119,7 +119,7 @@ class OrderIntent < ApplicationRecord
     end
 
     event :expire do
-      transitions from: [:submitted, :acknowledged], to: :expired
+      transitions from: %i[submitted acknowledged], to: :expired
       after { sync_status! }
     end
 

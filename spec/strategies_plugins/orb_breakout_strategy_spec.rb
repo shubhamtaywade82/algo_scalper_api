@@ -7,7 +7,7 @@ load Rails.root.join('strategies/orb-breakout/strategy.rb').to_s
 RSpec.describe OrbBreakoutStrategy do
   include PluginTestHelper
 
-  let(:default_params) {
+  let(:default_params) do
     {
       orb_period_minutes: 30,
       min_range_points: 40.0,
@@ -16,7 +16,7 @@ RSpec.describe OrbBreakoutStrategy do
       max_trades_per_day: 2,
       force_exit_time: '14:30'
     }
-  }
+  end
   let(:strategy) { described_class.new(params: default_params) }
   let(:base_date) { Date.parse('2026-07-06') } # A Monday
 
@@ -30,6 +30,7 @@ RSpec.describe OrbBreakoutStrategy do
       expect(schema[:max_trades_per_day][:default]).to eq(2)
     end
   end
+
   describe 'timeframes and instruments' do
     it 'uses 1m timeframe' do
       expect(described_class.timeframes).to eq(%w[1m])
@@ -62,14 +63,14 @@ RSpec.describe OrbBreakoutStrategy do
         # - Candle 35 breaks above range high with volume
         build_series(
           base_date: base_date, count: 45, interval: 1,
-          &->(i, prev_close) {
+          &lambda { |i, prev_close|
             if i < 30
               # ORB formation: oscillate in 24950-25050 range
-              close = 25_000.0 + (rand - 0.5) * 100
+              close = 25_000.0 + ((rand - 0.5) * 100)
               {
                 open: prev_close,
                 high: [close, prev_close].max + 10,
-                low:  [close, prev_close].min - 10,
+                low: [close, prev_close].min - 10,
                 close: close,
                 volume: 100_000
               }
@@ -79,14 +80,14 @@ RSpec.describe OrbBreakoutStrategy do
                 open: 25_050.0,
                 high: 25_200.0,
                 low: 25_030.0,
-                close: 25_180.0,  # close above range high
-                volume: 300_000  # 3x avg volume
+                close: 25_180.0, # close above range high
+                volume: 300_000 # 3x avg volume
               }
             else
               {
                 open: prev_close,
                 high: prev_close + 10,
-                low:  prev_close - 10,
+                low: prev_close - 10,
                 close: prev_close + 2,
                 volume: 100_000
               }
@@ -116,9 +117,9 @@ RSpec.describe OrbBreakoutStrategy do
         # Only 20pt range
         build_series(
           base_date: base_date, count: 40, interval: 1,
-          &->(i, prev_close) {
+          &lambda { |i, prev_close|
             if i < 30
-              close = 25_000.0 + (rand - 0.5) * 20  # tiny range
+              close = 25_000.0 + ((rand - 0.5) * 20) # tiny range
               { open: prev_close, high: close + 5, low: close - 5, close: close, volume: 100_000 }
             else
               { open: prev_close, high: 25_030, low: 24_990, close: 25_020, volume: 200_000 }
@@ -140,8 +141,8 @@ RSpec.describe OrbBreakoutStrategy do
       let(:series) do
         build_series(
           base_date: base_date, count: 120, interval: 1,
-          &->(i, prev_close) {
-            close = 25_000.0 + i * 0.3
+          &lambda { |i, prev_close|
+            close = 25_000.0 + (i * 0.3)
             { open: prev_close, high: close + 10, low: close - 10, close: close, volume: 100_000 }
           }
         )
@@ -163,8 +164,8 @@ RSpec.describe OrbBreakoutStrategy do
       let(:series) do
         build_series(
           base_date: base_date, count: 330, interval: 1,
-          &->(i, prev_close) {
-            close = 25_000.0 + i * 0.1
+          &lambda { |i, prev_close|
+            close = 25_000.0 + (i * 0.1)
             { open: prev_close, high: close + 5, low: close - 5, close: close, volume: 100_000 }
           }
         )
@@ -184,9 +185,9 @@ RSpec.describe OrbBreakoutStrategy do
       let(:series) do
         build_series(
           base_date: base_date, count: 45, interval: 1,
-          &->(i, prev_close) {
+          &lambda { |i, prev_close|
             if i < 30
-              close = 25_000.0 + (rand - 0.5) * 100
+              close = 25_000.0 + ((rand - 0.5) * 100)
               { open: prev_close, high: close + 10, low: close - 10, close: close, volume: 100_000 }
             elsif i == 35
               # Breakout but LOW volume
@@ -195,7 +196,7 @@ RSpec.describe OrbBreakoutStrategy do
                 high: 25_200.0,
                 low: 25_030.0,
                 close: 25_180.0,
-                volume: 50_000  # below 1.5x average
+                volume: 50_000 # below 1.5x average
               }
             else
               { open: prev_close, high: prev_close + 10, low: prev_close - 10, close: prev_close + 2, volume: 100_000 }
@@ -217,8 +218,8 @@ RSpec.describe OrbBreakoutStrategy do
       let(:series) do
         build_series(
           base_date: base_date, count: 40, interval: 1,
-          &->(i, prev_close) {
-            close = 25_000.0 + (rand - 0.5) * 80  # stays within range
+          &lambda { |_i, prev_close|
+            close = 25_000.0 + ((rand - 0.5) * 80) # stays within range
             { open: prev_close, high: close + 10, low: close - 10, close: close, volume: 100_000 }
           }
         )

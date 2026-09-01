@@ -64,7 +64,7 @@ RSpec.describe 'Api::Settings' do
       patch '/api/settings/bulk', params: { settings: { bogus_key: { a: 1 } } }
       expect(response).to have_http_status(:unprocessable_content)
       json = response.parsed_body
-      expect(json['error']).to match(/No permitted/)
+      expect(json['error']).to include('No permitted')
     end
   end
 

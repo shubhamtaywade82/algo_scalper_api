@@ -78,7 +78,7 @@ module Positions
                  deriv&.expiry_date
                end
       expiry_date_obj = expiry.present? && expiry.respond_to?(:to_date) ? expiry.to_date : nil
-      expiry_str = (expiry_date_obj && expiry_date_obj.year > 2000) ? expiry_date_obj.to_s : nil
+      expiry_str = expiry_date_obj && expiry_date_obj.year > 2000 ? expiry_date_obj.to_s : nil
 
       dte = (tracker.respond_to?(:dte_at_entry) ? tracker.dte_at_entry : nil) || meta['dte_at_entry']
       if dte.nil? && expiry_date_obj && tracker.created_at && expiry_date_obj.year > 2000
@@ -91,7 +91,7 @@ module Positions
         atm_strike = match[1].to_f if match
       end
 
-      iv_val  = (tracker.respond_to?(:iv_at_entry) ? tracker.iv_at_entry : nil) || meta['iv_at_entry'] || meta['iv']
+      iv_val = (tracker.respond_to?(:iv_at_entry) ? tracker.iv_at_entry : nil) || meta['iv_at_entry'] || meta['iv']
       iv_val ||= 16.5
 
       vix_val = (tracker.respond_to?(:vix_at_entry) ? tracker.vix_at_entry : nil) || meta['vix_at_entry'] || meta['vix']

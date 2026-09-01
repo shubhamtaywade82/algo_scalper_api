@@ -28,12 +28,12 @@ class OrbBreakoutStrategy < BaseStrategy
 
   def self.params_schema
     {
-      orb_period_minutes:  { type: :integer, default: 30 },
-      min_range_points:    { type: :float,   default: 40.0 },
-      max_open_gap_pct:    { type: :float,   default: 0.8 },
-      volume_multiplier:   { type: :float,   default: 1.5 },
-      max_trades_per_day:  { type: :integer, default: 2 },
-      force_exit_time:     { type: :string,  default: '14:30' }
+      orb_period_minutes: { type: :integer, default: 30 },
+      min_range_points: { type: :float,   default: 40.0 },
+      max_open_gap_pct: { type: :float,   default: 0.8 },
+      volume_multiplier: { type: :float, default: 1.5 },
+      max_trades_per_day: { type: :integer, default: 2 },
+      force_exit_time: { type: :string, default: '14:30' }
     }
   end
 
@@ -65,10 +65,10 @@ class OrbBreakoutStrategy < BaseStrategy
       return Signals::Hold.new(reason: 'midday_dead_zone')
     end
 
-    orb_candles = candles.select { |c|
+    orb_candles = candles.select do |c|
       t = c.timestamp.in_time_zone('Asia/Kolkata')
       t >= market_open && t < orb_end
-    }
+    end
     return Signals::Hold.new(reason: 'no_orb_candles') if orb_candles.size < 2
 
     range_high = orb_candles.map(&:high).max
@@ -96,7 +96,6 @@ class OrbBreakoutStrategy < BaseStrategy
     volume_ok   = candles.last.volume >= avg_volume * vol_mult
 
     close = candles.last.close
-    range_mid = (range_high + range_low) / 2.0
 
     # CE breakout: candle CLOSE above range high, with volume confirmation
     if close > range_high && volume_ok

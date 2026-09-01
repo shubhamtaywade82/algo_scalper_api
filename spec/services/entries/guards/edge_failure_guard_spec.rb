@@ -23,7 +23,7 @@ RSpec.describe Entries::Guards::EdgeFailureGuard do
     end
 
     context 'when edge failure detector is paused' do
-      let(:resume_time) { Time.current + 1.hour }
+      let(:resume_time) { 1.hour.from_now }
 
       before do
         allow(edge_failure_detector).to receive(:entries_paused?).with(index_key: 'NIFTY').and_return({

@@ -28,12 +28,12 @@ class EmaCrossoverStrategy < BaseStrategy
 
   def self.params_schema
     {
-      fast_ema_period:   { type: :integer, default: 9 },
-      slow_ema_period:   { type: :integer, default: 26 },
-      min_separation_pct: { type: :float,  default: 0.02 },
-      adx_threshold:     { type: :float,  default: 20.0 },
+      fast_ema_period: { type: :integer, default: 9 },
+      slow_ema_period: { type: :integer, default: 26 },
+      min_separation_pct: { type: :float, default: 0.02 },
+      adx_threshold: { type: :float, default: 20.0 },
       dead_zone_start_hour: { type: :integer, default: 11 },
-      dead_zone_end_hour:   { type: :integer, default: 13 }
+      dead_zone_end_hour: { type: :integer, default: 13 }
     }
   end
 
@@ -72,14 +72,16 @@ class EmaCrossoverStrategy < BaseStrategy
     slow_arr = Array(slow_ema)
     return Signals::Hold.new(reason: 'ema_arrays_too_short') if fast_arr.size < 2 || slow_arr.size < 2
 
-    prev_fast, curr_fast = fast_arr[-2], fast_arr[-1]
-    prev_slow, curr_slow = slow_arr[-2], slow_arr[-1]
+    prev_fast = fast_arr[-2]
+    curr_fast = fast_arr[-1]
+    prev_slow = slow_arr[-2]
+    curr_slow = slow_arr[-1]
 
     # Guard against nil EMA values (gem may pad leading values with nil)
     return Signals::Hold.new(reason: 'ema_values_nil') if [prev_fast, curr_fast, prev_slow, curr_slow].any?(&:nil?)
 
     # Detect crossover on the CURRENT bar (just happened)
-    bullish_crossover  = prev_fast <= prev_slow && curr_fast > curr_slow
+    bullish_crossover = prev_fast <= prev_slow && curr_fast > curr_slow
     bearish_crossover = prev_fast >= prev_slow && curr_fast < curr_slow
 
     unless bullish_crossover || bearish_crossover

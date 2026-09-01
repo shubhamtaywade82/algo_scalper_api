@@ -1,6 +1,8 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
-RSpec.describe DataQualityDailyMetric, type: :model do
+RSpec.describe DataQualityDailyMetric do
   it 'requires a trading_date' do
     expect(build(:data_quality_daily_metric, trading_date: nil)).not_to be_valid
   end

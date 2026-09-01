@@ -28,7 +28,7 @@ module Api
       end
 
       def show
-        lifecycle = ::Research::PremiumLifecycle.find(params[:id])
+        lifecycle = ::Research::PremiumLifecycle.find(params.expect(:id))
         render json: { lifecycle: serialize_lifecycle(lifecycle), bars: serialize_bars(lifecycle) }
       rescue ActiveRecord::RecordNotFound
         render json: { error: "not_found" }, status: :not_found
