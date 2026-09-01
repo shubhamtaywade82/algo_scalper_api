@@ -30,7 +30,7 @@ module Live
 
       if Live::OrderUpdateHandler::CANCELLED_STATUSES.include?(status)
         reconcile_incorrectly_active!(tracker, status)
-      elsif !Live::OrderUpdateHandler::FILL_STATUSES.include?(status)
+      elsif Live::OrderUpdateHandler::FILL_STATUSES.exclude?(status)
         cancel_stuck_order!(tracker, status)
       end
     rescue StandardError => e

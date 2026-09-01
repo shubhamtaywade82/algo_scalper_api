@@ -53,7 +53,7 @@ RSpec.describe 'Api::BacktestRuns' do
     it 'returns 422 for an unknown strategy_slug' do
       post '/api/backtest_runs', params: { symbol: 'NIFTY', strategy_slug: 'does-not-exist' }
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(response.parsed_body['error']).to eq('strategy_not_found')
       expect(BacktestRun.count).to eq(0)
     end
@@ -102,7 +102,7 @@ RSpec.describe 'Api::BacktestRuns' do
 
       get "/api/backtest_runs/#{run.id}/download_csv"
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
   end
 

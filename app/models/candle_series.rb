@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/ClassLength
+# rubocop:disable-next Metrics/ClassLength
 class CandleSeries
   include Enumerable
 
@@ -392,4 +392,3 @@ class CandleSeries
     nil
   end
 end
-# rubocop:enable Metrics/ClassLength

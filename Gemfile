@@ -55,8 +55,8 @@ gem 'DhanHQ', '~> 3.4'
 gem 'telegram-bot-ruby', '~> 2.8'
 
 gem 'aasm', '~> 5.5'
-gem 'prometheus_exporter', '~> 2.3'
 gem 'ollama-client', '~> 1.4'
+gem 'prometheus_exporter', '~> 2.3'
 gem 'ruby_llm', '~> 1.16'
 gem 'ruby_llm-agents', '~> 3.15'
 

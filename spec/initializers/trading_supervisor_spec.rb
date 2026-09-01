@@ -2,7 +2,7 @@
 
 require 'rails_helper'
 
-# rubocop:disable RSpec/SpecFilePathFormat, RSpec/MultipleExpectations, RSpec/MessageChain
+# rubocop:disable-next RSpec/SpecFilePathFormat, RSpec/MultipleExpectations, RSpec/MessageChain
 RSpec.describe TradingSystem::Daemon do
   let(:supervisor) { TradingSystem::Supervisor.new }
   let(:market_feed) { instance_double(Live::MarketFeedHubService, start: true, stop: true, subscribe_many: true) }
@@ -78,4 +78,3 @@ allow(TradingSystem::Bootstrap).to receive(:boot_reconciliation!).and_return(tru
     end
   end
 end
-# rubocop:enable RSpec/SpecFilePathFormat, RSpec/MultipleExpectations, RSpec/MessageChain

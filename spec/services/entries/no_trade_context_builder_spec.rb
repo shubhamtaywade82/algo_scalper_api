@@ -198,7 +198,7 @@ RSpec.describe Entries::NoTradeContextBuilder do
         expect(ctx.adx_5m).to eq(18.0)
         expect(ctx.plus_di_5m).to eq(0)
         expect(ctx.minus_di_5m).to eq(0)
-        expect(Rails.logger).to have_received(:warn).with(match(/ADX calculation failed/)).at_least(:once)
+        expect(Rails.logger).to have_received(:warn).with(include('ADX calculation failed')).at_least(:once)
       end
     end
 

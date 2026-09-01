@@ -7,7 +7,7 @@ module Signal
   # - IND_score (0-7): Technical indicators (RSI, MACD, ADX, Supertrend)
   # - MTF_score (0-7): Multi-timeframe alignment
   # Note: VOL_score removed - volume is always 0 for indices/underlying spots
-  # rubocop:disable Metrics/ClassLength
+  # rubocop:disable-next Metrics/ClassLength
   class TrendScorer
     attr_reader :instrument, :primary_tf, :confirmation_tf
 
@@ -377,5 +377,4 @@ module Signal
       Array(values).any? { |val| !val.is_a?(Numeric) }
     end
   end
-  # rubocop:enable Metrics/ClassLength
 end

@@ -3,7 +3,7 @@
 require 'rails_helper'
 require 'rake'
 
-# rubocop:disable RSpec/DescribeClass, RSpec/BeforeAfterAll
+# rubocop:disable-next RSpec/DescribeClass, RSpec/BeforeAfterAll
 RSpec.describe 'analysis:accuracy rake task' do
   before(:all) do
     Rails.application.load_tasks
@@ -287,4 +287,3 @@ RSpec.describe 'analysis:accuracy rake task' do
     end
   end
 end
-# rubocop:enable RSpec/DescribeClass, RSpec/BeforeAfterAll

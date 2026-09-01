@@ -2,7 +2,7 @@
 
 require 'rails_helper'
 
-RSpec.describe AuditLog, type: :model do
+RSpec.describe AuditLog do
   it 'requires event_type' do
     log = described_class.new(metadata: {})
 

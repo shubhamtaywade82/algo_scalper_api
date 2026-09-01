@@ -184,7 +184,7 @@ RSpec.describe Signal::Engine, :vcr do
                                       signals_cfg: signals_cfg)
 
         expect(result[:status]).to eq(:error)
-        expect(result[:message]).to match(/Invalid timeframe/)
+        expect(result[:message]).to include('Invalid timeframe')
       end
     end
 
@@ -201,7 +201,7 @@ RSpec.describe Signal::Engine, :vcr do
                                       signals_cfg: signals_cfg)
 
         expect(result[:status]).to eq(:no_data)
-        expect(result[:message]).to match(/No candle data/)
+        expect(result[:message]).to include('No candle data')
       end
     end
 
@@ -244,7 +244,7 @@ RSpec.describe Signal::Engine, :vcr do
       end
 
       it 'handles error gracefully' do
-        expect(Rails.logger).to receive(:error).with(match(/Multi-indicator analysis failed/))
+        expect(Rails.logger).to receive(:error).with(include('Multi-indicator analysis failed'))
 
         result = described_class.send(:analyze_with_multi_indicators,
                                       index_cfg: index_cfg,

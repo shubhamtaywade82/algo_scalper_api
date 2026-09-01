@@ -38,7 +38,7 @@ RSpec.describe 'Api::Strategies' do
 
     it 'scaffolds a new strategy' do
       post '/api/strategies', params: { slug: 'my_new_strategy', name: 'My New Strategy', template: 'basic' }
-      
+
       expect(response).to have_http_status(:created)
       body = response.parsed_body
       expect(body['slug']).to eq('my_new_strategy')

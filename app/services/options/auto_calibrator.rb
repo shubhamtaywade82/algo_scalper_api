@@ -174,7 +174,7 @@ module Options
       }
     end
 
-    # rubocop:disable Rails/Pluck -- candles is Array<Hash>, not ActiveRecord
+    # rubocop:disable-next Rails/Pluck -- candles is Array<Hash>, not ActiveRecord
     def cycle_stats(candles)
       entry   = candles.first[:open].to_f
       max_h   = candles.map { |c| c[:high] }.max.to_f
@@ -191,7 +191,6 @@ module Options
         post_peak_retrace: pct(pullback_l, max_h).round(2)
       }
     end
-    # rubocop:enable Rails/Pluck
 
     def session_breakdown(candles)
       SESSIONS.transform_values do |range|
@@ -228,7 +227,7 @@ module Options
     end
 
     def historical_weekly_expiry_dates
-      Options::ExpiryCalendar.windows(symbol: @symbol, weeks: @weeks).map { |w| w[:expiry] }
+      Options::ExpiryCalendar.windows(symbol: @symbol, weeks: @weeks).pluck(:expiry)
     end
   end
 end

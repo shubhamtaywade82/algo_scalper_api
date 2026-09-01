@@ -20,8 +20,8 @@ RSpec.describe Options::StrikeSelector do
 
     # Mock IndexConfigLoader for spot price lookup
     allow(IndexConfigLoader).to receive(:load_indices).and_return([
-      { key: 'NIFTY', segment: 'NSE_INDEX', sid: '26000' }
-    ])
+                                                                    { key: 'NIFTY', segment: 'NSE_INDEX', sid: '26000' }
+                                                                  ])
     allow(AlgoConfig).to receive(:fetch).and_return(
       indices: [
         { key: 'NIFTY', segment: 'NSE_INDEX', sid: '26000' }

@@ -4,7 +4,7 @@ module Orders
   # BracketPlacer for NEMESIS V3 architecture
   # Places and manages SL/TP bracket orders for positions
   # Supports initial bracket placement and dynamic adjustments
-  # rubocop:disable Metrics/ClassLength
+  # rubocop:disable-next Metrics/ClassLength
   class BracketPlacer
     class << self
       def place_bracket(...)
@@ -43,7 +43,7 @@ module Orders
     # @param tp_price [Float, nil] Take profit price (nil = calculate from entry: entry * 1.60)
     # @param reason [String] Reason for bracket placement
     # @return [Hash] Result hash with :success, :sl_price, :tp_price, :error
-    # rubocop:disable Metrics/AbcSize
+    # rubocop:disable-next Metrics/AbcSize
     def place_bracket(tracker:, sl_price: nil, tp_price: nil, reason: nil)
       return failure_result('Tracker not found') unless tracker
       return failure_result('Tracker not active') unless tracker.active?
@@ -85,7 +85,6 @@ module Orders
       Rails.logger.debug { e.backtrace.first(5).join("\n") }
       failure_result(e.message)
     end
-    # rubocop:enable Metrics/AbcSize
 
     # Update bracket orders (modify SL/TP)
     # Since DhanHQ doesn't support modifying bracket orders, this updates ActiveCache
@@ -95,7 +94,7 @@ module Orders
     # @param tp_price [Float, nil] New take profit price (nil to keep existing)
     # @param reason [String] Reason for modification
     # @return [Hash] Result hash with :success, :sl_price, :tp_price, :error
-    # rubocop:disable Metrics/AbcSize
+    # rubocop:disable-next Metrics/AbcSize
     def update_bracket(tracker:, sl_price: nil, tp_price: nil, reason: nil)
       return failure_result('Tracker not found') unless tracker
       return failure_result('Tracker not active') unless tracker.active?
@@ -139,7 +138,6 @@ module Orders
       Rails.logger.debug { e.backtrace.first(5).join("\n") }
       failure_result(e.message)
     end
-    # rubocop:enable Metrics/AbcSize
 
     # Move SL to breakeven (entry price)
     # @param tracker [PositionTracker] PositionTracker instance
@@ -251,5 +249,4 @@ module Orders
       }
     end
   end
-  # rubocop:enable Metrics/ClassLength
 end

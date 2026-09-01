@@ -2,7 +2,7 @@
 
 require 'rails_helper'
 
-# rubocop:disable RSpec/DescribeClass -- cross-cutting HTTP auth behavior (no single class)
+# rubocop:disable-next RSpec/DescribeClass -- cross-cutting HTTP auth behavior (no single class)
 RSpec.describe 'API token authentication' do
   describe 'dashboard tier (API_DASHBOARD_TOKEN)' do
     around do |example|
@@ -78,4 +78,3 @@ RSpec.describe 'API token authentication' do
     end
   end
 end
-# rubocop:enable RSpec/DescribeClass

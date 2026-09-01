@@ -94,7 +94,7 @@ RSpec.describe Indicators::IndicatorFactory do
           type: 'unknown_indicator',
           config: {}
         }
-        expect(Rails.logger).to receive(:warn).with(match(/Unknown indicator type/))
+        expect(Rails.logger).to receive(:warn).with(include('Unknown indicator type'))
         indicator = described_class.build_indicator(series: series, config: config)
         expect(indicator).to be_nil
       end
@@ -107,7 +107,7 @@ RSpec.describe Indicators::IndicatorFactory do
           config: { period: 7, multiplier: 3.0 }
         }
         allow(Indicators::SupertrendIndicator).to receive(:new).and_raise(StandardError, 'Test error')
-        expect(Rails.logger).to receive(:error).with(match(/Error building indicator/))
+        expect(Rails.logger).to receive(:error).with(include('Error building indicator'))
         indicator = described_class.build_indicator(series: series, config: config)
         expect(indicator).to be_nil
       end

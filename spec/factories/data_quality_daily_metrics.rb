@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 FactoryBot.define do
   factory :data_quality_daily_metric do
     sequence(:trading_date) { |n| Date.current - n.days }

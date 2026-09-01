@@ -116,7 +116,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
           ltp: 70.0
         }
         allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).with(position_tracker.id).and_return(pnl_data)
-        
+
         # When exit_engine is provided, it calls exit_engine.execute_exit, not risk_manager.execute_exit
         expect(mock_exit_engine).to receive(:execute_exit).with(
           position_tracker,

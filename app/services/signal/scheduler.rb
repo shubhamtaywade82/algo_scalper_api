@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Signal
-  # rubocop:disable Metrics/ClassLength
+  # rubocop:disable-next Metrics/ClassLength
   class Scheduler
     DEFAULT_PERIOD = 30 # seconds
     INTER_INDEX_DELAY = 5 # seconds between processing indices
@@ -416,12 +416,11 @@ module Signal
 
       # Log the ordering for debugging
       if sorted.size > 1
-        # rubocop:disable Style/MultilineBlockChain
+        # rubocop:disable-next Style/MultilineBlockChain
         order_str = sorted.map do |item|
           expiry_info = item[:expiry_date] ? "#{item[:expiry_date].strftime('%Y-%m-%d')} (#{item[:days_to_expiry]}d)" : 'N/A'
           "#{item[:index_cfg][:key]}: #{expiry_info}"
         end.join(' → ')
-        # rubocop:enable Style/MultilineBlockChain
         Rails.logger.debug { "[SignalScheduler] Processing order (by expiry proximity): #{order_str}" }
       end
 
@@ -447,5 +446,4 @@ module Signal
       7 # Default to 7 days if config unavailable
     end
   end
-  # rubocop:enable Metrics/ClassLength
 end

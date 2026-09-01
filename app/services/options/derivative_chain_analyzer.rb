@@ -5,7 +5,7 @@
 module Options
   # Enhanced ChainAnalyzer that uses Derivative records and integrates with existing infrastructure
   # This replaces the need for raw option chain APIs by leveraging existing Derivative models
-  # rubocop:disable Metrics/ClassLength
+  # rubocop:disable-next Metrics/ClassLength
   class DerivativeChainAnalyzer
     def initialize(index_key:, expiry: nil, config: {})
       @index_key = index_key.to_s.upcase
@@ -404,7 +404,7 @@ module Options
     end
 
     # Build option data hash from Derivative, API data, and tick
-    # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+    # rubocop:disable-next Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
     def build_option_data(derivative, api_data, tick)
       # Use exchange_segment (NSE_FNO) not segment (derivatives) for API calls
       exchange_seg = derivative.exchange_segment || 'NSE_FNO'
@@ -443,7 +443,6 @@ module Options
         vega: api_data&.dig('greeks', 'vega')&.to_f
       }
     end
-    # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
     # Find ATM strike from chain
     def find_atm_strike(chain, spot)
@@ -454,7 +453,7 @@ module Options
     end
 
     # Score chain options based on multiple factors
-    # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+    # rubocop:disable-next Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
     def score_chain(chain, atm, spot, direction, flow_results: nil, gamma_score: 0.0)
       @direction = direction # Store for use in reason_for
       option_type_key = direction == :bullish ? 'CE' : 'PE'
@@ -545,7 +544,6 @@ module Options
       Rails.logger.debug { "[Options::DerivativeChainAnalyzer] Scoring: #{candidates_with_ltp} with LTP, #{candidates_filtered} filtered, #{result.size} scored for #{@index_key}" }
       result
     end
-    # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
     # Calculate bid-ask spread percentage
     def calc_spread(bid, ask, _ltp)
@@ -666,5 +664,4 @@ module Options
       oc
     end
   end
-  # rubocop:enable Metrics/ClassLength
 end

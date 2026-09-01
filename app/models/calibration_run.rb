@@ -21,8 +21,8 @@
 class CalibrationRun < ApplicationRecord
   validates :symbol, presence: true
 
-  scope :pending,  -> { where(applied_at: nil) }
-  scope :applied,  -> { where.not(applied_at: nil) }
+  scope :pending, -> { where(applied_at: nil) }
+  scope :applied, -> { where.not(applied_at: nil) }
 
   # Deep-merges proposed_patch into +settings.algo_config_document+ via
   # +AlgoConfig::DocumentStore+ (Solid Cache bust via +Setting.put+, in-process cache via +AlgoConfig.reset!+).

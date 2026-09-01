@@ -76,7 +76,7 @@ module Api
     private
 
     def set_trading_strategy
-      @trading_strategy = TradingStrategy.find(params[:id])
+      @trading_strategy = TradingStrategy.find(params.expect(:id))
     end
 
     def trading_strategy_params

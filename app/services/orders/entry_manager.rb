@@ -4,7 +4,7 @@ module Orders
   # EntryManager for NEMESIS V3 architecture
   # Orchestrates entry order placement, validation, and position tracking
   # Integrates with Capital::Allocator, EntryGuard, Orders::Placer, and ActiveCache
-  # rubocop:disable Metrics/ClassLength
+  # rubocop:disable-next Metrics/ClassLength
   class EntryManager
     def initialize(event_bus: Core::EventBus.instance, active_cache: Positions::ActiveCache.instance)
       @event_bus = event_bus
@@ -25,7 +25,7 @@ module Orders
     # @param scale_multiplier [Integer] Scale multiplier for position sizing
     # @param trend_score [Float, nil] Trend score from TrendScorer (0-21)
     # @return [Hash] Result hash with :success, :tracker, :order_no, :error
-    # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+    # rubocop:disable-next Metrics/AbcSize, Metrics/MethodLength
     def process_entry(signal_result:, index_cfg:, direction:, scale_multiplier: 1, trend_score: nil)
       @stats[:entries_attempted] += 1
 
@@ -134,7 +134,6 @@ module Orders
       Rails.logger.debug { e.backtrace.first(5).join("\n") }
       failure_result(e.message)
     end
-    # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
     # Get statistics
     # @return [Hash]
@@ -259,7 +258,7 @@ module Orders
     # @param sl_price [Float] Stop loss price
     # @param tp_price [Float] Take profit price
     # @param risk_pct [Float, nil] Dynamic risk percentage
-    # rubocop:disable Metrics/ParameterLists, Metrics/AbcSize, Metrics/MethodLength
+    # rubocop:disable-next Metrics/ParameterLists, Metrics/AbcSize, Metrics/MethodLength
     def emit_entry_filled_event(tracker, pick, index_cfg, direction, sl_price, tp_price,
                                 risk_pct = nil)
       event_data = {
@@ -283,7 +282,6 @@ module Orders
     rescue StandardError => e
       Rails.logger.error("[Orders::EntryManager] Failed to emit entry_filled event: #{e.class} - #{e.message}")
     end
-    # rubocop:enable Metrics/ParameterLists, Metrics/AbcSize, Metrics/MethodLength
 
     # Build success result hash
     # @param tracker [PositionTracker] PositionTracker instance
@@ -293,7 +291,7 @@ module Orders
     # @param bracket_result [Hash, nil] Bracket placement result
     # @param risk_pct [Float, nil] Dynamic risk percentage
     # @return [Hash]
-    # rubocop:disable Metrics/ParameterLists
+    # rubocop:disable-next Metrics/ParameterLists
     def success_result(tracker:, position_data:, sl_price:, tp_price:, bracket_result: nil, risk_pct: nil)
       {
         success: true,
@@ -307,7 +305,6 @@ module Orders
         risk_pct: risk_pct
       }
     end
-    # rubocop:enable Metrics/ParameterLists
 
     # Build failure result hash
     # @param error [String] Error message
@@ -359,5 +356,4 @@ module Orders
       false
     end
   end
-  # rubocop:enable Metrics/ClassLength
 end

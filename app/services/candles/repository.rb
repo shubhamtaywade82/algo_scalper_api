@@ -67,9 +67,9 @@ module Candles
           cached = Live::CandleSeriesCache.fetch(instrument: instrument, interval: 1, backfill: false)
           if cached&.candles
             rows = cached.candles.reject { |c| c.timestamp.nil? || c.timestamp < from || c.timestamp > to }
-                                 .map do |c|
-              { ts: c.timestamp, open: c.open.to_f, high: c.high.to_f,
-                low: c.low.to_f, close: c.close.to_f, volume: c.volume.to_i, oi: 0 }
+                         .map do |c|
+      { ts: c.timestamp, open: c.open.to_f, high: c.high.to_f,
+        low: c.low.to_f, close: c.close.to_f, volume: c.volume.to_i, oi: 0 }
             end
           end
         end

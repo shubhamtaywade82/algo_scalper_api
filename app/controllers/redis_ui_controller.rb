@@ -3,7 +3,7 @@
 # Redis UI Controller - Development only
 # Provides a simple web interface to browse and manage Redis keys
 # NOTE: Inherits from ActionController::Base (not API) to support HTML views
-# rubocop:disable Rails/ApplicationController, Metrics/ClassLength
+# rubocop:disable-next Rails/ApplicationController, Metrics/ClassLength
 class RedisUiController < ActionController::Base
   # Only allow in development
   before_action :ensure_development
@@ -148,4 +148,3 @@ class RedisUiController < ActionController::Base
     end
   end
 end
-# rubocop:enable Rails/ApplicationController, Metrics/ClassLength

@@ -4,7 +4,7 @@ module Live
   # DailyLimits service for NEMESIS V3
   # Enforces per-index and global daily loss limits and trade frequency limits
   # Uses Redis for persistent counters with auto-lock behavior
-  # rubocop:disable Metrics/ClassLength, Naming/PredicateMethod, Naming/AccessorMethodName
+  # rubocop:disable-next Metrics/ClassLength, Naming/PredicateMethod, Naming/AccessorMethodName
   class DailyLimits
     REDIS_KEY_PREFIX = 'daily_limits'
     TTL_SECONDS = 25.hours.to_i # Slightly longer than 24h to handle timezone edge cases
@@ -19,7 +19,7 @@ module Live
     # Check if trading is allowed for the given index
     # @param index_key [Symbol, String] Index key (e.g., :NIFTY, :BANKNIFTY)
     # @return [Hash] { allowed: true/false, reason: "..." }
-    # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+    # rubocop:disable-next Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
     def can_trade?(index_key:)
       return { allowed: false, reason: 'redis_unavailable' } unless @redis
 
@@ -119,13 +119,12 @@ module Live
       Rails.logger.error("[DailyLimits] can_trade? error: #{e.class} - #{e.message}")
       { allowed: false, reason: "error: #{e.message}" }
     end
-    # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
     # Record a loss for the given index
     # @param index_key [Symbol, String] Index key
     # @param amount [Float, BigDecimal] Loss amount in rupees (positive value)
     # @return [Boolean] True if recorded successfully
-    # rubocop:disable Metrics/AbcSize
+    # rubocop:disable-next Metrics/AbcSize
     def record_loss(index_key:, amount:)
       return false unless @redis && amount&.positive?
 
@@ -151,13 +150,12 @@ module Live
       Rails.logger.error("[DailyLimits] record_loss error: #{e.class} - #{e.message}")
       false
     end
-    # rubocop:enable Metrics/AbcSize
 
     # Record a profit for the given index
     # @param index_key [Symbol, String] Index key
     # @param amount [Float, BigDecimal] Profit amount in rupees (positive value)
     # @return [Boolean] True if recorded successfully
-    # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity
+    # rubocop:disable-next Metrics/AbcSize, Metrics/CyclomaticComplexity
     def record_profit(index_key:, amount:)
       return false unless @redis && amount&.positive?
 
@@ -195,7 +193,6 @@ module Live
       Rails.logger.error("[DailyLimits] record_profit error: #{e.class} - #{e.message}")
       false
     end
-    # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity
 
     # Record a trade for the given index
     # @param index_key [Symbol, String] Index key
@@ -413,7 +410,7 @@ module Live
     end
 
     # Get max trades per day for specific index from config
-    # rubocop:disable Metrics/CyclomaticComplexity
+    # rubocop:disable-next Metrics/CyclomaticComplexity
     def get_index_max_trades(index_key)
       index_key = normalize_index_key(index_key)
       indices = AlgoConfig.fetch[:indices] || []
@@ -424,7 +421,6 @@ module Live
       Rails.logger.error("[DailyLimits] Failed to get index max trades: #{e.class} - #{e.message}")
       nil
     end
-    # rubocop:enable Metrics/CyclomaticComplexity
 
     # Get global max trades per day from config
     def get_global_max_trades
@@ -465,5 +461,4 @@ module Live
       "#{REDIS_KEY_PREFIX}:profit:#{Time.zone.today}:global"
     end
   end
-  # rubocop:enable Metrics/ClassLength, Naming/PredicateMethod, Naming/AccessorMethodName
 end

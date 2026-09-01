@@ -63,7 +63,7 @@ RSpec.describe Entries::Guards::RegimeGuard do
 
       context 'and regime detection fails' do
         before do
-          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |i| instance_double(Candle) })
+          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |_i| instance_double(Candle) })
           allow(MarketRegimeDetector).to receive(:new).with(candle_series).and_return(market_regime_detector)
           allow(market_regime_detector).to receive(:detect).and_return(nil)
         end
@@ -76,7 +76,7 @@ RSpec.describe Entries::Guards::RegimeGuard do
 
       context 'and detected regime is not in block list' do
         before do
-          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |i| instance_double(Candle) })
+          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |_i| instance_double(Candle) })
           allow(MarketRegimeDetector).to receive(:new).with(candle_series).and_return(market_regime_detector)
           allow(market_regime_detector).to receive(:detect).and_return({ regime: 'TRENDING', adx: 30.0 })
         end
@@ -89,7 +89,7 @@ RSpec.describe Entries::Guards::RegimeGuard do
 
       context 'and detected regime is in block list but ADX is above bypass threshold' do
         before do
-          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |i| instance_double(Candle) })
+          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |_i| instance_double(Candle) })
           allow(MarketRegimeDetector).to receive(:new).with(candle_series).and_return(market_regime_detector)
           allow(market_regime_detector).to receive(:detect).and_return({ regime: 'CHOPPY', adx: 30.0 })
           allow(candle_series).to receive(:adx).with(14).and_return(30.0)
@@ -103,7 +103,7 @@ RSpec.describe Entries::Guards::RegimeGuard do
 
       context 'and detected regime is in block list and ADX is below bypass threshold' do
         before do
-          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |i| instance_double(Candle) })
+          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |_i| instance_double(Candle) })
           allow(MarketRegimeDetector).to receive(:new).with(candle_series).and_return(market_regime_detector)
           allow(market_regime_detector).to receive(:detect).and_return({ regime: 'CHOPPY', adx: 20.0 })
           allow(candle_series).to receive(:adx).with(14).and_return(20.0)
@@ -118,7 +118,7 @@ RSpec.describe Entries::Guards::RegimeGuard do
 
       context 'and an error occurs during check' do
         before do
-          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |i| instance_double(Candle) })
+          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |_i| instance_double(Candle) })
           allow(MarketRegimeDetector).to receive(:new).with(candle_series).and_raise(StandardError.new('test error'))
         end
 

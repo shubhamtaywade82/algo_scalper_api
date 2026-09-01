@@ -146,7 +146,7 @@ module Live
 
       def enforce_early_trend_failure_for(tracker, exit_engine:, activation_profit: nil)
         activation_profit ||= (resolved_risk_config[:etf] || {})[:activation_profit_pct].to_f
-        
+
         snapshot = pnl_snapshot(tracker)
         return unless snapshot
 
@@ -181,7 +181,7 @@ module Live
 
         trend_score = val.to_f + momentum_score(series.candles)
         peak_trend_score = tracker.meta&.dig('peak_trend_score') || trend_score
-        
+
         # VWAP (simplified: use recent average price)
         vwap = series.candles.last(20).sum(&:close) / [series.candles.last(20).size, 1].max
         underlying_price = current_ltp(tracker) || tracker.entry_price.to_f
@@ -354,9 +354,9 @@ module Live
 
         today = Time.current.to_date
         PositionTracker.active
-                      .where(expiry_date: today + 1)
-                      .where.not(security_id: instrument.security_id)
-                      .exists?
+                       .where(expiry_date: today + 1)
+                       .where.not(security_id: instrument.security_id)
+                       .exists?
       rescue StandardError
         false
       end
@@ -653,14 +653,14 @@ module Live
 
         mark_breakeven_reached!(tracker, net_pnl, threshold_rupees: breakeven_at) if breakeven_at
         arm_profit_floor!(tracker, net_pnl, lock_rupees: lock_rupees) if lock_rupees
- 
+
         # Ratchet the floor upward as HWM PnL grows (trailing floor).
         trail_pct = cfg[:trail_pct]
         if trail_pct && position_data && (pending_meta || tracker.meta || {})['profit_floor_rupees'].present?
           hwm_pnl = safe_big_decimal(position_data.high_water_mark)
           update_trailing_floor!(tracker, hwm_pnl, trail_pct: trail_pct, pending_meta: pending_meta)
         end
- 
+
         floor = (pending_meta || tracker.meta || {})['profit_floor_rupees'] || tracker.profit_floor_rupees
         return unless floor
 
@@ -701,10 +701,10 @@ module Live
         if trailing_armed_for?(tracker, position_data)
           return
         end
- 
+
         ltp = position_data.current_ltp
         return unless ltp
- 
+
         premium_stop = (pending_meta || tracker.meta || {})['premium_stop_price']
         return unless premium_stop
 
@@ -804,10 +804,10 @@ module Live
         # Use passed position_data or fetch from ActiveCache if not provided
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
         return unless position_data
- 
+
         entry_risk_rupees = (pending_meta || tracker.meta || {})['entry_risk_rupees']
         risk_value = safe_big_decimal(entry_risk_rupees)
- 
+
         # Ensure we always update peak trend score if possible
         update_peak_trend_score(tracker, position_data, pending_meta: pending_meta)
 
@@ -853,16 +853,16 @@ module Live
       end
 
       def update_peak_trend_score(tracker, position_data, pending_meta: nil)
-        begin
+
           # Use trend score from position_data if available (from ActiveCache)
           trend_score = position_data.respond_to?(:underlying_trend_score) ? position_data.underlying_trend_score : nil
-          
+
           # Fallback to calculation only if not in position_data
           if trend_score.nil?
             instrument = tracker.instrument || tracker.watchable&.instrument
             return unless instrument
           end
-          
+
           peak = (pending_meta || tracker.meta || {})['peak_trend_score'] || 0
           if trend_score > peak
             if pending_meta
@@ -873,9 +873,9 @@ module Live
               tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
             end
           end
-        rescue StandardError
+      rescue StandardError
           nil
-        end
+
       end
 
       # Calculate momentum score from candles (0-50 range)
@@ -899,14 +899,14 @@ module Live
       end
 
       def mark_breakeven_reached!(tracker, net_pnl, threshold_rupees:)
-        begin
+
           return if tracker.be_set?
           return unless BigDecimal(threshold_rupees.to_s) <= net_pnl
 
           tracker.update!(be_set: true)
-        rescue StandardError => e
+      rescue StandardError => e
           Rails.logger.warn("[RiskManager] mark_breakeven_reached! failed for #{tracker.order_no}: #{e.class} - #{e.message}")
-        end
+
       end
 
       def arm_profit_floor!(tracker, net_pnl, lock_rupees:)
@@ -923,16 +923,16 @@ module Live
       end
 
       def profit_floor_time_kill?(tracker, time_kill_minutes:, pending_meta: nil)
-        begin
+
           return false unless time_kill_minutes
-          
+
           floor_set_at = (pending_meta || tracker.meta || {})['profit_floor_set_at'] || tracker.profit_floor_set_at
           return false unless floor_set_at
-  
+
           (Time.current - floor_set_at) >= time_kill_minutes.minutes
-        rescue StandardError
+      rescue StandardError
           false
-        end
+
       end
 
       def update_trailing_floor!(tracker, hwm_pnl, trail_pct:, pending_meta: nil)
@@ -995,7 +995,7 @@ module Live
         buy_value = entry_price * quantity
         return nil unless buy_value.positive?
 
-        return (hwm / buy_value).to_f
+        (hwm / buy_value).to_f
       end
     end
   end

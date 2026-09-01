@@ -3,7 +3,7 @@
 class Candle
   attr_reader :timestamp, :open, :high, :low, :close, :volume
 
-  # rubocop:disable Metrics/ParameterLists
+  # rubocop:disable-next Metrics/ParameterLists
   def initialize(timestamp:, open:, high:, low:, close:, volume:)
     @timestamp = timestamp
     @open = open.to_f
@@ -12,7 +12,6 @@ class Candle
     @close = close.to_f
     @volume = volume.to_i
   end
-  # rubocop:enable Metrics/ParameterLists
 
   def bullish?
     close >= open
