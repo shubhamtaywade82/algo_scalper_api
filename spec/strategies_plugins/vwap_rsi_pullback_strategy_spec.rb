@@ -2,6 +2,7 @@
 
 require 'rails_helper'
 require_relative 'plugin_test_helper'
+load Rails.root.join('strategies/vwap-rsi-pullback/strategy.rb').to_s
 
 RSpec.describe VwapRsiPullbackStrategy do
   include PluginTestHelper

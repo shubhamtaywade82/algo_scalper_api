@@ -5,6 +5,24 @@ require "dhan_hq"
 # Ensure error constants are loaded before `DhanHQ::Constants` references them.
 require "DhanHQ/errors"
 
+# DhanHQ 3.4.0 ships a handful of lib/DhanHQ/**/*.rb files whose class name doesn't
+# match the Zeitwerk-expected constant for the filename (e.g. edis_contract.rb defines
+# EdisFormContract, not EdisContract; ohlc_series.rb defines OHLCSeries, not OhlcSeries).
+# This breaks CI's eager_load (config.eager_load = ENV["CI"].present?) with a
+# Zeitwerk::NameError. We never reference these constants directly, so ignore the files.
+if defined?(DhanHQ::LOADER)
+  gem_dir = Gem.loaded_specs["DhanHQ"].gem_dir
+  [
+    "contracts/edis_contract.rb",
+    "contracts/forever_order_contract.rb",
+    "contracts/iceberg_order_contract.rb",
+    "contracts/twap_order_contract.rb",
+    "market_data/ohlc_series.rb"
+  ].each do |relative_path|
+    DhanHQ::LOADER.ignore(File.join(gem_dir, "lib", "DhanHQ", relative_path))
+  end
+end
+
 # Normalize environment variables to support both naming conventions
 # The DhanHQ gem expects variables with DHAN_ prefix (or CLIENT_ID/ACCESS_TOKEN)
 # We support both DHANHQ_ and DHAN_ prefixes for flexibility

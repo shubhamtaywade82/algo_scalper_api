@@ -2,6 +2,7 @@
 
 require 'rails_helper'
 require_relative 'plugin_test_helper'
+load Rails.root.join('strategies/orb-breakout/strategy.rb').to_s
 
 RSpec.describe OrbBreakoutStrategy do
   include PluginTestHelper
