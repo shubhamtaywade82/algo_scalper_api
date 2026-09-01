@@ -1,0 +1,38 @@
+---
+slug: orb-breakout
+name: Opening Range Breakout
+class_name: OrbBreakoutStrategy
+timeframes:
+- 5m
+instruments:
+- NIFTY
+- BANKNIFTY
+- SENSEX
+params:
+  range_minutes:
+    type: Integer
+    default: '30'
+  min_range_pct:
+    type: Float
+    default: '0.20'
+  max_gap_pct:
+    type: Float
+    default: '0.80'
+  target_r_multiple:
+    type: Float
+    default: '2.0'
+  volume_multiplier:
+    type: Float
+    default: '1.5'
+  force_exit_hour:
+    type: Integer
+    default: '14'
+  force_exit_minute:
+    type: Integer
+    default: '30'
+  max_failed_breakouts:
+    type: Integer
+    default: '2'
+  strike_pref:
+    type: String
+    default: ATM
