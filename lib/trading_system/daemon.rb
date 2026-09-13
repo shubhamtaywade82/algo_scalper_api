@@ -27,7 +27,7 @@ module TradingSystem
       setup_supervisor!
       trap_signals!
 
-      start_services!
+      start_services!(keep_alive: keep_alive)
 
       Rails.logger.info('[TradingDaemon] Started')
 
@@ -59,7 +59,7 @@ module TradingSystem
       Rails.application.config.x.trading_supervisor = @supervisor
     end
 
-    def start_services!
+    def start_services!(keep_alive: true)
       market_closed = TradingSession::Service.market_closed?
 
       TradingSystem::Bootstrap.boot_reconciliation!(strict: strict_boot_reconciliation?(market_closed: market_closed))
@@ -68,7 +68,7 @@ module TradingSystem
         Rails.logger.info('[TradingDaemon] Market closed - starting WebSocket only; will start full services when market opens')
         @supervisor[:market_feed]&.start
         Rails.logger.info('[Supervisor] started market_feed (WebSocket only)')
-        start_market_open_poller!
+        start_market_open_poller! if keep_alive
         return
       end
 
