@@ -225,6 +225,14 @@ class AlgoConfig
               "profile config/#{mode}.yml is unreadable (#{e.class}: #{e.message}) — refusing to run on base config"
       end
 
+      # An EMPTY document (comments-only / zero-content profile) means "no
+      # overrides" — the same semantics as an absent file. production.yml
+      # legitimately ships comments-only. Raw psych parses it to nil; bootsnap's
+      # YAML compile cache (active in app boot) to false — both are handled.
+      # Genuinely corrupt documents (arrays, scalars, strings) still fail loud
+      # per the error-handling contract.
+      profile = {} if profile.nil? || profile.equal?(false)
+
       profile = profile.deep_symbolize_keys if profile.is_a?(Hash)
       unless profile.is_a?(Hash)
         raise Errors::ConfigurationError,

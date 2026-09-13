@@ -231,8 +231,15 @@ RSpec.describe Live::UnifiedExitChecker do
       expect(result).to be false
     end
 
-    it 'returns nil gracefully when TickQuery fails' do
+    it 'propagates infra failures from TickQuery (wave-3 contract: no-data != broken)' do
       allow(Live::TickQuery).to receive(:for_security).and_raise(StandardError)
+      # Callers (RiskManager/ExitPolicy) rescue-and-log; the resolver itself must
+      # stay loud so a broken tick path is never confused with "no tick yet".
+      expect { described_class.send(:resolve_underlying_ltp, 'NIFTY') }.to raise_error(StandardError)
+    end
+
+    it 'returns nil when no tick is available for the underlying' do
+      allow(Live::TickQuery).to receive(:for_security).and_return(nil)
       result = described_class.send(:resolve_underlying_ltp, 'NIFTY')
       expect(result).to be_nil
     end
@@ -1109,16 +1116,16 @@ RSpec.describe Live::UnifiedExitChecker do
       }
     end
 
+    # hwm 2000 / entry_value 10000 = 20% >= 10% activation -> armed
+    let(:armed_snapshot) { { ltp: 130.0, pnl_pct: 0.30, pnl: 1_500.0, hwm_pnl: 2_000.0 } }
+
     before do
       described_class.instance_variable_set(:@exit_config, nil)
       described_class.instance_variable_set(:@exit_config_expires_at, nil)
       allow(described_class).to receive(:exit_config).and_return(config)
       allow(AlgoConfig).to receive(:fetch).and_return({ risk: {}, exit: {} })
-      # hwm 2000 / entry_value 10000 = 20% >= 10% activation -> armed
       allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(nil)
     end
-
-    let(:armed_snapshot) { { ltp: 130.0, pnl_pct: 0.30, pnl: 1_500.0, hwm_pnl: 2_000.0 } }
 
     context 'when the chain layer signals an exit (IV collapse / gamma wall)' do
       it 'returns a chain_context_exit' do
@@ -1138,10 +1145,11 @@ RSpec.describe Live::UnifiedExitChecker do
           .and_return({ action: :tighten, multiplier: 0.5, reason: 'UNDERLYING_MOMENTUM_FADING' })
         allow(Scalp::ChainTrailingContext).to receive(:evaluate)
           .and_return({ action: :widen, multiplier: 1.2, reason: 'SCALP_CONVEXITY' })
-        expect(described_class).to receive(:trailing_stop_hit?)
-          .with(tracker, armed_snapshot, tightening_multiplier: 0.6).and_return(false)
+        allow(described_class).to receive(:trailing_stop_hit?)
 
         expect(described_class.evaluate_trailing_stop(tracker, armed_snapshot)).to be_nil
+        expect(described_class).to have_received(:trailing_stop_hit?)
+          .with(tracker, armed_snapshot, tightening_multiplier: 0.6)
       end
     end
 
@@ -1151,21 +1159,24 @@ RSpec.describe Live::UnifiedExitChecker do
           .and_return({ action: :scale, multiplier: 1.4, reason: 'UNDERLYING_MOMENTUM_STRONG' })
         allow(Scalp::ChainTrailingContext).to receive(:evaluate)
           .and_return({ action: :hold, multiplier: 1.0, reason: nil })
-        expect(described_class).to receive(:trailing_stop_hit?)
-          .with(tracker, armed_snapshot, tightening_multiplier: 1.4).and_return(false)
+        allow(described_class).to receive(:trailing_stop_hit?)
 
         expect(described_class.evaluate_trailing_stop(tracker, armed_snapshot)).to be_nil
+        expect(described_class).to have_received(:trailing_stop_hit?)
+          .with(tracker, armed_snapshot, tightening_multiplier: 1.4)
       end
     end
 
     context 'when trailing is not armed' do
       it 'skips both context layers entirely' do
         unarmored = { ltp: 105.0, pnl_pct: 0.05, pnl: 250.0, hwm_pnl: 100.0 } # peak 1% < 10%
-        expect(described_class).not_to receive(:evaluate_underlying_context)
-        expect(Scalp::ChainTrailingContext).not_to receive(:evaluate)
-        expect(described_class).to receive(:trailing_stop_hit?).and_return(false)
+        allow(described_class).to receive(:evaluate_underlying_context)
+        allow(Scalp::ChainTrailingContext).to receive(:evaluate)
+        allow(described_class).to receive(:trailing_stop_hit?).and_return(false)
 
         expect(described_class.evaluate_trailing_stop(tracker, unarmored)).to be_nil
+        expect(described_class).not_to have_received(:evaluate_underlying_context)
+        expect(Scalp::ChainTrailingContext).not_to have_received(:evaluate)
       end
     end
   end
