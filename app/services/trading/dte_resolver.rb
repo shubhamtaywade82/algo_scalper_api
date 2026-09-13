@@ -2,6 +2,15 @@
 
 module Trading
   # Resolves days-to-expiry for an entry pick from derivative metadata or chain.
+  #
+  # Contract (error-handling review wave 4):
+  #   * nil = "expiry genuinely unknown" (no expiry on the pick, no derivative
+  #     row, no chain data, or an unparseable date string) — a documented
+  #     domain outcome; callers apply their default DTE tier.
+  #   * Errors propagate — the previous blanket `rescue StandardError -> nil`
+  #     also swallowed config/DB failures into "unknown", degrading DTE tiering
+  #     exactly when the system is misconfigured. The entry guards have their
+  #     own fail-closed handlers for Errors::Error.
   class DteResolver
     class << self
       def days_to_expiry(pick:, index_cfg:)
@@ -9,9 +18,6 @@ module Trading
         return nil unless expiry
 
         (expiry - Time.zone.today).to_i
-      rescue StandardError => e
-        Rails.logger.warn("[DteResolver] #{e.class} - #{e.message}")
-        nil
       end
 
       private
@@ -31,6 +37,8 @@ module Trading
         Instruments::LegacyResolver.resolve_pick(pick)
       end
 
+      # Malformed date strings (e.g. "not-a-date") parse to nil — the
+      # documented "expiry unknown" outcome, not a swallowed error.
       def coerce_date(raw)
         case raw
         when Date then raw

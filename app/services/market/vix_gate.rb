@@ -39,13 +39,23 @@ module Market
         return false if fail_closed_entries? && !evaluated?
 
         Rails.cache.read(ENTRY_ALLOWED_KEY) != false
-      rescue StandardError
-        !fail_closed_entries?
+      rescue Errors::Error
+        # Domain/config failures propagate: the pipeline guards block on them
+        # (see Entries::Guards::VixGateGuard). "Unknown" must never read as
+        # "entries allowed" for a volatility gate.
+        raise
+      rescue StandardError => e
+        # Non-domain failure (e.g. cache store error): fail CLOSED. The
+        # previous handler consulted fail_closed_entries? again — which itself
+        # re-raised on corrupt config, escaping the handler (wave 4).
+        Rails.logger.error("[VixGate] entry_allowed? #{e.class} - #{e.message} - blocking entries")
+        false
       end
 
       def evaluated?
         Rails.cache.read(CACHE_TS_KEY).present?
-      rescue StandardError
+      rescue StandardError => e
+        Rails.logger.warn("[VixGate] evaluated? #{e.class} - #{e.message}")
         false
       end
 
@@ -53,15 +63,19 @@ module Market
         return false unless enabled?
 
         Rails.cache.read(FORCE_EXIT_KEY) == true
-      rescue StandardError
+      rescue StandardError => e
+        # Logged disarm: a cache error must be visible — the alternative is
+        # silently sitting in a vol spike with force-exit quietly off.
+        Rails.logger.error("[VixGate] force_exit_active? #{e.class} - #{e.message}")
         false
       end
 
       def current_ltp
         val = Rails.cache.read(CACHE_LTP_KEY)
         val&.to_f
-      rescue StandardError
-        nil
+      rescue StandardError => e
+        Rails.logger.warn("[VixGate] current_ltp #{e.class} - #{e.message}")
+        nil # documented outcome: VIX unknown
       end
 
       private
@@ -70,10 +84,12 @@ module Market
         config[:enabled] == true
       end
 
+      # Absent section -> {} (documented "gate off"); a corrupt config document
+      # RAISES via AlgoConfig.fetch. The previous `rescue -> {}` turned every
+      # config failure into "gate disabled" — silently disarming a risk gate
+      # exactly when the system is misconfigured (wave 4).
       def config
         AlgoConfig.fetch.dig(:market, :vix_gate) || {}
-      rescue StandardError
-        {}
       end
 
       def entry_ceiling

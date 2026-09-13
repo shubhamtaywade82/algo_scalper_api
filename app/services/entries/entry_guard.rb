@@ -224,62 +224,12 @@ module Entries
         nil
       end
 
-      # Check if time regime allows entry
-      def time_regime_allows_entry?(index_cfg:, pick:, direction:)
-        return true unless time_regime_rules_enabled?
-
-        regime_service = Live::TimeRegimeService.instance
-        regime = regime_service.current_regime
-
-        # Global override: No new trades after 14:50 (unless exceptional conditions)
-        unless regime_service.allow_new_trades?
-          Rails.logger.info("[EntryGuard] Entry blocked: No new trades allowed after #{Live::TimeRegimeService::NO_NEW_TRADES_AFTER}")
-          return false
-        end
-
-        # Check if entries are allowed in current regime
-        unless regime_service.allow_entries?(regime)
-          Rails.logger.info("[EntryGuard] Entry blocked: Regime #{regime} does not allow entries")
-          return false
-        end
-
-        # Check minimum ADX requirement for regime
-        min_adx = regime_service.min_adx_requirement(regime)
-        if min_adx > 15.0 # Only check if stricter than default
-          # Get ADX from signal metadata or calculate
-          # For now, skip ADX check here (should be done in signal generation)
-          # This is a safety net - signal generation should already filter by ADX
-        end
-
-        # Special rules for CHOP_DECAY regime (very strict)
-        if regime == Live::TimeRegimeService::CHOP_DECAY
-          # Allow ONLY if exceptional conditions (ADX ≥ 22, expansion present, large impulse)
-          # This should be checked in signal generation, but we log here
-          Rails.logger.info('[EntryGuard] Entry in CHOP_DECAY regime - ensure exceptional conditions met')
-        end
-
-        # Special rules for CLOSE_GAMMA regime
-        if regime == Live::TimeRegimeService::CLOSE_GAMMA
-          # Use IST timezone explicitly
-          current_time = Live::TimeRegimeService.instance.current_ist_time.strftime('%H:%M')
-          if current_time >= '14:45'
-            # No fresh breakouts after 14:45 IST - only continuation moves
-            # This should be checked in signal generation
-            Rails.logger.info('[EntryGuard] Entry after 14:45 IST - ensure continuation move only')
-          end
-        end
-
-        true
-      rescue StandardError => e
-        Rails.logger.error("[EntryGuard] time_regime_allows_entry? error: #{e.class} - #{e.message}")
-        true # Fail-safe: allow entry if check fails
-      end
-
-      def time_regime_rules_enabled?
-        AlgoConfig.fetch.dig(:time_regimes, :enabled) == true
-      rescue StandardError
-        false
-      end
+      # Time-regime entry gating lives in Entries::Guards::TimeRegimeGuard
+      # (pipeline-owned). The legacy EntryGuard#time_regime_allows_entry?
+      # copy was deleted in the error-handling review wave 4: it was dead
+      # code (no callers), duplicated the guard's logic, read the config
+      # from the wrong path (top-level :time_regimes instead of risk:), and
+      # failed open on errors.
 
       # Check if daily loss/profit limits allow entry (NOT trade frequency - we don't cap trade count)
       # EXCEPT for institutional rule of max 3 trades per day for index options.

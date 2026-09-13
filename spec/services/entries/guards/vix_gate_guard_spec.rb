@@ -60,5 +60,20 @@ RSpec.describe Entries::Guards::VixGateGuard do
         expect(result[:blocked]).to include('awaiting first VIX evaluation')
       end
     end
+
+    context 'when the config document is corrupt' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_raise(Errors::ConfigurationError.new('config document unreadable'))
+      end
+
+      it 'blocks (fail-closed) instead of silently disabling the gate' do
+        # Wave 4: the guard's `rescue StandardError -> PASS` and
+        # `gate_enabled? rescue -> false` used to turn a corrupt config into
+        # "VIX gate off, entries allowed".
+        result = described_class.call(context)
+
+        expect(result[:blocked]).to include('vix_gate_failed')
+      end
+    end
   end
 end

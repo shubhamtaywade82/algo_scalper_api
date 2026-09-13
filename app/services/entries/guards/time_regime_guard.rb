@@ -22,7 +22,7 @@ module Entries
         private
 
         def time_regime_allows_entry?(index_cfg:, pick:, direction:)
-          return true unless time_regime_rules_enabled?
+          return true unless rules_enabled?
 
           regime_service = Live::TimeRegimeService.instance
           regime = regime_service.current_regime
@@ -35,14 +35,25 @@ module Entries
           end
 
           true
-        rescue StandardError
-          true
+        rescue Errors::Error => e
+          # Domain failures (corrupt regime config, coverage gap) block —
+          # fail-closed, same contract as the other wave-2/4 guards.
+          Rails.logger.warn("[TimeRegimeGuard] blocking entry: time_regime_resolution_failed: #{e.class} - #{e.message}")
+          false
+        rescue StandardError => e
+          # Unexpected failure inside the check itself: BLOCK, not pass. The
+          # previous `rescue -> true` turned every crash of this check into
+          # "entries allowed" — the exact assumption the error-handling
+          # review exists to remove.
+          Rails.logger.error("[TimeRegimeGuard] time_regime_allows_entry? error: #{e.class} - #{e.message}")
+          false
         end
 
-        def time_regime_rules_enabled?
-          AlgoConfig.fetch.dig(:risk, :time_regimes, :enabled) == true
-        rescue StandardError
-          false
+        # Delegates to the service (single source of truth). Section absent or
+        # enabled: false -> false (documented "no regime rules" state); a
+        # corrupt config document raises via AlgoConfig.fetch.
+        def rules_enabled?
+          Live::TimeRegimeService.instance.rules_enabled?
         end
       end
     end
