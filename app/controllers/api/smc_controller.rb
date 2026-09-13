@@ -50,8 +50,8 @@ module Api
         return nil
       end
 
-      instrument = Instrument.find_by_sid_and_segment(security_id: security_id, segment_code: segment,
-                                                      symbol_name: symbol_name)
+      instrument = Instrument.resolve_index_by_sid_or_symbol(security_id: security_id, segment_code: segment,
+                                                            symbol_name: symbol_name)
       unless instrument
         render json: { ok: false, error: 'instrument not found' }, status: :not_found
         return nil

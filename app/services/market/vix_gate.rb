@@ -110,7 +110,7 @@ module Market
       end
 
       def ltp_from_instrument(segment, security_id)
-        instrument = Instrument.find_by_sid_and_segment(
+        instrument = Instrument.resolve_index_by_sid_or_symbol(
           security_id: security_id,
           segment_code: segment,
           symbol_name: 'INDIA VIX'

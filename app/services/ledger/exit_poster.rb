@@ -120,12 +120,13 @@ module Ledger
         [lines, premium_received, buyback_cost, gain]
       end
 
+      # Paper-posting gate — see Ledger::EntryPoster#paper_posting?. Config
+      # failures propagate as Errors::ConfigurationError and surface through
+      # the :failed Result of #post!, never as a silent skip.
       def paper_posting?(tracker)
         return true if tracker.paper?
 
-        AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
-      rescue StandardError
-        false
+        AlgoConfig.paper_trading_enabled?
       end
 
       private

@@ -58,11 +58,10 @@ RSpec.describe Derivative do
       derivative.buy_option!(qty: 50, meta: { a: 1 })
     end
 
-    it 'returns nil (and logs) when no consolidated instrument exists' do
-      allow(Rails.logger).to receive(:error)
+    it 'raises Errors::InstrumentNotFound when no consolidated instrument exists' do
+      expect(derivative.consolidated_instrument).to be_nil
 
-      expect(derivative.buy_option!(qty: 50)).to be_nil
-      expect(Rails.logger).to have_received(:error).at_least(:once)
+      expect { derivative.buy_option!(qty: 50) }.to raise_error(Errors::InstrumentNotFound)
     end
   end
 
@@ -74,6 +73,12 @@ RSpec.describe Derivative do
       expect(consolidated).to receive(:sell_option!).with(qty: 25, meta: {})
 
       derivative.sell_option!(qty: 25)
+    end
+
+    it 'raises Errors::InstrumentNotFound when no consolidated instrument exists' do
+      expect(derivative.consolidated_instrument).to be_nil
+
+      expect { derivative.sell_option!(qty: 25) }.to raise_error(Errors::InstrumentNotFound)
     end
   end
 

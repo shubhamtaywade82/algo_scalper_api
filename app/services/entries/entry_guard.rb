@@ -381,7 +381,7 @@ module Entries
 
       def find_instrument(index_cfg)
         segment_code = index_cfg[:segment]
-        instrument = Instrument.find_by_sid_and_segment(
+        instrument = Instrument.resolve_index_by_sid_or_symbol(
           security_id: index_cfg[:sid],
           segment_code: segment_code,
           symbol_name: index_cfg[:key]

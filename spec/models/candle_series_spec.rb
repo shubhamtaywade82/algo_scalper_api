@@ -540,4 +540,54 @@ RSpec.describe CandleSeries do
       expect(obv).to be_an(Array).or be_nil
     end
   end
+
+  describe 'strict market-data parsing (error-handling review 2026-09)' do
+    it 'rejects non-numeric OHLC values instead of coercing them to 0.0' do
+      raw = [{ timestamp: Time.current, open: 'abc', high: 25_100, low: 24_900, close: 25_050, volume: 100 }]
+
+      expect { series.load_from_raw(raw) }.to raise_error(Errors::InvalidMarketData, /open/)
+    end
+
+    it 'rejects nil OHLC values' do
+      raw = [{ timestamp: Time.current, open: nil, high: 25_100, low: 24_900, close: 25_050, volume: 100 }]
+
+      expect { series.load_from_raw(raw) }.to raise_error(Errors::InvalidMarketData, /open/)
+    end
+
+    it 'names the candle and field on hash-format errors' do
+      raw = { 'open' => [25_000.0], 'high' => [25_100.0], 'low' => [24_900.0],
+              'close' => ['garbage'], 'timestamp' => [Time.current.to_i], 'volume' => [10] }
+
+      expect { series.load_from_raw(raw) }.to raise_error(Errors::InvalidMarketData, /close\[0\]/)
+    end
+
+    it 'still accepts volumeless index candles as an explicit representation decision' do
+      raw = { 'open' => [25_000.0], 'high' => [25_100.0], 'low' => [24_900.0],
+              'close' => [25_050.0], 'timestamp' => [Time.current.to_i] }
+
+      expect { series.load_from_raw(raw) }.not_to raise_error
+      expect(series.candles.first.volume).to eq(0)
+    end
+
+    it 'rejects candles missing a required field in both representations' do
+      raw = [{ timestamp: Time.current, high: 25_100, low: 24_900, close: 25_050, volume: 100 }]
+
+      expect { series.load_from_raw(raw) }.to raise_error(Errors::InvalidMarketData, /:open/)
+    end
+  end
+
+  describe '#vwap' do
+    it 'yields nil for the zero-volume prefix instead of the typical price' do
+      c1 = build(:candle, open: 100, high: 110, low: 90, close: 105, volume: 0)
+      c2 = build(:candle, open: 105, high: 115, low: 95, close: 110, volume: 100)
+      series.add_candle(c1)
+      series.add_candle(c2)
+
+      values = series.vwap
+
+      expect(values.first).to be_nil
+      # Only the second candle has volume, so VWAP == its typical price
+      expect(values.last).to be_within(0.01).of((115.0 + 95.0 + 110.0) / 3.0)
+    end
+  end
 end

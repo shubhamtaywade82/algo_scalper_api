@@ -146,7 +146,16 @@ class Instrument < ApplicationRecord
       SEGMENT_FROM_EXCHANGE[code] || code.downcase
     end
 
-    def find_by_sid_and_segment(security_id:, segment_code:, symbol_name: nil)
+    # Strict broker-identity lookup: security_id + segment only.
+    #
+    # Error-handling review 2026-09: this used to fall back to a symbol_name
+    # lookup when the security_id missed — silently substituting a *different
+    # security* with a shared symbol (NIFTY index vs NIFTY future vs historical
+    # contracts). A failed broker-ID lookup is now simply nil; symbol-based
+    # discovery lives explicitly in #resolve_index_by_sid_or_symbol.
+    #
+    # @return [Instrument, nil] nil when the broker identity is unknown
+    def find_by_sid_and_segment(security_id:, segment_code:)
       return nil unless security_id.present? && segment_code.present?
 
       sid = security_id.to_s
@@ -155,6 +164,17 @@ class Instrument < ApplicationRecord
         return instrument if instrument.present?
       end
 
+      nil
+    end
+
+    # Explicit DISCOVERY lookup for index master rows: try the broker identity
+    # first, then the symbol. Only for read/discovery paths (index config
+    # resolution, VIX) — never for placing orders, where identity must be exact.
+    #
+    # @return [Instrument, nil]
+    def resolve_index_by_sid_or_symbol(security_id:, segment_code:, symbol_name:)
+      instrument = find_by_sid_and_segment(security_id: security_id, segment_code: segment_code)
+      return instrument if instrument
       return nil if symbol_name.blank?
 
       segment_keys_for(segment_code).each do |segment_key|
@@ -268,6 +288,11 @@ class Instrument < ApplicationRecord
         .limit(limit)
     end
 
+    # Strict date coercion for contract queries: an unparseable expiry used to
+    # collapse to nil and silently match nothing. Malformed query input is now
+    # an explicit error.
+    #
+    # @raise [Errors::InvalidParameter]
     def coerce_date(raw)
       case raw
       when Date then raw
@@ -275,8 +300,8 @@ class Instrument < ApplicationRecord
       when String then Date.parse(raw)
       else Date.parse(raw.to_s)
       end
-    rescue ArgumentError, TypeError
-      nil
+    rescue ArgumentError, TypeError => e
+      raise Errors::InvalidParameter, "unparseable expiry date #{raw.inspect} (#{e.class}: #{e.message})"
     end
   end
 
@@ -332,19 +357,25 @@ class Instrument < ApplicationRecord
   end
 
   # Places a market BUY order for this instrument and tracks it.
-  # @param qty [Integer, nil]
+  #
+  # Quantity contract (error-handling review 2026-09): qty is REQUIRED and
+  # must be a positive whole number. The previous `qty.to_i.positive? ?
+  # qty.to_i : 1` turned nil/0/-50/"abc" into a live order for ONE unit.
+  #
+  # @param qty [Integer] positive whole quantity (required)
   # @param product_type [String]
   # @param meta [Hash]
   # @return [Object, nil] Order response from gateway
+  # @raise [Errors::InvalidQuantity]
   def buy_market!(qty: nil, product_type: "NORMAL", meta: {})
     segment_code = exchange_segment
     security = security_id.to_s
     raise "Instrument missing segment/security_id" if segment_code.blank? || security.blank?
 
+    quantity = Orders::Quantity.resolve!(qty, context: "#{symbol_name} buy_market!")
+
     ltp = resolve_ltp(segment: segment_code, security_id: security, meta: meta)
     raise "LTP unavailable" unless ltp
-
-    quantity = qty.to_i.positive? ? qty.to_i : 1
 
     order = Orders.config.gateway.place_market(
       side: 'buy',
@@ -390,21 +421,23 @@ class Instrument < ApplicationRecord
     order
   end
 
-  # Places a market SELL order to exit the underlying position.
-  # @param qty [Integer, nil]
+  # Places a market SELL order for a specific quantity of this instrument.
+  #
+  # Quantity contract: explicit sell-to-open/reduce orders MUST pass qty.
+  # Closing the whole position is a separate, explicit command:
+  # #close_market_position! — the previous "qty missing -> liquidate
+  # everything" behaviour is gone.
+  #
+  # @param qty [Integer] positive whole quantity (required)
   # @param meta [Hash]
   # @return [Object, nil]
+  # @raise [Errors::InvalidQuantity]
   def sell_market!(qty: nil, meta: {})
     segment_code = exchange_segment
     security = security_id.to_s
     raise "Instrument missing segment/security_id" if segment_code.blank? || security.blank?
 
-    quantity = if qty.to_i.positive?
-      qty.to_i
-               else
-      PositionTracker.active.where(security_id: security).sum(:quantity).to_i
-               end
-    return nil if quantity <= 0
+    quantity = Orders::Quantity.resolve!(qty, context: "#{symbol_name} sell_market!")
 
     Orders.config.gateway.place_market(
       side: 'sell',
@@ -417,15 +450,53 @@ class Instrument < ApplicationRecord
     )
   end
 
-  # Places a market BUY order for this option contract (CE/PE) with
-  # risk-aware sizing. Ported from the legacy Derivative model — the
-  # instrument itself is now the tradable object.
+  # EXPLICIT whole-position exit: sells the total active tracked quantity for
+  # this security. This is the deliberate liquidation policy that sell_market!
+  # used to infer from a missing qty.
+  #
+  # @return [Object, nil] order response, or nil when there is no active
+  #   position to close (documented domain outcome)
+  def close_market_position!(meta: {})
+    segment_code = exchange_segment
+    security = security_id.to_s
+    raise "Instrument missing segment/security_id" if segment_code.blank? || security.blank?
+
+    quantity = PositionTracker.active.where(security_id: security).sum(:quantity).to_i
+    if quantity <= 0
+      Rails.logger.info("[Instrument] close_market_position! — no active position for #{symbol_name} (#{security})")
+      return nil
+    end
+
+    Orders.config.gateway.place_market(
+      side: 'sell',
+      segment: segment_code,
+      security_id: security,
+      qty: quantity,
+      meta: {
+        client_order_id: meta[:client_order_id] || default_client_order_id(side: :sell, security_id: security),
+        close_position: true
+      }
+    )
+  end
+
+  # Places a market BUY order for this option contract (CE/PE).
+  #
+  # Quantity contract (error-handling review 2026-09): sizing is EXPLICIT.
+  #   * qty given ............ used as-is (strictly validated)
+  #   * qty absent + auto_size: true ... strategy/admin sizing policy that
+  #     deliberately requests Capital::Allocator sizing (requires index_cfg)
+  #   * qty absent + auto_size: false .. Errors::InvalidQuantity
+  # Previously a missing qty silently manufactured an index config and
+  # auto-sized the order — a trading decision nobody explicitly made.
+  #
   # @param qty [Integer, nil]
+  # @param auto_size [Boolean] explicitly opt in to allocator sizing
   # @param product_type [String]
-  # @param index_cfg [Hash, nil]
+  # @param index_cfg [Hash, nil] required when auto_size is true
   # @param meta [Hash]
-  # @return [Object, nil]
-  def buy_option!(qty: nil, product_type: "NORMAL", index_cfg: nil, meta: {})
+  # @return [Object, nil] Order response from gateway
+  # @raise [Errors::InvalidQuantity, Errors::ConfigurationError]
+  def buy_option!(qty: nil, auto_size: false, product_type: "NORMAL", index_cfg: nil, meta: {})
     segment_code = exchange_segment
     security = security_id.to_s
     raise "Instrument missing segment/security_id" if segment_code.blank? || security.blank?
@@ -433,18 +504,30 @@ class Instrument < ApplicationRecord
     ltp = resolve_ltp(segment: segment_code, security_id: security, meta: meta)
     raise "LTP unavailable" unless ltp
 
-    quantity = if qty.to_i.positive?
-      qty.to_i
-               else
-      config = index_cfg || { key: underlying_symbol || symbol_name, segment: segment_code }
+    quantity = if qty.present?
+      Orders::Quantity.resolve!(qty, context: "#{symbol_name} buy_option!")
+               elsif auto_size
+      unless index_cfg.is_a?(Hash) && index_cfg.present?
+        raise Errors::ConfigurationError,
+              "index_cfg is required to auto-size #{symbol_name} — refusing to manufacture one"
+      end
+
       Capital::Allocator.qty_for(
-        index_cfg: config,
+        index_cfg: index_cfg,
         entry_price: ltp.to_f,
         derivative_lot_size: lot_size.to_i,
         scale_multiplier: 1
-      )
+      ).tap do |resolved|
+        unless resolved.present? && resolved.to_i.positive?
+          raise Errors::InvalidQuantity,
+                "allocator returned no usable quantity for #{symbol_name} (got #{resolved.inspect})"
+        end
+      end.to_i
+               else
+      raise Errors::InvalidQuantity,
+            "qty is required for buy_option! on #{symbol_name} " \
+            "(pass auto_size: true to request allocator sizing)"
                end
-    return nil if quantity.to_i <= 0
 
     order = Orders.config.gateway.place_market(
       side: 'buy',
@@ -474,7 +557,6 @@ class Instrument < ApplicationRecord
       index_key: (index_cfg || {})[:key],
       meta: meta.slice(:alpha_source, :signal_confidence, :expected_value, :entry_strategy, :signal_timestamp, :direction, :client_order_id)
     )
-
     execution = Execution.record_from_order!(
       order: order, instrument: self, side: :buy, quantity: quantity,
       purpose: :entry, position_tracker: tracker, requested_price: ltp
@@ -494,21 +576,23 @@ class Instrument < ApplicationRecord
     order
   end
 
-  # Places a market SELL order to exit this option position.
-  # @param qty [Integer, nil]
+  # Places a market SELL order for a specific quantity of this option.
+  #
+  # Quantity contract: SELL-to-open/reduce requires an explicit qty. Closing
+  # the whole tracked position is the separate, explicit #close_position!
+  # command — the previous "qty missing -> sell the entire position" implicit
+  # liquidation policy is gone.
+  #
+  # @param qty [Integer] positive whole quantity (required)
   # @param meta [Hash]
   # @return [Object, nil]
+  # @raise [Errors::InvalidQuantity]
   def sell_option!(qty: nil, meta: {})
     segment_code = exchange_segment
     security = security_id.to_s
     raise "Instrument missing segment/security_id" if segment_code.blank? || security.blank?
 
-    quantity = if qty.to_i.positive?
-      qty.to_i
-               else
-      PositionTracker.active.where(security_id: security).sum(:quantity).to_i
-               end
-    return nil if quantity <= 0
+    quantity = Orders::Quantity.resolve!(qty, context: "#{symbol_name} sell_option!")
 
     Orders.config.gateway.place_market(
       side: 'sell',
@@ -517,6 +601,35 @@ class Instrument < ApplicationRecord
       qty: quantity,
       meta: {
         client_order_id: meta[:client_order_id] || default_client_order_id(side: :sell, security_id: security)
+      }
+    )
+  end
+
+  # EXPLICIT whole-position exit for this option contract: sells the total
+  # active tracked quantity. This is the deliberate close policy that
+  # sell_option! used to infer from a missing qty.
+  #
+  # @return [Object, nil] order response, or nil when there is no active
+  #   position to close (documented domain outcome)
+  def close_position!(meta: {})
+    segment_code = exchange_segment
+    security = security_id.to_s
+    raise "Instrument missing segment/security_id" if segment_code.blank? || security.blank?
+
+    quantity = PositionTracker.active.where(security_id: security).sum(:quantity).to_i
+    if quantity <= 0
+      Rails.logger.info("[Instrument] close_position! — no active position for #{symbol_name} (#{security})")
+      return nil
+    end
+
+    Orders.config.gateway.place_market(
+      side: 'sell',
+      segment: segment_code,
+      security_id: security,
+      qty: quantity,
+      meta: {
+        client_order_id: meta[:client_order_id] || default_client_order_id(side: :sell, security_id: security),
+        close_position: true
       }
     )
   end

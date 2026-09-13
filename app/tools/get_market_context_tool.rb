@@ -18,7 +18,7 @@ class GetMarketContextTool < RubyLLM::Tool
     segment     = index_cfg[:segment]
     return { error: "Missing security_id or segment for #{index_key}" } unless security_id && segment
 
-    instrument = Instrument.find_by_sid_and_segment(
+    instrument = Instrument.resolve_index_by_sid_or_symbol(
       security_id: security_id,
       segment_code: segment,
       symbol_name: index_key
