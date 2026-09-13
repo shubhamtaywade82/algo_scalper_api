@@ -64,7 +64,7 @@ RSpec.describe Entries::Guards::MomentumGateGuard do
         let(:market_regime_detector) { instance_double(MarketRegimeDetector) }
 
         before do
-          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |i| instance_double(Candle) })
+          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |_i| instance_double(Candle) })
           allow(MarketRegimeDetector).to receive(:new).with(candle_series).and_return(market_regime_detector)
           allow(market_regime_detector).to receive(:bollinger_band_breakout?).and_return(true)
           allow(candle_series).to receive(:adx).with(14).and_return(20.0)
@@ -80,7 +80,7 @@ RSpec.describe Entries::Guards::MomentumGateGuard do
         let(:market_regime_detector) { instance_double(MarketRegimeDetector) }
 
         before do
-          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |i| instance_double(Candle) })
+          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |_i| instance_double(Candle) })
           allow(MarketRegimeDetector).to receive(:new).with(candle_series).and_return(market_regime_detector)
           allow(market_regime_detector).to receive(:bollinger_band_breakout?).and_return(false)
           allow(candle_series).to receive(:adx).with(14).and_return(30.0)
@@ -96,7 +96,7 @@ RSpec.describe Entries::Guards::MomentumGateGuard do
         let(:market_regime_detector) { instance_double(MarketRegimeDetector) }
 
         before do
-          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |i| instance_double(Candle) })
+          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |_i| instance_double(Candle) })
           allow(MarketRegimeDetector).to receive(:new).with(candle_series).and_return(market_regime_detector)
           allow(market_regime_detector).to receive(:bollinger_band_breakout?).and_return(false)
           allow(candle_series).to receive(:adx).with(14).and_return(20.0)
@@ -113,7 +113,7 @@ RSpec.describe Entries::Guards::MomentumGateGuard do
 
       context 'and an error occurs during check' do
         before do
-          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |i| instance_double(Candle) })
+          allow(candle_series).to receive(:candles).and_return(Array.new(20) { |_i| instance_double(Candle) })
           allow(MarketRegimeDetector).to receive(:new).with(candle_series).and_raise(StandardError.new('test error'))
         end
 

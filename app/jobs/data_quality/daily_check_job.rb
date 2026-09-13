@@ -113,7 +113,7 @@ module DataQuality
       symbols = traded_symbols
       return Instrument.none if symbols.empty?
 
-      Instrument.where(underlying_symbol: symbols).where('expiry_date < ?', Date.current)
+      Instrument.where(underlying_symbol: symbols).where(expiry_date: ...Date.current)
     end
 
     def audit_expired_derivatives!(expired)

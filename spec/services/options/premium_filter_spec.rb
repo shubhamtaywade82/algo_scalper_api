@@ -178,7 +178,7 @@ RSpec.describe Options::PremiumFilter do
         }
       end
 
-      # rubocop:disable RSpec/MultipleExpectations
+      # rubocop:disable-next RSpec/MultipleExpectations
       it 'returns detailed validation with all checks passing' do
         result = filter.validate_with_details(candidate)
         expect(result[:valid]).to be true
@@ -187,7 +187,6 @@ RSpec.describe Options::PremiumFilter do
         expect(result[:spread_check]).to be true
         expect(result[:reason]).to eq('valid')
       end
-      # rubocop:enable RSpec/MultipleExpectations
     end
 
     context 'with invalid candidate' do
@@ -202,7 +201,7 @@ RSpec.describe Options::PremiumFilter do
         }
       end
 
-      # rubocop:disable RSpec/MultipleExpectations
+      # rubocop:disable-next RSpec/MultipleExpectations
       it 'returns detailed validation with failure reasons' do
         result = filter.validate_with_details(candidate)
         expect(result[:valid]).to be false
@@ -211,7 +210,6 @@ RSpec.describe Options::PremiumFilter do
         expect(result[:reason]).to include('premium_below_min')
         expect(result[:reason]).to include('insufficient_liquidity')
       end
-      # rubocop:enable RSpec/MultipleExpectations
     end
 
     context 'with missing data' do

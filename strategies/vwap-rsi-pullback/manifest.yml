@@ -1,0 +1,32 @@
+---
+slug: vwap-rsi-pullback
+name: VWAP RSI Pullback
+class_name: VwapRsiPullbackStrategy
+timeframes:
+- 3m
+instruments:
+- NIFTY
+- BANKNIFTY
+- SENSEX
+params:
+  rsi_period:
+    type: Integer
+    default: '14'
+  rsi_pullback_zone_low:
+    type: Float
+    default: '40.0'
+  rsi_pullback_zone_high:
+    type: Float
+    default: '60.0'
+  vwap_band_pct:
+    type: Float
+    default: '0.1'
+  min_slope_per_bar:
+    type: Float
+    default: '0.002'
+  dead_zone_start_hour:
+    type: Integer
+    default: '11'
+  dead_zone_end_hour:
+    type: Integer
+    default: '13'

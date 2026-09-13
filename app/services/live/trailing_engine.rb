@@ -4,7 +4,7 @@ module Live
   # TrailingEngine for NEMESIS V3
   # Per-tick trailing stop management with tiered SL offsets
   # Updates peak profit percentage and applies dynamic SL adjustments
-  # rubocop:disable Metrics/ClassLength
+  # rubocop:disable-next Metrics/ClassLength
   class TrailingEngine
     def initialize(active_cache: Positions::ActiveCache.instance,
                    bracket_placer: nil)
@@ -295,7 +295,7 @@ module Live
     # Apply direct trailing SL (follows price directly, only moves upward)
     # @param position_data [Positions::ActiveCache::PositionData] Position data
     # @return [Hash] Result hash with :updated, :new_sl_price, :reason
-    # rubocop:disable Metrics/AbcSize
+    # rubocop:disable-next Metrics/AbcSize
     def apply_direct_trailing_sl(position_data, tracker: nil)
       return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
 
@@ -354,12 +354,11 @@ module Live
       Rails.logger.error("[TrailingEngine] Failed to apply direct trailing SL: #{e.class} - #{e.message}")
       { updated: false, new_sl_price: nil, reason: e.message }
     end
-    # rubocop:enable Metrics/AbcSize
 
     # Apply tiered SL offsets based on current profit percentage
     # @param position_data [Positions::ActiveCache::PositionData] Position data
     # @return [Hash] Result hash with :updated, :new_sl_price, :reason
-    # rubocop:disable Metrics/AbcSize
+    # rubocop:disable-next Metrics/AbcSize
     def apply_tiered_sl(position_data, tracker: nil)
       return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
 
@@ -408,7 +407,6 @@ module Live
       Rails.logger.error("[TrailingEngine] Failed to apply tiered SL: #{e.class} - #{e.message}")
       { updated: false, new_sl_price: nil, reason: e.message }
     end
-    # rubocop:enable Metrics/AbcSize
 
     private
 
@@ -536,5 +534,4 @@ module Live
       nil
     end
   end
-  # rubocop:enable Metrics/ClassLength
 end

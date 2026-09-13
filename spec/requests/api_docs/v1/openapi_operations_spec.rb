@@ -2,7 +2,7 @@
 
 require 'swagger_helper'
 
-# rubocop:disable RSpec/DescribeClass, RSpec/EmptyExampleGroup, RSpec/ScatteredSetup -- RSwag OpenAPI specs
+# rubocop:disable-next RSpec/DescribeClass, RSpec/EmptyExampleGroup, RSpec/ScatteredSetup -- RSwag OpenAPI specs
 RSpec.describe 'OpenAPI v1 — settings, calibration, risk, debug', openapi_spec: 'v1/swagger.yaml' do
   path '/api/settings' do
     get 'Full algo config (YAML merge + DB overrides)' do
@@ -212,4 +212,3 @@ RSpec.describe 'OpenAPI v1 — settings, calibration, risk, debug', openapi_spec
     end
   end
 end
-# rubocop:enable RSpec/DescribeClass, RSpec/EmptyExampleGroup, RSpec/ScatteredSetup

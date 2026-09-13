@@ -13,7 +13,7 @@ RSpec.describe 'Api::EquityCurve' do
       expect(response).to have_http_status(:ok)
       body = response.parsed_body
       expect(body.length).to eq(1)
-      expect(body.first['equity']).to eq(105000.0)
+      expect(body.first['equity']).to eq(105_000.0)
     end
   end
 end

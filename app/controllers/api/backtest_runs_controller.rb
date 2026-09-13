@@ -20,10 +20,27 @@ module Api
     # request would otherwise hand the job strings, crashing deep inside BacktestRunJob).
     NUMERIC_PARAM_KEYS = %w[stop_loss_pct target_pct giveback_activation_pct giveback_pct max_hold_minutes].freeze
 
+    def index
+      page = [params[:page].to_i, 1].max
+      per_page = [[params[:per_page].to_i, 1].max, MAX_PER_PAGE].min
+
+      scope = BacktestRun.recent_first
+      total = scope.count
+      runs = scope.offset((page - 1) * per_page).limit(per_page)
+
+      render json: {
+        runs: runs.map { |r| run_summary(r) },
+        meta: { total: total, page: page, per_page: per_page, pages: [1, (total.to_f / per_page).ceil].max }
+      }
+    end
+    def show
+      run = BacktestRun.find(params.expect(:id))
+      render json: run_detail(run)
+    end
     def create
       strategy_version = resolve_strategy_version(params[:strategy_slug])
       if params[:strategy_slug].present? && strategy_version.nil?
-        return render json: { error: 'strategy_not_found', slug: params[:strategy_slug] }, status: :unprocessable_entity
+        return render json: { error: 'strategy_not_found', slug: params[:strategy_slug] }, status: :unprocessable_content
       end
 
       run = BacktestRun.create!(
@@ -39,29 +56,10 @@ module Api
       render json: { backtest_run_id: run.id, status: run.status }, status: :accepted
     end
 
-    def index
-      page = [params[:page].to_i, 1].max
-      per_page = [[params[:per_page].to_i, 1].max, MAX_PER_PAGE].min
-
-      scope = BacktestRun.recent_first
-      total = scope.count
-      runs = scope.offset((page - 1) * per_page).limit(per_page)
-
-      render json: {
-        runs: runs.map { |r| run_summary(r) },
-        meta: { total: total, page: page, per_page: per_page, pages: [1, (total.to_f / per_page).ceil].max }
-      }
-    end
-
-    def show
-      run = BacktestRun.find(params[:id])
-      render json: run_detail(run)
-    end
-
     def download_csv
-      run = BacktestRun.find(params[:id])
+      run = BacktestRun.find(params.expect(:id))
       unless run.completed?
-        render json: { error: 'not_completed', status: run.status }, status: :unprocessable_entity
+        render json: { error: 'not_completed', status: run.status }, status: :unprocessable_content
         return
       end
 

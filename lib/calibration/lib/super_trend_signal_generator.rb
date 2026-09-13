@@ -252,42 +252,42 @@ vol_spike ? 2 : 0
     tf = @cfg[:tf_minutes]
 
     # Direct port of Pine dynamic threshold blocks
-    @st_atr_base      = if tf <= 1
+    @st_atr_base = if tf <= 1
 8
-                        else
+                   else
 tf <= 15 ? 9 : 10
-                        end
-    @rsi_buy_min      = if tf <= 1
+                   end
+    @rsi_buy_min = if tf <= 1
 30
-                        else
+                   else
 tf <= 15 ? 35 : 40
-                        end
-    @rsi_buy_max      = if tf <= 1
+                   end
+    @rsi_buy_max = if tf <= 1
 80
-                        else
+                   else
 tf <= 15 ? 75 : 70
-                        end
-    @rsi_sell_min     = if tf <= 1
+                   end
+    @rsi_sell_min = if tf <= 1
 20
-                        else
+                    else
 tf <= 15 ? 25 : 30
-                        end
-    @rsi_sell_max     = if tf <= 1
+                    end
+    @rsi_sell_max = if tf <= 1
 70
-                        else
+                    else
 tf <= 15 ? 65 : 60
-                        end
+                    end
     @disinterest_level = if tf <= 1
 12
                          else
 tf <= 15 ? 15 : 20
                          end
-    @trend_level      = if tf <= 1
+    @trend_level = if tf <= 1
 20
-                        else
+                   else
 tf <= 15 ? 28 : 35
-                        end
-    @dir_confirm      = tf >= 15
+                   end
+    @dir_confirm = tf >= 15
   end
 
   def atr_per_bar_or_fallback(atr_per_bar:, base_atr:, i:)

@@ -109,7 +109,7 @@ RSpec.describe Entries::NoTradeEngine do
         expect(result.allowed).to be true
         expect(result.score).to eq(2)
         expect(result.reasons).to include('Weak trend: ADX < 15')
-        expect(result.reasons).to include(match(/DI overlap: no directional strength/))
+        expect(result.reasons).to include(include('DI overlap: no directional strength'))
       end
     end
 
@@ -140,7 +140,7 @@ RSpec.describe Entries::NoTradeEngine do
         expect(result.allowed).to be false
         expect(result.score).to eq(3)
         expect(result.reasons).to include('Weak trend: ADX < 15')
-        expect(result.reasons).to include(match(/DI overlap: no directional strength/))
+        expect(result.reasons).to include(include('DI overlap: no directional strength'))
         expect(result.reasons).to include('No BOS in last 10m')
       end
 
@@ -249,7 +249,7 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).to include(match(/DI overlap: no directional strength/))
+        expect(result.reasons).to include(include('DI overlap: no directional strength'))
       end
 
       it 'allows when DI difference >= 2' do
@@ -275,7 +275,7 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).not_to include(match(/DI overlap/))
+        expect(result.reasons).not_to include(include('DI overlap'))
       end
     end
 
@@ -383,7 +383,7 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).to include(match(/VWAP magnet zone/))
+        expect(result.reasons).to include(include('VWAP magnet zone'))
       end
 
       it 'blocks when trapped between VWAP and AVWAP' do
@@ -437,7 +437,7 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).to include(match(/Low volatility/))
+        expect(result.reasons).to include(include('Low volatility'))
       end
 
       it 'blocks when ATR is trending down' do
@@ -463,7 +463,7 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).to include(match(/ATR decreasing/))
+        expect(result.reasons).to include(include('ATR decreasing'))
       end
     end
 
@@ -492,7 +492,7 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).to include(match(/OI trap/))
+        expect(result.reasons).to include(include('OI trap'))
       end
 
       it 'blocks when IV is too low' do
@@ -518,7 +518,7 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).to include(match(/IV too low/))
+        expect(result.reasons).to include(include('IV too low'))
       end
 
       it 'blocks when IV is falling' do
@@ -570,7 +570,7 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).to include(match(/Wide bid-ask spread/))
+        expect(result.reasons).to include(include('Wide bid-ask spread'))
       end
     end
 
@@ -598,7 +598,7 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).to include(match(/Moderate wick ratio/))
+        expect(result.reasons).to include(include('Moderate wick ratio'))
       end
     end
 
@@ -652,7 +652,7 @@ RSpec.describe Entries::NoTradeEngine do
 
         result = described_class.validate(ctx)
 
-        expect(result.reasons).to include(match(/Lunch-time theta zone/))
+        expect(result.reasons).to include(include('Lunch-time theta zone'))
       end
 
       it 'allows during lunch-time if ADX >= 20' do

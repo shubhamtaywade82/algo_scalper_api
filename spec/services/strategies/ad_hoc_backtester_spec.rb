@@ -74,6 +74,6 @@ RSpec.describe Strategies::AdHocBacktester do
     result = described_class.new(trading_strategy).run
 
     expect(result[:checks][:backtest]).to eq("failed")
-    expect(result[:backtest_results]["error"]).to match(/boom/)
+    expect(result[:backtest_results]["error"]).to include('boom')
   end
 end

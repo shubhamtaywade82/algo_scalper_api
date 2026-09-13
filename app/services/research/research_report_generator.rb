@@ -441,7 +441,7 @@ gross_wins / gross_losses
       end
     end
 
-    # rubocop:disable Rails/Output
+    # rubocop:disable-next Rails/Output
     def self.print_console_summary(agg)
       puts "\n#{'=' * 120}"
       puts "📊 INSTITUTIONAL OPENING AUCTION RESEARCH OPERATING SYSTEM (V7)"
@@ -550,6 +550,5 @@ gross_wins / gross_losses
       puts "  P(Premium decay > 25% after peak | MFE>=50%): #{agg[:conditional_probabilities][:p_decay_above_25_given_strong_mfe]}%"
       puts "#{'=' * 110}\n"
     end
-    # rubocop:enable Rails/Output
   end
 end

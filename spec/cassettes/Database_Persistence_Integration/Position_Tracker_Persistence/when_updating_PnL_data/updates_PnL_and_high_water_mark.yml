@@ -1,0 +1,49 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://auth.dhan.co/app/generateAccessToken?dhanClientId=<CLIENT_ID>&pin=855179&totp=340205
+    body:
+      encoding: UTF-8
+      string: ''
+    headers:
+      User-Agent:
+      - Faraday v2.14.3
+      Accept:
+      - application/json
+      Content-Length:
+      - '0'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+  response:
+    status:
+      code: 200
+      message: ''
+    headers:
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Date:
+      - Mon, 07 Sep 2026 17:28:45 GMT
+      Content-Security-Policy:
+      - frame-ancestors 'self' https://dhan.co https://*.dhan.co https://scanx.trade
+        https://*.scanx.trade https://dhanhq.co https://*.dhanhq.co;
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Cache:
+      - Miss from cloudfront
+      Via:
+      - 1.1 9383f439239cbd86ffd68eab0c78eb0c.cloudfront.net (CloudFront)
+      X-Amz-Cf-Pop:
+      - BLR50-P1
+      X-Amz-Cf-Id:
+      - UCMA-vHlhmuwaFAcXLjxJCOUkEtUdO0oiL6FSs4aY-3RnkQoP_ZhFQ==
+    body:
+      encoding: UTF-8
+      string: '{"dhanClientId":"<CLIENT_ID>","dhanClientName":"SHUBHAM PURUSHOTTAM
+        TAYWADE","dhanClientUcc":"TCZY97960C","givenPowerOfAttorney":true,"accessToken":"<ACCESS_TOKEN>","expiryTime":"2026-09-08T22:58:45.613"}'
+  recorded_at: Mon, 07 Sep 2026 17:28:45 GMT
+recorded_with: VCR 6.4.0

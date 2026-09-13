@@ -358,7 +358,7 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
           )
 
           expect(result[:status]).to eq(:error)
-          expect(result[:message]).to match(/Invalid timeframe/)
+          expect(result[:message]).to include('Invalid timeframe')
         end
       end
 
@@ -377,7 +377,7 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
           )
 
           expect(result[:status]).to eq(:no_data)
-          expect(result[:message]).to match(/No candle data/)
+          expect(result[:message]).to include('No candle data')
         end
       end
 
@@ -395,7 +395,7 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
             adx_min_strength: 18.0
           )
 
-          expect(Rails.logger).to have_received(:error).with(match(/Timeframe analysis failed/))
+          expect(Rails.logger).to have_received(:error).with(include('Timeframe analysis failed'))
           expect(result[:status]).to eq(:error)
           expect(result[:message]).to eq('API error')
         end
@@ -455,7 +455,7 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
             timeframe_label: '1m'
           )
 
-          expect(Rails.logger).to have_received(:info).with(match(/ADX too weak/))
+          expect(Rails.logger).to have_received(:info).with(include('ADX too weak'))
           expect(direction).to eq(:avoid)
         end
       end
@@ -546,7 +546,6 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
       end
     end
 
-
     describe '.comprehensive_validation' do
       let(:series) { double('CandleSeries', candles: [double('Candle', close: 25_000.0)] * 10) }
       let(:supertrend_result) { { trend: :bullish, last_value: 25_000.0 } }
@@ -635,7 +634,7 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
           )
 
           expect(result[:valid]).to be(false)
-          expect(result[:reason]).to match(/ADX Strength/)
+          expect(result[:reason]).to include('ADX Strength')
         end
       end
     end

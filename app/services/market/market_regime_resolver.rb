@@ -20,7 +20,7 @@ module Market
   # - :bullish → Block all BUY PE trades
   # - :neutral → No directional constraint
   #
-  # rubocop:disable Metrics/ClassLength
+  # rubocop:disable-next Metrics/ClassLength
   class MarketRegimeResolver < ApplicationService
     # Minimum candles required for analysis
     MIN_CANDLES = 20
@@ -305,7 +305,7 @@ module Market
     # A gap occurs when current candle's low > prior candle's high (gap up)
     # or current candle's high < prior candle's low (gap down)
     # Returns { direction:, midpoint:, index: } or nil
-    # rubocop:disable Metrics/AbcSize
+    # rubocop:disable-next Metrics/AbcSize
     def detect_gap
       # Only look for gaps in the recent portion of candles
       search_start = [0, @candles.size - 10].max
@@ -339,7 +339,6 @@ module Market
 
       nil
     end
-    # rubocop:enable Metrics/AbcSize
 
     # -------------------------------------------------------------------------
     # VALUE AREA / MIDPOINT CALCULATION
@@ -412,5 +411,4 @@ module Market
       (hash[key] || hash[key.to_s]).to_f
     end
   end
-  # rubocop:enable Metrics/ClassLength
 end

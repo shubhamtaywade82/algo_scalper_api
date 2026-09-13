@@ -3,7 +3,7 @@
 require 'rails_helper'
 require 'yaml'
 
-# rubocop:disable RSpec/DescribeClass
+# rubocop:disable-next RSpec/DescribeClass
 RSpec.describe 'recurring schedule config' do
   let(:config) { YAML.load_file(Rails.root.join('config/recurring.yml')) }
 
@@ -19,4 +19,3 @@ RSpec.describe 'recurring schedule config' do
     end
   end
 end
-# rubocop:enable RSpec/DescribeClass

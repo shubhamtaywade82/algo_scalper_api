@@ -107,7 +107,7 @@ module Strategies
 
     def reconcile
       refresh_strategy_registry
-      Strategies::Record.where(status: %w[running deployed]).find_each do |strategy_record|
+      Strategies::Record.where.not(status: "draft").find_each do |strategy_record|
         desired = strategy_record.desired_status || strategy_record.status
         actual = @mutex.synchronize { @runners.key?(strategy_record.slug) }
 

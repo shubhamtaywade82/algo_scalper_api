@@ -14,9 +14,7 @@ RSpec.describe Live::BrokerReconciliationService do
   describe '#reconcile!' do
     context 'when broker returns matching data' do
       before do
-        allow(mock_client).to receive(:orders).and_return({ data: [] })
-        allow(mock_client).to receive(:positions).and_return({ data: [] })
-        allow(mock_client).to receive(:fund_limit).and_return({ data: { available_margin: 100_000 } })
+        allow(mock_client).to receive_messages(orders: { data: [] }, positions: { data: [] }, fund_limit: { data: { available_margin: 100_000 } })
         allow(Ledger::WalletReader).to receive(:snapshot).and_return({ cash: 100_000 })
       end
 
@@ -41,9 +39,7 @@ RSpec.describe Live::BrokerReconciliationService do
 
     context 'when critical discrepancy found' do
       before do
-        allow(mock_client).to receive(:orders).and_return({ data: [] })
-        allow(mock_client).to receive(:positions).and_return({ data: [] })
-        allow(mock_client).to receive(:fund_limit).and_return({ data: { available_margin: 500_000 } })
+        allow(mock_client).to receive_messages(orders: { data: [] }, positions: { data: [] }, fund_limit: { data: { available_margin: 500_000 } })
         allow(Ledger::WalletReader).to receive(:snapshot).and_return({ cash: 100_000 })
       end
 

@@ -54,7 +54,7 @@ module Api
     end
 
     def position
-      tracker = PositionTracker.find(params[:id])
+      tracker = PositionTracker.find(params.expect(:id))
       entries = LedgerJournalEntry.where(position_tracker_id: tracker.id).includes(ledger_postings: :ledger_account)
 
       render json: {

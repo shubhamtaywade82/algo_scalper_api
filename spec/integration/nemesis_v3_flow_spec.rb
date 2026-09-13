@@ -215,7 +215,7 @@ RSpec.describe 'NEMESIS V3 Flow Integration', :vcr, type: :integration do
       expect(result[:exit_triggered]).to be true
       expect(exit_engine).to have_received(:execute_exit).with(
         tracker,
-        match(/peak_drawdown_exit/)
+        include('peak_drawdown_exit')
       )
     end
   end

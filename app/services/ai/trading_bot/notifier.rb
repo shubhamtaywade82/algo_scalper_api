@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# rubocop:disable Rails/Output
+# rubocop:disable-next Rails/Output
 module Ai
   module TradingBot
     # Telegram notification handler for trading signals and executions.
@@ -78,4 +78,3 @@ module Ai
     end
   end
 end
-# rubocop:enable Rails/Output

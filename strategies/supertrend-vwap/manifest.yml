@@ -1,0 +1,23 @@
+---
+slug: supertrend-vwap
+name: Supertrend VWAP
+class_name: SupertrendVwapStrategy
+timeframes:
+- 5m
+instruments:
+- NIFTY
+- BANKNIFTY
+- SENSEX
+params:
+  supertrend_period:
+    type: Integer
+    default: '10'
+  supertrend_multiplier:
+    type: Float
+    default: '3.0'
+  dead_zone_start_hour:
+    type: Integer
+    default: '11'
+  dead_zone_end_hour:
+    type: Integer
+    default: '13'

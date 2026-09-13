@@ -237,7 +237,7 @@ RSpec.describe MultiIndicatorStrategy do
       it 'handles errors gracefully' do
         allow_any_instance_of(Indicators::SupertrendIndicator).to receive(:calculate_at).and_raise(StandardError,
                                                                                                    'Test error')
-        expect(Rails.logger).to receive(:error).with(match(/Error calculating/))
+        expect(Rails.logger).to receive(:error).with(include('Error calculating'))
 
         index = series.candles.size - 1
         signal = strategy.generate_signal(index)

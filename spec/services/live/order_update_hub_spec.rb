@@ -271,8 +271,8 @@ RSpec.describe Live::OrderUpdateHub do
     end
 
     it 'allows multiple callbacks' do
-      callback1 = proc { |p|  }
-      callback2 = proc { |p|  }
+      callback1 = proc { |p| }
+      callback2 = proc { |p| }
 
       hub.on_update(&callback1)
       hub.on_update(&callback2)

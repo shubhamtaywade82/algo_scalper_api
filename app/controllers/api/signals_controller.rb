@@ -42,7 +42,7 @@ module Api
     private
 
     def apply_filters(scope)
-      scope = scope.where(instrument_key: params[:index_key].upcase) if params[:index_key].present?
+      scope = scope.where(instrument_key: params.expect(:index_key).upcase) if params[:index_key].present?
 
       if params[:direction].present?
         actions = DIRECTION_BY_ACTION.select { |_, dir| dir == params[:direction] }.keys

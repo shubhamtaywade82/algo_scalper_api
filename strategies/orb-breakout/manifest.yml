@@ -1,0 +1,29 @@
+---
+slug: orb-breakout
+name: ORB Breakout
+class_name: OrbBreakoutStrategy
+timeframes:
+- 1m
+instruments:
+- NIFTY
+- BANKNIFTY
+- SENSEX
+params:
+  orb_period_minutes:
+    type: Integer
+    default: '30'
+  min_range_points:
+    type: Float
+    default: '40.0'
+  max_open_gap_pct:
+    type: Float
+    default: '0.8'
+  volume_multiplier:
+    type: Float
+    default: '1.5'
+  max_trades_per_day:
+    type: Integer
+    default: '2'
+  force_exit_time:
+    type: String
+    default: '14:30'
