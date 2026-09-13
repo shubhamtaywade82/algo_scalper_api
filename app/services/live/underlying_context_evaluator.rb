@@ -101,6 +101,10 @@ module Live
         state.atr_ratio.to_f < cfg[:atr_ratio_threshold].to_f
     end
 
+    # Absent keys use the documented defaults below. A corrupt config
+    # document propagates (wave 3) — the old rescue returned
+    # enabled: false while the absent-key default is enabled: true, i.e. it
+    # silently made the OPPOSITE decision of the default it was guarding.
     def underlying_context_cfg
       cfg = AlgoConfig.fetch.dig(:risk, :underlying_context_exit) || {}
       {
@@ -109,9 +113,6 @@ module Live
         atr_ratio_threshold: cfg.fetch(:atr_ratio_threshold, 0.65).to_f,
         tightening_multiplier: cfg.fetch(:tightening_multiplier, 0.5).to_f
       }
-    rescue StandardError
-      { enabled: false, trend_score_threshold: 15.0, atr_ratio_threshold: 0.65,
-        tightening_multiplier: 0.5 }
     end
 
     def hold_result

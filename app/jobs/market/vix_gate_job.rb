@@ -15,10 +15,11 @@ module Market
 
     private
 
+    # Flag absent -> gate off (documented). A corrupt config document
+    # propagates — perform's rescue logs and re-raises so the job retries
+    # instead of the VIX risk gate silently reading as disabled (wave 3).
     def gate_enabled?
       AlgoConfig.fetch.dig(:market, :vix_gate, :enabled) == true
-    rescue StandardError
-      false
     end
   end
 end

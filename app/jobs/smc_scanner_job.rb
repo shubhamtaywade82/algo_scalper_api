@@ -120,6 +120,9 @@ class SmcScannerJob < ApplicationJob
     indices
   end
 
+  # Days-to-expiry estimate. 999 = "expiry unknown" sentinel -> the index
+  # is skipped by the caller (fail-closed for scanning). Logged, never
+  # silent (wave 3).
   def calculate_days_to_expiry(instrument)
     expiry_list = instrument.expiry_list
     return 999 unless expiry_list&.any?
@@ -142,15 +145,21 @@ class SmcScannerJob < ApplicationJob
     return 999 unless nearest_expiry
 
     (nearest_expiry - today).to_i
-  rescue StandardError
+  rescue StandardError => e
+    Rails.logger.warn("[SmcScannerJob] days-to-expiry resolution failed for #{instrument&.symbol_name}: #{e.class} - #{e.message}")
     999
   end
 
+  # Absent -> documented default 7. Present-but-garbage raises (wave 3):
+  # a corrupt signals section used to silently widen/narrow the scan window.
   def max_expiry_days
-    config = AlgoConfig.fetch[:signals] || {}
-    (config[:max_expiry_days] || 7).to_i
-  rescue StandardError
-    7
+    raw = (AlgoConfig.fetch[:signals] || {})[:max_expiry_days]
+    return 7 if raw.nil?
+
+    Integer(raw)
+  rescue ArgumentError, TypeError => e
+    raise Errors::ConfigurationError,
+          "signals.max_expiry_days is not an integer (#{raw.inspect}): #{e.message}"
   end
 
   def send_ai_analysis_telegram_notification(index_key, decision, ai_analysis)

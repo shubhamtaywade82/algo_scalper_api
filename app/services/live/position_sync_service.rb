@@ -9,11 +9,11 @@ module Live
     def initialize
       @last_sync = nil
       @sync_interval = 30.seconds
-      @paper_mode = begin
-        AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
-      rescue StandardError
-        false
-      end
+      # SAFETY-CRITICAL (error-handling review 2026-09, wave 3): a config
+      # failure used to read as "live" and drive live-broker sync calls.
+      # Unknown mode refuses to initialize (test env keeps the documented
+      # default; see AlgoConfig.paper_trading_enabled?).
+      @paper_mode = AlgoConfig.paper_trading_enabled?
     end
 
     def sync_positions!

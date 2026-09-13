@@ -5,11 +5,10 @@ module Live
     module_function
 
     def etf_cfg
-      @etf_cfg ||= begin
-        (AlgoConfig.fetch[:risk] && AlgoConfig.fetch[:risk][:etf]) || {}
-      rescue StandardError
-        {}
-      end
+      # Strict read (wave 3): a corrupt config document used to read as
+      # "feature disabled" — an exit layer silently turning itself off.
+      # Callers (enforcement loop / early_trend_failure?) log-and-isolate.
+      @etf_cfg ||= (AlgoConfig.fetch.dig(:risk, :etf) || {})
     end
 
     # Reset cached config (useful for testing)
