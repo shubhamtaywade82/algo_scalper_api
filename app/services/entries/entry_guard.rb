@@ -202,13 +202,11 @@ module Entries
         end
 
         # Strategy 2: REST API fallback (only if WebSocket unavailable or no tick received)
-        # Try to resolve via instrument/derivative object
-        if pick[:derivative_id].present?
-          derivative = Derivative.find_by(id: pick[:derivative_id])
-          if derivative
-            api_ltp = derivative.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
-            return BigDecimal(api_ltp.to_s) if api_ltp.present?
-          end
+        # Try to resolve via the traded contract instrument
+        contract = pick_instrument(pick)
+        if contract
+          api_ltp = contract.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
+          return BigDecimal(api_ltp.to_s) if api_ltp.present?
         end
 
         # Fallback to instrument method
@@ -466,9 +464,19 @@ module Entries
       end
 
       def find_watchable_for_pick(pick:, instrument:)
-        Derivative.find_by(security_id: pick[:security_id].to_s, segment: (pick[:segment] || 'NSE_FNO').to_s) || instrument
+        # Post-consolidation: the traded option/contract is an Instrument row.
+        # Prefer FNO segment on the (vanishingly rare) cross-segment id clash.
+        Instrument.fno.find_by(security_id: pick[:security_id].to_s) ||
+          Instrument.find_by(security_id: pick[:security_id].to_s) ||
+          instrument
       rescue StandardError
         instrument
+      end
+
+      # Resolves the traded contract for an entry pick (shared semantics:
+      # instrument_id > legacy derivative_id > security_id).
+      def pick_instrument(pick)
+        Instruments::LegacyResolver.resolve_pick(pick)
       end
 
       def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:, ltp:, entry_metadata: nil, bos_context: nil)

@@ -28,17 +28,7 @@ module Trading
       end
 
       def derivative_for(pick)
-        if pick[:derivative_id].present?
-          return Derivative.find_by(id: pick[:derivative_id])
-        end
-
-        security_id = pick[:security_id].to_s
-        return nil if security_id.empty?
-
-        segment = pick[:segment] || pick['segment']
-        Derivative.find_by(security_id: security_id, segment: segment.to_s)
-      rescue StandardError
-        nil
+        Instruments::LegacyResolver.resolve_pick(pick)
       end
 
       def coerce_date(raw)

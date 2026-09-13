@@ -10,6 +10,7 @@
 #  instrument_code               :string
 #  underlying_security_id        :string
 #  underlying_symbol             :string
+#  underlying_instrument_id      :bigint
 #  symbol_name                   :string
 #  display_name                  :string
 #  instrument_type               :string
@@ -25,63 +26,93 @@
 #  asm_gsm_flag                  :string
 #  asm_gsm_category              :string
 #  buy_sell_indicator            :string
-#  buy_co_min_margin_per         :decimal(8, 2)
-#  sell_co_min_margin_per        :decimal(8, 2)
-#  buy_co_sl_range_max_perc      :decimal(8, 2)
-#  sell_co_sl_range_max_perc     :decimal(8, 2)
-#  buy_co_sl_range_min_perc      :decimal(8, 2)
-#  sell_co_sl_range_min_perc     :decimal(8, 2)
-#  buy_bo_min_margin_per         :decimal(8, 2)
-#  sell_bo_min_margin_per        :decimal(8, 2)
-#  buy_bo_sl_range_max_perc      :decimal(8, 2)
-#  sell_bo_sl_range_max_perc     :decimal(8, 2)
-#  buy_bo_sl_range_min_perc      :decimal(8, 2)
-#  sell_bo_sl_min_range          :decimal(8, 2)
-#  buy_bo_profit_range_max_perc  :decimal(8, 2)
-#  sell_bo_profit_range_max_perc :decimal(8, 2)
-#  buy_bo_profit_range_min_perc  :decimal(8, 2)
-#  sell_bo_profit_range_min_perc :decimal(8, 2)
-#  mtf_leverage                  :decimal(8, 2)
+#  active                        :boolean
+#  tradable                      :boolean
+#  contract_multiplier           :decimal(, )
+#  custom_symbol                 :string
+#  settlement_type               :string           default("cash")
 #  created_at                    :datetime         not null
 #  updated_at                    :datetime         not null
 #
 # Indexes
 #
-#  index_instruments_on_instrument_code                    (instrument_code)
-#  index_instruments_on_symbol_name                        (symbol_name)
-#  index_instruments_on_underlying_symbol_and_expiry_date  (underlying_symbol,expiry_date)
-#  index_instruments_unique                                (security_id,symbol_name,exchange,segment) UNIQUE
+#  index_instruments_on_exchange_segment_security_id_unique  (exchange,segment,security_id) UNIQUE
+#  index_instruments_on_option_contract_identity             (exchange,segment,underlying_security_id,expiry_date,strike_price,option_type) UNIQUE (partial)
+#  index_instruments_on_future_contract_identity             (exchange,segment,underlying_security_id,expiry_date) UNIQUE (partial)
+#  index_instruments_on_underlying_instrument_id             (underlying_instrument_id)
+#  index_instruments_on_security_id_and_segment              (security_id,segment)
+#  index_instruments_on_instrument_code                      (instrument_code)
+#  index_instruments_on_symbol_name                          (symbol_name)
+#  index_instruments_on_underlying_symbol_and_expiry_date    (underlying_symbol,expiry_date)
 #
 
 # frozen_string_literal: true
 
 require "bigdecimal"
 
+# Single canonical tradable-security master.
+#
+# Domain decision (architecture review 2026-09):
+#   Instrument = one broker/exchange-specific tradable contract
+#   (equity, index, future, option). The legacy `derivatives` table was a
+#   duplicate copy of the Dhan scrip master and is now a frozen archive —
+#   everything lives here.
+#
+# Identity:
+#   * Broker identity ... (exchange, segment, security_id)  — DB-unique.
+#   * Internal identity .. id (referenced by every FK).
+#   * Contract identity .. (exchange, segment, underlying_security_id,
+#     expiry_date, strike_price, option_type) for options — DB-unique via a
+#     partial index.
+#
+# Underlying relationship (self-referential):
+#   NIFTY index row  <-underlying_instrument_id-  NIFTY 25000 CE row
+#   The underlying link is metadata about a contract, NOT a separate master
+#   entity, mirroring Dhan's own UNDERLYING_SECURITY_ID field.
 class Instrument < ApplicationRecord
   include InstrumentHelpers
 
-  has_many :derivatives, dependent: :destroy
+  # --- Identity -----------------------------------------------------------
+  # DB invariant (index_instruments_on_exchange_segment_security_id_unique)
+  # and application invariant now agree: one row per tradable security per
+  # exchange segment. The previous model validated global security_id
+  # uniqueness while the database only enforced it per (security_id,
+  # symbol_name, exchange, segment) — two different contracts.
+  validates :security_id, presence: true, uniqueness: { scope: %i[exchange segment] }
+  validates :symbol_name, presence: true
+  validates :exchange_segment, presence: true, unless: -> { exchange.present? && segment.present? }
+  validates :option_type, inclusion: { in: %w[CE PE], allow_blank: true }
+
+  # --- Associations -------------------------------------------------------
+  belongs_to :underlying_instrument, class_name: 'Instrument', optional: true,
+                                     inverse_of: :derivative_contracts
+  has_many :derivative_contracts, class_name: 'Instrument',
+           foreign_key: :underlying_instrument_id,
+           inverse_of: :underlying_instrument, dependent: :nullify
+
+  # Back-compat alias: `instrument.derivatives` used to hit the duplicated
+  # Derivative master. It now returns consolidated Instrument contract rows
+  # hanging off the underlying via underlying_instrument_id.
+  has_many :derivatives, class_name: 'Instrument', foreign_key: :underlying_instrument_id
+
   has_many :position_trackers, dependent: :restrict_with_error
-  accepts_nested_attributes_for :derivatives, allow_destroy: true
+  has_many :executions, dependent: :restrict_with_error
   has_many :watchlist_items, as: :watchable, dependent: :nullify, inverse_of: :watchable
   has_one  :watchlist_item,  lambda {
     where(active: true)
   }, as: :watchable, class_name: 'WatchlistItem', dependent: :nullify, inverse_of: :watchable
 
-  scope :enabled, -> { where(enabled: true) }
+  # --- Scopes -------------------------------------------------------------
   scope :active, -> { where(active: true) }
   scope :tradable, -> { where(tradable: true) }
-  validates :security_id, presence: true, uniqueness: true # rubocop:disable Rails/UniqueValidationWithoutIndex
-  validates :symbol_name, presence: true
-  validates :exchange_segment, presence: true, unless: -> { exchange.present? && segment.present? }
-
-  class << self
-    def option_chain_adapter
-      @option_chain_adapter ||= Adapters::OptionChain::DhanAdapter.new
-    end
-
-    attr_writer :option_chain_adapter
-  end
+  scope :fno, -> { where(segment: :derivatives) }
+  scope :options, -> { where.not(option_type: [nil, '']) }
+  scope :futures, -> { where(option_type: [nil, '']).where.not(expiry_date: nil) }
+  scope :ce, -> { where(option_type: 'CE') }
+  scope :pe, -> { where(option_type: 'PE') }
+  scope :current_expiry, -> { where(expiry_date: Date.current) }
+  scope :expired, -> { where(expiry_date: ...Date.current) }
+  scope :not_expired, -> { where(expiry_date: Date.current..).or(where(expiry_date: nil)) }
 
   SEGMENT_FROM_EXCHANGE = {
     "IDX_I" => "index",
@@ -102,6 +133,12 @@ class Instrument < ApplicationRecord
   }.freeze
 
   class << self
+    def option_chain_adapter
+      @option_chain_adapter ||= Adapters::OptionChain::DhanAdapter.new
+    end
+
+    attr_writer :option_chain_adapter
+
     def segment_key_for(segment_code)
       return if segment_code.blank?
 
@@ -148,6 +185,142 @@ class Instrument < ApplicationRecord
     def find_index_by_sid_and_symbol(security_id:, symbol_name:)
       segment_index.find_by(security_id: security_id.to_s, symbol_name: symbol_name.to_s)
     end
+
+    # --- Contract resolution (Q19 query surface) --------------------------
+
+    # Exact option resolution in a single SQL statement.
+    #
+    # The business identity of an option contract — exchange + underlying +
+    # expiry + strike + CE/PE — is a database invariant
+    # (index_instruments_on_option_contract_identity), so this lookup no
+    # longer depends on in-Ruby BigDecimal comparison the way the legacy
+    # Derivative.find_by_params did.
+    #
+    # @param underlying_symbol [String] e.g. "NIFTY"
+    # @param expiry_date [Date, String]
+    # @param strike_price [Numeric, String]
+    # @param option_type [String] "CE" or "PE"
+    # @param exchange [String, nil] e.g. "NSE"
+    # @return [Instrument, nil]
+    def find_option(underlying_symbol:, expiry_date:, strike_price:, option_type:, exchange: nil)
+      options
+        .where(underlying_symbol: underlying_symbol.to_s.upcase)
+        .where(expiry_date: coerce_date(expiry_date))
+        .where(option_type: option_type.to_s.upcase)
+        .where(strike_price: BigDecimal(strike_price.to_s))
+        .then { |scope| exchange.present? ? scope.where(exchange: exchange.to_s.upcase) : scope }
+        .first
+    end
+
+    # Back-compat alias for the legacy Derivative.find_by_params call shape.
+    def find_derivative_by_params(underlying_symbol:, strike_price:, expiry_date:, option_type:, exchange: nil)
+      find_option(
+        underlying_symbol: underlying_symbol,
+        expiry_date: expiry_date,
+        strike_price: strike_price,
+        option_type: option_type,
+        exchange: exchange
+      )
+    end
+
+    # Back-compat alias for the legacy Derivative.find_security_id.
+    def find_security_id_by_params(underlying_symbol:, strike_price:, expiry_date:, option_type:)
+      find_option(
+        underlying_symbol: underlying_symbol,
+        expiry_date: expiry_date,
+        strike_price: strike_price,
+        option_type: option_type
+      )&.security_id
+    end
+
+    # All option contracts for one underlying + expiry (strike-ordered).
+    # @return [ActiveRecord::Relation<Instrument>]
+    def options_for(underlying_symbol:, expiry_date:, option_type: nil, exchange: nil)
+      scope = options
+              .where(underlying_symbol: underlying_symbol.to_s.upcase)
+              .where(expiry_date: coerce_date(expiry_date))
+              .order(:strike_price)
+      scope = scope.where(option_type: option_type.to_s.upcase) if option_type.present?
+      scope = scope.where(exchange: exchange.to_s.upcase) if exchange.present?
+      scope
+    end
+
+    # Distinct tradable expiries for an underlying, nearest first.
+    # @param include_expired [Boolean] keep already-expired contract listings
+    # @return [Array<Date>]
+    def option_expiries_for(underlying_symbol:, exchange: nil, include_expired: false)
+      scope = options.where(underlying_symbol: underlying_symbol.to_s.upcase)
+      scope = scope.where(exchange: exchange.to_s.upcase) if exchange.present?
+      scope = scope.not_expired unless include_expired
+      scope.distinct.order(:expiry_date).pluck(:expiry_date).compact
+    end
+
+    # Options within +-range of the ATM strike for the current expiry.
+    # @return [ActiveRecord::Relation<Instrument>]
+    def atm_options(underlying_symbol:, spot:, expiry_date: nil, range: 100, limit: 5)
+      expiry = expiry_date.present? ? coerce_date(expiry_date) : option_expiries_for(underlying_symbol: underlying_symbol).first
+      return none if expiry.blank?
+
+      options
+        .where(underlying_symbol: underlying_symbol.to_s.upcase, expiry_date: expiry)
+        .where('ABS(strike_price - ?) <= ?', spot.to_f, range.to_f)
+        .order(:strike_price)
+        .limit(limit)
+    end
+
+    def coerce_date(raw)
+      case raw
+      when Date then raw
+      when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
+      when String then Date.parse(raw)
+      else Date.parse(raw.to_s)
+      end
+    rescue ArgumentError, TypeError
+      nil
+    end
+  end
+
+  # --- Predicates ---------------------------------------------------------
+  def option?
+    option_type.present?
+  end
+
+  def future?
+    option_type.blank? && expiry_date.present?
+  end
+
+  # True for FNO contracts (futures + options) — i.e. anything that has an
+  # underlying and expiry semantics.
+  def derivative?
+    return true if option? || future?
+    return true if underlying_security_id.present?
+
+    segment_derivatives?
+  end
+
+  def index_master?
+    segment_index?
+  end
+
+  def expired?
+    expiry_date.present? && expiry_date < Date.current
+  end
+
+  # Operational availability: an instrument row is kept forever for history
+  # but expired contracts must never be selected for new orders.
+  def currently_tradable?
+    return false if expired?
+
+    active != false && tradable != false
+  end
+
+  # Composite key used for logging / reconciliation.
+  def broker_identity_key
+    "#{exchange}:#{segment}:#{security_id}"
+  end
+
+  def contract_identity_key
+    [exchange, segment, underlying_security_id, expiry_date, strike_price, option_type].compact.join(':')
   end
 
   def subscribe!
@@ -158,7 +331,7 @@ class Instrument < ApplicationRecord
     unsubscribe
   end
 
-  # Places a market BUY order for the underlying instrument and tracks it.
+  # Places a market BUY order for this instrument and tracks it.
   # @param qty [Integer, nil]
   # @param product_type [String]
   # @param meta [Hash]
@@ -186,9 +359,10 @@ class Instrument < ApplicationRecord
     )
     return nil unless order.respond_to?(:order_id) && order.order_id.present?
 
-    after_order_track!(
+    order_no = order.order_id
+    tracker = after_order_track!(
       instrument: self,
-      order_no: order.order_id,
+      order_no: order_no,
       segment: segment_code,
       security_id: security,
       side: "LONG",
@@ -198,6 +372,20 @@ class Instrument < ApplicationRecord
       index_key: meta[:index_key],
       meta: meta.slice(:alpha_source, :signal_confidence, :expected_value, :entry_strategy, :direction, :client_order_id)
     )
+
+    execution = Execution.record_from_order!(
+      order: order, instrument: self, side: :buy, quantity: quantity,
+      purpose: :entry, position_tracker: tracker, requested_price: ltp
+    )
+
+    if Ledger::OrderResponse.paper?(order) || (order.is_a?(Hash) && order[:paper])
+      Ledger::EntryPoster.post!(
+        tracker: tracker,
+        fill_price: execution&.fill_price || ltp,
+        quantity: quantity,
+        order_no: order_no
+      )
+    end
 
     order
   end
@@ -214,10 +402,111 @@ class Instrument < ApplicationRecord
     quantity = if qty.to_i.positive?
       qty.to_i
                else
-      PositionTracker.active.where(
-        "(watchable_type = 'Instrument' AND watchable_id = ?) OR instrument_id = ?",
-        id, id
-      ).where(security_id: security).sum(:quantity).to_i
+      PositionTracker.active.where(security_id: security).sum(:quantity).to_i
+               end
+    return nil if quantity <= 0
+
+    Orders.config.gateway.place_market(
+      side: 'sell',
+      segment: segment_code,
+      security_id: security,
+      qty: quantity,
+      meta: {
+        client_order_id: meta[:client_order_id] || default_client_order_id(side: :sell, security_id: security)
+      }
+    )
+  end
+
+  # Places a market BUY order for this option contract (CE/PE) with
+  # risk-aware sizing. Ported from the legacy Derivative model — the
+  # instrument itself is now the tradable object.
+  # @param qty [Integer, nil]
+  # @param product_type [String]
+  # @param index_cfg [Hash, nil]
+  # @param meta [Hash]
+  # @return [Object, nil]
+  def buy_option!(qty: nil, product_type: "NORMAL", index_cfg: nil, meta: {})
+    segment_code = exchange_segment
+    security = security_id.to_s
+    raise "Instrument missing segment/security_id" if segment_code.blank? || security.blank?
+
+    ltp = resolve_ltp(segment: segment_code, security_id: security, meta: meta)
+    raise "LTP unavailable" unless ltp
+
+    quantity = if qty.to_i.positive?
+      qty.to_i
+               else
+      config = index_cfg || { key: underlying_symbol || symbol_name, segment: segment_code }
+      Capital::Allocator.qty_for(
+        index_cfg: config,
+        entry_price: ltp.to_f,
+        derivative_lot_size: lot_size.to_i,
+        scale_multiplier: 1
+      )
+               end
+    return nil if quantity.to_i <= 0
+
+    order = Orders.config.gateway.place_market(
+      side: 'buy',
+      segment: segment_code,
+      security_id: security,
+      qty: quantity,
+      meta: {
+        client_order_id: meta[:client_order_id] || default_client_order_id(side: :buy, security_id: security),
+        ltp: ltp,
+        product_type: product_type
+      }
+    )
+    order_no = Ledger::OrderResponse.extract_order_id(order)
+    return nil if order_no.blank?
+
+    side_label = option_type.to_s.upcase == "CE" ? "long_ce" : "long_pe"
+
+    tracker = after_order_track!(
+      instrument: self,
+      order_no: order_no,
+      segment: segment_code,
+      security_id: security,
+      side: side_label,
+      qty: quantity,
+      entry_price: ltp,
+      symbol: symbol_name || display_name,
+      index_key: (index_cfg || {})[:key],
+      meta: meta.slice(:alpha_source, :signal_confidence, :expected_value, :entry_strategy, :signal_timestamp, :direction, :client_order_id)
+    )
+
+    execution = Execution.record_from_order!(
+      order: order, instrument: self, side: :buy, quantity: quantity,
+      purpose: :entry, position_tracker: tracker, requested_price: ltp
+    )
+
+    if Ledger::OrderResponse.paper?(order) || (order.is_a?(Hash) && order[:paper])
+      Ledger::EntryPoster.post!(
+        tracker: tracker,
+        # Ledger books the SIMULATED fill (bid/ask + slippage from the paper
+        # gateway), not the raw LTP — previously this overstated paper P&L.
+        fill_price: execution&.fill_price || ltp,
+        quantity: quantity,
+        order_no: order_no
+      )
+    end
+
+    order
+  end
+
+  # Places a market SELL order to exit this option position.
+  # @param qty [Integer, nil]
+  # @param meta [Hash]
+  # @return [Object, nil]
+  def sell_option!(qty: nil, meta: {})
+    segment_code = exchange_segment
+    security = security_id.to_s
+    raise "Instrument missing segment/security_id" if segment_code.blank? || security.blank?
+
+    quantity = if qty.to_i.positive?
+      qty.to_i
+               else
+      PositionTracker.active.where(security_id: security).sum(:quantity).to_i
                end
     return nil if quantity <= 0
 
@@ -361,9 +650,10 @@ class Instrument < ApplicationRecord
     fetch_option_chain(expiry)
   end
 
-  # Get lot size from the nearest future expiry derivative
-  # Returns the lot_size of the first derivative with expiry_date >= today
-  # @return [Integer, nil] Lot size from nearest future expiry derivative, or nil if not found
+  # Get lot size from the nearest future expiry contract hanging off this
+  # underlying. Returns the lot_size of the first contract with
+  # expiry_date >= today.
+  # @return [Integer, nil] Lot size from nearest future expiry contract, or nil if not found
   def lot_size_from_derivatives
     today = Time.zone.today
     nearest_derivative = derivatives

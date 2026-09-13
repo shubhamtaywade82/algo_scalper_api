@@ -64,10 +64,12 @@ module Positions
       meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
       inst = tracker.instrument
 
-      deriv = if tracker.watchable.is_a?(Derivative)
+      deriv = if tracker.watchable.is_a?(Instrument) && tracker.watchable.derivative?
                 tracker.watchable
               elsif tracker.security_id.present?
-                Derivative.find_by(security_id: tracker.security_id, segment: tracker.segment) || Derivative.find_by(security_id: tracker.security_id)
+                # Consolidated master: prefer FNO contract, then any match.
+                Instrument.fno.find_by(security_id: tracker.security_id) ||
+                  Instrument.find_by(security_id: tracker.security_id)
               end
 
       expiry = if meta.key?('expiry_date')

@@ -221,52 +221,29 @@ module Live
       quantity = extract_quantity(dhan_position)
       average_price = extract_average_price(dhan_position)
 
-      # Find the derivative (for options) or instrument (for indices)
-      # Parse exchange_segment (e.g., "NSE_FNO" -> exchange: "NSE", segment: "FNO")
+      # Find the traded contract (consolidated master — options are
+      # Instrument rows with segment 'D') or the index/equity instrument.
       exchange, segment = parse_exchange_segment(exchange_segment)
 
-      # For options (derivatives), look up derivatives
-      if segment == 'derivatives'
-        derivative = Derivative.find_by(
-          security_id: security_id,
-          exchange: exchange,
-          segment: segment
-        )
+      instrument = Instrument.find_by(
+        security_id: security_id,
+        exchange: exchange,
+        segment: segment
+      )
 
-        unless derivative
-          Rails.logger.error("[PositionSync] Could not find derivative for #{security_id} (#{exchange_segment})")
-          return false
-        end
-
-        instrument = derivative.instrument
-      else
-        # For indices, look up instruments directly
-        instrument = Instrument.find_by(
-          security_id: security_id,
-          exchange: exchange,
-          segment: segment
-        )
-
-        unless instrument
-          Rails.logger.error("[PositionSync] Could not find instrument for #{security_id} (#{exchange_segment})")
-          return false
-        end
+      unless instrument
+        Rails.logger.error("[PositionSync] Could not find instrument for #{security_id} (#{exchange_segment})")
+        return false
       end
 
       # Generate a synthetic order number for untracked positions
       synthetic_order_no = "SYNC-#{security_id}-#{Time.current.to_i}"
 
-      # Determine watchable: derivative for options, instrument for indices
-      watchable = if segment == 'derivatives' && derivative
-                    derivative
-                  else
-                    instrument
-                  end
-
-      # Create PositionTracker
+      # The traded contract is the watchable; the tracker's instrument FK is
+      # the underlying for derivative trades, self otherwise.
       tracker = PositionTracker.create!(
-        watchable: watchable,
-        instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
+        watchable: instrument,
+        instrument: (instrument.derivative? ? instrument.underlying_instrument : nil) || instrument,
         order_no: synthetic_order_no,
         security_id: security_id.to_s,
         symbol: symbol,

@@ -91,7 +91,7 @@ module AlphaExecutionService
     end
 
     def find_derivative(signal)
-      Derivative.find_by_params(
+      Instrument.find_derivative_by_params(
         underlying_symbol: signal[:index_key].to_s.upcase,
         strike_price: signal[:strike],
         expiry_date: signal[:expiry],

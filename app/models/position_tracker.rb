@@ -10,6 +10,15 @@ class PositionTracker < ApplicationRecord
   include PositionTracker::Broadcastable
   include PositionTracker::Lifecycle
 
+  # Canonical paper/live discriminator. The legacy `paper` boolean is kept
+  # as a synced compatibility mirror (see sync_trading_mode) because a wide
+  # body of code and queries still writes/reads it. Same direction the
+  # ledger (ledger_journal_entries.mode) and paper_daily_wallets (mode)
+  # already took — explicit mode, not booleans.
+  enum :trading_mode, { paper: 'paper', live: 'live' }, prefix: :mode, default: :live
+
+  before_validation :sync_trading_mode
+
   def peak_premium
     highest_price
   end
@@ -84,19 +93,21 @@ class PositionTracker < ApplicationRecord
   after_commit :unregister_from_index, on: :destroy
   after_update_commit :refresh_index_if_relevant
   after_update_commit :cleanup_if_exited
+  after_update_commit :refresh_leg_group_status_if_relevant
   after_create_commit :subscribe_to_feed
   after_destroy_commit :clear_redis_pnl_cache
   after_update_commit :clear_redis_cache_if_exited
   after_update_commit :analyze_trade_if_exited
 
   # Associations
-  belongs_to :instrument, optional: false # Kept for backward compatibility during transition
+  belongs_to :instrument, optional: false # Parent/underlying for derivative trades, self otherwise
   belongs_to :leg_group, optional: true
   belongs_to :watchable, polymorphic: true
   has_one :trade_analytic, dependent: :destroy
   has_one :trade_telemetry, foreign_key: :tracker_id, class_name: 'TradeTelemetry', dependent: :destroy
   has_one :trade_memory, dependent: :destroy
   has_one :meta_snapshot, class_name: 'PositionMetaSnapshot', dependent: :destroy
+  has_many :executions, dependent: :nullify
 
   # Scopes
   # Note: enum automatically creates scopes for :pending, :active, :exited, :cancelled
@@ -332,12 +343,13 @@ class PositionTracker < ApplicationRecord
     Positions::States::PositionStateMachine.new(self)
   end
 
+  # trading_mode is canonical; the paper boolean mirrors it.
   def paper?
-    paper == true
+    trading_mode == 'paper'
   end
 
   def live?
-    !paper?
+    trading_mode == 'live'
   end
 
   def be_set?
@@ -388,6 +400,30 @@ class PositionTracker < ApplicationRecord
   end
 
   private
+
+  # Keeps trading_mode (canonical) and the legacy paper boolean in lockstep,
+  # whichever side the caller wrote to. Works for both create and update
+  # because Rails reports changed? against the DB default / loaded value.
+  def sync_trading_mode
+    if paper_changed? && !trading_mode_changed?
+      self.trading_mode = paper ? 'paper' : 'live'
+    elsif trading_mode_changed? && !paper_changed?
+      self.paper = (trading_mode == 'paper')
+    elsif new_record? && trading_mode == 'live' && paper == true
+      self.trading_mode = 'paper'
+    end
+  end
+
+  # When a leg's status changes, the owning trade (LegGroup) derives its own
+  # status from its legs instead of being maintained by hand.
+  def refresh_leg_group_status_if_relevant
+    return unless leg_group_id.present?
+    return unless saved_change_to_status?
+
+    leg_group&.refresh_status!
+  rescue StandardError => e
+    Rails.logger.warn("[PositionTracker] refresh_leg_group_status failed for #{id}: #{e.message}")
+  end
 
   def analyze_trade_if_exited
     return unless saved_change_to_status? && exited?

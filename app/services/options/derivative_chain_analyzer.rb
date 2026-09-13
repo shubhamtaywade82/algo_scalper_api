@@ -136,10 +136,9 @@ module Options
 
     def weekly_expiry_in_db?(expiry_date)
       expiry = expiry_date.is_a?(Date) ? expiry_date : Date.parse(expiry_date.to_s)
-      Derivative.where(underlying_symbol: @index_key, expiry_date: expiry)
-                .where("expiry_flag ILIKE 'W%'")
-                .where.not(option_type: [nil, ''])
-                .exists?
+      Instrument.options.where(underlying_symbol: @index_key, expiry_date: expiry)
+               .where("expiry_flag ILIKE 'W%'")
+               .exists?
     rescue StandardError
       false
     end
@@ -150,13 +149,12 @@ module Options
       # Convert expiry_date to Date object if it's a string
       expiry_obj = expiry_date.is_a?(Date) ? expiry_date : Date.parse(expiry_date.to_s)
 
-      # Get all derivatives for this index and expiry
-      # Exclude TEST_ security IDs completely - never use test derivatives
-      derivatives_relation = Derivative.where(
+      # Get all option contracts for this index and expiry from the
+      # consolidated master. Exclude TEST_ security IDs completely.
+      derivatives_relation = Instrument.options.where(
         underlying_symbol: @index_key,
         expiry_date: expiry_obj
-      ).where.not(option_type: [nil, ''])
-                                       .where.not("security_id LIKE 'TEST_%'")
+      ).where.not("security_id LIKE 'TEST_%'")
       derivatives = derivatives_relation
 
       if derivatives.empty?
@@ -186,7 +184,7 @@ module Options
                           api_strikes.include?(strike_bd)
                         end
                         filtered_ids = matching.map(&:id)
-                        Derivative.where(id: filtered_ids)
+                        Instrument.where(id: filtered_ids)
                       end
 
         if derivatives.count < original_count
@@ -230,7 +228,7 @@ module Options
                          target_strikes_bd.include?(strike_bd)
                        end
                        filtered_ids = matching_derivs.map(&:id)
-                       Derivative.where(id: filtered_ids)
+                       Instrument.where(id: filtered_ids)
                      end
 
           filtered_count = filtered.count
@@ -537,6 +535,7 @@ module Options
           security_id: option[:security_id],
           lot_size: option[:lot_size],
           symbol: build_symbol(option[:derivative], option[:strike], option[:type], option[:expiry]),
+          instrument_id: option[:derivative]&.id,
           derivative_id: option[:derivative]&.id,
           reason: reason_for(option, score, atm, spot, direction)
         }

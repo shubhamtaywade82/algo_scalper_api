@@ -187,7 +187,9 @@ module InstrumentHelpers
   end
 
   # Creates a PositionTracker immediately after order placement and primes caches.
-  # @param instrument [Instrument]
+  # @param instrument [Instrument] The TRADED instrument (option/future/equity
+  #   itself). The tracker's `instrument` FK resolves to the underlying for
+  #   derivative trades and to the instrument itself otherwise.
   # @param order_no [String]
   # @param segment [String]
   # @param security_id [String]
@@ -200,8 +202,10 @@ module InstrumentHelpers
   # @return [PositionTracker]
   def after_order_track!(instrument:, order_no:, segment:, security_id:, side:, qty:, entry_price:, symbol:, # rubocop:disable Metrics/ParameterLists
                          index_key: nil, meta: {})
-    # Determine watchable: if self is a Derivative, use self; otherwise use instrument
-    watchable = is_a?(Derivative) ? self : instrument
+    # watchable is always the traded instrument now that the derivative
+    # master is consolidated. Legacy Derivative callers still route through
+    # their consolidated Instrument (see Derivative#buy_option!).
+    watchable = is_a?(Derivative) ? consolidated_instrument || instrument : instrument
 
     # Build base meta with index_key
     base_meta = index_key ? { 'index_key' => index_key.to_s } : {}
@@ -210,7 +214,7 @@ module InstrumentHelpers
 
     tracker = PositionTracker.build_or_average!(
       watchable: watchable,
-      instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
+      instrument: watchable,
       order_no: order_no,
       security_id: security_id.to_s,
       symbol: symbol,

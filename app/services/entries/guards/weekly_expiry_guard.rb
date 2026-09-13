@@ -33,17 +33,10 @@ module Entries
       private
 
       def weekly_contract?(pick:, index_cfg:)
-        derivative = if pick[:derivative_id].present?
-                       Derivative.find_by(id: pick[:derivative_id])
-                     else
-                       Derivative.find_by(
-                         security_id: pick[:security_id].to_s,
-                         segment: (pick[:segment] || index_cfg[:segment]).to_s
-                       )
-                     end
-        return false unless derivative
+        instrument = Instruments::LegacyResolver.resolve_pick(pick)
+        return false unless instrument
 
-        derivative.expiry_flag.to_s.upcase.start_with?('W')
+        instrument.expiry_flag.to_s.upcase.start_with?('W')
       rescue StandardError
         false
       end

@@ -319,6 +319,7 @@ module Options
         spot: nil, # Can be fetched separately if needed
         multiplier: rules.multiplier,
         derivative: candidate[:derivative],
+        instrument_id: candidate[:instrument_id] || candidate[:derivative_id],
         derivative_id: candidate[:derivative_id],
         symbol: candidate[:symbol],
         iv: candidate[:iv],

@@ -8,7 +8,7 @@ module Positions
       key = tracker.index_key if tracker.respond_to?(:index_key)
       return key if key.present?
 
-      derivative = tracker.watchable if tracker.watchable.is_a?(Derivative)
+      derivative = traded_contract(tracker)
       return derivative.underlying_symbol if derivative&.underlying_symbol.present?
 
       instrument = tracker.instrument
@@ -27,7 +27,7 @@ module Positions
       side = tracker.side.to_s.downcase
       return :bearish if side.include?('sell') || side.include?('short')
 
-      derivative = tracker.watchable if tracker.watchable.is_a?(Derivative)
+      derivative = traded_contract(tracker)
       return :bearish if derivative&.option_type.to_s.upcase == 'PE'
 
       :bullish
@@ -36,9 +36,9 @@ module Positions
     end
 
     def underlying_meta(tracker, index_key: nil)
-      derivative = tracker.watchable if tracker.watchable.is_a?(Derivative)
+      derivative = traded_contract(tracker)
       if derivative&.underlying_security_id.present?
-        segment = derivative.instrument&.exchange_segment || 'IDX_I'
+        segment = underlying_segment_for(derivative) || 'IDX_I'
         return {
           segment: segment,
           security_id: derivative.underlying_security_id.to_s,
@@ -69,6 +69,27 @@ module Positions
       }
     rescue StandardError
       nil
+    end
+
+    # The traded contract for a tracker — consolidated Instrument for new
+    # records, legacy Derivative for pre-consolidation ones.
+    def traded_contract(tracker)
+      watchable = tracker.watchable
+      return watchable if watchable.is_a?(Derivative)
+      return watchable if watchable.is_a?(Instrument) && watchable.derivative?
+
+      nil
+    end
+
+    # Underlying exchange segment: legacy Derivative reaches the parent via
+    # `instrument`, consolidated Instruments via `underlying_instrument`.
+    def underlying_segment_for(derivative)
+      parent = if derivative.respond_to?(:underlying_instrument)
+                 derivative.underlying_instrument
+               else
+                 derivative.instrument
+               end
+      parent&.exchange_segment
     end
 
     def index_config_for_key(key)

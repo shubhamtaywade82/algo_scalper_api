@@ -642,7 +642,7 @@ module Options
         end
 
         legs.first(2).map do |leg|
-          leg.slice(:segment, :security_id, :symbol, :strike, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id)
+          leg.slice(:segment, :security_id, :symbol, :strike, :ltp, :iv, :oi, :spread, :lot_size, :instrument_id, :derivative_id)
         end
       end
 
@@ -889,7 +889,7 @@ module Options
           end
         end
 
-        pick = leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id, :strike)
+        pick = leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :instrument_id, :derivative_id, :strike)
                   .merge(strike_type: used_strike_type, score: leg[:score], acceleration_signal: leg[:acceleration_signal])
 
         if exit_testing_mode
@@ -1153,28 +1153,29 @@ module Options
                          end
                        end
 
-          # Fallback: Query by instrument_id if association lookup failed
-          derivative ||= Derivative.where(
-            instrument_id: instrument.id,
+          # Fallback: Query by underlying link if association lookup failed
+          derivative ||= Instrument.where(
+            underlying_instrument_id: instrument.id,
             expiry_date: expiry_date_obj,
             option_type: option_type
           ).detect do |d|
             BigDecimal(d.strike_price.to_s) == strike_bd
           end
 
-          # Second fallback: Query by underlying_symbol, exchange, segment if instrument_id not available
-          derivative ||= Derivative.where(
+          # Second fallback: Query by underlying_symbol + exchange (segment on
+          # the underlying row is the index segment, not the FNO segment)
+          derivative ||= Instrument.where(
             underlying_symbol: instrument.symbol_name,
             exchange: instrument.exchange,
-            segment: instrument.segment,
             expiry_date: expiry_date_obj,
             option_type: option_type
           ).detect do |d|
             BigDecimal(d.strike_price.to_s) == strike_bd
           end
 
-          # Third fallback: Use Derivative.find_by_params (uses underlying_symbol)
-          derivative ||= Derivative.find_by_params(
+          # Third fallback: exact contract identity (exchange + underlying +
+          # expiry + strike + type, DB-unique)
+          derivative ||= Instrument.find_derivative_by_params(
             underlying_symbol: index_cfg[:key],
             strike_price: strike,
             expiry_date: expiry_date_obj,
@@ -1290,6 +1291,7 @@ module Options
             delta: delta,
             distance_from_atm: (strike - atm).abs,
             lot_size: resolved_lot_size,
+            instrument_id: derivative&.id,
             derivative_id: derivative&.id
           }
 

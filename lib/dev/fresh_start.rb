@@ -167,8 +167,8 @@ module Dev
     def print_summary
       puts "\n==> Fresh start complete"
       puts "  position_trackers: #{PositionTracker.count} (active: #{PositionTracker.active.count})"
-      puts "  instruments: #{Instrument.count}"
-      puts "  derivatives: #{Derivative.count}"
+      puts "  instruments: #{Instrument.count} (FNO contracts: #{Instrument.fno.count})"
+      puts "  derivatives (legacy archive): #{Derivative.count}"
       puts "  watchlist_items: #{WatchlistItem.count}"
       puts "  ledger_accounts: #{LedgerAccount.count}" if defined?(LedgerAccount)
       puts "  solid_queue recurring tasks: #{SolidQueue::RecurringTask.count}"

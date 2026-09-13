@@ -2,16 +2,42 @@
 
 module Ledger
   class ExitPoster
+    # Deterministic outcome of booking a paper exit (mirror of EntryPoster::Result).
+    class Result
+      STATUSES = %i[posted duplicate rejected failed disabled skipped].freeze
+
+      attr_reader :status, :journal, :error
+
+      def initialize(status:, journal: nil, error: nil)
+        @status = status
+        @journal = journal
+        @error = error
+      end
+
+      STATUSES.each do |status|
+        define_method(:"#{status}?") { @status == status }
+      end
+
+      def success?
+        posted? || duplicate?
+      end
+
+      def to_s
+        "Ledger::ExitPoster::Result(#{status}#{": #{error}" if error})"
+      end
+    end
+
     class << self
+      # @return [Result] always a Result — never a silent nil.
       def post!(tracker:, exit_price: nil)
-        return nil unless paper_posting?(tracker)
-        return nil unless Config.posting_enabled_for_paper?
-        return nil unless LedgerJournalEntry.exists?(idempotency_key: "entry:#{tracker.id}")
+        return Result.new(status: :disabled) unless paper_posting?(tracker)
+        return Result.new(status: :disabled) unless Config.posting_enabled_for_paper?
+        return Result.new(status: :skipped) unless LedgerJournalEntry.exists?(idempotency_key: "entry:#{tracker.id}")
 
         Seeder.ensure_ready!
 
         qty = tracker.quantity.to_i
-        return nil unless qty.positive?
+        return Result.new(status: :skipped) unless qty.positive?
 
         entry_px = BigDecimal((tracker.avg_price || tracker.entry_price).to_s)
         exit_px = BigDecimal((exit_price || tracker.exit_price).to_s)
@@ -30,7 +56,7 @@ module Ledger
           lines << { account_code: 'realized_pnl', debit: gain.abs }
         end
 
-        PostingService.post!(
+        journal = PostingService.post!(
           idempotency_key: "exit:#{tracker.id}",
           event_type: 'exit_fill',
           mode: :paper,
@@ -47,9 +73,14 @@ module Ledger
           },
           lines: lines
         )
+
+        stamp_tracker!(tracker, 'exit_posted')
+        Result.new(status: :posted, journal: journal)
       rescue StandardError => e
-        Rails.logger.error("[Ledger::ExitPoster] #{e.class} - #{e.message} tracker=#{tracker.id}")
-        nil
+        Rails.logger.error("[Ledger::ExitPoster] FAILED #{e.class} - #{e.message} tracker=#{tracker.id}")
+        Rails.error.report(e, handled: true, context: { component: 'Ledger::ExitPoster', tracker_id: tracker.id }) if Rails.respond_to?(:error)
+        stamp_tracker!(tracker, 'exit_failed', "#{e.class}: #{e.message}")
+        Result.new(status: :failed, error: "#{e.class}: #{e.message}")
       end
 
       def long_exit_lines(qty:, entry_px:, exit_px:, exit_fee:)
@@ -95,6 +126,20 @@ module Ledger
         AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
       rescue StandardError
         false
+      end
+
+      private
+
+      # Stamps the ledger outcome into tracker meta so failures are queryable
+      # state instead of log lines that vanish.
+      def stamp_tracker!(tracker, status, error = nil)
+        meta = (tracker.meta.is_a?(Hash) ? tracker.meta.dup : {})
+        meta['ledger_exit_status'] = status
+        meta['ledger_exit_error'] = error if error
+        meta['ledger_exit_stamped_at'] = Time.current.iso8601
+        tracker.update_columns(meta: meta, updated_at: Time.current)
+      rescue StandardError => e
+        Rails.logger.warn("[Ledger::ExitPoster] could not stamp tracker=#{tracker.id}: #{e.message}")
       end
     end
   end

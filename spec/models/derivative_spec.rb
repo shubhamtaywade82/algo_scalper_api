@@ -1,68 +1,18 @@
-# == Schema Information
-#
-# Table name: derivatives
-#
-#  id                            :integer          not null, primary key
-#  instrument_id                 :integer          not null
-#  exchange                      :string
-#  segment                       :string
-#  security_id                   :string
-#  isin                          :string
-#  instrument_code               :string
-#  underlying_security_id        :string
-#  underlying_symbol             :string
-#  symbol_name                   :string
-#  display_name                  :string
-#  instrument_type               :string
-#  series                        :string
-#  lot_size                      :integer
-#  expiry_date                   :date
-#  strike_price                  :decimal(, )
-#  option_type                   :string
-#  tick_size                     :decimal(, )
-#  expiry_flag                   :string
-#  bracket_flag                  :string
-#  cover_flag                    :string
-#  asm_gsm_flag                  :string
-#  asm_gsm_category              :string
-#  buy_sell_indicator            :string
-#  buy_co_min_margin_per         :decimal(, )
-#  sell_co_min_margin_per        :decimal(, )
-#  buy_co_sl_range_max_perc      :decimal(, )
-#  sell_co_sl_range_max_perc     :decimal(, )
-#  buy_co_sl_range_min_perc      :decimal(, )
-#  sell_co_sl_range_min_perc     :decimal(, )
-#  buy_bo_min_margin_per         :decimal(, )
-#  sell_bo_min_margin_per        :decimal(, )
-#  buy_bo_sl_range_max_perc      :decimal(, )
-#  sell_bo_sl_range_max_perc     :decimal(, )
-#  buy_bo_sl_range_min_perc      :decimal(, )
-#  sell_bo_sl_min_range          :decimal(, )
-#  buy_bo_profit_range_max_perc  :decimal(, )
-#  sell_bo_profit_range_max_perc :decimal(, )
-#  buy_bo_profit_range_min_perc  :decimal(, )
-#  sell_bo_profit_range_min_perc :decimal(, )
-#  mtf_leverage                  :decimal(, )
-#  created_at                    :datetime         not null
-#  updated_at                    :datetime         not null
-#
-# Indexes
-#
-#  index_derivatives_on_expiry_strike_option_type          (expiry_date,strike_price,option_type)
-#  index_derivatives_on_instrument_code                    (instrument_code)
-#  index_derivatives_on_instrument_id                      (instrument_id)
-#  index_derivatives_on_instrument_id_and_instrument_type  (instrument_id,instrument_type)
-#  index_derivatives_on_symbol_name                        (symbol_name)
-#  index_derivatives_on_underlying_symbol_and_expiry_date  (underlying_symbol,expiry_date)
-#  index_derivatives_unique                                (security_id,symbol_name,exchange,segment) UNIQUE
-#
-
 # frozen_string_literal: true
 
 require 'rails_helper'
 
+# DEPRECATED model: Derivative is a read-only legacy facade over the frozen
+# derivatives table. These specs pin the facade contract:
+#
+#   * lookups delegate to the consolidated Instrument master
+#   * trading methods route through the consolidated Instrument so no new
+#     Derivative-polymorphic records are created
+#
+# The behavioral specs for buying/selling options live in
+# spec/models/instrument_buy_option_spec.rb.
 RSpec.describe Derivative do
-  let(:instrument) do
+  let(:underlying) do
     Instrument.find_or_create_by!(security_id: '13') do |inst|
       inst.assign_attributes(
         symbol_name: 'NIFTY',
@@ -74,293 +24,82 @@ RSpec.describe Derivative do
     end
   end
   let(:derivative) do
-    create(:derivative, :nifty_call_option, instrument: instrument, security_id: '60001', lot_size: 25)
+    create(:derivative, :nifty_call_option, instrument: underlying, security_id: '60001', lot_size: 25)
   end
-  let(:order_response) { double('Order', order_id: 'ORD654321') }
-  let(:redis_cache) { Live::RedisPnlCache.instance }
-  let(:ws_hub) { Live::WsHub.instance }
 
-  before do
-    allow(ws_hub).to receive_messages(running?: true, subscribe: true)
-    allow(redis_cache).to receive(:clear_tick)
-    allow(redis_cache).to receive(:fetch_tick).and_return(nil)
-    allow(Orders.config.gateway).to receive(:place_market).and_return(order_response)
+  describe 'validations' do
+    it 'validates option_type inclusion and scoped security_id uniqueness' do
+      expect(build(:derivative, :nifty_call_option, instrument: underlying, security_id: '60001')).not_to be_valid
+      expect(build(:derivative, instrument: underlying, security_id: '60010', option_type: 'XX')).not_to be_valid
+    end
+  end
+
+  describe '#consolidated_instrument' do
+    it 'finds the consolidated instrument by canonical broker identity' do
+      consolidated = create(:instrument, :nifty_call_option, security_id: '60001', exchange: 'nse',
+                                                             segment: 'derivatives', lot_size: 25,
+                                                             underlying_instrument: underlying)
+
+      expect(derivative.consolidated_instrument).to eq(consolidated)
+    end
+
+    it 'returns nil when no consolidated instrument exists' do
+      expect(derivative.consolidated_instrument).to be_nil
+    end
   end
 
   describe '#buy_option!' do
-    before do
-      allow(derivative).to receive(:resolve_ltp).and_return(BigDecimal('120.75'))
+    it 'delegates to the consolidated instrument' do
+      consolidated = instance_double(Instrument)
+      allow(derivative).to receive(:consolidated_instrument).and_return(consolidated)
+
+      expect(consolidated).to receive(:buy_option!).with(qty: 50, meta: { a: 1 })
+
+      derivative.buy_option!(qty: 50, meta: { a: 1 })
     end
 
-    context 'when quantity is provided' do
-      it 'uses provided quantity and places order' do
-        expect(Orders.config.gateway).to receive(:place_market).with(
-          side: 'buy',
-          segment: derivative.exchange_segment,
-          security_id: derivative.security_id.to_s,
-          qty: 50,
-          meta: hash_including(
-            :client_order_id,
-            ltp: BigDecimal('120.75'),
-            product_type: 'NORMAL'
-          )
-        ).and_return(order_response)
+    it 'returns nil (and logs) when no consolidated instrument exists' do
+      allow(Rails.logger).to receive(:error)
 
-        expect(derivative).to receive(:after_order_track!).with(
-          instrument: instrument,
-          order_no: 'ORD654321',
-          segment: derivative.exchange_segment,
-          security_id: derivative.security_id.to_s,
-          side: 'long_ce',
-          qty: 50,
-          entry_price: BigDecimal('120.75'),
-          symbol: derivative.symbol_name,
-          index_key: nil,
-          meta: {}
-        ).and_return(instance_double(PositionTracker))
-
-        result = derivative.buy_option!(qty: 50)
-        expect(result).to eq(order_response)
-      end
-    end
-
-    context 'when quantity is nil or zero' do
-      it 'calculates quantity via Capital::Allocator' do
-        index_cfg = { key: 'NIFTY', segment: 'IDX_I' }
-        allow(Capital::Allocator).to receive(:qty_for).and_return(75)
-
-        expect(Orders.config.gateway).to receive(:place_market).with(
-          side: 'buy',
-          segment: derivative.exchange_segment,
-          security_id: derivative.security_id.to_s,
-          qty: 75,
-          meta: hash_including(:client_order_id, ltp: BigDecimal('120.75'), product_type: 'NORMAL')
-        ).and_return(order_response)
-
-        allow(derivative).to receive(:after_order_track!).and_return(instance_double(PositionTracker))
-
-        derivative.buy_option!(index_cfg: index_cfg)
-
-        expect(Capital::Allocator).to have_received(:qty_for).with(
-          index_cfg: index_cfg,
-          entry_price: 120.75,
-          derivative_lot_size: 25,
-          scale_multiplier: 1
-        )
-      end
-
-      it 'includes index_key in tracker when index_cfg provided' do
-        index_cfg = { key: 'NIFTY', segment: 'IDX_I' }
-        allow(Capital::Allocator).to receive(:qty_for).and_return(75)
-        allow(Orders.config.gateway).to receive(:place_market).and_return(order_response)
-
-        expect(derivative).to receive(:after_order_track!).with(
-          instrument: instrument,
-          order_no: 'ORD654321',
-          segment: derivative.exchange_segment,
-          security_id: derivative.security_id.to_s,
-          side: 'long_ce',
-          qty: 75,
-          entry_price: BigDecimal('120.75'),
-          symbol: derivative.symbol_name,
-          index_key: 'NIFTY',
-          meta: {}
-        ).and_return(instance_double(PositionTracker))
-
-        derivative.buy_option!(index_cfg: index_cfg)
-      end
-
-      it 'uses long_pe for put options' do
-        put_derivative = create(:derivative, :nifty_put_option, instrument: instrument, security_id: '60002',
-                                                                lot_size: 25)
-        allow(put_derivative).to receive(:resolve_ltp).and_return(BigDecimal('80.50'))
-        allow(Capital::Allocator).to receive(:qty_for).and_return(50)
-        allow(Orders.config.gateway).to receive(:place_market).and_return(order_response)
-
-        expect(put_derivative).to receive(:after_order_track!).with(
-          hash_including(side: 'long_pe')
-        ).and_return(instance_double(PositionTracker))
-
-        put_derivative.buy_option!
-      end
-    end
-
-    context 'when LTP is unavailable' do
-      it 'raises error' do
-        allow(derivative).to receive(:resolve_ltp).and_return(nil)
-
-        expect do
-          derivative.buy_option!(qty: 50)
-        end.to raise_error('LTP unavailable')
-      end
-    end
-
-    context 'when segment or security_id is missing' do
-      it 'raises error for missing segment' do
-        allow(derivative).to receive(:exchange_segment).and_return('')
-
-        expect do
-          derivative.buy_option!(qty: 50)
-        end.to raise_error('Derivative missing segment/security_id')
-      end
-
-      it 'raises error for missing security_id' do
-        allow(derivative).to receive(:security_id).and_return('')
-
-        expect do
-          derivative.buy_option!(qty: 50)
-        end.to raise_error('Derivative missing segment/security_id')
-      end
-    end
-
-    context 'when quantity is zero or negative' do
-      it 'returns nil when calculated quantity is zero' do
-        allow(Capital::Allocator).to receive(:qty_for).and_return(0)
-
-        expect(Orders.config.gateway).not_to receive(:place_market)
-
-        result = derivative.buy_option!
-        expect(result).to be_nil
-      end
-
-      it 'returns nil when provided quantity is zero' do
-        # Mock Capital::Allocator to return 0 so place_market is not called
-        allow(Capital::Allocator).to receive(:qty_for).and_return(0)
-        expect(Orders.config.gateway).not_to receive(:place_market)
-
-        result = derivative.buy_option!(qty: 0)
-        expect(result).to be_nil
-      end
-    end
-
-    context 'when order placement fails' do
-      it 'returns nil when order response has no order_id' do
-        bad_response = double('Order', order_id: nil)
-        allow(Orders.config.gateway).to receive(:place_market).and_return(bad_response)
-
-        result = derivative.buy_option!(qty: 50)
-        expect(result).to be_nil
-      end
-
-      it 'returns nil when order response does not respond to order_id' do
-        bad_response = double('BadResponse')
-        allow(Orders.config.gateway).to receive(:place_market).and_return(bad_response)
-
-        result = derivative.buy_option!(qty: 50)
-        expect(result).to be_nil
-      end
-    end
-
-    context 'with custom product_type' do
-      it 'uses provided product_type' do
-        allow(Orders.config.gateway).to receive(:place_market).and_return(order_response)
-        allow(derivative).to receive(:after_order_track!).and_return(instance_double(PositionTracker))
-
-        expect(Orders.config.gateway).to receive(:place_market).with(
-          hash_including(meta: hash_including(product_type: 'CNC'))
-        )
-
-        derivative.buy_option!(qty: 50, product_type: 'CNC')
-      end
+      expect(derivative.buy_option!(qty: 50)).to be_nil
+      expect(Rails.logger).to have_received(:error).at_least(:once)
     end
   end
 
   describe '#sell_option!' do
-    let(:active_tracker) do
-      create(
-        :position_tracker,
-        :nifty_position,
-        instrument: instrument,
-        watchable: derivative,
-        security_id: derivative.security_id.to_s,
-        segment: 'NSE_FNO',
-        quantity: 50,
-        status: 'active'
-      )
+    it 'delegates to the consolidated instrument' do
+      consolidated = instance_double(Instrument)
+      allow(derivative).to receive(:consolidated_instrument).and_return(consolidated)
+
+      expect(consolidated).to receive(:sell_option!).with(qty: 25, meta: {})
+
+      derivative.sell_option!(qty: 25)
+    end
+  end
+
+  describe '.find_by_params (delegation)' do
+    let!(:option) do
+      create(:instrument, :nifty_call_option, underlying_symbol: 'NIFTY', security_id: '49081',
+                                              expiry_date: Date.new(2026, 9, 24), strike_price: 25_000,
+                                              underlying_instrument: underlying)
     end
 
-    before do
-      active_tracker
-    end
-
-    context 'when quantity is provided' do
-      it 'uses provided quantity' do
-        expect(Orders.config.gateway).to receive(:place_market).with(
-          side: 'sell',
-          segment: derivative.exchange_segment,
-          security_id: derivative.security_id.to_s,
-          qty: 25,
-          meta: hash_including(:client_order_id)
-        ).and_return(order_response)
-
-        result = derivative.sell_option!(qty: 25)
-        expect(result).to eq(order_response)
-      end
-    end
-
-    context 'when quantity is nil' do
-      it 'uses sum of active PositionTracker quantities' do
-        create(
-          :position_tracker,
-          :nifty_position,
-          instrument: instrument,
-          watchable: derivative,
-          security_id: derivative.security_id.to_s,
-          segment: 'NSE_FNO',
-          quantity: 25,
-          status: 'active'
+    it 'resolves through the consolidated Instrument master' do
+      expect(
+        described_class.find_by_params(
+          underlying_symbol: 'NIFTY', strike_price: 25_000,
+          expiry_date: Date.new(2026, 9, 24), option_type: 'CE'
         )
-
-        expect(Orders.config.gateway).to receive(:place_market).with(
-          side: 'sell',
-          segment: derivative.exchange_segment,
-          security_id: derivative.security_id.to_s,
-          qty: 75, # 50 + 25
-          meta: hash_including(:client_order_id)
-        ).and_return(order_response)
-
-        derivative.sell_option!
-      end
+      ).to eq(option)
     end
 
-    context 'when no active positions exist' do
-      it 'returns nil' do
-        PositionTracker.where(instrument_id: instrument.id, security_id: derivative.security_id.to_s).delete_all
-
-        expect(Orders.config.gateway).not_to receive(:place_market)
-
-        result = derivative.sell_option!
-        expect(result).to be_nil
-      end
-    end
-
-    context 'when segment or security_id is missing' do
-      it 'raises error for missing segment' do
-        allow(derivative).to receive(:exchange_segment).and_return('')
-
-        expect do
-          derivative.sell_option!(qty: 50)
-        end.to raise_error('Derivative missing segment/security_id')
-      end
-
-      it 'raises error for missing security_id' do
-        allow(derivative).to receive(:security_id).and_return('')
-
-        expect do
-          derivative.sell_option!(qty: 50)
-        end.to raise_error('Derivative missing segment/security_id')
-      end
-    end
-
-    context 'when quantity is zero or negative' do
-      it 'returns nil when provided quantity is zero' do
-        # Clear existing trackers to ensure no active positions
-        PositionTracker.where(instrument_id: instrument.id, security_id: derivative.security_id.to_s).delete_all
-        expect(Orders.config.gateway).not_to receive(:place_market)
-
-        result = derivative.sell_option!(qty: 0)
-        expect(result).to be_nil
-      end
+    it 'exposes find_security_id through the same path' do
+      expect(
+        described_class.find_security_id(
+          underlying_symbol: 'NIFTY', strike_price: 25_000,
+          expiry_date: Date.new(2026, 9, 24), option_type: 'CE'
+        )
+      ).to eq('49081')
     end
   end
 end

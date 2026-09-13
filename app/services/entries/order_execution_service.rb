@@ -43,7 +43,8 @@ module Entries
       tracker = create_tracker(response, order_no)
       return failure('tracker_creation_failed') unless tracker
 
-      post_ledger_entry!(tracker, order_no) if response.is_a?(Hash) && response[:paper]
+      record_execution!(response, tracker, order_no)
+      post_ledger_entry!(response, tracker, order_no) if response.is_a?(Hash) && response[:paper]
       mark_bos_consumed! if @bos_context
       tracker
     end
@@ -79,8 +80,25 @@ module Entries
       end
     end
 
-    def post_ledger_entry!(tracker, order_no)
-      Ledger::EntryPoster.post!(tracker: tracker, fill_price: @ltp, quantity: @quantity, order_no: order_no)
+    # Both paper and live paths produce the same Execution record so the
+    # downstream (ledger, analytics, reconciliation) sees one event shape.
+    def record_execution!(response, tracker, _order_no)
+      instrument = tracker.watchable.is_a?(Instrument) ? tracker.watchable : @instrument
+      Execution.record_from_order!(
+        order: response, instrument: instrument, side: opening_order_side,
+        quantity: @quantity, purpose: :entry, position_tracker: tracker,
+        requested_price: @ltp
+      )
+    end
+
+    def post_ledger_entry!(response, tracker, order_no)
+      # Book the SIMULATED fill (bid/ask + slippage) when the paper gateway
+      # provides one — falling back to LTP only for legacy responses.
+      fill_price = (response.is_a?(Hash) ? response[:fill_price] : nil).presence || @ltp
+      result = Ledger::EntryPoster.post!(
+        tracker: tracker, fill_price: fill_price, quantity: @quantity, order_no: order_no
+      )
+      result if result.rejected? || result.failed? # surfaced for callers/logs; never nil
     end
 
     def mark_bos_consumed!
