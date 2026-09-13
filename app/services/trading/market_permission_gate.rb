@@ -21,8 +21,7 @@ module Trading
         return reject('Not in a directional trend structure', :not_trending)
       end
 
-      min_conv = cfg[:min_conviction_score].to_i
-      min_conv = 70 if min_conv.zero?
+      min_conv = required_threshold(cfg, :min_conviction_score)
       if @snapshot.conviction_score < min_conv
         return reject("Conviction #{@snapshot.conviction_score} < #{min_conv}", :low_conviction)
       end
@@ -39,8 +38,7 @@ module Trading
         return reject('Participation too low for OB', :low_participation)
       end
 
-      min_chain = cfg[:min_chain_confidence].to_i
-      min_chain = 40 if min_chain.zero?
+      min_chain = required_threshold(cfg, :min_chain_confidence)
       if @chain.direction_confidence < min_chain
         return reject("Chain confidence #{@chain.direction_confidence} < #{min_chain}", :low_chain_confidence)
       end
@@ -62,10 +60,24 @@ module Trading
 
     private
 
+    # A disabled gate (market_context.gate.enabled != true) stays disabled — that
+    # is an explicit operator choice. But an ENABLED gate must have its
+    # thresholds configured: a missing threshold used to be silently replaced
+    # with 70/40, quietly changing what the "hard gate" actually enforced.
+    # (`to_i.zero?` also conflated an explicit 0 with a missing key.)
+    def required_threshold(cfg, key)
+      raw = cfg[key]
+      value = raw.to_i
+      unless raw.present? && value.positive?
+        raise Errors::ConfigurationError,
+              "market_context.gate.#{key} must be a positive integer when the gate is enabled — got #{raw.inspect}"
+      end
+
+      value
+    end
+
     def gate_config
       AlgoConfig.fetch.dig(:market_context, :gate) || {}
-    rescue StandardError
-      {}
     end
 
     def trending_structure?

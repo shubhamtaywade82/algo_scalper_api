@@ -19,16 +19,20 @@ module Entries
         return PASS if now_hhmm <= max_time.to_s
 
         { blocked: "DTE entry window closed for DTE=#{dte} (max #{max_time} IST)" }
+      rescue Errors::Error => e
+        # Domain failures block (fail-closed) — a corrupt config must not
+        # quietly reopen the entry window.
+        { blocked: "dte_entry_window_failed: #{e.class} - #{e.message}" }
       rescue StandardError => e
         Rails.logger.warn("[DteEntryWindowGuard] #{e.class} - #{e.message}")
         PASS
       end
 
+      # Opt-in: risk.dte_parameters.enabled must be explicitly true (an absent
+      # section used to be treated as enabled).
       def self.enabled?
         cfg = AlgoConfig.fetch.dig(:risk, :dte_parameters) || {}
-        cfg[:enabled] != false
-      rescue StandardError
-        false
+        cfg[:enabled] == true
       end
     end
   end

@@ -24,14 +24,19 @@ module Trading
       # Directional bias
       bias = determine_bias(components)
 
-      # ADX Filter: If trend is weak, slash total score by 50%
-      adx_value = series_5m.adx(14) || 0
-      final_score = adx_value < 20 ? (raw_score * 0.5) : raw_score
+      # ADX Filter: If trend is weak, slash total score by 50%.
+      # ADX unavailable (insufficient candles / calculation failure) is NOT the
+      # same as a measured weak trend — it is reported as nil + a status flag
+      # while keeping the same conservative score treatment.
+      adx_value = series_5m.adx(14)
+      weak_or_unknown_trend = adx_value.nil? || adx_value < 20
+      final_score = weak_or_unknown_trend ? (raw_score * 0.5) : raw_score
 
       {
         score: final_score.round(2),
         bias: bias,
-        adx: adx_value.round(2),
+        adx: adx_value&.round(2),
+        adx_available: !adx_value.nil?,
         components: components
       }
     end

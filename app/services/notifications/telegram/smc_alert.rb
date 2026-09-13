@@ -98,7 +98,7 @@ module Notifications
         instrument_name = escape_html(@signal.instrument.symbol_name)
         decision_text = escape_html(@signal.decision.to_s.upcase)
         timeframe_text = escape_html(@signal.timeframe)
-        price_text = escape_html(@signal.price.to_s)
+        price_text = escape_html(@signal.price.nil? ? 'N/A' : @signal.price.to_s)
         time_text = escape_html(Time.current.strftime('%d %b %Y, %H:%M'))
 
         <<~MSG

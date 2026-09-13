@@ -97,8 +97,9 @@ module Smc
     def place_live_order(option_inst)
       ensure_ws_connected!
 
-      # Use tick LTP if available
-      ltp = option_inst.latest_ltp || signal[:meta]&.dig(:premium) || 0.0
+      # Use tick LTP if available (nil flows into the availability check below —
+      # no fabricated 0.0 sentinel)
+      ltp = option_inst.latest_ltp || signal[:meta]&.dig(:premium)
       if ltp.to_f <= 0
         Rails.logger.warn("[Smc::Runner] LTP not available for #{option_inst.symbol_name}, aborting")
         return nil

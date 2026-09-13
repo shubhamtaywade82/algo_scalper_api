@@ -210,11 +210,14 @@ module Notifications
       CGI.escapeHTML(value.to_s)
     end
 
+    # Display-only helpers: an unknown value renders as 'N/A', never as a
+    # fabricated number the operator would act on (error-handling review
+    # 2026-09, wave 2 — quantity used to show 0, direction used to show BUY).
     def format_entry_message(tracker, entry_data)
       symbol = h(tracker.symbol || entry_data[:symbol] || 'N/A')
-      entry_price = tracker.entry_price&.to_f || entry_data[:entry_price] || 0.0
-      quantity   = tracker.quantity || entry_data[:quantity] || 0
-      direction  = tracker.direction || entry_data[:direction] || 'BUY'
+      entry_price = tracker.entry_price&.to_f || entry_data[:entry_price]&.to_f
+      quantity   = tracker.quantity || entry_data[:quantity]
+      direction  = tracker.direction || entry_data[:direction] || 'N/A'
       index_key  = h(tracker.index_key || entry_data[:index_key] || 'N/A')
       risk_pct   = entry_data[:risk_pct]
       sl_price   = entry_data[:sl_price]
@@ -226,8 +229,8 @@ module Notifications
       message  = "#{emoji} <b>ENTRY</b>\n\n"
       message += "📊 <b>Symbol:</b> #{symbol}\n"
       message += "📈 <b>Index:</b> #{index_key}\n"
-      message += "💰 <b>Entry Price:</b> ₹#{entry_price.round(2)}\n"
-      message += "📦 <b>Quantity:</b> #{quantity}\n"
+      message += "💰 <b>Entry Price:</b> #{entry_price ? "₹#{entry_price.round(2)}" : 'N/A'}\n"
+      message += "📦 <b>Quantity:</b> #{quantity || 'N/A'}\n"
       message += "🎯 <b>Direction:</b> #{direction_text}\n"
       message += "⚖️ <b>Risk:</b> #{(risk_pct * 100).round(2)}%\n" if risk_pct
 
@@ -244,27 +247,29 @@ module Notifications
     def format_exit_message(tracker, exit_reason, exit_price, pnl)
       symbol           = h(tracker.symbol || 'N/A')
       entry_price      = tracker.entry_price.to_f
-      exit_price_value = exit_price&.to_f || tracker.exit_price&.to_f || 0.0
-      quantity         = tracker.quantity || 0
-      pnl_value        = pnl&.to_f || tracker.last_pnl_rupees&.to_f || 0.0
+      exit_price_value = exit_price&.to_f || tracker.exit_price&.to_f
+      quantity         = tracker.quantity
+      pnl_value        = pnl&.to_f || tracker.last_pnl_rupees&.to_f
 
       # Calculate PnL percentage from PnL value (includes broker fees) for consistency with exit reason
       # Exit reason shows PnL percentage (after fees), not price change percentage
       # Formula: PnL percentage = (PnL / (entry_price * quantity)) * 100
-      pnl_pct = if pnl_value.present? && entry_price.positive? && quantity.positive?
+      pnl_pct = if pnl_value.present? && entry_price.positive? && quantity.to_i.positive?
                   # Calculate PnL percentage (includes fees) - matches exit reason format
                   (pnl_value / (entry_price * quantity)) * 100.0
                 elsif tracker.last_pnl_pct.present?
                   # Fallback: use price change percentage from DB (convert decimal to percentage)
                   (tracker.last_pnl_pct.to_f * 100.0)
-                elsif entry_price.positive? && exit_price_value.positive?
+                elsif entry_price.positive? && exit_price_value.to_f.positive?
                   # Last fallback: calculate price change percentage
                   ((exit_price_value - entry_price) / entry_price) * 100.0
                 else
-                  0.0
+                  nil
                 end
 
-      emoji = if pnl_value.positive?
+      emoji = if pnl_value.nil?
+                '⚪'
+              elsif pnl_value.positive?
                 '✅'
               elsif pnl_value.negative?
                 '❌'
@@ -274,12 +279,12 @@ module Notifications
 
       message  = "#{emoji} <b>EXIT</b>\n\n"
       message += "📊 <b>Symbol:</b> #{symbol}\n"
-      message += "💰 <b>Entry:</b> ₹#{entry_price.round(2)}\n"
-      message += "💵 <b>Exit:</b> ₹#{exit_price_value.round(2)}\n"
-      message += "📦 <b>Quantity:</b> #{quantity}\n"
-      message += "💸 <b>PnL:</b> ₹#{pnl_value.round(2)}"
+      message += "💰 <b>Entry:</b> #{entry_price.positive? ? "₹#{entry_price.round(2)}" : 'N/A'}\n"
+      message += "💵 <b>Exit:</b> #{exit_price_value ? "₹#{exit_price_value.round(2)}" : 'N/A'}\n"
+      message += "📦 <b>Quantity:</b> #{quantity || 'N/A'}\n"
+      message += "💸 <b>PnL:</b> #{pnl_value ? "₹#{pnl_value.round(2)}" : 'N/A'}"
 
-      if pnl_pct.zero?
+      if pnl_pct.nil? || pnl_pct.zero?
         message += "\n"
       else
         pnl_pct_emoji = pnl_pct.positive? ? '📈' : '📉'
@@ -302,8 +307,7 @@ module Notifications
     def format_pnl_message(tracker, pnl, pnl_pct)
       symbol        = h(tracker.symbol || 'N/A')
       entry_price   = tracker.entry_price.to_f
-      current_price = tracker.avg_price&.to_f || entry_price
-      tracker.quantity || 0
+      current_price = tracker.avg_price&.to_f
       pnl_value     = pnl.to_f
       pnl_pct_value = pnl_pct.to_f
 
@@ -315,8 +319,8 @@ module Notifications
 
       message  = "#{emoji} <b>PnL Update</b>\n\n"
       message += "📊 <b>Symbol:</b> #{symbol}\n"
-      message += "💰 <b>Entry:</b> ₹#{entry_price.round(2)}\n"
-      message += "💵 <b>Current:</b> ₹#{current_price.round(2)}\n"
+      message += "💰 <b>Entry:</b> #{entry_price.positive? ? "₹#{entry_price.round(2)}" : 'N/A'}\n"
+      message += "💵 <b>Current:</b> #{current_price ? "₹#{current_price.round(2)}" : 'N/A'}\n"
       message += "💸 <b>PnL:</b> ₹#{pnl_value.round(2)}"
       message += if pnl_pct_value.zero?
                    "\n"
@@ -355,8 +359,6 @@ module Notifications
     def daily_profit_target_notify_enabled?
       config = AlgoConfig.fetch[:telegram] || {}
       config[:enabled] != false && config[:notify_daily_profit_target] != false
-    rescue StandardError
-      false
     end
 
     def acquire_daily_profit_notify_slot!

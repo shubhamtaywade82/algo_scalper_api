@@ -269,7 +269,9 @@ module Smc
     def publish_scan_event(index_cfg, instrument, decision)
       return unless event_store_enabled?
 
-      price = instrument.ltp&.to_f || instrument.latest_ltp&.to_f || 0.0
+      # nil price is stored as null — an unavailable price is not a ₹0 price
+      # (error-handling review 2026-09, wave 2).
+      price = instrument.ltp&.to_f || instrument.latest_ltp&.to_f
       payload = {
         'index' => index_cfg[:key].to_s,
         'decision' => decision.to_s,
