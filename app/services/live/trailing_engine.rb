@@ -36,6 +36,10 @@ module Live
       # 2. Update peak_profit_pct if current profit exceeds peak
       peak_updated = update_peak(position_data, tracker: tracker, pending_meta: pending_meta)
 
+      # 2.5 Fee-aware breakeven lock (scalp): once peak covers friction, pin SL at
+      # the exit price that nets >= 0 after exit fee + half spread. Only raises.
+      lock_result = apply_fee_aware_breakeven_lock(position_data, tracker: tracker)
+
       # 3. Apply trailing SL (direct or tiered based on config)
       sl_result = if tailored_trailing_applicable?(position_data)
                     apply_tailored_sl(position_data)
@@ -45,12 +49,23 @@ module Live
                     apply_tiered_sl(position_data, tracker: tracker)
                   end
 
+      sl_updated = sl_result[:updated] || lock_result[:updated]
+      reason = if sl_result[:updated]
+                 sl_result[:reason]
+               elsif lock_result[:updated] || lock_result[:reason]
+                 # Lock applied, or attempted and failed — surface the lock outcome
+                 # (a rejected lock is more actionable than 'tier_not_reached').
+                 lock_result[:reason]
+               else
+                 sl_result[:reason]
+               end
+
       {
         peak_updated: peak_updated,
-        sl_updated: sl_result[:updated],
+        sl_updated: sl_updated,
         exit_triggered: false,
-        new_sl_price: sl_result[:new_sl_price],
-        reason: sl_result[:reason]
+        new_sl_price: [sl_result[:new_sl_price], lock_result[:new_sl_price]].compact.max,
+        reason: reason
       }
     rescue StandardError => e
       Rails.logger.error("[TrailingEngine] process_tick failed: #{e.class} - #{e.message}")
@@ -213,6 +228,68 @@ module Live
       meta['highest_price'] = new_highest
       meta['lowest_price'] = new_lowest
       tracker.update_column(:meta, meta)
+    end
+
+    # Fee-aware breakeven lock — the "PnL > fees" guarantee on the SL side.
+    #
+    # Once the position has peaked at breakeven_arm_factor x round-trip friction
+    # (fees + spread, per Scalp::FeeAwareExitTargets), the SL is pinned at the
+    # exit price that nets >= 0 after the exit fee and half-spread crossing.
+    # The lock only ever RAISES the SL (never lowers it) and never blocks the
+    # trailing engines — a failure here degrades to "no lock this tick",
+    # logged loudly, leaving the SL exactly where it was.
+    #
+    # @param position_data [Positions::ActiveCache::PositionData]
+    # @param tracker [PositionTracker]
+    # @return [Hash] { updated: Boolean, new_sl_price: Float|nil, reason: String|nil }
+    def apply_fee_aware_breakeven_lock(position_data, tracker:)
+      return { updated: false, new_sl_price: nil } unless Scalp::FeeAwareExitTargets.enabled?
+      if position_data.respond_to?(:short_position?) && position_data.short_position?
+        return { updated: false, new_sl_price: nil }
+      end
+
+      targets = Scalp::FeeAwareExitTargets.new(tracker)
+      lock_price = targets.breakeven_lock_price
+      current_sl = position_data.sl_price.to_f
+      peak = position_data.peak_profit_pct.to_f
+
+      if lock_price.nil? || lock_price <= current_sl || !targets.breakeven_armed?(peak)
+        return { updated: false, new_sl_price: nil }
+      end
+
+      entry_price = position_data.entry_price.to_f
+      sl_offset_pct = entry_price.positive? ? ((lock_price - entry_price) / entry_price * 100.0).round(2) : nil
+
+      bracket_result = @bracket_placer.update_bracket(
+        tracker: tracker,
+        sl_price: lock_price,
+        reason: "fee_aware_breakeven_lock (peak #{(peak * 100).round(2)}% covers friction, " \
+                "lock ₹#{lock_price.round(2)})"
+      )
+
+      if bracket_result[:success]
+        @active_cache.update_position(
+          position_data.tracker_id,
+          sl_price: lock_price,
+          sl_offset_pct: sl_offset_pct
+        )
+        position_data.sl_price = lock_price if position_data.respond_to?(:sl_price=)
+        position_data.sl_offset_pct = sl_offset_pct if position_data.respond_to?(:sl_offset_pct=)
+
+        Rails.logger.info(
+          "[TrailingEngine] Fee-aware breakeven lock for #{tracker.order_no}: " \
+          "SL ₹#{current_sl.round(2)} → ₹#{lock_price.round(2)} (peak #{(peak * 100).round(2)}%)"
+        )
+        { updated: true, new_sl_price: lock_price, reason: 'fee_aware_breakeven_lock' }
+      else
+        Rails.logger.warn("[TrailingEngine] Breakeven lock bracket update failed for #{tracker.order_no}: #{bracket_result[:error]}")
+        { updated: false, new_sl_price: nil, reason: bracket_result[:error] }
+      end
+    rescue StandardError => e
+      # Self-isolating (documented): the lock is an additional protection layer —
+      # a data/config failure here must never take the trailing path down.
+      Rails.logger.error("[TrailingEngine] Fee-aware breakeven lock failed for tracker=#{tracker&.id}: #{e.class} - #{e.message}")
+      { updated: false, new_sl_price: nil }
     end
 
     # Apply direct trailing SL (follows price directly, only moves upward)

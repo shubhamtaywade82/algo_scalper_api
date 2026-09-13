@@ -4,12 +4,21 @@ module Live
   # Evaluates underlying index state to inform trailing stop behaviour.
   # Included into Live::UnifiedExitChecker's singleton class.
   #
-  # Returns { action: :exit | :tighten | :hold, multiplier: Float, reason: String | nil }
+  # Returns { action: :exit | :tighten | :scale | :hold, multiplier: Float, reason: String | nil }
   # Only evaluates when trailing is already armed (position is profitable enough).
   #
-  # :exit     — BOS broken against position, or dual weakness (trend + ATR)
-  # :tighten  — single weakness signal; caller compresses allowed_dd by multiplier
+  # :exit     — BOS broken against position, dual weakness (trend + ATR), or
+  #             momentum death (scaled mode; M < death_threshold)
+  # :tighten  — trail compression; multiplier < 1 (weakness, or low momentum score)
+  # :scale    — trail widening; multiplier > 1 (strong momentum — stop one-tick
+  #             pullbacks from shaking out a runner). Only in scaled mode.
   # :hold     — underlying healthy or data unavailable; trailing unchanged
+  #
+  # Two modes, selected by risk.underlying_context_exit.momentum_scaling.enabled
+  # (opt-in — absent config preserves the legacy binary behaviour):
+  #   legacy  — single weakness -> fixed tightening_multiplier; dual -> exit
+  #   scaled  — Scalp::MomentumScaler continuous M in [0,1]: death -> exit,
+  #             otherwise multiplier interpolates [min_multiplier, max_multiplier]
   module UnderlyingContextEvaluator
     def evaluate_underlying_context(tracker, snapshot)
       cfg = underlying_context_cfg
@@ -36,6 +45,8 @@ module Live
                            "atr_ratio=#{state.atr_ratio&.round(3)}, tracker=#{tracker.order_no})")
       end
 
+      return evaluate_momentum_scaling(state, direction, tracker) if Scalp::MomentumScaler.enabled?
+
       if weak || collap
         signal = weak ? "trend_score=#{state.trend_score&.round(1)}" : "atr_ratio=#{state.atr_ratio&.round(3)}"
         return tighten_result("UNDERLYING_WEAKENING (#{signal}, tracker=#{tracker.order_no})",
@@ -49,6 +60,37 @@ module Live
     end
 
     private
+
+    # Scaled mode (momentum_scaling.enabled): continuous trail scaling.
+    #   M < death_threshold            -> exit now (the scalp's engine stalled)
+    #   multiplier < 1                 -> :tighten (fading momentum)
+    #   multiplier > 1                 -> :scale (strong momentum — let it breathe)
+    #   multiplier == 1.0 / M unknown  -> :hold
+    def evaluate_momentum_scaling(state, direction, tracker)
+      scaler = Scalp::MomentumScaler.from_config
+      momentum = scaler.score(state, direction)
+
+      if scaler.death?(momentum)
+        return exit_result(
+          "UNDERLYING_MOMENTUM_DEATH (M=#{momentum&.round(3)}, " \
+          "trend_score=#{state.trend_score&.round(1)}, atr_ratio=#{state.atr_ratio&.round(3)}, " \
+          "tracker=#{tracker.order_no})"
+        )
+      end
+
+      mult = scaler.multiplier(momentum)
+      if mult < 1.0
+        tighten_result("UNDERLYING_MOMENTUM_FADING (M=#{momentum&.round(3)}, " \
+                       "mult=#{mult}, tracker=#{tracker.order_no})",
+                       multiplier: mult)
+      elsif mult > 1.0
+        scale_result("UNDERLYING_MOMENTUM_STRONG (M=#{momentum&.round(3)}, " \
+                     "mult=#{mult}, tracker=#{tracker.order_no})",
+                     multiplier: mult)
+      else
+        hold_result
+      end
+    end
 
     # Build the position_data OpenStruct that UnderlyingMonitor.evaluate expects.
     # Reads underlying_segment and underlying_security_id from ActiveCache pos_data
@@ -121,6 +163,10 @@ module Live
 
     def tighten_result(reason, multiplier:)
       { action: :tighten, multiplier: multiplier.to_f, reason: reason }
+    end
+
+    def scale_result(reason, multiplier:)
+      { action: :scale, multiplier: multiplier.to_f, reason: reason }
     end
 
     def exit_result(reason)

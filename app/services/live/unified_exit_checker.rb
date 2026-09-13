@@ -163,7 +163,7 @@ module Live
       def percentage_pnl_exit_hit?(tracker, snapshot)
         cfg = AlgoConfig.fetch.dig(:risk, :percentage_pnl_exit) || {}
         return false unless cfg[:enabled]
-        target = cfg[:target_pct].to_f
+        target = fee_aware_target_pct(tracker, cfg[:target_pct].to_f)
         return false unless target.positive?
         pnl_pct = snapshot[:pnl_pct].to_f
         return false unless pnl_pct >= target
@@ -174,9 +174,25 @@ module Live
       def profit_target_hit?(tracker, snapshot)
         config = exit_config
         pnl_pct = snapshot[:pnl_pct].to_f
-        tp = config[:take_profit].to_f
+        tp = fee_aware_target_pct(tracker, config[:take_profit].to_f)
         return false unless pnl_pct >= tp
         !trailing_armed?(tracker, snapshot, config)
+      end
+
+      # Fee-aware replacement for a static target percentage: never below base,
+      # raised to a multiple of this position's round-trip friction (fees +
+      # spread) when that is higher — a 5% target on a fee-hostile premium is a
+      # net-zero trade otherwise. Falls back to the base target (logged) when
+      # fee-awareness is disabled or the data is unusable; domain failures never
+      # take the rest of the exit waterfall down with them.
+      def fee_aware_target_pct(tracker, base_pct)
+        Scalp::FeeAwareExitTargets.new(tracker).min_target_pct(base_pct)
+      rescue Errors::Error => e
+        Rails.logger.error(
+          "[UnifiedExitChecker] fee-aware target unavailable for tracker=#{tracker&.id}: " \
+          "#{e.class} - #{e.message} — using base target #{base_pct}"
+        )
+        base_pct.to_f
       end
 
       def check_structure_invalidation(tracker, snapshot)
@@ -268,8 +284,25 @@ module Live
           if ctx_res.is_a?(Hash)
             if ctx_res[:action] == :exit
               return { exit: true, reason: ctx_res[:reason] || 'UNDERLYING_STRUCTURE_BREAK', path: 'underlying_context_exit' }
-            elsif ctx_res[:action] == :tighten
+            elsif ctx_res[:action] == :tighten || ctx_res[:action] == :scale
+              # :tighten compresses the allowed drawdown (< 1); :scale widens it (> 1)
+              # when underlying momentum is strong — both are the same knob.
               tightening_mult = ctx_res[:multiplier].to_f
+            end
+          end
+
+          # Chain telemetry (IV collapse / OI drift / convexity / gamma wall).
+          # Self-isolating: any internal failure logs and returns :hold.
+          chain_res = begin
+            Scalp::ChainTrailingContext.evaluate(tracker, snapshot)
+          rescue StandardError
+            nil
+          end
+          if chain_res.is_a?(Hash)
+            if chain_res[:action] == :exit
+              return { exit: true, reason: chain_res[:reason] || 'CHAIN_CONTEXT_EXIT', path: 'chain_context_exit' }
+            elsif %i[tighten widen].include?(chain_res[:action])
+              tightening_mult *= chain_res[:multiplier].to_f
             end
           end
         end

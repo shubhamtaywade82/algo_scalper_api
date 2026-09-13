@@ -316,5 +316,79 @@ RSpec.describe Live::UnderlyingContextEvaluator do
         expect(result[:multiplier]).to eq(0.3)
       end
     end
+
+    context 'with continuous momentum scaling enabled (Scalp::MomentumScaler)' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          risk: {
+            underlying_context_exit: {
+              enabled: true,
+              trend_score_threshold: 15,
+              atr_ratio_threshold: 0.65,
+              tightening_multiplier: 0.5,
+              momentum_scaling: { enabled: true } # defaults: 0.6/1.4, death 0.30, trend_max 45
+            }
+          }
+        })
+      end
+
+      it 'widens the trail (:scale, multiplier > 1) when momentum is strong' do
+        # trend 45/45=1.0, atr 1.1→1.0, mtf true, BOS intact (0.75) → M = 0.985
+        # multiplier = 0.6 + 0.8 x 0.985 = 1.388
+        allow(Live::UnderlyingMonitor).to receive(:evaluate).and_return(
+          OpenStruct.new(
+            trend_score: 45.0, bos_state: :intact, bos_direction: :neutral,
+            atr_trend: :rising, atr_ratio: 1.1, mtf_confirm: true,
+            ltp: 79_500.0, smc_bias_flip: false
+          )
+        )
+
+        result = host.evaluate_underlying_context(tracker, snapshot_armed)
+        expect(result[:action]).to eq(:scale)
+        expect(result[:multiplier]).to eq(1.388)
+        expect(result[:reason]).to include('UNDERLYING_MOMENTUM_STRONG')
+      end
+
+      it 'exits immediately on momentum death without any individually-weak signal' do
+        # trend 16 (>= 15, not weak), atr 0.66 (>= 0.65, not collapsing), mtf off,
+        # BOS unknown → M = 0.263 < 0.30 death threshold — composite death only.
+        allow(Live::UnderlyingMonitor).to receive(:evaluate).and_return(
+          OpenStruct.new(
+            trend_score: 16.0, bos_state: :unknown, bos_direction: :neutral,
+            atr_trend: :flat, atr_ratio: 0.66, mtf_confirm: false,
+            ltp: 79_500.0, smc_bias_flip: false
+          )
+        )
+
+        result = host.evaluate_underlying_context(tracker, snapshot_armed)
+        expect(result[:action]).to eq(:exit)
+        expect(result[:reason]).to include('UNDERLYING_MOMENTUM_DEATH')
+      end
+
+      it 'tightens (:tighten, multiplier < 1) when momentum is fading but not dead' do
+        # trend 18/45=0.4, atr 0.8→(0.8-0.65)/0.35≈0.4286, mtf 0.5, BOS unknown 0.5
+        # M = 0.2 + 0.15 + 0.075 = 0.425 → multiplier = 0.6 + 0.8 x 0.425 = 0.94
+        allow(Live::UnderlyingMonitor).to receive(:evaluate).and_return(
+          OpenStruct.new(
+            trend_score: 18.0, bos_state: :unknown, bos_direction: :neutral,
+            atr_trend: :flat, atr_ratio: 0.80, mtf_confirm: false,
+            ltp: 79_000.0, smc_bias_flip: false
+          )
+        )
+
+        result = host.evaluate_underlying_context(tracker, snapshot_armed)
+        expect(result[:action]).to eq(:tighten)
+        expect(result[:multiplier]).to eq(0.94)
+        expect(result[:reason]).to include('UNDERLYING_MOMENTUM_FADING')
+      end
+
+      it 'keeps the dual-weakness hard exit ahead of scaling' do
+        allow(Live::UnderlyingMonitor).to receive(:evaluate).and_return(dual_weakness_state)
+
+        result = host.evaluate_underlying_context(tracker, snapshot_armed)
+        expect(result[:action]).to eq(:exit)
+        expect(result[:reason]).to include('UNDERLYING_DUAL_WEAKNESS')
+      end
+    end
   end
 end

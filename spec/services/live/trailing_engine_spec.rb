@@ -18,6 +18,9 @@ RSpec.describe Live::TrailingEngine do
     allow(tracker).to receive(:with_lock).and_yield
     allow(tracker).to receive(:exited?).and_return(false)
     allow(Rails.logger).to receive_messages(info: nil, warn: nil, error: nil, debug: nil)
+    # Scalp overlay (fee-aware breakeven lock) is opt-in: legacy fixtures here run
+    # with it OFF — the dedicated describe below exercises it with the layer on.
+    allow(Scalp::FeeAwareExitTargets).to receive(:enabled?).and_return(false)
   end
 
   describe '#process_tick' do
@@ -218,6 +221,77 @@ RSpec.describe Live::TrailingEngine do
       )
 
       engine.update_peak(position, tracker: tracker)
+    end
+  end
+
+  describe '#apply_fee_aware_breakeven_lock' do
+    # With defaults: entry 100, qty 50 -> position value 5000.
+    # fees 40/5000 = 0.008; spread estimate 100 x 0.01 x 2 = 2 -> spread_pct 0.02.
+    # friction = 0.028; lock price = 100 + (20 + 1)/50 = 100.42.
+    # Armed when peak >= 0.028 x 1.2 = 0.0336.
+    before do
+      allow(Scalp::FeeAwareExitTargets).to receive(:enabled?).and_return(true)
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        risk: { scalp_exit: { enabled: true } },
+        broker_fees: { enabled: true, fee_per_order: 20 }
+      })
+      allow(Live::TickQuery).to receive(:for).and_return(nil) # no live quote -> estimate
+      allow(Positions::TrailingConfig).to receive(:direct_trailing_enabled?).and_return(false)
+      allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(false)
+    end
+
+    it 'locks SL at the fee-breakeven price once peak covers friction' do
+      position = build_position(pnl_pct: 0.04, peak_profit_pct: 0.05, sl_price: 70.0)
+
+      result = engine.process_tick(position, exit_engine: nil)
+
+      expect(bracket_placer).to have_received(:update_bracket).with(
+        tracker: tracker,
+        sl_price: 100.42,
+        reason: /fee_aware_breakeven_lock/
+      )
+      expect(result[:sl_updated]).to be true
+      expect(result[:new_sl_price]).to eq(100.42)
+      expect(result[:reason]).to eq('fee_aware_breakeven_lock')
+      expect(active_cache).to have_received(:update_position).with(
+        42, hash_including(sl_price: 100.42)
+      )
+    end
+
+    it 'does not lock before the peak covers friction (young trade)' do
+      position = build_position(pnl_pct: 0.01, peak_profit_pct: 0.02, sl_price: 70.0)
+
+      result = engine.process_tick(position, exit_engine: nil)
+
+      expect(bracket_placer).not_to have_received(:update_bracket)
+      expect(result[:reason]).to eq('tier_not_reached')
+    end
+
+    it 'never lowers an SL that is already above the lock price' do
+      position = build_position(pnl_pct: 0.05, peak_profit_pct: 0.06, sl_price: 105.0)
+
+      engine.process_tick(position, exit_engine: nil)
+
+      expect(bracket_placer).not_to have_received(:update_bracket)
+    end
+
+    it 'skips short positions (tiered trailing still applies per existing behaviour)' do
+      position = build_position(pnl_pct: 0.05, peak_profit_pct: 0.06, sl_price: 70.0, position_side: 'short')
+
+      engine.process_tick(position, exit_engine: nil)
+
+      expect(bracket_placer).not_to have_received(:update_bracket)
+        .with(tracker: tracker, sl_price: 100.42, reason: /fee_aware_breakeven_lock/)
+    end
+
+    it 'reports lock failure without raising when the bracket update fails' do
+      allow(bracket_placer).to receive(:update_bracket).and_return({ success: false, error: 'rejected' })
+      position = build_position(pnl_pct: 0.04, peak_profit_pct: 0.05, sl_price: 70.0)
+
+      result = engine.process_tick(position, exit_engine: nil)
+
+      expect(result[:sl_updated]).to be false
+      expect(result[:reason]).to eq('rejected')
     end
   end
 
