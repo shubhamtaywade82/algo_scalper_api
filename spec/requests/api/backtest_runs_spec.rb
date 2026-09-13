@@ -106,7 +106,7 @@ RSpec.describe 'Api::BacktestRuns' do
     end
   end
 
-  describe 'existing synchronous Api::BacktestsController is untouched' do
+  describe 'Api::BacktestsController route is unchanged (now async internally, see equity_backtest_job_spec)' do
     it 'still routes POST /api/backtests to the original controller/action' do
       route = Rails.application.routes.recognize_path('/api/backtests', method: :post)
 

@@ -82,6 +82,7 @@ Rails.application.routes.draw do
     post 'scheduler/tasks/:id/execute', to: 'scheduler#execute'
 
     post 'backtests', to: 'backtests#create'
+    get  'backtests/:id', to: 'backtests#show'
     post 'replays', to: 'replays#create'
 
     resources :backtest_runs, only: %i[create index show] do
@@ -92,8 +93,8 @@ Rails.application.routes.draw do
       post :apply, on: :member
     end
 
-    get   'variables', to: 'variables#index'
-    put   'variables', to: 'variables#update'
+    get 'variables', to: 'variables#index'
+    put 'variables', to: 'variables#update'
 
     resources :trading_strategies, only: %i[index show create update destroy] do
       post :validate, on: :member
