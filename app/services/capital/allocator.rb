@@ -123,6 +123,11 @@ module Capital
       # problem. Uses Live::TimeRegimeService's existing session classification (the
       # same regimes that already gate entries) so sizing and entry logic agree on
       # which windows are dangerous.
+      #
+      # No rescue (wave 4): the previous `rescue -> 1.0` made ANY failure of this
+      # check mean FULL position size — the most aggressive assumption available,
+      # in the exact scenario (broken regime resolution) where we know the least.
+      # Errors now propagate; entry sizing fails and the entry is not taken.
       def time_regime_size_multiplier
         return 1.0 unless decay_aware_sizing_enabled?
 
@@ -137,9 +142,6 @@ module Capital
         else
           1.0
         end
-      rescue StandardError => e
-        Rails.logger.warn("[Allocator] time_regime_size_multiplier error: #{e.message}")
-        1.0
       end
 
       def decay_aware_sizing_enabled?

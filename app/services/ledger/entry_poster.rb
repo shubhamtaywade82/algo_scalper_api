@@ -108,12 +108,15 @@ module Ledger
         end
       end
 
+      # Paper-posting gate. A config document that cannot be READ used to be
+      # reported as "posting disabled" (rescue -> false) — conflating "off"
+      # with "unknown". Config failures now propagate as
+      # Errors::ConfigurationError and surface through the :failed Result of
+      # #post! (stamped on the tracker), never as a silent skip.
       def paper_posting?(tracker)
         return true if tracker.paper?
 
-        AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
-      rescue StandardError
-        false
+        AlgoConfig.paper_trading_enabled?
       end
 
       private

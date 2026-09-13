@@ -64,6 +64,22 @@ RSpec.describe Live::DailyLimits do
       end
     end
 
+    context 'when the config document is corrupt' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_raise(Errors::ConfigurationError.new('config document unreadable'))
+      end
+
+      it 'fails closed instead of trading without loss limits' do
+        # Wave 4: the inner config rescues (load_risk_config etc.) used to
+        # swallow this into {} — no loss limits, no profit target, trading
+        # continued. Errors now reach the fail-closed outer rescue.
+        result = daily_limits.can_trade?(index_key: 'NIFTY')
+
+        expect(result[:allowed]).to be false
+        expect(result[:reason]).to include('config document unreadable')
+      end
+    end
+
     context 'when daily loss limit is exceeded (per-index)' do
       before do
         allow(redis).to receive(:get).with(/daily_limits:loss:.*:NIFTY/).and_return('2500.0') # 2.5% > 2%

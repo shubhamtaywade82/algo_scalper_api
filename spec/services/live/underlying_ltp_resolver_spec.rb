@@ -33,9 +33,9 @@ RSpec.describe Live::UnderlyingLtpResolver do
       expect(resolver.resolve_underlying_ltp(nil)).to be_nil
     end
 
-    it 'returns nil when TickQuery raises' do
+    it 'propagates infra failures instead of reading them as "no data" (wave 3)' do
       allow(Live::TickQuery).to receive(:for_security).and_raise(StandardError)
-      expect(resolver.resolve_underlying_ltp('NIFTY')).to be_nil
+      expect { resolver.resolve_underlying_ltp('NIFTY') }.to raise_error(StandardError)
     end
 
     it 'returns nil when TickQuery returns nil' do

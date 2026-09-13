@@ -32,13 +32,16 @@ module Smc
         return nil
       end
 
-      # final IV & liquidity re-check
-      if signal[:meta]&.dig(:iv) && signal[:meta][:iv] > (signal[:meta][:max_iv] || begin
-                                                                                      AlgoConfig.fetch[:smc][:max_iv]
-      rescue StandardError
-                                                                                      60
-      end)
-        Rails.logger.warn("[Smc::Runner] IV too high at execution: #{signal[:meta][:iv]} - aborting")
+      # final IV & liquidity re-check.
+      # Error-handling review 2026-09: a config failure used to silently
+      # become max_iv = 60 — a risk threshold must never be invented from a
+      # rescue. Resolution order is explicit: signal meta -> config document
+      # -> the generator's named DEFAULT_MAX_IV constant.
+      max_iv_threshold = signal[:meta][:max_iv] ||
+                         AlgoConfig.fetch.dig(:smc, :max_iv) ||
+                         Smc::SignalGenerator::DEFAULT_MAX_IV
+      if signal[:meta]&.dig(:iv) && signal[:meta][:iv] > max_iv_threshold
+        Rails.logger.warn("[Smc::Runner] IV too high at execution: #{signal[:meta][:iv]} (max #{max_iv_threshold}) - aborting")
         return nil
       end
 
@@ -94,8 +97,9 @@ module Smc
     def place_live_order(option_inst)
       ensure_ws_connected!
 
-      # Use tick LTP if available
-      ltp = option_inst.latest_ltp || signal[:meta]&.dig(:premium) || 0.0
+      # Use tick LTP if available (nil flows into the availability check below —
+      # no fabricated 0.0 sentinel)
+      ltp = option_inst.latest_ltp || signal[:meta]&.dig(:premium)
       if ltp.to_f <= 0
         Rails.logger.warn("[Smc::Runner] LTP not available for #{option_inst.symbol_name}, aborting")
         return nil

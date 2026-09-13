@@ -58,7 +58,7 @@ RSpec.describe Instrument do
       end
     end
 
-    context 'when quantity is nil or zero' do
+    context 'with explicit auto_size (allocator sizing policy)' do
       it 'calculates quantity via Capital::Allocator and labels the side by option type' do
         index_cfg = { key: 'NIFTY', segment: 'IDX_I' }
         allow(Capital::Allocator).to receive(:qty_for).and_return(75)
@@ -67,7 +67,7 @@ RSpec.describe Instrument do
           hash_including(side: 'long_ce', qty: 75, security_id: option.security_id.to_s)
         ).and_return(instance_double(PositionTracker))
 
-        option.buy_option!(index_cfg: index_cfg)
+        option.buy_option!(auto_size: true, index_cfg: index_cfg)
 
         expect(Capital::Allocator).to have_received(:qty_for).with(
           index_cfg: index_cfg,
@@ -87,7 +87,24 @@ RSpec.describe Instrument do
           hash_including(side: 'long_pe')
         ).and_return(instance_double(PositionTracker))
 
-        put_option.buy_option!
+        put_option.buy_option!(auto_size: true, index_cfg: { key: 'NIFTY', segment: 'IDX_I' })
+      end
+    end
+
+    context 'when quantity is absent and auto_size is not requested' do
+      it 'raises Errors::InvalidQuantity — sizing is never inferred' do
+        expect(Orders.config.gateway).not_to receive(:place_market)
+
+        expect { option.buy_option! }.to raise_error(Errors::InvalidQuantity)
+        expect { option.buy_option!(index_cfg: { key: 'NIFTY' }) }.to raise_error(Errors::InvalidQuantity)
+      end
+    end
+
+    context 'auto_size without index_cfg' do
+      it 'raises Errors::ConfigurationError — refuses to manufacture a config' do
+        expect(Capital::Allocator).not_to receive(:qty_for)
+
+        expect { option.buy_option!(auto_size: true) }.to raise_error(Errors::ConfigurationError)
       end
     end
 
@@ -119,13 +136,14 @@ RSpec.describe Instrument do
       end
     end
 
-    context 'when quantity is zero or negative' do
-      it 'returns nil when calculated quantity is zero' do
+    context 'when the allocator returns no usable quantity' do
+      it 'raises Errors::InvalidQuantity instead of silently skipping the order' do
         allow(Capital::Allocator).to receive(:qty_for).and_return(0)
 
         expect(Orders.config.gateway).not_to receive(:place_market)
 
-        expect(option.buy_option!).to be_nil
+        expect { option.buy_option!(auto_size: true, index_cfg: { key: 'NIFTY' }) }
+          .to raise_error(Errors::InvalidQuantity)
       end
     end
 
@@ -189,7 +207,15 @@ RSpec.describe Instrument do
     end
 
     context 'when quantity is nil' do
-      it 'uses sum of active PositionTracker quantities' do
+      it 'raises Errors::InvalidQuantity — whole-position exit is the explicit close_position!' do
+        expect(Orders.config.gateway).not_to receive(:place_market)
+
+        expect { option.sell_option! }.to raise_error(Errors::InvalidQuantity)
+      end
+    end
+
+    context 'close_position! (explicit whole-position exit)' do
+      it 'sells the sum of active PositionTracker quantities' do
         create(
           :position_tracker,
           :nifty_position,
@@ -206,20 +232,18 @@ RSpec.describe Instrument do
           segment: option.exchange_segment,
           security_id: option.security_id.to_s,
           qty: 75, # 50 + 25
-          meta: hash_including(:client_order_id)
+          meta: hash_including(:client_order_id, close_position: true)
         ).and_return(order_response)
 
-        option.sell_option!
+        option.close_position!
       end
-    end
 
-    context 'when no active positions exist' do
-      it 'returns nil' do
+      it 'returns nil when there is no active position (documented outcome)' do
         PositionTracker.where(security_id: option.security_id.to_s).delete_all
 
         expect(Orders.config.gateway).not_to receive(:place_market)
 
-        expect(option.sell_option!).to be_nil
+        expect(option.close_position!).to be_nil
       end
     end
   end

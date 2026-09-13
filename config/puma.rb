@@ -51,11 +51,19 @@ end
 # ---------------------------------------------------------
 on_restart do
   Rails.logger.info("[Puma] Restarting, stopping background services...")
-  if defined?(Live::ExitEngine)
-    Live::ExitEngine.instance.stop rescue nil
+  # Best-effort teardown — but never silent: a swallowed stop failure would
+  # leave duplicate engine threads running after the restart.
+  begin
+    Rails.logger.info("[Puma] Stopping Live::ExitEngine") if defined?(Live::ExitEngine)
+    Live::ExitEngine.instance.stop if defined?(Live::ExitEngine)
+  rescue StandardError => e
+    Rails.logger.error("[Puma] Failed to stop Live::ExitEngine: #{e.class} - #{e.message}")
   end
-  if defined?(Live::MarketFeedHub)
-    Live::MarketFeedHub.instance.stop! rescue nil
+  begin
+    Rails.logger.info("[Puma] Stopping Live::MarketFeedHub") if defined?(Live::MarketFeedHub)
+    Live::MarketFeedHub.instance.stop! if defined?(Live::MarketFeedHub)
+  rescue StandardError => e
+    Rails.logger.error("[Puma] Failed to stop Live::MarketFeedHub: #{e.class} - #{e.message}")
   end
 end
 

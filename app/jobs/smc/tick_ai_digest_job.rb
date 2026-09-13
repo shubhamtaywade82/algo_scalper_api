@@ -64,11 +64,12 @@ module Smc
 
     private
 
+    # Flag absent -> feature off (documented). A corrupt config document
+    # propagates — perform's rescue logs and re-raises so the job retries,
+    # instead of the AI gate silently reading as disabled (wave 3).
     def ai_enabled?
       AlgoConfig.fetch.dig(:ai, :enabled) == true &&
         Services::Ai::OllamaClient.instance.enabled?
-    rescue StandardError
-      false
     end
 
     def run_ai_and_notify(instrument, signals_cfg, ltp, fired_keys, tick_at)

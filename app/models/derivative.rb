@@ -66,27 +66,34 @@ class Derivative < ApplicationRecord
 
   # Trading routes through the consolidated Instrument so trackers/watchables
   # are created against instruments, not legacy derivatives.
+  #
+  # Error contract (error-handling review 2026-09): a legacy record with no
+  # consolidated mirror used to log + return nil — callers then inferred
+  # success/failure from side effects. It now raises; a missing mirror is a
+  # data-integrity problem, not a tradeable state.
+  #
+  # @raise [Errors::InstrumentNotFound] when no consolidated Instrument exists
   def buy_option!(**args)
-    target = consolidated_instrument
-    if target.nil?
-      Rails.logger.error(
-        "[Derivative] DEPRECATED buy_option! on legacy derivative #{id} with no consolidated instrument"
-      )
-      return nil
-    end
-
-    target.buy_option!(**args)
+    consolidated_instrument!
+      .buy_option!(**args)
   end
 
+  # @raise [Errors::InstrumentNotFound] when no consolidated Instrument exists
   def sell_option!(**args)
-    target = consolidated_instrument
-    if target.nil?
-      Rails.logger.error(
-        "[Derivative] DEPRECATED sell_option! on legacy derivative #{id} with no consolidated instrument"
-      )
-      return nil
-    end
+    consolidated_instrument!
+      .sell_option!(**args)
+  end
 
-    target.sell_option!(**args)
+  private
+
+  # @return [Instrument]
+  # @raise [Errors::InstrumentNotFound]
+  def consolidated_instrument!
+    consolidated_instrument || raise(
+      Errors::InstrumentNotFound.new(
+        { legacy_derivative_id: id, security_id: security_id, symbol_name: symbol_name },
+        "legacy Derivative #{id} (#{symbol_name}) has no consolidated Instrument — run the consolidation migration"
+      )
+    )
   end
 end

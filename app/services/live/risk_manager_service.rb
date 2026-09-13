@@ -29,12 +29,12 @@ module Live
 
     def initialize(exit_engine: nil)
       @exit_engine = exit_engine
-      @algo_config = begin
-        AlgoConfig.fetch
-      rescue StandardError
-        {}
-      end
-      @paper_mode = @algo_config.dig(:paper_trading, :enabled) == true
+      # SAFETY-CRITICAL (error-handling review 2026-09, wave 3): a config
+      # fetch failure used to read as "not paper" — i.e. the LIVE gateway.
+      # Unknown mode now refuses to start the service (test env keeps the
+      # documented default; see AlgoConfig.paper_trading_enabled?).
+      @algo_config = AlgoConfig.fetch
+      @paper_mode = AlgoConfig.paper_trading_enabled?
       @orders_gateway = Orders.config ? Orders.config.gateway : Orders::GatewayFactory.build(paper_mode: @paper_mode)
       @active_cache = begin
         Positions::ActiveCache.instance
@@ -184,31 +184,6 @@ module Live
     rescue StandardError => e
       Rails.logger.error("[RiskManagerService] active_cache unavailable: #{e.class} - #{e.message}")
       nil
-    end
-
-    # Lightweight risk evaluation helper (unchanged semantics)
-    def evaluate_signal_risk(signal_data)
-      confidence = signal_data[:confidence] || 0.0
-      entry_price = signal_data[:entry_price]
-      stop_loss = signal_data[:stop_loss]
-
-      risk_level =
-        case confidence
-        when 0.8..1.0 then :low
-        when 0.6...0.8 then :medium
-        else :high
-        end
-
-      max_position_size =
-        case risk_level
-        when :low then 100
-        when :medium then 50
-        else 25
-        end
-
-      recommended_stop_loss = stop_loss || (entry_price * 0.98)
-
-      { risk_level: risk_level, max_position_size: max_position_size, recommended_stop_loss: recommended_stop_loss }
     end
   end
 end

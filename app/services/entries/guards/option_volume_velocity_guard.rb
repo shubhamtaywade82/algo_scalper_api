@@ -25,23 +25,34 @@ module Entries
 
         return PASS unless volume_baseline&.positive?
 
-        # Resolve volume velocity multiplier based on DTE
+        # Resolve volume velocity multiplier based on DTE.
+        # Error-handling review 2026-09 (wave 2): no assumed 2.0 — an
+        # unresolvable multiplier is an explicit block with the reason.
         dte = Trading::DteResolver.days_to_expiry(pick: pick, index_cfg: context[:index_cfg])
-        multiplier = Trading::DteParameterResolver.volume_velocity_multiplier(dte: dte) || 2.0
+        multiplier = Trading::DteParameterResolver.volume_velocity_multiplier(dte: dte)
+        if multiplier.nil?
+          return { blocked: 'volume_velocity_multiplier_unconfigured (risk.dte_parameters disabled and no fallback source)' }
+        end
 
         if volume_delta < (volume_baseline * multiplier)
           return { blocked: "Option contract volume velocity too low: delta #{volume_delta} < baseline #{volume_baseline.round(1)} * multiplier #{multiplier}" }
         end
 
         PASS
+      rescue Errors::Error => e
+        # Domain failures (config corruption, bad market data) block the entry —
+        # they are not warmup conditions.
+        { blocked: "volume_velocity_gate_failed: #{e.class} - #{e.message}" }
       rescue StandardError => e
         Rails.logger.warn("[OptionVolumeVelocityGuard] Error: #{e.class} - #{e.message}")
         PASS
       end
 
+      # Opt-in (error-handling review 2026-09, wave 2): an absent section means
+      # the gate is off; it used to be silently treated as enabled.
       def self.enabled?
         cfg = AlgoConfig.fetch.dig(:risk, :volume_velocity_gate) || {}
-        cfg[:enabled] != false
+        cfg[:enabled] == true
       end
     end
   end

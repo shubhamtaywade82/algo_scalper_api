@@ -117,15 +117,14 @@ RSpec.describe Instrument do
       end
     end
 
-    context 'when quantity is nil' do
-      it 'defaults to quantity 1' do
-        expect(Orders.config.gateway).to receive(:place_market).with(
-          hash_including(qty: 1)
-        ).and_return(order_response)
+    context 'when quantity is nil, zero or malformed' do
+      it 'raises Errors::InvalidQuantity instead of silently ordering 1 unit' do
+        expect(Orders.config.gateway).not_to receive(:place_market)
 
-        allow(instrument).to receive(:after_order_track!).and_return(instance_double(PositionTracker))
-
-        instrument.buy_market!
+        expect { instrument.buy_market! }.to raise_error(Errors::InvalidQuantity)
+        expect { instrument.buy_market!(qty: 0) }.to raise_error(Errors::InvalidQuantity)
+        expect { instrument.buy_market!(qty: -5) }.to raise_error(Errors::InvalidQuantity)
+        expect { instrument.buy_market!(qty: 'abc') }.to raise_error(Errors::InvalidQuantity)
       end
     end
 
@@ -222,7 +221,15 @@ RSpec.describe Instrument do
     end
 
     context 'when quantity is nil' do
-      it 'uses sum of active PositionTracker quantities' do
+      it 'raises Errors::InvalidQuantity — liquidation is now the explicit close_market_position!' do
+        expect(Orders.config.gateway).not_to receive(:place_market)
+
+        expect { instrument.sell_market! }.to raise_error(Errors::InvalidQuantity)
+      end
+    end
+
+    context 'close_market_position! (explicit whole-position exit)' do
+      it 'sells the sum of active PositionTracker quantities' do
         create(
           :position_tracker,
           :nifty_position,
@@ -239,20 +246,18 @@ RSpec.describe Instrument do
           segment: instrument.exchange_segment,
           security_id: instrument.security_id.to_s,
           qty: 7, # 5 + 2
-          meta: hash_including(:client_order_id)
+          meta: hash_including(:client_order_id, close_position: true)
         ).and_return(order_response)
 
-        instrument.sell_market!
+        instrument.close_market_position!
       end
-    end
 
-    context 'when no active positions exist' do
-      it 'returns nil' do
+      it 'returns nil when there is no active position (documented outcome)' do
         PositionTracker.where(instrument_id: instrument.id, security_id: instrument.security_id.to_s).delete_all
 
         expect(Orders.config.gateway).not_to receive(:place_market)
 
-        result = instrument.sell_market!
+        result = instrument.close_market_position!
         expect(result).to be_nil
       end
     end
@@ -276,13 +281,10 @@ RSpec.describe Instrument do
     end
 
     context 'when quantity is zero or negative' do
-      it 'returns nil when provided quantity is zero' do
-        # Clear existing trackers
-        PositionTracker.where(instrument_id: instrument.id, security_id: instrument.security_id.to_s).delete_all
+      it 'raises Errors::InvalidQuantity' do
         expect(Orders.config.gateway).not_to receive(:place_market)
 
-        result = instrument.sell_market!(qty: 0)
-        expect(result).to be_nil
+        expect { instrument.sell_market!(qty: 0) }.to raise_error(Errors::InvalidQuantity)
       end
     end
   end

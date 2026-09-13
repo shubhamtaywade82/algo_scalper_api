@@ -129,11 +129,10 @@ module Live
       end
 
       def enforce_early_trend_failure(exit_engine:)
-        etf_cfg = begin
-          resolved_risk_config[:etf] || {}
-        rescue StandardError
-          {}
-        end
+        # Strict config read (wave 3): a corrupt document used to read as
+        # "feature disabled" — an exit layer silently turning itself off.
+        # The per-tracker rescue below logs-and-isolates real failures.
+        etf_cfg = resolved_risk_config[:etf] || {}
 
         return unless etf_cfg[:enabled]
 
@@ -539,7 +538,15 @@ module Live
         pnl_pct = snapshot[:pnl_pct]
         return if pnl_pct.nil?
 
-        # Get initial risk (SL) from tracker meta or default
+        # Initial risk (SL) precedence for the RR estimate (wave 3 audit):
+        #   1. SL pinned on the tracker at entry (risk gates pin it since wave 2)
+        #   2. SL derived from the recorded premium stop price
+        #   3. risk config sl_pct (DECIMAL, e.g. 0.12 = 12%)
+        #   4. documented 10% assumption — LAST RESORT for legacy positions
+        #      entered before SL pinning; estimate input for profit-booking
+        #      math only, never a hard stop.
+        # pct_value raises on garbage (wave 3) instead of manufacturing 0,
+        # which used to silently disable the booking target.
         sl_pct = tracker.meta&.dig('initial_sl_pct')&.to_f
 
         # Fallback: if premium_stop_price exists, calculate sl_pct from it

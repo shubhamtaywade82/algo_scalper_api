@@ -365,14 +365,14 @@ module Live
       Thread.current[:current_strategy_slug]
     end
 
-    # Get max trades per day for a specific strategy from config
+    # Get max trades per day for a specific strategy from config.
+    # No rescue (wave 4): a corrupt config used to read as "no strategy limit",
+    # silently un-throttling a strategy exactly when the system is misconfigured.
+    # Errors now propagate to #can_trade?'s fail-closed outer rescue.
     def get_strategy_max_trades(strategy_slug)
       strategy_limits = AlgoConfig.fetch[:strategy_limits] || {}
       strategy_limits.dig(strategy_slug.to_sym, :max_trades_per_day) ||
         strategy_limits.dig(strategy_slug, 'max_trades_per_day')
-    rescue StandardError => e
-      Rails.logger.error("[DailyLimits] Failed to get strategy max trades: #{e.class} - #{e.message}")
-      nil
     end
 
     # Redis key for daily trades (per-strategy)
@@ -385,12 +385,14 @@ module Live
       index_key.to_s.strip.upcase
     end
 
-    # Load risk configuration from AlgoConfig
+    # Load risk configuration from AlgoConfig.
+    # No rescue (wave 4): `rescue -> {}` made a corrupt config document mean
+    # "no daily loss limits, no profit target" while trading continued —
+    # silently defeating this service's own fail-closed outer rescue in
+    # #can_trade?. Absent :risk section still degrades to {} (documented
+    # "no limits configured" state).
     def load_risk_config
       AlgoConfig.fetch[:risk] || {}
-    rescue StandardError => e
-      Rails.logger.error("[DailyLimits] Failed to load risk config: #{e.class} - #{e.message}")
-      {}
     end
 
     # Capital base for percentage-of-capital daily loss limits.
@@ -412,7 +414,9 @@ module Live
       end
     end
 
-    # Get max trades per day for specific index from config
+    # Get max trades per day for specific index from config.
+    # No rescue (wave 4) — same rationale as #load_risk_config: errors
+    # propagate to the fail-closed #can_trade? boundary.
     # rubocop:disable Metrics/CyclomaticComplexity
     def get_index_max_trades(index_key)
       index_key = normalize_index_key(index_key)
@@ -420,19 +424,14 @@ module Live
       index_cfg = indices.find { |idx| idx[:key]&.to_s&.upcase == index_key }
       index_cfg&.dig(:trade_limits, :max_trades_per_day) ||
         index_cfg&.dig('trade_limits', 'max_trades_per_day')
-    rescue StandardError => e
-      Rails.logger.error("[DailyLimits] Failed to get index max trades: #{e.class} - #{e.message}")
-      nil
     end
     # rubocop:enable Metrics/CyclomaticComplexity
 
-    # Get global max trades per day from config
+    # Get global max trades per day from config.
+    # No rescue (wave 4) — same rationale as #load_risk_config.
     def get_global_max_trades
       trade_limits = AlgoConfig.fetch[:trade_limits] || {}
       trade_limits[:global_max_trades_per_day] || trade_limits['global_max_trades_per_day']
-    rescue StandardError => e
-      Rails.logger.error("[DailyLimits] Failed to get global max trades: #{e.class} - #{e.message}")
-      nil
     end
 
     # Redis key for daily loss (per-index)

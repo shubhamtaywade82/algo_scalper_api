@@ -94,35 +94,9 @@ RSpec.describe Live::RiskManagerService do
     end
   end
 
-  describe '#evaluate_signal_risk' do
-    it 'returns low risk for high confidence' do
-      result = service.send(:evaluate_signal_risk, { confidence: 0.9, entry_price: 100 })
-      expect(result[:risk_level]).to eq(:low)
-      expect(result[:max_position_size]).to eq(100)
-    end
-
-    it 'returns medium risk for medium confidence' do
-      result = service.send(:evaluate_signal_risk, { confidence: 0.7, entry_price: 100 })
-      expect(result[:risk_level]).to eq(:medium)
-      expect(result[:max_position_size]).to eq(50)
-    end
-
-    it 'returns high risk for low confidence' do
-      result = service.send(:evaluate_signal_risk, { confidence: 0.4, entry_price: 100 })
-      expect(result[:risk_level]).to eq(:high)
-      expect(result[:max_position_size]).to eq(25)
-    end
-
-    it 'defaults to high risk when confidence is missing' do
-      result = service.send(:evaluate_signal_risk, { entry_price: 100 })
-      expect(result[:risk_level]).to eq(:high)
-    end
-
-    it 'falls back to 2% stop loss when not provided' do
-      result = service.send(:evaluate_signal_risk, { confidence: 0.9, entry_price: 100 })
-      expect(result[:recommended_stop_loss]).to eq(98.0)
-    end
-  end
+  # #evaluate_signal_risk was deleted in the error-handling review (wave 3):
+  # it had no production callers and manufactured values (assumed 2% stop,
+  # hardcoded position-size tiers).
 
   describe '#should_run_realtime_enforcement?' do
     it 'returns true when gap is not configured' do
@@ -332,9 +306,14 @@ RSpec.describe Live::RiskManagerService do
   end
 
   describe '#risk_config' do
-    it 'returns empty hash on error' do
-      allow(service).to receive(:resolved_risk_config).and_raise(StandardError, 'Config error')
+    it 'returns empty hash when the resolved config is blank (documented no-config outcome)' do
+      allow(service).to receive(:resolved_risk_config).and_return(nil)
       expect(service.send(:risk_config)).to eq({})
+    end
+
+    it 'propagates resolution errors instead of silently degrading to no-config (wave 3)' do
+      allow(service).to receive(:resolved_risk_config).and_raise(Errors::ConfigurationError, 'Config error')
+      expect { service.send(:risk_config) }.to raise_error(Errors::ConfigurationError)
     end
   end
 
@@ -343,8 +322,12 @@ RSpec.describe Live::RiskManagerService do
       expect(service.send(:pct_value, 0.12)).to eq(BigDecimal('0.12'))
     end
 
-    it 'returns zero for unparseable values' do
-      expect(service.send(:pct_value, Object.new)).to eq(BigDecimal('0'))
+    it 'passes an actual zero through (0 is a real percentage)' do
+      expect(service.send(:pct_value, 0)).to eq(BigDecimal('0'))
+    end
+
+    it 'raises on unparseable values instead of manufacturing zero (wave 3)' do
+      expect { service.send(:pct_value, Object.new) }.to raise_error(Errors::ConfigurationError)
     end
   end
 

@@ -18,15 +18,31 @@ class AnalysisJob < ApplicationJob
 
   AI_TIMEOUT = 120 # seconds
 
+  # A component that raised. Raised (once) at the end of #perform so already
+  # computed components stay cached while the job still fails loudly and
+  # retries — instead of writing nil into the analysis store and marking a
+  # broken component "fresh" (error-handling review 2026-09).
+  class ComponentFailure < StandardError
+    attr_reader :failed_components
+
+    def initialize(failed_components)
+      @failed_components = failed_components
+      super("AnalysisJob components failed: #{failed_components.join(', ')}")
+    end
+  end
+
   def perform(index_key = nil, force: false)
     indices = index_key ? [index_key.upcase] : all_index_keys
+    failures = []
 
     indices.each do |key|
-      compute_for_index(key, force: force)
+      failures.concat(compute_for_index(key, force: force))
       sleep 1 # Rate limit between indices
     end
 
     Rails.logger.info("[AnalysisJob] Completed analysis for #{indices.join(', ')}")
+
+    raise ComponentFailure, failures if failures.any?
   rescue StandardError => e
     Rails.logger.error("[AnalysisJob] Fatal error: #{e.class} - #{e.message}")
     raise
@@ -34,50 +50,52 @@ class AnalysisJob < ApplicationJob
 
   private
 
+  # @return [Array<String>] labels of components that failed (not written)
   def compute_for_index(index_key, force: false)
     instrument = find_instrument(index_key)
     unless instrument
       Rails.logger.warn("[AnalysisJob] Instrument not found for #{index_key}")
-      return
+      return []
     end
 
     stale = force ? AnalysisStore::COMPONENTS : AnalysisStore.stale_components(index_key)
-    return if stale.empty?
+    return [] if stale.empty?
 
     Rails.logger.info("[AnalysisJob] #{index_key}: refreshing #{stale.join(', ')}")
+    failures = []
 
     # SMC Analysis
     if stale.include?(:smc)
-      data = safe_compute("#{index_key}:smc") do
-        engine = Smc::BiasEngine.new(instrument, delay_seconds: 0.5)
-        engine.details
+      failures << compute_component("#{index_key}:smc") do
+        AnalysisStore.write(index_key, :smc,
+                            Smc::BiasEngine.new(instrument, delay_seconds: 0.5).details)
       end
-      AnalysisStore.write(index_key, :smc, data)
     end
 
     # Market Regime
     if stale.include?(:regime)
-      data = safe_compute("#{index_key}:regime") do
+      failures << compute_component("#{index_key}:regime") do
         series = instrument.candle_series(interval: '5')
-        if series&.candles&.size&.>= 20
-          MarketRegimeDetector.new(series).detect
-        else
-          { regime: 'NO_DATA', confidence: 0 }
-        end
+        data = if series&.candles&.size&.>= 20
+                 MarketRegimeDetector.new(series).detect
+               else
+                 { regime: 'NO_DATA', confidence: 0 }
+               end
+        AnalysisStore.write(index_key, :regime, data)
       end
-      AnalysisStore.write(index_key, :regime, data)
     end
 
     # AI Analysis (slowest — do last, with timeout)
     if stale.include?(:ai) && !Ai::GenerativeAiMarketGate.skip?(force: false)
-      data = safe_compute("#{index_key}:ai") do
+      failures << compute_component("#{index_key}:ai") do
         Timeout.timeout(AI_TIMEOUT) do
           engine = Smc::BiasEngine.new(instrument, delay_seconds: 0.5)
-          engine.analyze_with_ai
+          AnalysisStore.write(index_key, :ai, engine.analyze_with_ai)
         end
       end
-      AnalysisStore.write(index_key, :ai, data)
     end
+
+    failures.compact
   end
 
   def find_instrument(index_key)
@@ -94,13 +112,19 @@ class AnalysisJob < ApplicationJob
     IndexConfigLoader.load_indices.map { |idx| idx[:key].to_s.upcase }
   end
 
-  def safe_compute(label)
+  # Runs one component. On failure the store is NOT written (the component
+  # stays stale and will be retried) and the failure label is returned so
+  # #perform can fail the job after the remaining components finish.
+  #
+  # @return [String, nil] the component label when it failed
+  def compute_component(label)
     yield
-  rescue Timeout::Error
+    nil
+  rescue Timeout::Error => e
     Rails.logger.warn("[AnalysisJob] #{label} timed out after #{AI_TIMEOUT}s")
-    nil
+    label
   rescue StandardError => e
-    Rails.logger.warn("[AnalysisJob] #{label} failed: #{e.class} - #{e.message}")
-    nil
+    Rails.logger.error("[AnalysisJob] #{label} failed: #{e.class} - #{e.message}")
+    label
   end
 end

@@ -34,11 +34,23 @@ module Trading
       end
     end
 
+    # Profile-selection floors are trading-state inputs: a missing key used to
+    # silently become 80/60 (and a corrupt config document too, via a blanket
+    # rescue). algo.yml ships both keys; anything else is a misconfiguration.
+    #
+    # Test-env carve-out (same as AlgoConfig.run_mode): the spec suite stubs
+    # AlgoConfig.fetch with partial hashes, so test keeps the documented
+    # defaults instead of raising.
     def self.profile_threshold(key, default)
       v = AlgoConfig.fetch.dig(:market_context, :strategy_profiles, key)
-      v.nil? ? default : v.to_i
-    rescue StandardError
-      default
+      return default if v.nil? && Rails.env.test?
+
+      unless v.present? && v.to_i.positive?
+        raise Errors::ConfigurationError,
+              "market_context.strategy_profiles.#{key} must be a positive integer — got #{v.inspect}"
+      end
+
+      v.to_i
     end
   end
 end

@@ -62,7 +62,11 @@ module AlphaExecutionService
       }
 
       # Existing logic: resolve_ltp -> sizing -> order_placer -> tracker
+      # Sizing policy (error-handling review 2026-09): the alpha strategy
+      # sizes via Capital::Allocator — now an explicit auto_size opt-in
+      # instead of an inferred fallback.
       order = derivative.buy_option!(
+        auto_size: true,
         product_type: "NORMAL",
         index_cfg: index_cfg,
         meta: meta

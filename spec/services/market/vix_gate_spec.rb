@@ -47,6 +47,18 @@ RSpec.describe Market::VixGate do
         expect(described_class.entry_allowed?).to be(true)
       end
     end
+
+    context 'when the config document is corrupt' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_raise(Errors::ConfigurationError.new('config document unreadable'))
+      end
+
+      it 'propagates instead of silently disarming the gate' do
+        # Wave 4: `config rescue -> {}` used to read a corrupt document as
+        # "gate disabled" — entry_allowed? returned true unconditionally.
+        expect { described_class.entry_allowed? }.to raise_error(Errors::ConfigurationError)
+      end
+    end
   end
 
   describe '.ensure_evaluated!' do

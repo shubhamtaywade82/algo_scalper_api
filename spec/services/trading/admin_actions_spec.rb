@@ -21,6 +21,7 @@ RSpec.describe Trading::AdminActions do
 
       expect(derivative).to receive(:buy_option!).with(
         qty: 50,
+        auto_size: false,
         product_type: 'INTRADAY',
         index_cfg: index_cfg,
         meta: {}
@@ -36,6 +37,7 @@ RSpec.describe Trading::AdminActions do
 
       expect(derivative).to receive(:buy_option!).with(
         qty: nil,
+        auto_size: true,
         product_type: 'INTRADAY',
         index_cfg: banknifty_cfg,
         meta: { foo: 'bar' }
@@ -54,6 +56,7 @@ RSpec.describe Trading::AdminActions do
 
       expect(derivative).to receive(:buy_option!).with(
         qty: nil,
+        auto_size: true,
         product_type: 'INTRADAY',
         index_cfg: index_cfg,
         meta: {}
@@ -71,6 +74,7 @@ RSpec.describe Trading::AdminActions do
 
       expect(alt_derivative).to receive(:buy_option!).with(
         qty: nil,
+        auto_size: true,
         product_type: 'INTRADAY',
         index_cfg: banknifty_cfg,
         meta: {}
@@ -85,6 +89,7 @@ RSpec.describe Trading::AdminActions do
 
       expect(derivative).to receive(:buy_option!).with(
         qty: nil,
+        auto_size: true,
         product_type: 'INTRADAY',
         index_cfg: nil,
         meta: {}
@@ -93,20 +98,15 @@ RSpec.describe Trading::AdminActions do
       described_class.buy_derivative!(derivative_id: 789)
     end
 
-    it 'handles errors gracefully when config lookup fails' do
+    it 'propagates config lookup failures instead of silently passing nil' do
       allow(AlgoConfig).to receive(:fetch).and_raise(StandardError, 'Config error')
-      allow(Rails.logger).to receive(:error)
       allow(Instruments::LegacyResolver).to receive(:by_legacy_id).with(999, require_derivative: true).and_return(derivative)
 
-      expect(derivative).to receive(:buy_option!).with(
-        qty: 10,
-        product_type: 'INTRADAY',
-        index_cfg: nil,
-        meta: {}
-      )
+      expect(derivative).not_to receive(:buy_option!)
 
-      described_class.buy_derivative!(derivative_id: 999, qty: 10)
-      expect(Rails.logger).to have_received(:error)
+      expect do
+        described_class.buy_derivative!(derivative_id: 999, qty: 10)
+      end.to raise_error(StandardError, 'Config error')
     end
 
     it 'passes custom product_type' do
@@ -114,6 +114,7 @@ RSpec.describe Trading::AdminActions do
 
       expect(derivative).to receive(:buy_option!).with(
         qty: 25,
+        auto_size: false,
         product_type: 'CNC',
         index_cfg: index_cfg,
         meta: {}
@@ -132,10 +133,10 @@ RSpec.describe Trading::AdminActions do
       described_class.sell_derivative!(derivative_id: 42, qty: 50)
     end
 
-    it 'passes meta hash when provided' do
+    it 'routes an omitted qty to the explicit close_position! command' do
       allow(Instruments::LegacyResolver).to receive(:by_legacy_id).with(99, require_derivative: true).and_return(derivative)
 
-      expect(derivative).to receive(:sell_option!).with(qty: nil, meta: { note: 'exit' })
+      expect(derivative).to receive(:close_position!).with(meta: { note: 'exit' })
 
       described_class.sell_derivative!(derivative_id: 99, meta: { note: 'exit' })
     end

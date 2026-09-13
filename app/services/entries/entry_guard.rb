@@ -81,6 +81,10 @@ module Entries
 
         # ===== Unified instrument profile + capital cap sizing (hard rules) =====
         symbol = index_cfg[:key].to_s.upcase
+        # NOTE (error-handling review 2026-09, wave 2): the pipeline's SizingGuard
+        # blocks permission-less contexts ('permission_unresolved') before this
+        # line, and every production caller passes an explicit permission — the
+        # :scale_ready tail below only survives for pipeline-stubbed spec paths.
         permission_sym = (permission || entry_metadata&.dig(:permission) || :scale_ready).to_s.downcase.to_sym
         profile = Trading::InstrumentExecutionProfile.for(symbol)
 
@@ -220,62 +224,12 @@ module Entries
         nil
       end
 
-      # Check if time regime allows entry
-      def time_regime_allows_entry?(index_cfg:, pick:, direction:)
-        return true unless time_regime_rules_enabled?
-
-        regime_service = Live::TimeRegimeService.instance
-        regime = regime_service.current_regime
-
-        # Global override: No new trades after 14:50 (unless exceptional conditions)
-        unless regime_service.allow_new_trades?
-          Rails.logger.info("[EntryGuard] Entry blocked: No new trades allowed after #{Live::TimeRegimeService::NO_NEW_TRADES_AFTER}")
-          return false
-        end
-
-        # Check if entries are allowed in current regime
-        unless regime_service.allow_entries?(regime)
-          Rails.logger.info("[EntryGuard] Entry blocked: Regime #{regime} does not allow entries")
-          return false
-        end
-
-        # Check minimum ADX requirement for regime
-        min_adx = regime_service.min_adx_requirement(regime)
-        if min_adx > 15.0 # Only check if stricter than default
-          # Get ADX from signal metadata or calculate
-          # For now, skip ADX check here (should be done in signal generation)
-          # This is a safety net - signal generation should already filter by ADX
-        end
-
-        # Special rules for CHOP_DECAY regime (very strict)
-        if regime == Live::TimeRegimeService::CHOP_DECAY
-          # Allow ONLY if exceptional conditions (ADX ≥ 22, expansion present, large impulse)
-          # This should be checked in signal generation, but we log here
-          Rails.logger.info('[EntryGuard] Entry in CHOP_DECAY regime - ensure exceptional conditions met')
-        end
-
-        # Special rules for CLOSE_GAMMA regime
-        if regime == Live::TimeRegimeService::CLOSE_GAMMA
-          # Use IST timezone explicitly
-          current_time = Live::TimeRegimeService.instance.current_ist_time.strftime('%H:%M')
-          if current_time >= '14:45'
-            # No fresh breakouts after 14:45 IST - only continuation moves
-            # This should be checked in signal generation
-            Rails.logger.info('[EntryGuard] Entry after 14:45 IST - ensure continuation move only')
-          end
-        end
-
-        true
-      rescue StandardError => e
-        Rails.logger.error("[EntryGuard] time_regime_allows_entry? error: #{e.class} - #{e.message}")
-        true # Fail-safe: allow entry if check fails
-      end
-
-      def time_regime_rules_enabled?
-        AlgoConfig.fetch.dig(:time_regimes, :enabled) == true
-      rescue StandardError
-        false
-      end
+      # Time-regime entry gating lives in Entries::Guards::TimeRegimeGuard
+      # (pipeline-owned). The legacy EntryGuard#time_regime_allows_entry?
+      # copy was deleted in the error-handling review wave 4: it was dead
+      # code (no callers), duplicated the guard's logic, read the config
+      # from the wrong path (top-level :time_regimes instead of risk:), and
+      # failed open on errors.
 
       # Check if daily loss/profit limits allow entry (NOT trade frequency - we don't cap trade count)
       # EXCEPT for institutional rule of max 3 trades per day for index options.
@@ -381,7 +335,7 @@ module Entries
 
       def find_instrument(index_cfg)
         segment_code = index_cfg[:segment]
-        instrument = Instrument.find_by_sid_and_segment(
+        instrument = Instrument.resolve_index_by_sid_or_symbol(
           security_id: index_cfg[:sid],
           segment_code: segment_code,
           symbol_name: index_cfg[:key]
@@ -572,28 +526,39 @@ module Entries
         return unless bos_context
 
         contract = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_contract].to_s : ''
+
+        # Strict inputs (error-handling review 2026-09, wave 2): these values
+        # pin the position's stop/target metadata for its whole life. Garbage
+        # used to coerce to 0 and produce NaN stops or a fabricated ₹0 risk.
+        entry_price_f = positive_entry_price!(entry_price)
+        qty = Orders::Quantity.resolve!(quantity, context: 'EntryGuard BOS metadata')
+
         if contract == SUPERTREND_CONTRACT
           # Supertrend direct entries do not have BOS structure risk; derive premium risk from configured SL %.
           sl_decimal = supertrend_sl_decimal
-          premium_r = entry_price.to_f * sl_decimal
-          entry_risk_rupees = premium_r * quantity.to_i
-          origin_price = entry_price.to_f
+          premium_r = entry_price_f * sl_decimal
+          entry_risk_rupees = premium_r * qty
+          origin_price = entry_price_f
           entry_underlying_price = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_underlying_price] : nil
         else
-          origin_price = bos_context[:origin_swing][:price].to_f
+          # Non-supertrend entries carry their structural stop in the BOS origin
+          # swing. A missing/zero swing price used to be written into tracker meta
+          # as structure_invalidation_price = 0.0, silently disabling
+          # structure-invalidation exits for the life of the trade.
+          origin_price = positive_origin_swing_price!(bos_context)
           entry_underlying_price = bos_context[:entry_underlying_price]
-          reference_price = entry_underlying_price || entry_price
-          entry_risk_rupees = (reference_price.to_f - origin_price).abs * quantity.to_i
-          premium_r = entry_risk_rupees / quantity.to_f
+          reference_price = entry_underlying_price || entry_price_f
+          entry_risk_rupees = (reference_price.to_f - origin_price).abs * qty
+          premium_r = entry_risk_rupees / qty.to_f
         end
-        premium_stop = entry_price.to_f - premium_r
-        premium_target = entry_price.to_f + premium_r
+        premium_stop = entry_price_f - premium_r
+        premium_target = entry_price_f + premium_r
 
         meta_hash[:structure_invalidation_price] = origin_price
-        meta_hash[:entry_premium] = entry_price.to_f
+        meta_hash[:entry_premium] = entry_price_f
         meta_hash[:entry_risk_rupees] = entry_risk_rupees
         meta_hash[:premium_stop_price] = premium_stop
-        meta_hash[:initial_sl_pct] = (premium_r / entry_price.to_f * 100.0).round(2)
+        meta_hash[:initial_sl_pct] = (premium_r / entry_price_f * 100.0).round(2)
         meta_hash[:premium_target_price] = premium_target
         meta_hash[:entry_underlying_price] = entry_underlying_price if entry_underlying_price
         meta_hash[:bos_confirmed_at] = bos_context[:confirmed_at]&.iso8601
@@ -616,13 +581,54 @@ module Entries
         end
       end
 
+      # Supertrend direct entries derive premium risk from the configured SL %.
+      #
+      # Error-handling review 2026-09 (wave 2): a missing/corrupt risk.sl_pct
+      # used to silently become 0.12 — a WIDER stop than the shipped 0.10, with
+      # no signal. The value is now mandatory.
+      #
+      # Test-env carve-out (same convention as AlgoConfig.run_mode): partial
+      # AlgoConfig.fetch stubs keep the legacy 0.12 in test; development and
+      # production refuse to guess.
+      #
+      # @return [Float]
+      # @raise [Errors::ConfigurationError] when risk.sl_pct is missing, non-positive or non-finite
       def supertrend_sl_decimal
-        value = AlgoConfig.fetch.dig(:risk, :sl_pct).to_f
-        return 0.12 if value <= 0
+        raw = AlgoConfig.fetch.dig(:risk, :sl_pct)
+        value = raw.to_f
+
+        unless raw.present? && value.finite? && value.positive?
+          return 0.12 if Rails.env.test?
+
+          raise Errors::ConfigurationError,
+                "risk.sl_pct must be a positive number — got #{raw.inspect}; refusing to assume a stop-loss percentage"
+        end
 
         value
-      rescue StandardError
-        0.12
+      end
+
+      # @raise [Errors::InvalidPrice] when entry_price is not a positive finite number
+      def positive_entry_price!(entry_price)
+        price = entry_price.to_f
+        unless entry_price.present? && price.finite? && price.positive?
+          raise Errors::InvalidPrice, "entry_price must be a positive number — got #{entry_price.inspect}"
+        end
+
+        price
+      end
+
+      # @raise [Errors::InvalidMarketData] when the BOS origin swing price is
+      #   missing or not a positive finite number
+      def positive_origin_swing_price!(bos_context)
+        raw = bos_context.dig(:origin_swing, :price)
+        price = raw.to_f
+        unless raw.present? && price.finite? && price.positive?
+          raise Errors::InvalidMarketData,
+                "bos_context[:origin_swing][:price] must be a positive number — got #{raw.inspect}; " \
+                'refusing to pin a fabricated structure_invalidation_price'
+        end
+
+        price
       end
 
       def timeframe_to_interval(timeframe)

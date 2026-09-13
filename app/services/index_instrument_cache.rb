@@ -63,7 +63,7 @@ class IndexInstrumentCache
   def fetch_instrument(index_cfg)
     # Try to find existing instrument in database first using both security_id and segment
     segment_key = Instrument.segment_key_for(index_cfg[:segment]) || 'index'
-    instrument = Instrument.find_by_sid_and_segment(
+    instrument = Instrument.resolve_index_by_sid_or_symbol(
       security_id: index_cfg[:sid],
       segment_code: segment_key,
       symbol_name: index_cfg[:key]
