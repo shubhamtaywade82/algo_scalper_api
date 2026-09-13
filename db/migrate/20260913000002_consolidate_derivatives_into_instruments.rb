@@ -27,13 +27,13 @@
 #   6. Mark expired contracts as not tradable (kept forever for history).
 class ConsolidateDerivativesIntoInstruments < ActiveRecord::Migration[8.1]
   CHILD_FK_TABLES = {
-    'position_trackers'     => 'instrument_id',
-    'derivatives'           => 'instrument_id',
-    'leg_groups'            => 'instrument_id',
-    'order_intents'         => 'instrument_id',
-    'paper_orders'          => 'instrument_id',
-    'paper_positions'       => 'instrument_id',
-    'risk_events'           => 'instrument_id',
+    'position_trackers' => 'instrument_id',
+    'derivatives' => 'instrument_id',
+    'leg_groups' => 'instrument_id',
+    'order_intents' => 'instrument_id',
+    'paper_orders' => 'instrument_id',
+    'paper_positions' => 'instrument_id',
+    'risk_events' => 'instrument_id',
     'best_indicator_params' => 'instrument_id'
   }.freeze
 
@@ -64,64 +64,59 @@ class ConsolidateDerivativesIntoInstruments < ActiveRecord::Migration[8.1]
   def dedupe_instruments_on_canonical_identity!
     say 'ConsolidateDerivatives: deduping instruments on (exchange, segment, security_id)'
 
+    execute <<~SQL.squish
+      CREATE TEMP TABLE IF NOT EXISTS _inst_dups AS
+      SELECT id AS dropped_id,
+             FIRST_VALUE(id) OVER (
+               PARTITION BY exchange, segment, security_id
+               ORDER BY id ASC
+             ) AS keep_id
+      FROM instruments;
+
+      CREATE INDEX IF NOT EXISTS _inst_dups_dropped_id_idx ON _inst_dups (dropped_id);
+    SQL
+
     # best_indicator_params has a unique index on (instrument_id, interval,
     # indicator) — drop rows that would collide once remapped onto the keeper.
-    execute <<~SQL
+    execute <<~SQL.squish
       DELETE FROM best_indicator_params b1
-      USING instruments i1, instruments i2, best_indicator_params b2
-      WHERE b1.instrument_id = i1.id
-        AND b2.instrument_id = i2.id
-        AND i1.id > i2.id
-        AND i1.exchange IS NOT DISTINCT FROM i2.exchange
-        AND i1.segment  IS NOT DISTINCT FROM i2.segment
-        AND i1.security_id IS NOT DISTINCT FROM i2.security_id
+      USING _inst_dups d1, best_indicator_params b2
+      WHERE d1.dropped_id != d1.keep_id
+        AND b1.instrument_id = d1.dropped_id
+        AND b2.instrument_id = d1.keep_id
         AND b1.interval = b2.interval
         AND b1.indicator = b2.indicator
     SQL
 
     CHILD_FK_TABLES.each do |table, column|
-      execute <<~SQL
+      execute <<~SQL.squish
         UPDATE #{table} child
-        SET #{column} = keeper.keep_id
-        FROM instruments dropped
-        JOIN LATERAL (
-          SELECT MIN(k.id) AS keep_id
-          FROM instruments k
-          WHERE k.id < dropped.id
-            AND k.exchange IS NOT DISTINCT FROM dropped.exchange
-            AND k.segment  IS NOT DISTINCT FROM dropped.segment
-            AND k.security_id IS NOT DISTINCT FROM dropped.security_id
-        ) keeper ON TRUE
-        WHERE child.#{column} = dropped.id
+        SET #{column} = dups.keep_id
+        FROM _inst_dups dups
+        WHERE child.#{column} = dups.dropped_id
+          AND dups.dropped_id != dups.keep_id
       SQL
     end
 
     # Polymorphic Instrument watchables.
     %w[position_trackers watchlist_items].each do |table|
-      execute <<~SQL
+      execute <<~SQL.squish
         UPDATE #{table} w
-        SET watchable_id = keeper.keep_id
-        FROM instruments dropped
-        JOIN LATERAL (
-          SELECT MIN(k.id) AS keep_id
-          FROM instruments k
-          WHERE k.id < dropped.id
-            AND k.exchange IS NOT DISTINCT FROM dropped.exchange
-            AND k.segment  IS NOT DISTINCT FROM dropped.segment
-            AND k.security_id IS NOT DISTINCT FROM dropped.security_id
-        ) keeper ON TRUE
+        SET watchable_id = dups.keep_id
+        FROM _inst_dups dups
         WHERE w.watchable_type = 'Instrument'
-          AND w.watchable_id = dropped.id
+          AND w.watchable_id = dups.dropped_id
+          AND dups.dropped_id != dups.keep_id
       SQL
     end
 
-    execute <<~SQL
-      DELETE FROM instruments a
-      USING instruments b
-      WHERE a.id > b.id
-        AND a.exchange IS NOT DISTINCT FROM b.exchange
-        AND a.segment  IS NOT DISTINCT FROM b.segment
-        AND a.security_id IS NOT DISTINCT FROM b.security_id
+    execute <<~SQL.squish
+      DELETE FROM instruments
+      WHERE id IN (
+        SELECT dropped_id FROM _inst_dups WHERE dropped_id != keep_id
+      );
+
+      DROP TABLE IF EXISTS _inst_dups;
     SQL
   end
 
@@ -136,7 +131,7 @@ class ConsolidateDerivativesIntoInstruments < ActiveRecord::Migration[8.1]
 
   def insert_derivatives_into_instruments!
     say 'ConsolidateDerivatives: inserting derivatives rows into instruments'
-    execute <<~SQL
+    execute <<~SQL.squish
       INSERT INTO instruments (
         exchange, segment, security_id, isin, instrument_code,
         underlying_security_id, underlying_symbol, symbol_name, display_name,
@@ -175,7 +170,7 @@ class ConsolidateDerivativesIntoInstruments < ActiveRecord::Migration[8.1]
   # underlying_security_id and falling back to underlying_symbol.
   def link_underlying_instruments!
     say 'ConsolidateDerivatives: linking derivative contracts to underlying instruments'
-    execute <<~SQL
+    execute <<~SQL.squish
       UPDATE instruments deriv
       SET underlying_instrument_id = underlying.id
       FROM instruments underlying
@@ -187,7 +182,7 @@ class ConsolidateDerivativesIntoInstruments < ActiveRecord::Migration[8.1]
         AND underlying.segment IN ('I', 'E')
     SQL
 
-    execute <<~SQL
+    execute <<~SQL.squish
       UPDATE instruments deriv
       SET underlying_instrument_id = underlying.id
       FROM instruments underlying
@@ -204,7 +199,7 @@ class ConsolidateDerivativesIntoInstruments < ActiveRecord::Migration[8.1]
   def remap_watchables_to_instrument!
     say 'ConsolidateDerivatives: remapping watchables from Derivative to Instrument'
     %w[position_trackers watchlist_items].each do |table|
-      execute <<~SQL
+      execute <<~SQL.squish
         UPDATE #{table} w
         SET watchable_type = 'Instrument', watchable_id = i.id
         FROM derivatives d
@@ -222,7 +217,7 @@ class ConsolidateDerivativesIntoInstruments < ActiveRecord::Migration[8.1]
   # must never be selected for new orders.
   def mark_expired_contracts_untradable!
     say 'ConsolidateDerivatives: marking expired contracts untradable'
-    execute <<~SQL
+    execute <<~SQL.squish
       UPDATE instruments
       SET tradable = FALSE, updated_at = CURRENT_TIMESTAMP
       WHERE expiry_date IS NOT NULL

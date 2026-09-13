@@ -241,8 +241,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_13_000004) do
     t.string "status", default: "filled", null: false
     t.datetime "updated_at", null: false
     t.index ["instrument_id", "filled_at"], name: "index_executions_on_instrument_id_and_filled_at"
+    t.index ["instrument_id"], name: "index_executions_on_instrument_id"
     t.index ["order_no"], name: "index_executions_on_order_no"
     t.index ["position_tracker_id", "purpose"], name: "index_executions_on_position_tracker_id_and_purpose"
+    t.index ["position_tracker_id"], name: "index_executions_on_position_tracker_id"
     t.index ["source", "status"], name: "index_executions_on_source_and_status"
   end
 

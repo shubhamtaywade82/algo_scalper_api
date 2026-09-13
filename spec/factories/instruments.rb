@@ -63,7 +63,7 @@ FactoryBot.define do
     segment { 'derivatives' }
     isin { 'INE123456789' }
     instrument_code { 'futures_index' }
-    underlying_security_id { '12345' }
+    sequence(:underlying_security_id) { |n| (50_000 + n).to_s }
     underlying_symbol { 'UNDERLYING' }
     display_name { 'Display Name' }
     instrument_type { 'FUTURE' }
@@ -104,6 +104,9 @@ FactoryBot.define do
       segment { 'index' }
       instrument_code { 'index' }
       instrument_type { 'INDEX' }
+      underlying_security_id { nil }
+      underlying_symbol { nil }
+      expiry_date { nil }
       lot_size { 1 }
       tick_size { 0.05 }
     end
@@ -115,6 +118,9 @@ FactoryBot.define do
       segment { 'index' }
       instrument_code { 'index' }
       instrument_type { 'INDEX' }
+      underlying_security_id { nil }
+      underlying_symbol { nil }
+      expiry_date { nil }
       lot_size { 1 }
       tick_size { 0.05 }
     end
@@ -126,6 +132,9 @@ FactoryBot.define do
       segment { 'index' }
       instrument_code { 'index' }
       instrument_type { 'INDEX' }
+      underlying_security_id { nil }
+      underlying_symbol { nil }
+      expiry_date { nil }
       lot_size { 1 }
       tick_size { 0.05 }
     end

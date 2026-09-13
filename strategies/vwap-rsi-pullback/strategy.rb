@@ -44,8 +44,6 @@ class VwapRsiPullbackStrategy < BaseStrategy
     return Signals::Hold.new(reason: 'no_candle_data') unless series&.candles&.any?
 
     candles = series.candles
-    return Signals::Hold.new(reason: 'insufficient_data') if candles.size < WARMUP_BARS
-
     now = candles.last.timestamp.in_time_zone('Asia/Kolkata')
 
     # Need at least 15 min of data to establish VWAP
@@ -53,6 +51,8 @@ class VwapRsiPullbackStrategy < BaseStrategy
     if now < warmup_end
       return Signals::Hold.new(reason: 'warming_up_vwap')
     end
+
+    return Signals::Hold.new(reason: 'insufficient_data') if candles.size < WARMUP_BARS
 
     # Dead zone filter
     dz_start = (params[:dead_zone_start_hour] || DEAD_ZONE_START).to_i

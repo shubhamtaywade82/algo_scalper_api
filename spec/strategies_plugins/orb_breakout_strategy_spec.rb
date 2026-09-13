@@ -21,7 +21,7 @@ RSpec.describe OrbBreakoutStrategy do
   let(:base_date) { Date.parse('2026-07-06') } # A Monday
 
   describe 'params_schema' do
-    it 'declares all doc-specified parameters with defaults' do
+    it 'declares all doc-specified parameters with defaults', :aggregate_failures do
       schema = described_class.params_schema
       expect(schema[:orb_period_minutes][:default]).to eq(30)
       expect(schema[:min_range_points][:default]).to eq(40.0)
@@ -42,7 +42,7 @@ RSpec.describe OrbBreakoutStrategy do
   end
 
   describe '#call' do
-    context 'during ORB formation (before ORB period completes)' do
+    context 'when in ORB formation (before ORB period completes)' do
       let(:series) do
         build_series(base_date: base_date, count: 25, interval: 1, &gentle_uptrend_1m)
       end
@@ -56,7 +56,7 @@ RSpec.describe OrbBreakoutStrategy do
       end
     end
 
-    context 'after ORB period with a valid CE breakout' do
+    context 'when after ORB period with a valid CE breakout' do
       let(:series) do
         # Build 45 1m candles where:
         # - First 30 form the ORB (range high ~25050, range low ~24950 = 100pt range)
@@ -137,7 +137,7 @@ RSpec.describe OrbBreakoutStrategy do
       end
     end
 
-    context 'during midday dead zone (11:00 AM - 1:00 PM)' do
+    context 'when in midday dead zone (11:00 AM - 1:00 PM)' do
       let(:series) do
         build_series(
           base_date: base_date, count: 120, interval: 1,
@@ -160,7 +160,7 @@ RSpec.describe OrbBreakoutStrategy do
       end
     end
 
-    context 'past force_exit_time' do
+    context 'when past force_exit_time' do
       let(:series) do
         build_series(
           base_date: base_date, count: 330, interval: 1,
@@ -181,7 +181,7 @@ RSpec.describe OrbBreakoutStrategy do
       end
     end
 
-    context 'breakout without volume confirmation' do
+    context 'with breakout without volume confirmation' do
       let(:series) do
         build_series(
           base_date: base_date, count: 45, interval: 1,
@@ -214,7 +214,7 @@ RSpec.describe OrbBreakoutStrategy do
       end
     end
 
-    context 'price inside ORB range' do
+    context 'when price inside ORB range' do
       let(:series) do
         build_series(
           base_date: base_date, count: 40, interval: 1,

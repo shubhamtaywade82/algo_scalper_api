@@ -13,8 +13,11 @@ module PluginTestHelper
   # @param count [Integer] number of 1m candles
   # @param interval [Integer] candle interval in minutes
   # @return [CandleSeries]
-  def build_series(base_date:, price_fn:, count: 60, interval: 1)
-    series = CandleSeries.new(symbol: 'NIFTY', interval: interval.to_s)
+  def build_series(base_date:, price_fn: nil, count: 60, interval: 1, &block)
+    price_fn ||= block
+    raise ArgumentError, 'missing keyword: :price_fn or block' unless price_fn
+
+    series = CandleSeries.new(symbol: 'NIFTY', interval: interval.to_s, max_candles: [count, 200].max)
     prev_close = 25_000.0
 
     count.times do |i|
@@ -44,17 +47,24 @@ module PluginTestHelper
   # @return [Strategies::StrategyContext]
   def build_context(series:, params: {}, cutoff: nil)
     cutoff ||= series.candles.last.timestamp
+    prefix_candles = series.candles.select { |c| c.timestamp <= cutoff }
 
     Strategies::StrategyContext.new(
       instrument_key: series.symbol,
       candles: lambda { |tf = '1m'|
-        # In the real adapter, candles are resampled. For tests, we return the
-        # series as-is if the timeframe matches, or a rollup approximation.
-        if tf == series.interval || tf == '1m'
-          series
+        norm_tf = tf.to_s.delete_suffix('m')
+        norm_interval = series.interval.to_s.delete_suffix('m')
+        if norm_tf == norm_interval || (norm_tf == '1' && norm_interval == '1')
+          sub_series = CandleSeries.new(
+            symbol: series.symbol,
+            interval: series.interval.to_s,
+            max_candles: [prefix_candles.size, 200].max
+          )
+          prefix_candles.each { |c| sub_series.add_candle(c) }
+          sub_series
         else
           # Simple rollup for testing
-          Candles::Repository.rollup_candles(candles: series.candles, symbol: series.symbol, timeframe: tf)
+          Candles::Repository.rollup_candles(candles: prefix_candles, symbol: series.symbol, timeframe: tf)
         end
       },
       indicators: nil,
@@ -88,12 +98,11 @@ module PluginTestHelper
   def flat_market_1m
     lambda { |_i, _prev_close|
       base = 25_000.0
-      noise = (rand - 0.5) * 5
-      close = base + noise
+      close = base
       {
         open: base,
-        high: close + 3,
-        low: close - 3,
+        high: close + 1,
+        low: close - 1,
         close: close,
         volume: 80_000
       }

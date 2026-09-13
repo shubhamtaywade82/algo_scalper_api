@@ -8,9 +8,10 @@ class CandleSeries
 
   attr_reader :symbol, :interval, :candles
 
-  def initialize(symbol:, interval: '5')
+  def initialize(symbol:, interval: '5', max_candles: MAX_CANDLES)
     @symbol = symbol
     @interval = interval
+    @max_candles = max_candles
     @candles = []
   end
 
@@ -18,7 +19,7 @@ class CandleSeries
 
   def add_candle(candle)
     candles << candle
-    candles.shift if candles.size > MAX_CANDLES
+    candles.shift if candles.size > @max_candles
     candle
   end
 

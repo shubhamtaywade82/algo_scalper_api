@@ -149,17 +149,20 @@ module Backtest
       []
     end
 
-    def nearest_bar(option_data, ts)
+    def nearest_bar(option_data, ts, tolerance: 45.seconds)
       return nil if option_data.blank?
 
-      option_data.min_by { |b| (b[:timestamp] - ts).abs }
+      bar = option_data.min_by { |b| (b[:timestamp] - ts).abs }
+      return nil if bar.nil? || (bar[:timestamp] - ts).abs > tolerance
+
+      bar
     end
 
-    def fetch_premium_price(option_data, ts)
+    def fetch_premium_price(option_data, ts, tolerance: 45.seconds)
       return 0.0 if option_data.blank?
 
-      bar = option_data.min_by { |b| (b[:timestamp] - ts).abs }
-      bar[:close].to_f
+      bar = nearest_bar(option_data, ts, tolerance: tolerance)
+      bar ? bar[:close].to_f : 0.0
     end
 
     def calculate_stop_loss(entry_price, signal_type)

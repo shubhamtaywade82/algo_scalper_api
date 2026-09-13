@@ -37,7 +37,7 @@ RSpec.describe SupertrendVwapStrategy do
   end
 
   describe '#call' do
-    context 'insufficient data (fewer than 20 bars)' do
+    context 'with insufficient data (fewer than 20 bars)' do
       let(:series) do
         build_series(base_date: base_date, count: 15, interval: 5, &gentle_uptrend_1m)
       end
@@ -51,7 +51,7 @@ RSpec.describe SupertrendVwapStrategy do
       end
     end
 
-    context 'during midday dead zone' do
+    context 'when in midday dead zone' do
       let(:series) do
         build_series(
           base_date: base_date, count: 50, interval: 5,
@@ -71,7 +71,7 @@ RSpec.describe SupertrendVwapStrategy do
       end
     end
 
-    context 'late entry (after 2:30 PM)' do
+    context 'with late entry (after 2:30 PM)' do
       let(:series) do
         build_series(
           base_date: base_date, count: 80, interval: 5,
@@ -92,13 +92,13 @@ RSpec.describe SupertrendVwapStrategy do
       end
     end
 
-    context 'flat VWAP (sideways market)' do
+    context 'with flat VWAP (sideways market)' do
       let(:series) do
         build_series(base_date: base_date, count: 40, interval: 5, &flat_market_1m)
       end
 
       it 'returns Hold with flat_vwap_no_trend' do
-        cutoff = series.candles[25].timestamp
+        cutoff = series.candles[20].timestamp
         context = build_context(series: series, cutoff: cutoff)
         result = strategy.call(context)
         expect(result).to be_a(Signals::Hold)
@@ -106,7 +106,7 @@ RSpec.describe SupertrendVwapStrategy do
       end
     end
 
-    context 'aligned bullish setup (Supertrend green + above VWAP + VWAP sloping up)' do
+    context 'with aligned bullish setup (Supertrend green + above VWAP + VWAP sloping up)' do
       let(:series) do
         build_series(
           base_date: base_date, count: 45, interval: 5,

@@ -42,7 +42,7 @@ RSpec.describe VwapRsiPullbackStrategy do
   end
 
   describe '#call' do
-    context 'warming up (before 9:30 AM)' do
+    context 'when warming up (before 9:30 AM)' do
       let(:series) do
         build_series(base_date: base_date, count: 3, interval: 3, &gentle_uptrend_1m)
       end
@@ -56,7 +56,7 @@ RSpec.describe VwapRsiPullbackStrategy do
       end
     end
 
-    context 'flat VWAP (no trend)' do
+    context 'with flat VWAP (no trend)' do
       let(:series) do
         build_series(base_date: base_date, count: 30, interval: 3, &flat_market_1m)
       end
@@ -72,7 +72,7 @@ RSpec.describe VwapRsiPullbackStrategy do
       end
     end
 
-    context 'during midday dead zone (11:00 AM - 1:00 PM)' do
+    context 'when in midday dead zone (11:00 AM - 1:00 PM)' do
       let(:series) do
         build_series(
           base_date: base_date, count: 50, interval: 3,
@@ -96,7 +96,7 @@ RSpec.describe VwapRsiPullbackStrategy do
       end
     end
 
-    context 'late entry (after 2:30 PM)' do
+    context 'with late entry (after 2:30 PM)' do
       let(:series) do
         build_series(
           base_date: base_date, count: 100, interval: 3,
@@ -127,7 +127,7 @@ RSpec.describe VwapRsiPullbackStrategy do
       end
     end
 
-    context 'uptrend with pullback to VWAP' do
+    context 'with uptrend and pullback to VWAP' do
       let(:series) do
         build_series(
           base_date: base_date, count: 40, interval: 3,

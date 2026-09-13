@@ -40,7 +40,7 @@ RSpec.describe EmaCrossoverStrategy do
   end
 
   describe '#call' do
-    context 'insufficient data (fewer than 30 bars)' do
+    context 'with insufficient data (fewer than 30 bars)' do
       let(:series) do
         build_series(base_date: base_date, count: 20, interval: 5, &gentle_uptrend_1m)
       end
@@ -54,7 +54,7 @@ RSpec.describe EmaCrossoverStrategy do
       end
     end
 
-    context 'during midday dead zone' do
+    context 'when in midday dead zone' do
       let(:series) do
         build_series(
           base_date: base_date, count: 60, interval: 5,
@@ -66,8 +66,8 @@ RSpec.describe EmaCrossoverStrategy do
       end
 
       it 'returns Hold with midday_dead_zone' do
-        # 5m * index: index 24 = 9:15 + 120 = 11:15 AM (dead zone)
-        cutoff = series.candles[24].timestamp
+        # 5m * index: index 35 = 9:15 + 175 = 12:10 PM (dead zone and >= 30 warmup bars)
+        cutoff = series.candles[35].timestamp
         context = build_context(series: series, cutoff: cutoff)
         result = strategy.call(context)
         expect(result).to be_a(Signals::Hold)
@@ -75,7 +75,7 @@ RSpec.describe EmaCrossoverStrategy do
       end
     end
 
-    context 'after 3:15 PM' do
+    context 'when after 3:15 PM' do
       let(:series) do
         build_series(
           base_date: base_date, count: 80, interval: 5,
@@ -96,10 +96,10 @@ RSpec.describe EmaCrossoverStrategy do
       end
     end
 
-    context 'no crossover (steady trend, EMAs aligned)' do
+    context 'with no crossover (steady trend, EMAs aligned)' do
       let(:series) do
         build_series(
-          base_date: base_date, count: 40, interval: 5,
+          base_date: base_date, count: 60, interval: 5,
           &lambda { |i, prev_close|
             # Steady uptrend — fast EMA stays above slow, no crossover
             close = 25_000.0 + (i * 10)
@@ -109,7 +109,8 @@ RSpec.describe EmaCrossoverStrategy do
       end
 
       it 'returns Hold with no_crossover' do
-        cutoff = series.candles[35].timestamp
+        # Index 50 = 9:15 + 250m = 13:25 (after 11:00-13:00 dead zone)
+        cutoff = series.candles[50].timestamp
         context = build_context(series: series, cutoff: cutoff)
         result = strategy.call(context)
         expect(result).to be_a(Signals::Hold)

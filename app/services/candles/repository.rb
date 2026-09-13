@@ -105,7 +105,11 @@ module Candles
       end
 
       def to_candle_series(instrument_key, timeframe, rows)
-        series = CandleSeries.new(symbol: instrument_key, interval: minutes_for(timeframe).to_s)
+        series = CandleSeries.new(
+          symbol: instrument_key,
+          interval: minutes_for(timeframe).to_s,
+          max_candles: [rows.size, CandleSeries::MAX_CANDLES].max
+        )
         rows.each do |r|
           series.add_candle(
             Candle.new(

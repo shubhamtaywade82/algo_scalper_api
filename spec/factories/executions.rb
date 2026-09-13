@@ -3,7 +3,7 @@
 FactoryBot.define do
   factory :execution do
     instrument
-    association :position_tracker, factory: :position_tracker, optional: true
+    position_tracker { nil }
     sequence(:order_no) { |n| "EXEC#{n.to_s.rjust(8, '0')}" }
     side { 'buy' }
     purpose { 'entry' }
