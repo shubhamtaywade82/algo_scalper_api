@@ -44,9 +44,11 @@ RSpec.describe Policies::RiskPolicy do
       )
     end
 
-    it 'coerces to zero without raising' do
-      expect { policy.permitted? }.not_to raise_error
-      expect(policy).to be_permitted
+    # Error-handling review 2026-09: garbage sizing values no longer coerce to
+    # 0 (which trivially passed every exposure check) — the policy refuses to
+    # evaluate a trade it cannot size.
+    it 'refuses to evaluate an unsizable trade' do
+      expect { policy }.to raise_error(Errors::InvalidQuantity, /positive whole number/)
     end
   end
 
@@ -60,9 +62,8 @@ RSpec.describe Policies::RiskPolicy do
       )
     end
 
-    it 'coerces lot_size to at least 1 without raising' do
-      expect { policy.permitted? }.not_to raise_error
-      expect(policy).to be_permitted
+    it 'refuses to evaluate with an unsizable lot_size' do
+      expect { policy }.to raise_error(Errors::InvalidQuantity, /positive whole number/)
     end
   end
 

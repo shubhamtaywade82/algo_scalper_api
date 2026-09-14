@@ -80,7 +80,7 @@ RSpec.describe 'analysis:accuracy rake task' do
   end
 
   describe 'log parsing patterns' do
-    let(:decision_pattern) { /\[SMCSanner\]\s+(\w+):\s+(call|put|no_trade)/i }
+    let(:decision_pattern) { /\[SmcScanner\]\s+(\w+):\s+(call|put|no_trade)/i }
     let(:price_pattern) { /Current price:\s*₹?([\d,]+\.?\d*)/ }
     let(:recommendation_pattern) { /(BUY\s+(?:CE|PE)|AVOID(?:\s+TRADING)?)/i }
 

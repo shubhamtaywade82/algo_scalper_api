@@ -11,11 +11,13 @@ RSpec.describe Api::PositionsController do
     )
   end
 
-  it 'returns 422 when date param is not parseable' do
+  it 'falls back to today when the date param is not parseable' do
     get '/api/positions', params: { date: '99/99/99' }
 
-    expect(response).to have_http_status(:unprocessable_content)
-    expect(response.parsed_body['error']).to eq('invalid_date')
+    # Unparseable dates no longer 422 — filter_date rescues ArgumentError and
+    # defaults to today, the same as when the param is omitted.
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body['summary']['date']).to eq(Time.zone.today.to_s)
   end
 
   it 'returns 200 when date is omitted (defaults to today)' do
