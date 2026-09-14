@@ -389,7 +389,15 @@ module Live
     # #can_trade?. Absent :risk section still degrades to {} (documented
     # "no limits configured" state).
     def load_risk_config
-      AlgoConfig.fetch[:risk] || {}
+      # The daily_limits section historically lives under position_sizing: in
+      # config/algo.yml while this service used to read only risk: - the
+      # mismatch silently disabled every shipped per-index loss limit (same
+      # class of bug as the wave-4 time-regimes path fix). Read both, canonical
+      # risk: winning on conflicts (mirrors RiskManagerService#resolved_risk_config).
+      cfg = AlgoConfig.fetch
+      legacy = cfg[:position_sizing].is_a?(Hash) ? cfg[:position_sizing] : {}
+      risk = cfg[:risk].is_a?(Hash) ? cfg[:risk] : {}
+      legacy.merge(risk)
     end
 
     # Capital base for percentage-of-capital daily loss limits.

@@ -130,13 +130,14 @@ module Smc
       end
 
       def active_liquidity_trap?
-        # Explicit false (symbol or string key) => not in trap
-        raw_val = @raw[:active_liquidity_trap] || @raw['active_liquidity_trap']
-        return false if [false, 'false'].include?(raw_val)
+        # Explicit false => not in trap. NOTE: @raw keys are symbol-normalized
+        # in #initialize (the string-key lookup was dead code), and a plain ||
+        # chain SWALLOWS an explicit false value - read with key? so a real
+        # false is honoured instead of degrading to the fail-closed default.
+        return false if @raw.key?(:active_liquidity_trap) && [false, 'false'].include?(@raw[:active_liquidity_trap])
 
         v =
           value(:active_liquidity_trap) ||
-          value('active_liquidity_trap') ||
           value(:liquidity_trap_active) ||
           value(:liquidity_trap) ||
           dig(:trap, :active) ||

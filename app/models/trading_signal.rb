@@ -105,6 +105,15 @@ class TradingSignal < ApplicationRecord
     direction == DIRECTIONS[:avoid]
   end
 
+  # Persisted metadata merged with any live fragments cached since the last
+  # write (see Signal::LiveMetadataCache). This method was dropped in a merge
+  # resolution and Research::SignalSnapshotBuilder.from_trading_signal depends
+  # on it - restored 2026-09.
+  def effective_metadata
+    live = Signal::LiveMetadataCache.instance.fetch(id)
+    (metadata || {}).merge(live)
+  end
+
   def record_entry_outcome(outcome, reason = nil, extra_metadata: nil)
     fragment = {
       'entry_outcome' => outcome,
