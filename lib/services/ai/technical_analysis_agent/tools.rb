@@ -1028,3 +1028,4 @@ module Services
     end
   end
 end
+# rubocop:enable Metrics/BlockNesting

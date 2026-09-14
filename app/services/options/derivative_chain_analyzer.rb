@@ -664,3 +664,4 @@ module Options
     end
   end
 end
+# rubocop:enable Metrics/BlockNesting

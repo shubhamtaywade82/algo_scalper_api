@@ -2,8 +2,6 @@
 
 # rubocop:disable Metrics/BlockNesting
 
-# rubocop:disable Metrics/BlockNesting
-
 module Signal
   # Stock Supertrend options-buying pipeline: 1m flip → chop gate → ATM strike → EntryGuard.
   class Engine
