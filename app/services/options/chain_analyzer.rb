@@ -2,8 +2,6 @@
 
 # rubocop:disable Metrics/BlockNesting
 
-# rubocop:disable Metrics/BlockNesting
-
 require 'bigdecimal'
 require 'active_support/core_ext/hash'
 require 'active_support/core_ext/object/blank'
@@ -736,7 +734,7 @@ module Options
         expiry_date_obj = Date.parse(expiry_date)
         option_type = side_sym.to_s
 
-        available_strikes_bd = instrument.derivatives.where(
+        available_strikes_bd = instrument.derivative_contracts.where(
           expiry_date: expiry_date_obj,
           option_type: option_type
         ).pluck(:strike_price).to_set { |sp| BigDecimal(sp.to_s) }
@@ -1132,9 +1130,9 @@ module Options
           # Use BigDecimal for accurate float comparison
           strike_bd = BigDecimal(strike.to_s)
 
-          derivatives_collection = instrument.respond_to?(:derivatives) ? instrument.derivatives : nil
+          derivatives_collection = instrument.respond_to?(:derivative_contracts) ? instrument.derivative_contracts : nil
 
-          # Try to find derivative using instrument.derivatives association first
+          # Try to find the contract using the derivative_contracts association first
           derivative = if derivatives_collection.respond_to?(:where)
                          derivatives_collection.where(
                            expiry_date: expiry_date_obj,

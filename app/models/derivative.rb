@@ -16,9 +16,7 @@
 class Derivative < ApplicationRecord
   include InstrumentHelpers
 
-  # No inverse_of: the Instrument side's `derivatives` association now points
-  # at consolidated Instrument rows (self-referential), not at this class.
-  belongs_to :instrument, optional: false
+  belongs_to :instrument, optional: false, inverse_of: :derivatives
   has_many :watchlist_items, as: :watchable, dependent: :nullify, inverse_of: :watchable
   has_one  :watchlist_item,  lambda {
     where(active: true)

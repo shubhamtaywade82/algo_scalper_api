@@ -32,7 +32,9 @@ RSpec.describe Instrument do
 
       expect(option.underlying_instrument).to eq(underlying)
       expect(underlying.derivative_contracts).to include(option)
-      expect(underlying.derivatives).to include(option) # back-compat alias
+      # `derivatives` is the LEGACY association over the frozen Derivative
+      # table again (one name, one meaning — review P1); the consolidated
+      # contract rows are #derivative_contracts, asserted above.
     end
   end
 

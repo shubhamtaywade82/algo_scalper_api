@@ -260,7 +260,7 @@ namespace :trading do
               puts "      Looking for: strike=#{selected_strike}, expiry=#{expiry_date_obj}, option_type=#{option_type}"
 
               # Show available strikes in DB
-              available_strikes = instrument.derivatives.where(
+              available_strikes = instrument.derivative_contracts.where(
                 expiry_date: expiry_date_obj,
                 option_type: option_type
               ).pluck(:strike_price).map(&:to_f).sort
