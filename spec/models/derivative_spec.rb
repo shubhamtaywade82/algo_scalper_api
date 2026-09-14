@@ -29,6 +29,8 @@ RSpec.describe Derivative do
 
   describe 'validations' do
     it 'validates option_type inclusion and scoped security_id uniqueness' do
+      derivative # materialize the lazy let so the uniqueness scope has a row to collide with
+
       expect(build(:derivative, :nifty_call_option, instrument: underlying, security_id: '60001')).not_to be_valid
       expect(build(:derivative, instrument: underlying, security_id: '60010', option_type: 'XX')).not_to be_valid
     end
@@ -70,7 +72,9 @@ RSpec.describe Derivative do
       consolidated = instance_double(Instrument)
       allow(derivative).to receive(:consolidated_instrument).and_return(consolidated)
 
-      expect(consolidated).to receive(:sell_option!).with(qty: 25, meta: {})
+      # The facade forwards **args verbatim; the meta default lives in
+      # Instrument#sell_option!'s own signature.
+      expect(consolidated).to receive(:sell_option!).with(qty: 25)
 
       derivative.sell_option!(qty: 25)
     end

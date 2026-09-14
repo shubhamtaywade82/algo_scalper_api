@@ -19,6 +19,14 @@ RSpec.describe Live::TimeRegimeService do
   end
 
   before do
+    # rails_helper installs a GLOBAL default stub on the singleton
+    # (current_regime -> :trend_continuation, allow_new_trades? -> true) so
+    # unrelated specs run in a permissive regime. This spec tests the REAL
+    # classification, so re-stub both back to the original implementations
+    # first — later stubs win in rspec-mocks.
+    allow(service).to receive(:current_regime).and_call_original
+    allow(service).to receive(:allow_new_trades?).and_call_original
+
     allow(AlgoConfig).to receive(:fetch).and_return(
       risk: {
         time_overrides: {

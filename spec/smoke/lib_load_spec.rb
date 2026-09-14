@@ -9,7 +9,8 @@ RSpec.describe 'Smoke: lib/ loads' do
 
     lib_paths.each do |path|
       # Exclude scripts/console helpers which may expect interactive context
-      next if path.include?('/lib/console/')
+      # (Rails.root.glob yields Pathname objects — no #include? on them.)
+      next if path.to_s.include?('/lib/console/')
 
       expect { load path }.not_to raise_error, "Failed to load lib file: #{path}"
     end
