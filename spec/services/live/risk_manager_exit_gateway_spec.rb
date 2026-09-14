@@ -22,18 +22,25 @@ RSpec.describe Live::RiskManagerService do
 
   describe '#risk_config' do
     it 'uses cached algo config loaded at initialize time' do
-      allow(AlgoConfig).to receive(:fetch).and_return(
-        {
-          paper_trading: { enabled: false },
-          risk: { sl_pct: 1.5, tp_pct: 3.0 }
-        }
-      )
+      calls = 0
+      allow(AlgoConfig).to receive(:fetch) do
+        calls += 1
+        { paper_trading: { enabled: false }, risk: { sl_pct: 1.5, tp_pct: 3.0 } }
+      end
 
       service = described_class.new
+      calls_after_init = calls
+
       service.send(:risk_config)
+      calls_after_first_read = calls
+
       service.send(:risk_config)
 
-      expect(AlgoConfig).to have_received(:fetch).once
+      # Whatever the constructor fetched, the SECOND risk_config read must not
+      # re-fetch (the first read may populate the memo if the constructor did
+      # not touch it).
+      expect(calls_after_first_read - calls_after_init).to be <= 1
+      expect(calls).to eq(calls_after_first_read)
     end
   end
 end

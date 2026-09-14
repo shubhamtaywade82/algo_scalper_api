@@ -55,6 +55,16 @@ RSpec.describe Live::RiskManagerService, '#enforce_trailing_stops' do
       before do
         # First set the high watermark at 200 using a direct call or manual meta update
         tracker.update!(meta: tracker.meta.merge('highest_price' => 200.0))
+
+        # Peak-drawdown exits are activation-gated: the trail must already have
+        # moved the SL up before a drawdown can fire. Seed the ActiveCache entry
+        # with an activated stop (offset 70% of entry) so the gate is open.
+        Positions::ActiveCache.instance.add_position(tracker: tracker)
+        Positions::ActiveCache.instance.update_position(
+          tracker.id,
+          sl_price: 170.0,
+          sl_offset_pct: 70.0
+        )
       end
 
       # Highest: 200.0

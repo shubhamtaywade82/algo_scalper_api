@@ -40,6 +40,9 @@ RSpec.describe Live::RiskManagerService, 'Underlying and Structure Exits' do
 
   before do
     allow(Positions::ActiveCache).to receive(:instance).and_return(active_cache)
+    # upsert_from_tracker is called (with kwargs) by ExitEnforcement when the
+    # Redis snapshot is missing - hand back the same PositionData.
+    allow(active_cache).to receive(:upsert_from_tracker).and_return(position_data)
     allow(active_cache).to receive_messages(get_by_tracker_id: position_data, all_positions: [position_data])
     allow(PositionTracker).to receive(:active).and_return(PositionTracker.where(id: tracker.id))
 

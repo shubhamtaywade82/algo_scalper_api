@@ -163,7 +163,14 @@ RSpec.describe Instrument do
         paper_response = { success: true, order_id: 'PAPER-1', paper: true, fill_price: 121.05, bid: 120.80, ask: 121.00 }
         allow(Orders.config.gateway).to receive(:place_market).and_return(paper_response)
         allow(option).to receive(:after_order_track!).and_return(tracker)
+        # The InstanceDouble tracker cannot be assigned to the Execution
+        # belongs_to, so record_from_order! self-isolates and returns nil -
+        # stub the recorded execution carrying the simulated fill instead.
+        execution = instance_double(Execution, fill_price: BigDecimal('121.05'))
+        allow(Execution).to receive(:record_from_order!).and_return(execution)
 
+        # LTP is 120.75 (stubbed below in the outer context) - the assertion
+        # discriminates the ledger booking between the simulated fill and LTP.
         expect(Ledger::EntryPoster).to receive(:post!).with(
           hash_including(fill_price: BigDecimal('121.05'), quantity: 50, order_no: 'PAPER-1')
         ).and_return(Ledger::EntryPoster::Result.new(status: :posted))

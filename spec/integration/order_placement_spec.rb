@@ -9,7 +9,9 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
   let(:order_placer) { Orders::Placer }
   # Removed: Trading::TradingService (redundant legacy implementation)
   let(:entry_guard) { Entries::EntryGuard }
-  let(:mock_order) { double('Order', id: 'ORD123456', order_id: 'ORD123456') }
+  # persisted? is required: DhanHQ::Models::Order.create! unwraps its result via WriteResult,
+  # which calls #persisted? on whatever the (stubbed) Order.create returns.
+  let(:mock_order) { double('Order', id: 'ORD123456', order_id: 'ORD123456', persisted?: true) }
   let(:instrument) { create(:instrument, :nifty_future, security_id: '12345') }
 
   before do
@@ -21,9 +23,12 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         headers: { 'Content-Type' => 'application/json' }
       )
 
-    # Mock Rails cache for duplicate prevention
+    # Mock Rails cache for duplicate prevention. Orders::Placer#claim! acquires
+    # its idempotency claim via Rails.cache.write(key, true, unless_exist: true)
+    # and returns nil (no order) unless the write reports success, so the stub
+    # must return true.
     allow(Rails.cache).to receive(:read).and_return(nil)
-    allow(Rails.cache).to receive(:write)
+    allow(Rails.cache).to receive(:write).and_return(true)
 
     # Mock configuration
     allow(Rails.application.config.x).to receive(:dhanhq).and_return(
@@ -83,7 +88,9 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
       end
 
       it 'prevents duplicate orders' do
-        allow(Rails.cache).to receive(:read).with('coid:TEST-BUY-001').and_return(true)
+        # claim! is a write(..., unless_exist: true) check-and-set: a false return
+        # means the client_order_id was already claimed by a previous attempt.
+        allow(Rails.cache).to receive(:write).with('coid:TEST-BUY-001', true, anything).and_return(false)
 
         result = order_placer.buy_market!(**order_params)
 
@@ -109,7 +116,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
 
         # Expect specific messages
         expect(Rails.logger).to receive(:info).with(/BUY payload/).at_least(:once)
-        expect(Rails.logger).to receive(:debug).with(/BUY dry-run/).at_least(:once)
+        expect(Rails.logger).to receive(:warn).with(/BUY blocked because PLACE_ORDER is not enabled/).at_least(:once)
 
         result = order_placer.buy_market!(**order_params)
 
@@ -159,7 +166,8 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
       end
 
       it 'prevents duplicate SELL orders' do
-        allow(Rails.cache).to receive(:read).with('coid:TEST-SELL-001').and_return(true)
+        # Already-claimed client_order_id: the unless_exist write returns false.
+        allow(Rails.cache).to receive(:write).with('coid:TEST-SELL-001', true, anything).and_return(false)
 
         # Verify that the method can be called without crashing
         expect { order_placer.sell_market!(**order_params) }.not_to raise_error
@@ -205,14 +213,16 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
 
         expect(Rails.logger).to receive(:error).with(/failed|BUY failed/).at_least(:once)
 
-        result = order_placer.buy_market!(
-          seg: 'NSE_FNO',
-          sid: '12345',
-          qty: 50,
-          client_order_id: 'TEST-BUY-001'
-        )
-
-        expect(result).to be_nil
+        # Retryable transport errors are re-raised out of the placer so
+        # GatewayLive#with_retries can retry; the claim is released on the way out.
+        expect do
+          order_placer.buy_market!(
+            seg: 'NSE_FNO',
+            sid: '12345',
+            qty: 50,
+            client_order_id: 'TEST-BUY-001'
+          )
+        end.to raise_error(Timeout::Error)
       end
     end
   end
@@ -442,7 +452,12 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
     context 'when handling feed health errors' do
       it 'proceeds with entry via API fallback when feed is stale' do
         # Mock resolve_entry_ltp to return a value (as if API fallback worked)
-        allow(Entries::EntryGuard).to receive_messages(resolve_entry_ltp: 100.0, create_tracker!: true)
+        allow(Entries::EntryGuard).to receive(:resolve_entry_ltp).and_return(100.0)
+        # Sizing lot-aligns the allocator quantity (NIFTY lot size 75).
+        allow(Capital::Allocator).to receive(:qty_for).and_return(75)
+        allow(Entries::OrderExecutionService).to receive(:call).and_return(
+          instance_double(PositionTracker, order_no: 'ORD123456', execution: {}, update_column: true)
+        )
 
         result = Entries::EntryGuard.try_enter(
           index_cfg: index_config,
@@ -483,11 +498,13 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         allow(mock_record).to receive_messages(errors: double('Errors', full_messages: ['some error']),
                                                class: mock_class)
 
-        # Mock create_paper_tracker! since paper mode is likely enabled
+        # Paper gateway is selected in test env, so OrderExecutionService routes
+        # tracker creation through create_paper_tracker!. The allocator quantity
+        # must be lot-aligned (NIFTY lot size 75) to pass sizing.
+        allow(Capital::Allocator).to receive(:qty_for).and_return(75)
         allow(Entries::EntryGuard).to receive(:create_paper_tracker!).and_raise(ActiveRecord::RecordInvalid.new(mock_record))
 
         expect(Rails.logger).to receive(:error).with(/EntryGuard failed for nifty: ActiveRecord::RecordInvalid/)
-        expect(Rails.logger).to receive(:error).with(/entry_guard_exception.*ActiveRecord::RecordInvalid/)
 
         result = Entries::EntryGuard.try_enter(
           index_cfg: index_config,

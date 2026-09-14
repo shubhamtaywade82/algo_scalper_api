@@ -27,6 +27,11 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
     # Reset TrailingConfig memoization so it picks up the test config
     Positions::TrailingConfig.instance_variable_set(:@config, nil)
 
+    # UnifiedExitChecker memoizes its exit config for 30s at class level - reset
+    # so each example's AlgoConfig stub is actually honoured.
+    Live::UnifiedExitChecker.instance_variable_set(:@exit_config, nil)
+    Live::UnifiedExitChecker.instance_variable_set(:@exit_config_expires_at, nil)
+
     # Ensure ActiveCache is clean
     Positions::ActiveCache.instance.clear
   end
@@ -93,7 +98,12 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
               atr_ratio_threshold: 0.60
             },
             # Direct trailing enabled for conservative
-            direct_trailing: { enabled: true }
+            direct_trailing: { enabled: true },
+            # The NIFTY trailing path reads tier config from here - peak 5%
+            # with current 2% must breach the 3%-of-peak drawdown allowance.
+            institutional_trailing: {
+              nifty: { adaptive_drawdown: [{ min_profit: 0.03, drawdown: 0.03 }] }
+            }
           }
         }
       end
@@ -271,6 +281,9 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
         expect(service).to receive(:enforce_early_trend_failure_for).with(tracker, exit_engine: exit_engine).and_call_original
         expect(service).to receive(:enforce_premium_r_stop_for).with(tracker, exit_engine: exit_engine).and_call_original
         expect(service).to receive(:enforce_dynamic_trailing_stops_for).with(tracker, exit_engine: exit_engine).and_call_original
+
+        # have_received requires the method to have been stubbed (spy semantics)
+        allow(service).to receive(:run_interval_enforcement_if_needed).and_call_original
 
         service.instance_variable_set(:@exit_engine, exit_engine)
         service.send(:monitor_loop, Time.current)
