@@ -17,5 +17,17 @@ module Strategies
     validates :file_path, presence: true
     validates :checksum, presence: true
     validates :manifest, presence: true
+
+    def resolved_file_path
+      return file_path if file_path.present? && File.exist?(file_path)
+
+      if file_path.present?
+        rel = file_path.sub(%r{\A.*?/(strategies/.+)\z}, '\1')
+        candidate = Rails.root.join(rel).to_s
+        return candidate if File.exist?(candidate)
+      end
+
+      file_path
+    end
   end
 end

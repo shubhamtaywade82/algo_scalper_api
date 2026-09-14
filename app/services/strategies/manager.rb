@@ -96,8 +96,12 @@ module Strategies
 
     def control_loop
       while @running
-        reconcile
-        heartbeat_runners
+        begin
+          reconcile
+          heartbeat_runners
+        rescue StandardError => e
+          Rails.logger.error("[Strategies::Manager] control loop iteration error: #{e.class} - #{e.message}")
+        end
         sleep CONTROL_LOOP_PERIOD
       end
     rescue StandardError => e
@@ -198,6 +202,8 @@ module Strategies
                    run_id: run_record.id)
       broadcast_heartbeat(strategy_record.slug, "running")
       log_stream.info("Runner started (v#{version.version})")
+    rescue StandardError => e
+      Rails.logger.error("[Strategies::Manager] Failed to start runner for #{strategy_record.slug}: #{e.class} - #{e.message}")
     end
 
     def stop_runner(slug, reason)

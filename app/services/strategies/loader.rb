@@ -23,12 +23,13 @@ module Strategies
 
     def load
       content = read_and_verify
+      path = version.resolved_file_path
 
       mod = Module.new
-      mod.module_eval(content, version.file_path)
+      mod.module_eval(content, path)
 
       unless mod.const_defined?(@class_name)
-        raise ClassNotFound, "#{@class_name} not defined in #{version.file_path}"
+        raise ClassNotFound, "#{@class_name} not defined in #{path}"
       end
 
       strategy_class = mod.const_get(@class_name)
@@ -45,7 +46,7 @@ module Strategies
     private
 
     def read_and_verify
-      path = version.file_path
+      path = version.resolved_file_path
       content = File.read(path)
       actual = Digest::SHA256.hexdigest(content)
       stored = version.checksum

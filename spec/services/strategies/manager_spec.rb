@@ -79,7 +79,7 @@ RSpec.describe Strategies::Manager do
       manager.send(:reconcile)
       expect(manager.runner_status('lifecycle_test')).not_to be_nil
 
-      strategy_record.update!(desired_status: 'stopped')
+      strategy_record.reload.update!(desired_status: 'stopped')
       manager.send(:reconcile)
 
       expect(manager.runner_status('lifecycle_test')).to be_nil

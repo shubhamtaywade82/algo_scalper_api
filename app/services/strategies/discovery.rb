@@ -97,13 +97,16 @@ module Strategies
         "instruments" => plugin[:instruments],
         "params" => plugin[:params]
       }
-      return current if current && current.checksum == checksum && current.manifest == manifest
+      release_path_str = release_path.to_s
+      if current && current.checksum == checksum && current.manifest == manifest
+        current.update!(file_path: release_path_str) if current.file_path != release_path_str
+        return current
+      end
 
       scan_report = SecurityScanner.new(File.read(release_path)).scan
       raise PluginError, "security scan blocked" unless scan_report[:pass]
 
       next_version = (strategy_record.versions.maximum(:version) || 0) + 1
-      release_path_str = release_path.to_s
 
       version = strategy_record.versions.create!(
         version: next_version,
