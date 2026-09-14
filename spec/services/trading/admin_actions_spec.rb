@@ -9,6 +9,14 @@ RSpec.describe Trading::AdminActions do
 
   before do
     allow(AlgoConfig).to receive(:fetch).and_return({ indices: [index_cfg] })
+    # find_index_config resolves via IndexConfigLoader (WatchlistItems -> algo.yml),
+    # which memoizes on a singleton for 30s — reset so each example's AlgoConfig
+    # stub is actually honoured.
+    IndexConfigLoader.instance.clear_cache!
+  end
+
+  after do
+    IndexConfigLoader.instance.clear_cache!
   end
 
   describe '.buy_derivative!' do
@@ -22,7 +30,7 @@ RSpec.describe Trading::AdminActions do
       expect(derivative).to receive(:buy_option!).with(
         qty: 50,
         auto_size: false,
-        product_type: 'INTRADAY',
+        product_type: 'NORMAL',
         index_cfg: index_cfg,
         meta: {}
       )
@@ -38,7 +46,7 @@ RSpec.describe Trading::AdminActions do
       expect(derivative).to receive(:buy_option!).with(
         qty: nil,
         auto_size: true,
-        product_type: 'INTRADAY',
+        product_type: 'NORMAL',
         index_cfg: banknifty_cfg,
         meta: { foo: 'bar' }
       )
@@ -57,7 +65,7 @@ RSpec.describe Trading::AdminActions do
       expect(derivative).to receive(:buy_option!).with(
         qty: nil,
         auto_size: true,
-        product_type: 'INTRADAY',
+        product_type: 'NORMAL',
         index_cfg: index_cfg,
         meta: {}
       )
@@ -75,7 +83,7 @@ RSpec.describe Trading::AdminActions do
       expect(alt_derivative).to receive(:buy_option!).with(
         qty: nil,
         auto_size: true,
-        product_type: 'INTRADAY',
+        product_type: 'NORMAL',
         index_cfg: banknifty_cfg,
         meta: {}
       )
@@ -90,7 +98,7 @@ RSpec.describe Trading::AdminActions do
       expect(derivative).to receive(:buy_option!).with(
         qty: nil,
         auto_size: true,
-        product_type: 'INTRADAY',
+        product_type: 'NORMAL',
         index_cfg: nil,
         meta: {}
       )
@@ -99,7 +107,10 @@ RSpec.describe Trading::AdminActions do
     end
 
     it 'propagates config lookup failures instead of silently passing nil' do
-      allow(AlgoConfig).to receive(:fetch).and_raise(StandardError, 'Config error')
+      # The config seam moved: find_index_config resolves via IndexConfigLoader
+      # (which has its own documented algo.yml fallback), so the lookup failure
+      # is injected there — AdminActions itself must still let it propagate.
+      allow(IndexConfigLoader).to receive(:load_indices).and_raise(StandardError, 'Config error')
       allow(Instruments::LegacyResolver).to receive(:by_legacy_id).with(999, require_derivative: true).and_return(derivative)
 
       expect(derivative).not_to receive(:buy_option!)

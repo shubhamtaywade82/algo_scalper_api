@@ -147,7 +147,9 @@ RSpec.describe Ai::TradingAgent::ToolRegistry do
                             id: 1, security_id: 13, display_name: 'Nifty 50',
                             exchange: 'nse', segment: 'index',
                             instrument_type: 'INDEX', lot_size: 50,
-                            expiry_flag: 'N', underlying_symbol: 'NIFTY')
+                            expiry_flag: 'N', underlying_symbol: 'NIFTY',
+                            # the registry falls back to this when lot_size is blank
+                            lot_size_from_derivatives: 50)
         allow(Instrument).to receive(:where).with(segment: 'index').and_return(Instrument)
         allow(Instrument).to receive(:where).with(anything).and_return(Instrument)
         allow(Instrument).to receive_messages(where: Instrument, order: [instrument], first: instrument)

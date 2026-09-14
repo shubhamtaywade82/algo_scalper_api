@@ -27,6 +27,13 @@ RSpec.describe Orders::EntryManager do
       segment: 'NSE_FNO',
       security_id: '49081',
       symbol: 'NIFTY-25Jan2024-25000-CE',
+      # process_entry records the trade via DailyLimits#record_trade with the
+      # tracker's entry_strategy (column) as the strategy slug.
+      entry_strategy: 'trend_follow',
+      # Telegram entry notification fallbacks (only read when Telegram ENV is
+      # configured) — keep the double complete for the notify path.
+      direction: nil,
+      index_key: nil,
       active?: true
     )
   end

@@ -17,6 +17,8 @@ RSpec.describe Portfolio::PnlTracker do
     allow(redis).to receive(:incrbyfloat)
     allow(redis).to receive_messages(get: nil, hgetall: {})
     allow(redis).to receive(:set)
+    # mark_realized also records the tracker id in the realized-trackers set
+    allow(redis).to receive(:sadd)
 
     allow(AlgoConfig).to receive(:fetch).and_return({ profit_lock: { enabled: true } })
   end
