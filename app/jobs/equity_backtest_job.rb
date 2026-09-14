@@ -11,7 +11,11 @@ class EquityBacktestJob < ApplicationJob
   CACHE_EXPIRY = 30.minutes
 
   def perform(run_id, symbol:, interval:, days_back:)
-    Rails.cache.write(cache_key(run_id), { status: 'running' }, expires_in: CACHE_EXPIRY)
+    # started_at lets polling clients implement their own timeout — a hard
+    # crash between this write and completion would otherwise leave them
+    # polling 'running' until the 30-minute cache expiry (review P3).
+    Rails.cache.write(cache_key(run_id), { status: 'running', started_at: Time.current.iso8601 },
+                      expires_in: CACHE_EXPIRY)
     backtest = BacktestService.run(symbol: symbol, interval: interval, days_back: days_back, strategy: SupertrendBacktestStrategy)
     result = Backtest::EquitySummaryPresenter.call(backtest.summary, symbol: symbol, interval: interval, days_back: days_back)
 

@@ -47,7 +47,7 @@ module Backtest
       same_strike = same_strike_bars(position)
       current_price = fetch_premium_price(same_strike, candle.timestamp)
       # If no same-strike bar is available near this timestamp, skip bar
-      return nil if current_price.zero?
+      return nil if current_price.nil?
 
       entry_price = position[:entry_price]
       signal_type = position[:signal_type]
@@ -99,7 +99,9 @@ module Backtest
     def force_exit(position, candle, index, reason)
       same_strike = same_strike_bars(position)
       current_price = fetch_premium_price(same_strike, candle.timestamp)
-      current_price = position[:entry_price] * 0.5 if current_price.zero?
+      # Forced exits still need SOME price to book the trade against: fall back
+      # to a documented 50% haircut of entry rather than fabricating a zero.
+      current_price = position[:entry_price] * 0.5 if current_price.nil?
       entry_price = position[:entry_price]
       signal_type = position[:signal_type]
 
@@ -158,11 +160,14 @@ module Backtest
       bar
     end
 
+    # Returns the near-timestamp premium, or nil when no same-strike bar exists
+    # within tolerance — nil is the honest "no data" signal; 0.0 fabricated a
+    # price and forced every caller to re-test for it (review P3).
     def fetch_premium_price(option_data, ts, tolerance: 45.seconds)
-      return 0.0 if option_data.blank?
+      return nil if option_data.blank?
 
       bar = nearest_bar(option_data, ts, tolerance: tolerance)
-      bar ? bar[:close].to_f : 0.0
+      bar&.dig(:close)&.to_f
     end
 
     def calculate_stop_loss(entry_price, signal_type)
