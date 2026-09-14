@@ -205,10 +205,9 @@ RSpec.describe CandleSeries do
         allow(TechnicalAnalysis::Adx).to receive(:calculate).and_raise(StandardError.new('Calculation error'))
       end
 
-      it 'returns nil and logs warning' do
+      it 'propagates unexpected calculation errors instead of returning nil' do
         series_with_candles = build(:candle_series, :with_candles)
-        expect(Rails.logger).to receive(:warn).with(/ADX calculation failed/)
-        expect(series_with_candles.adx(14)).to be_nil
+        expect { series_with_candles.adx(14) }.to raise_error(StandardError, 'Calculation error')
       end
     end
   end
@@ -241,10 +240,9 @@ RSpec.describe CandleSeries do
         allow(RubyTechnicalAnalysis::RelativeStrengthIndex).to receive(:new).and_raise(StandardError.new('Calculation error'))
       end
 
-      it 'returns nil and logs warning' do
+      it 'propagates unexpected calculation errors instead of returning nil' do
         series_with_candles = build(:candle_series, :with_candles)
-        expect(Rails.logger).to receive(:warn).with(/RSI calculation failed/)
-        expect(series_with_candles.rsi(14)).to be_nil
+        expect { series_with_candles.rsi(14) }.to raise_error(StandardError, 'Calculation error')
       end
     end
   end

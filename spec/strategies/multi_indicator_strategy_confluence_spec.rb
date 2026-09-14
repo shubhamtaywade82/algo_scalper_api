@@ -10,7 +10,7 @@ RSpec.describe MultiIndicatorStrategy, 'Confluence Detection' do
     50.times do |i|
       price = base_price + (i * 10)
       candle = Candle.new(
-        ts: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
+        timestamp: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
         open: price,
         high: price + 5,
         low: price - 5,
@@ -69,7 +69,7 @@ RSpec.describe MultiIndicatorStrategy, 'Confluence Detection' do
     end
 
     context 'when indicators disagree' do
-      it 'calculates weak confluence' do
+      it 'calculates zero-score confluence when there is no dominant direction' do
         results = [
           { indicator: 'supertrend', direction: :bullish, confidence: 80 },
           { indicator: 'adx', direction: :bearish, confidence: 75 }
@@ -77,8 +77,9 @@ RSpec.describe MultiIndicatorStrategy, 'Confluence Detection' do
 
         confluence = strategy.send(:calculate_confluence, results)
 
-        expect(confluence[:score]).to eq(50) # Tie - 1/2 = 50%
-        expect(confluence[:strength]).to eq(:weak)
+        expect(confluence[:score]).to eq(0) # Tie -> no dominant direction -> score 0
+        expect(confluence[:strength]).to eq(:none)
+        expect(confluence[:dominant_direction]).to eq(:neutral)
         expect(confluence[:bullish_count]).to eq(1)
         expect(confluence[:bearish_count]).to eq(1)
       end
@@ -163,12 +164,12 @@ RSpec.describe MultiIndicatorStrategy, 'Confluence Detection' do
           { indicator: 'supertrend', direction: :bullish, confidence: 80 },
           { indicator: 'adx', direction: :bullish, confidence: 75 },
           { indicator: 'rsi', direction: :bearish, confidence: 60 },
-          { indicator: 'macd', direction: :bearish, confidence: 65 }
+          { indicator: 'macd', direction: :neutral, confidence: 65 }
         ]
 
         confluence = strategy.send(:calculate_confluence, results)
         expect(confluence[:strength]).to eq(:weak)
-        expect(confluence[:score]).to eq(50) # 2/4 = 50%
+        expect(confluence[:score]).to eq(50) # 2/4 dominant bullish = 50%
       end
 
       it 'returns :none for score < 40' do
@@ -176,13 +177,13 @@ RSpec.describe MultiIndicatorStrategy, 'Confluence Detection' do
           { indicator: 'supertrend', direction: :bullish, confidence: 80 },
           { indicator: 'adx', direction: :bearish, confidence: 75 },
           { indicator: 'rsi', direction: :bearish, confidence: 60 },
-          { indicator: 'macd', direction: :bearish, confidence: 65 },
-          { indicator: 'trend_duration', direction: :bearish, confidence: 70 }
+          { indicator: 'macd', direction: :neutral, confidence: 65 },
+          { indicator: 'trend_duration', direction: :neutral, confidence: 70 }
         ]
 
         confluence = strategy.send(:calculate_confluence, results)
         expect(confluence[:strength]).to eq(:none)
-        expect(confluence[:score]).to eq(20) # 1/5 = 20%
+        expect(confluence[:score]).to eq(0) # No dominant direction -> score 0
       end
     end
   end

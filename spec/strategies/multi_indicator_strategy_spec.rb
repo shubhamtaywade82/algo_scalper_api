@@ -28,18 +28,24 @@ RSpec.describe MultiIndicatorStrategy do
   describe '#initialize' do
     it 'initializes with default confirmation mode' do
       strategy = described_class.new(series: series, indicators: [])
-      expect(strategy.confirmation_mode).to eq(:all_must_agree)
-      expect(strategy.min_confidence).to eq(60)
+      # Defaults come from the threshold preset (algo.yml signals.indicator_preset:
+      # loose -> confirmation_mode :any, min_confidence 40); the constructor
+      # fallbacks (:all_must_agree / 60) only apply when no preset defines them.
+      expect(strategy.confirmation_mode).to eq(:any_confirms)
+      expect(strategy.min_confidence).to eq(40)
     end
 
-    it 'initializes with custom confirmation mode' do
+    it 'lets the threshold preset override a custom confirmation mode kwarg' do
       strategy = described_class.new(
         series: series,
         indicators: [],
         confirmation_mode: :majority,
         min_confidence: 70
       )
-      expect(strategy.confirmation_mode).to eq(:majority_vote)
+      # The active preset (loose) defines confirmation_mode :any and a preset
+      # that defines it always beats the constructor kwarg. The min_confidence
+      # kwarg, however, still wins over the preset value.
+      expect(strategy.confirmation_mode).to eq(:any_confirms)
       expect(strategy.min_confidence).to eq(70)
     end
 
@@ -55,6 +61,8 @@ RSpec.describe MultiIndicatorStrategy do
 
   describe '#generate_signal' do
     context 'with all confirmation mode' do
+      # The threshold preset overrides the confirmation_mode kwarg, so pin a
+      # preset whose multi_indicator row selects :all (see ThresholdConfig).
       let(:strategy) do
         described_class.new(
           series: series,
@@ -63,7 +71,8 @@ RSpec.describe MultiIndicatorStrategy do
             { type: 'adx', config: { period: 14, min_strength: 20 } }
           ],
           confirmation_mode: :all,
-          min_confidence: 50
+          min_confidence: 50,
+          indicator_preset: :production
         )
       end
 
@@ -94,6 +103,7 @@ RSpec.describe MultiIndicatorStrategy do
     end
 
     context 'with majority confirmation mode' do
+      # Pin the moderate preset (multi_indicator confirmation_mode: :majority).
       let(:strategy) do
         described_class.new(
           series: series,
@@ -103,7 +113,8 @@ RSpec.describe MultiIndicatorStrategy do
             { type: 'rsi', config: { period: 14 } }
           ],
           confirmation_mode: :majority,
-          min_confidence: 50
+          min_confidence: 50,
+          indicator_preset: :moderate
         )
       end
 

@@ -17,7 +17,7 @@ RSpec.describe Smc::Detectors::OrderBlocks do
       series = build(:candle_series, :five_minute)
       # Need 5+ candles; pattern at i=0,1: bearish then bullish displacement
       series.add_candle(build(:candle, open: 105, high: 106, low: 104, close: 104.5)) # bearish OB
-      series.add_candle(build(:candle, open: 104.5, high: 108, low: 104, close: 107)) # bullish impulse
+      series.add_candle(build(:candle, open: 104.5, high: 108, low: 104.5, close: 107)) # bullish impulse (wick stays above the OB low)
       series.add_candle(build(:candle, open: 107, high: 108, low: 106, close: 107))
       series.add_candle(build(:candle, open: 107, high: 108, low: 106, close: 107))
       series.add_candle(build(:candle, open: 107, high: 108, low: 106, close: 107))
@@ -67,7 +67,7 @@ RSpec.describe Smc::Detectors::OrderBlocks do
       bearish_ob = detector.bearish
 
       expect(bearish_ob).not_to be_nil
-      expect(bearish_ob[:bias]).to eq(:bullish)
+      expect(bearish_ob[:bias]).to eq(:bearish)
       expect(bearish_ob[:high]).to eq(102)
       expect(bearish_ob[:low]).to eq(99)
     end
@@ -90,7 +90,7 @@ RSpec.describe Smc::Detectors::OrderBlocks do
       series = build(:candle_series, :five_minute)
       timestamp = Time.zone.now
       series.add_candle(build(:candle, open: 105, high: 106, low: 104, close: 104.5, timestamp: timestamp))
-      series.add_candle(build(:candle, open: 104.5, high: 108, low: 104, close: 107))
+      series.add_candle(build(:candle, open: 104.5, high: 108, low: 104.5, close: 107))
       3.times { series.add_candle(build(:candle, open: 107, high: 108, low: 106, close: 107)) }
       allow(series).to receive(:atr).with(20).and_return(1.0)
 
