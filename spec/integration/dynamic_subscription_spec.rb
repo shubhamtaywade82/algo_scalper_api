@@ -31,7 +31,8 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
            hgetall: {},
            hdel: true,
            incr: true,
-           incrbyfloat: true,
+           incrbyfloat: 0.0,
+           sadd: true,
            ttl: 3600,
            expire: true,
            scan_each: [].each)
@@ -111,7 +112,8 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         allow(market_feed_hub).to receive(:subscribe).and_raise(StandardError, 'Subscription error')
 
         # The subscribe method catches errors and returns nil
-        expect(Rails.logger).to receive(:error).with(/Failed to subscribe/)
+        expect(Rails.logger).to receive(:error)
+          .with(/\[Positions::FeedSubscription\] StandardError - Subscription error/)
         result = position_tracker.subscribe
         expect(result).to be_nil
       end
@@ -194,10 +196,12 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
       end
 
       it 'unsubscribes when position is exited' do
+        # unsubscribe is invoked by ExitFlow directly and again by the
+        # after_update_commit callbacks (cleanup_if_exited / refresh_index_if_relevant)
         expect(market_feed_hub).to receive(:unsubscribe).with(
           segment: 'NSE_FNO',
           security_id: '12345'
-        )
+        ).at_least(:once)
 
         position_tracker.mark_exited!
       end
@@ -537,7 +541,7 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         allow(market_feed_hub).to receive_messages(enabled?: true, running?: false)
         allow(market_feed_hub).to receive(:build_client).and_raise(StandardError, 'Startup error')
 
-        expect(Rails.logger).to receive(:error).with(/Failed to start DhanHQ market feed/)
+        expect(Rails.logger).to receive(:error).with(/Failed to start DhanHQ market feed/).at_least(:once)
 
         result = market_feed_hub.start!
         expect(result).to be false
@@ -601,7 +605,8 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         allow(market_feed_hub).to receive(:subscribe).and_raise(StandardError, 'WebSocket error')
 
         # The subscribe method catches errors and returns nil
-        expect(Rails.logger).to receive(:error).with(/Failed to subscribe/)
+        expect(Rails.logger).to receive(:error)
+          .with(/\[Positions::FeedSubscription\] StandardError - WebSocket error/)
         result = position_tracker.subscribe
         expect(result).to be_nil
       end
@@ -635,7 +640,8 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         allow(market_feed_hub).to receive(:subscribe).and_raise(Timeout::Error, 'Subscription timeout')
 
         # The subscribe method catches errors and returns nil
-        expect(Rails.logger).to receive(:error).with(/Failed to subscribe/)
+        expect(Rails.logger).to receive(:error)
+          .with(/\[Positions::FeedSubscription\] Timeout::Error - Subscription timeout/)
         result = position_tracker.subscribe
         expect(result).to be_nil
       end
@@ -645,8 +651,11 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
       it 'handles WebSocket disconnection errors' do
         allow(market_feed_hub).to receive(:unsubscribe).and_raise(StandardError, 'WebSocket error')
 
-        # The unsubscribe method should raise the error
-        expect { position_tracker.unsubscribe }.to raise_error(StandardError, 'WebSocket error')
+        # The unsubscribe path now rescues, logs and returns nil instead of raising
+        expect(Rails.logger).to receive(:error)
+          .with(/\[Positions::FeedSubscription\] StandardError - WebSocket error/)
+        result = position_tracker.unsubscribe
+        expect(result).to be_nil
       end
 
       it 'handles hub not running errors' do

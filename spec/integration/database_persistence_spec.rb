@@ -213,7 +213,8 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
 
         position_tracker.lock_breakeven!
 
-        expect(position_tracker.meta['breakeven_locked']).to be true
+        # lock_breakeven! promotes the meta key into the breakeven_locked column
+        expect(position_tracker.reload.breakeven_locked).to be true
       end
     end
   end
@@ -592,9 +593,14 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
         tracker2 = PositionTracker.find(position_tracker.id)
 
         tracker1.update!(quantity: 100)
-        tracker2.update!(quantity: 150)
 
-        expect(tracker1.reload.quantity).to eq(150) # Last update wins
+        # tracker2 holds a stale lock_version, so its write is rejected
+        expect { tracker2.update!(quantity: 150) }.to raise_error(ActiveRecord::StaleObjectError)
+
+        # Reloading refreshes lock_version so the retry succeeds
+        tracker2.reload.update!(quantity: 150)
+
+        expect(tracker1.reload.quantity).to eq(150)
       end
 
       it 'handles pessimistic locking' do
