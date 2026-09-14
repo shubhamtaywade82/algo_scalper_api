@@ -104,6 +104,17 @@ module Scalp
         cache.clear
       end
 
+      # Evict a closed tracker's cache entry (called from Positions::ExitFlow on
+      # exit). The class-level map is keyed by tracker id and would otherwise
+      # leak an entry per position for the daemon's lifetime.
+      def forget(tracker_id)
+        cache.delete(tracker_id)
+      rescue StandardError => e
+        Rails.logger.debug do
+          "[Scalp::ChainTrailingContext] forget failed for tracker=#{tracker_id}: #{e.class} - #{e.message}"
+        end
+      end
+
       # Honors both the chain_context switch and the parent scalp_exit switch —
       # turning off scalp_exit must turn off chain telemetry too.
       def enabled?
@@ -117,7 +128,8 @@ module Scalp
       end
 
       def cache_entry_for(tracker_id)
-        cache[tracker_id] ||= { at: -Float::INFINITY, result: hold_result, underlying_history: [] }
+        cache[tracker_id] ||= { at: -Float::INFINITY, result: hold_result,
+                                underlying_history: [], premium_history: [] }
       end
 
       def fresh?(entry)
@@ -155,7 +167,7 @@ module Scalp
         iv_res = iv_collapse_signal(tracker, own_leg)
         return iv_res if iv_res
 
-        wall_res = gamma_wall_signal(oc, spot, direction, peak_pct)
+        wall_res = direction ? gamma_wall_signal(oc, spot, direction, peak_pct) : nil
         return wall_res if wall_res
 
         # Degradation signals.
@@ -242,17 +254,27 @@ module Scalp
       end
 
       # Premium convexity: the ratio of premium return to underlying return over
-      # the short live window (tick-level premium history vs the underlying LTP
-      # history accumulated across evaluations). A strong reading — the
-      # underlying move is amplifying into the premium, in the trade's favour —
-      # widens the trail so one-tick pullbacks don't shake out a runner.
+      # the short live window. Both series are sampled ONCE PER EVALUATION (TTL
+      # cadence) so the two returns span the same window — comparing a per-tick
+      # premium return against a per-TTL underlying return made the ratio
+      # structurally unreachable (review P1). A strong reading — the underlying
+      # move is amplifying into the premium, in the trade's favour — widens the
+      # trail so one-tick pullbacks don't shake out a runner.
       #
       # Deliberately NOT Options::DeltaAccelerationDetector: its volume-spike
       # gate needs a volume history we don't keep in-trade, and its directional
       # check is CE-shaped (it would never widen a PE trail).
+      #
+      # Returns nil when the position direction is unknown — "favourable" is
+      # undefined without it, and a guess can widen the wrong trail (review P2:
+      # unknown != measured).
       def convexity_signal(pos_data, direction, entry)
-        premium_history = Array(pos_data&.price_history)
-        return nil unless premium_history.size >= 2
+        return nil unless direction
+
+        premium_history = entry[:premium_history]
+        p_now = pos_data&.price_history&.last.to_f
+        premium_history << p_now if p_now.positive?
+        premium_history.shift if premium_history.size > 10
 
         underlying_history = entry[:underlying_history]
         u_now = current_underlying_ltp(pos_data)
@@ -260,7 +282,7 @@ module Scalp
           underlying_history << u_now
           underlying_history.shift if underlying_history.size > 10
         end
-        return nil unless underlying_history.size >= 2
+        return nil unless premium_history.size >= 2 && underlying_history.size >= 2
 
         p_prev, p_now = premium_history.last(2)
         u_prev, u_last = underlying_history.last(2)
@@ -326,7 +348,11 @@ module Scalp
         snapshot[:hwm_pnl].to_f / entry_value
       end
 
-      # Same normalization contract as UnderlyingContextEvaluator#resolve_position_direction.
+      # Same normalization contract as UnderlyingContextEvaluator#resolve_position_direction,
+      # but unknown stays UNKNOWN (nil) instead of guessing :bullish — the
+      # direction-dependent signals (gamma wall, convexity) are skipped rather
+      # than computed against a fabricated direction (review P2: unknown !=
+      # measured; a wrong guess can bank profit at a wall that isn't ahead).
       def resolve_direction(tracker, pos_data)
         raw = pos_data&.position_direction.presence ||
               (tracker.respond_to?(:direction) ? tracker.direction.presence : nil) ||
@@ -335,18 +361,21 @@ module Scalp
         case raw.to_s.downcase
         when 'long_pe', 'bearish', 'put' then :bearish
         when 'long_ce', 'bullish', 'call' then :bullish
-        else :bullish
+        else nil
         end
       end
 
-      def record_oi_baseline(tracker, meta, current_oi)
+      def record_oi_baseline(tracker, _meta, current_oi)
         return unless current_oi.positive?
-
-        meta['scalp_oi_baseline'] = current_oi
         return unless tracker.respond_to?(:update_column)
 
+        # Merge into the freshest meta we have instead of blind-writing the
+        # stale hash: update_column is last-write-wins on the whole blob and
+        # another writer may have stamped a different key since this was read
+        # (review P3 - once per tracker, but a merge is safer).
         # Skip validations on purpose: telemetry path, runs every few seconds.
-        tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
+        fresh_meta = (tracker.meta || {}).merge('scalp_oi_baseline' => current_oi)
+        tracker.update_column(:meta, fresh_meta) # rubocop:disable Rails/SkipsModelValidations
       end
 
       # --- results / config --------------------------------------------------

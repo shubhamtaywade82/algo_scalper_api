@@ -103,17 +103,28 @@ module Scalp
       friction = friction_pct
       return base if friction.nil?
 
-      fee_floor = (friction * cfg_value(:friction_multiple)).clamp(0.0, cfg_value(:max_target_pct))
+      max_target = cfg_value(:max_target_pct)
+      unless max_target.positive?
+        raise Errors::ConfigurationError,
+              "risk.scalp_exit.max_target_pct must be positive (got #{max_target}) — a negative ceiling " \
+              'makes the fee floor clamp raise an untyped ArgumentError'
+      end
+
+      fee_floor = (friction * cfg_value(:friction_multiple)).clamp(0.0, max_target)
       [base, fee_floor].max
     end
 
-    # LTP at which exiting the whole position nets >= 0 after the exit-side
-    # friction (exit order fee + half spread crossing), spread over quantity.
+    # LTP at which exiting the whole position nets >= 0 after the FULL
+    # round-trip friction: both order fees (entry + exit = fee_per_trade) and
+    # the whole spread (half crossed on entry, half on exit), spread over
+    # quantity. The previous exit-side-only version left a locked exit netting
+    # minus the entry fee (review P2) — breakeven must mean net-zero on the
+    # round trip, not on the exit leg alone.
     # @return [Float, nil] nil when position economics are unusable
     def breakeven_lock_price
       return nil unless @entry_price.positive? && @quantity.positive?
 
-      per_unit_friction = (fee_per_order + half_spread_rupees) / @quantity
+      per_unit_friction = (fee_per_trade + spread_rupees) / @quantity
       (@entry_price + per_unit_friction).round(2)
     end
 
@@ -179,6 +190,14 @@ module Scalp
       return 0.0 unless BrokerFeeCalculator.enabled?
 
       BrokerFeeCalculator.fee_per_order.to_f
+    end
+
+    # Round-trip order fees (entry + exit) in rupees; zero when broker fee
+    # simulation is disabled (paper without fees).
+    def fee_per_trade
+      return 0.0 unless BrokerFeeCalculator.enabled?
+
+      BrokerFeeCalculator.fee_per_trade.to_f
     end
 
     # Strict numeric read: absent key -> documented default; garbage raises.

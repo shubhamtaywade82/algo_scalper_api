@@ -276,6 +276,10 @@ module Live
 
         tightening_mult = 1.0
         if trailing_armed?(tracker, snapshot, config)
+          # Isolation boundary (documented divergence from the strict-config
+          # posture, review P3): the telemetry layers below self-isolate — a
+          # failure inside them degrades momentum feedback to :hold (trail
+          # unchanged) instead of taking the trailing path down.
           ctx_res = begin
             evaluate_underlying_context(tracker, snapshot)
           rescue StandardError
@@ -339,7 +343,19 @@ module Live
           prices = pos_data&.price_history || [ltp]
           analyzer = Orders::Analyzer.new(tracker: tracker, ltp: ltp, prices: prices, peak_profit_pct: peak_profit_pct)
           sl_price = analyzer.recommended_sl
-          return sl_price && ltp <= sl_price
+          return false unless sl_price
+          return true if ltp <= sl_price
+
+          # Apply the live momentum/chain multiplier on the analyzer path too
+          # (review P1): without this the continuous-scaling layer only ever
+          # tightened NIFTY (the only index with adaptive_drawdown tiers) and
+          # SENSEX/BANKNIFTY fell through to the raw analyzer stop. The
+          # multiplier scales the remaining cushion between the current price
+          # and the analyzer's stop: < 1 pulls the effective stop closer
+          # (earlier exit), > 1 gives the runner more room, 1.0 is exactly the
+          # analyzer stop.
+          sl_effective = ltp - ((ltp - sl_price) * tightening_multiplier.to_f)
+          ltp <= sl_effective
         end
 
         hwm = snapshot[:hwm_pnl].to_f
@@ -353,7 +369,10 @@ module Live
       end
 
       # Best-effort trailing SL price for DISPLAY only — mirrors trailing_stop_hit?'s
-      # logic without ever triggering an exit. Returns nil when trailing hasn't armed
+      # logic without ever triggering an exit. NOTE: unlike the enforcement path,
+      # this does not apply the live momentum/chain tightening multiplier (that
+      # feedback exists only in-trade, per tick); the displayed stop is the
+      # unmultiplied analyzer/tier stop. Returns nil when trailing hasn't armed
       # yet, or when the active rule is PnL-ratio-based and no reliable price
       # equivalent can be derived (falls back to the caller's static SL in that case).
       def live_sl_price(tracker, snapshot, ltp)

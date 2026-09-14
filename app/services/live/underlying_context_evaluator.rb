@@ -109,9 +109,12 @@ module Live
       )
     end
 
-    # Normalise raw direction value to :bullish / :bearish.
-    # UnderlyingMonitor#structure_state only handles these two symbols.
-    # Safe default: :bullish — unknown direction → false negative, never false positive.
+    # Normalise raw direction value to :bullish / :bearish, or nil when the
+    # direction is genuinely unknown. UnderlyingMonitor#structure_state only
+    # handles the two symbols — an unknown direction no longer guesses
+    # :bullish (review P2: unknown != measured). Direction-dependent checks
+    # (the BOS-against exit, the scaler's BOS-in-favour bonus) are skipped
+    # for nil instead of being computed against a fabricated direction.
     def resolve_position_direction(tracker, pos_data)
       raw = pos_data&.position_direction.presence ||
             (tracker.respond_to?(:direction) ? tracker.direction.presence : nil) ||
@@ -120,11 +123,11 @@ module Live
       case raw.to_s.downcase
       when 'long_pe', 'bearish', 'put' then :bearish
       when 'long_ce', 'bullish', 'call' then :bullish
-      else :bullish
       end
     end
 
     def bos_broken_against?(state, direction)
+      return false if direction.nil?
       return false unless state.bos_state == :broken
 
       (direction == :bullish && state.bos_direction == :bearish) ||

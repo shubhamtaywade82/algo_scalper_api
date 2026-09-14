@@ -234,7 +234,8 @@ module Live
     #
     # Once the position has peaked at breakeven_arm_factor x round-trip friction
     # (fees + spread, per Scalp::FeeAwareExitTargets), the SL is pinned at the
-    # exit price that nets >= 0 after the exit fee and half-spread crossing.
+    # exit price that nets >= 0 after the FULL round-trip friction (both order
+    # fees and the whole spread — see breakeven_lock_price).
     # The lock only ever RAISES the SL (never lowers it) and never blocks the
     # trailing engines — a failure here degrades to "no lock this tick",
     # logged loudly, leaving the SL exactly where it was.

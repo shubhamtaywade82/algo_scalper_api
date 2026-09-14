@@ -109,6 +109,12 @@ module Scalp
 
       min_mult = cfg_value(:min_multiplier)
       max_mult = cfg_value(:max_multiplier)
+      unless min_mult.positive? && max_mult.positive?
+        raise Errors::ConfigurationError,
+              "risk.underlying_context_exit.momentum_scaling min_multiplier and max_multiplier must be positive " \
+              "(got min=#{min_mult}, max=#{max_mult})"
+      end
+
       span = [max_mult - min_mult, 0.0].max
       (min_mult + (span * momentum_score.clamp(0.0, 1.0))).round(4)
     end
