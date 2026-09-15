@@ -86,11 +86,17 @@ class LegGroup < ApplicationRecord
   #   any leg open, none exited ......... active
   #   no legs at all .................... pending (or cancelled if so stamped)
   # @return [String] the new status
+  OPEN_LEG_STATUSES = %w[pending active].freeze
+  private_constant :OPEN_LEG_STATUSES
+
+  # Recompute and persist the derived trade status from the leg statuses.
+  # Always returns the resulting status string — callers (and specs) rely on
+  # the value, not on the save result of update!.
   def refresh_status!
     legs = position_trackers.reload
     return status if legs.empty?
 
-    open_legs = legs.select { |t| %w[pending active].include?(t.status) }
+    open_legs = legs.select { |t| OPEN_LEG_STATUSES.include?(t.status) }
     done_legs = legs.select { |t| t.status == 'exited' }
     cancelled_legs = legs.select { |t| t.status == 'cancelled' }
 
@@ -106,11 +112,8 @@ class LegGroup < ApplicationRecord
                    status
                  end
 
-    if new_status != status
-      update!(status: new_status)
-    else
-      status
-    end
+    update!(status: new_status) if new_status != status
+    new_status
   end
 
   def net_pnl_rupees

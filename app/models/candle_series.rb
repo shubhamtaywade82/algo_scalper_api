@@ -172,6 +172,15 @@ class CandleSeries
       raise Errors::InvalidMarketData, "candle field #{field.inspect} missing: #{candle.inspect[0, 200]}"
     end
 
+    # Strict OHLC parsing (error-handling review 2026-09): the hash/array
+    # paths used to pass values through untouched, so `open: 'abc'` was
+    # silently coerced to 0.0 by Candle#initialize — contradicting the
+    # documented strict-parsing contract the hash-format path already
+    # enforces via parse_price!.
+    %i[open high low close].each do |field|
+      sliced[field] = parse_price!(sliced[field], field: field.to_s)
+    end
+
     sliced[:volume] = parse_volume!(sliced[:volume])
     sliced
   end
