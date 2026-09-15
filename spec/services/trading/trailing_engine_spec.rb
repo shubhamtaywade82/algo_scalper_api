@@ -289,7 +289,7 @@ RSpec.describe Trading::TrailingEngine do
     end
   end
 
-  # ── CONFIG FALLBACK ────────────────────────────────────────────────────────
+  # ── CONFIG IS MANDATORY ────────────────────────────────────────────────────
 
   context 'when AlgoConfig is unavailable' do
     before do
@@ -300,11 +300,58 @@ RSpec.describe Trading::TrailingEngine do
     let(:segment) { 'NSE_FNO' }
     let(:ltp) { 120.0 } # +20% profit
 
-    it 'falls back to DEFAULTS and still returns a trailing stop' do
-      # Uses DEFAULTS[:nifty][:trailing_distance] = 0.386
-      # session/expiry features disabled (errors caught)
-      # 120 * (1 - 0.386) = 73.68
-      expect(engine.call).to be_within(0.01).of(73.68)
+    it 'refuses to trail on assumed stops instead of falling back to DEFAULTS' do
+      # Error-handling review 2026-09 (wave 2): hardcoded DEFAULTS diverged from
+      # the live config (sensex trailing_distance 0.413 vs 0.8) — a config read
+      # failure used to silently change live stop-loss behavior.
+      expect { engine.call }.to raise_error(StandardError, /config unavailable/)
+    end
+  end
+
+  context 'when the symbol tier is missing from the config' do
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return(
+        risk: { institutional_trailing: { enabled: true, nifty: { early_trigger: 0.05 } } }
+      )
+    end
+
+    let(:symbol) { 'SENSEX24MAR72000CE' }
+    let(:segment) { 'BSE_FNO' }
+    let(:ltp) { 120.0 }
+
+    it 'raises instead of assuming stops for the missing symbol' do
+      expect { engine.call }.to raise_error(Errors::ConfigurationError, /sensex tier is missing/)
+    end
+  end
+
+  context 'with strategy profile overrides' do
+    let(:symbol) { 'NIFTY24MAR22000CE' }
+    let(:segment) { 'NSE_FNO' }
+    let(:ltp) { 125.0 } # +25% profit — Phase 3 active
+
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return(
+        risk: {
+          institutional_trailing: {
+            nifty: {
+              early_trigger: 0.05,
+              early_sl_offset: -0.12,
+              breakeven_trigger: 0.157,
+              activation_trigger: 0.20,
+              trailing_distance: 0.386
+            },
+            profiles: {
+              trend_aggressive: { trailing_distance: 0.30 }
+            }
+          }
+        }
+      )
+      tracker.update!(strategy_profile: 'trend_aggressive')
+    end
+
+    it 'merges the profile overrides into the symbol tier' do
+      # 125 * (1 - 0.30 * 1.0) = 125 * 0.70 = 87.5
+      expect(engine.call).to be_within(0.01).of(87.5)
     end
   end
 end

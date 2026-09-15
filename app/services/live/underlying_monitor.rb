@@ -207,7 +207,10 @@ module Live
         return nil unless index_cfg
 
         Live::TickQuery.for_security(segment: index_cfg[:segment], security_id: index_cfg[:sid])&.ltp
-      rescue StandardError
+      rescue StandardError => e
+        # nil stays the outcome (never trail/act on an unknown price) but the
+        # failure is logged — indistinguishable-from-no-tick was silent (wave 3).
+        Rails.logger.warn("[UnderlyingMonitor] latest_underlying_ltp failed: #{e.class} - #{e.message}")
         nil
       end
 
@@ -228,9 +231,10 @@ module Live
       end
 
       def signals_cfg
+        # Strict read (wave 3): a corrupt config document used to silently
+        # fall back to the default timeframes; trend_direction's rescue
+        # logs-and-isolates instead.
         AlgoConfig.fetch[:signals] || {}
-      rescue StandardError
-        {}
       end
 
       # Returns true when the SMC HTF/MTF/LTF bias has flipped against the position's entry direction.

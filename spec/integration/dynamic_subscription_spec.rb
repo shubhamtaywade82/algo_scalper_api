@@ -371,10 +371,10 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         # Reset last_sync to allow sync to proceed
         position_sync_service.instance_variable_set(:@last_sync, nil)
 
-        # Mock the derivative lookup to return a derivative
-        mock_derivative = double('Derivative')
-        allow(mock_derivative).to receive(:instrument).and_return(double('Instrument'))
-        allow(Derivative).to receive(:find_by).and_return(mock_derivative)
+        # Mock the instrument lookup (consolidated master)
+        mock_instrument = double('Instrument')
+        allow(mock_instrument).to receive_messages(derivative?: true, underlying_instrument: nil)
+        allow(Instrument).to receive(:find_by).and_return(mock_instrument)
 
         # Ensure no existing trackers for this position
         allow(PositionTracker).to receive(:active).and_return(PositionTracker.none)
@@ -458,10 +458,10 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
       end
 
       before do
-        # Mock the derivative lookup to return a derivative
-        mock_derivative = double('Derivative')
-        allow(mock_derivative).to receive(:instrument).and_return(double('Instrument'))
-        allow(Derivative).to receive(:find_by).and_return(mock_derivative)
+        # Mock the instrument lookup (consolidated master)
+        mock_instrument = double('Instrument')
+        allow(mock_instrument).to receive_messages(derivative?: true, underlying_instrument: nil)
+        allow(Instrument).to receive(:find_by).and_return(mock_instrument)
       end
 
       it 'creates tracker with correct parameters' do
@@ -487,10 +487,10 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
       end
 
       it 'handles tracker creation errors gracefully' do
-        # Mock the derivative lookup to return a derivative
-        mock_derivative = double('Derivative')
-        allow(mock_derivative).to receive(:instrument).and_return(double('Instrument'))
-        allow(Derivative).to receive(:find_by).and_return(mock_derivative)
+        # Mock the instrument lookup (consolidated master)
+        mock_instrument = double('Instrument')
+        allow(mock_instrument).to receive_messages(derivative?: true, underlying_instrument: nil)
+        allow(Instrument).to receive(:find_by).and_return(mock_instrument)
 
         allow(PositionTracker).to receive(:create!).and_raise(StandardError, 'Database error')
 

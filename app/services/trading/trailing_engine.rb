@@ -1,32 +1,21 @@
 # frozen_string_literal: true
 
 module Trading
+  # Institutional trailing stop engine.
+  #
+  # Error-handling review 2026-09 (wave 2):
+  #   * Hardcoded DEFAULTS used to silently substitute for a missing/corrupt
+  #     risk.institutional_trailing config — and they DIVERGED from the shipped
+  #     config (e.g. sensex trailing_distance 0.413 hardcoded vs 0.8 live), so a
+  #     config read failure materially changed live stop-loss behavior with no
+  #     signal. The config section is now mandatory.
+  #   * merge_strategy_profile_override! had a latent NoMethodError (it called
+  #     transform_keys on the profile NAME instead of merging the overrides
+  #     hash) — fixed to actually merge.
   class TrailingEngine
-    # Default configs calibrated from 16-week historical ATM options intraday analysis.
-    # These are fallbacks — live values are read from algo.yml[:risk][:institutional_trailing].
-    DEFAULTS = {
-      nifty: {
-        early_trigger: 0.05, # +5% → survival SL
-        early_sl_offset: -0.12, # SL at -12% from entry
-        breakeven_trigger: 0.157, # +15.7% → breakeven (25% of avg max gain 62.88%)
-        activation_trigger: 0.20, # +20% → HWM trailing active
-        trailing_distance: 0.386 # 38.6% from HWM (80% of avg retrace 48.3%)
-      }.freeze,
-      sensex: {
-        early_trigger: 0.06, # +6% → survival SL
-        early_sl_offset: -0.10, # SL at -10% from entry
-        breakeven_trigger: 0.12, # +12% → breakeven
-        activation_trigger: 0.18, # +18% → HWM trailing active
-        trailing_distance: 0.413 # 41.3% from HWM (80% of avg retrace 51.65%)
-      }.freeze,
-      banknifty: {
-        early_trigger: 0.06, # +6% → survival SL
-        early_sl_offset: -0.15, # SL at -15% (wider — BN is volatile)
-        breakeven_trigger: 0.18, # +18% → breakeven
-        activation_trigger: 0.25, # +25% → HWM trailing active
-        trailing_distance: 0.35 # 35% from HWM
-      }.freeze
-    }.freeze
+    REQUIRED_KEYS = %i[
+      early_trigger early_sl_offset breakeven_trigger activation_trigger trailing_distance
+    ].freeze
 
     def initialize(tracker:, ltp:)
       @tracker  = tracker
@@ -35,6 +24,13 @@ module Trading
       @quantity = tracker.quantity.to_i.abs
       @ltp      = ltp.to_f
       @highest  = [tracker.highest_price.to_f, @entry].max
+
+      unless @entry.finite? && @entry.positive?
+        raise Errors::InvalidPrice, "tracker #{tracker.order_no} entry_price must be positive — got #{tracker.entry_price.inspect}"
+      end
+      unless @ltp.finite? && @ltp.positive?
+        raise Errors::InvalidMarketData, "LTP must be positive to trail tracker #{tracker.order_no} — got #{ltp.inspect}"
+      end
     end
 
     def call
@@ -75,30 +71,41 @@ module Trading
       Rails.logger.error("[Trading::TrailingEngine] #{e.class} - #{e.message}")
     end
 
-    # Resolve config: algo.yml > hardcoded DEFAULTS
+    # Config resolution: risk.institutional_trailing.{symbol_key} is mandatory.
+    # @raise [Errors::ConfigurationError] when the section or the symbol's tier is missing
     def config_for_symbol
-      yml = begin
-        AlgoConfig.fetch.dig(:risk, :institutional_trailing)
-      rescue StandardError
-        nil
+      yml = AlgoConfig.fetch.dig(:risk, :institutional_trailing)
+
+      unless yml.is_a?(Hash)
+        raise Errors::ConfigurationError,
+              'risk.institutional_trailing config section is missing or not a mapping — refusing to trail on assumed stops'
       end
 
       key = symbol_key
-      raw = yml&.[](key) || DEFAULTS[key]
-      raw = raw.transform_keys(&:to_sym)
-      merge_strategy_profile_override!(raw)
+      raw = yml[key]
+      unless raw.is_a?(Hash)
+        raise Errors::ConfigurationError,
+              "risk.institutional_trailing.#{key} tier is missing — refusing to trail on assumed stops"
+      end
+
+      base = raw.transform_keys(&:to_sym)
+      missing = REQUIRED_KEYS - base.keys
+      unless missing.empty?
+        raise Errors::ConfigurationError,
+              "risk.institutional_trailing.#{key} is missing #{missing.map(&:to_s).join(', ')} — refusing to trail on assumed stops"
+      end
+
+      merge_strategy_profile_override!(base)
     end
 
     def merge_strategy_profile_override!(base)
-      raw = @tracker.strategy_profile
-      profile = raw&.to_sym
+      profile = @tracker.strategy_profile&.to_sym
       return base unless profile
 
       overrides = AlgoConfig.fetch.dig(:risk, :institutional_trailing, :profiles, profile)
       return base unless overrides.is_a?(Hash)
 
-      # Symbolize keys if loaded from YAML (string keys)
-      raw.transform_keys(&:to_sym)
+      base.merge(overrides.transform_keys(&:to_sym))
     end
 
     def symbol_key
@@ -159,20 +166,29 @@ module Trading
 
     def session_aware?
       AlgoConfig.fetch.dig(:risk, :institutional_trailing, :session_aware) == true
-    rescue StandardError
-      false
     end
 
     def expiry_day_tightening_enabled?
       AlgoConfig.fetch.dig(:risk, :institutional_trailing, :expiry_day_tightening).present?
-    rescue StandardError
-      false
     end
 
+    # Must be a positive fraction of the trailing distance. `true` (boolean) or
+    # 0 would collapse the trail onto the HWM instantly.
+    # @raise [Errors::ConfigurationError]
     def expiry_tightening_ratio
-      AlgoConfig.fetch.dig(:risk, :institutional_trailing, :expiry_day_tightening).to_f
-    rescue StandardError
-      0.60
+      raw = AlgoConfig.fetch.dig(:risk, :institutional_trailing, :expiry_day_tightening)
+      unless raw.is_a?(Numeric)
+        raise Errors::ConfigurationError,
+              "risk.institutional_trailing.expiry_day_tightening must be a positive number — got #{raw.inspect}"
+      end
+
+      ratio = raw.to_f
+      unless ratio.finite? && ratio.positive?
+        raise Errors::ConfigurationError,
+              "risk.institutional_trailing.expiry_day_tightening must be a positive number — got #{raw.inspect}"
+      end
+
+      ratio
     end
   end
 end

@@ -62,7 +62,11 @@ module AlphaExecutionService
       }
 
       # Existing logic: resolve_ltp -> sizing -> order_placer -> tracker
+      # Sizing policy (error-handling review 2026-09): the alpha strategy
+      # sizes via Capital::Allocator — now an explicit auto_size opt-in
+      # instead of an inferred fallback.
       order = derivative.buy_option!(
+        auto_size: true,
         product_type: "NORMAL",
         index_cfg: index_cfg,
         meta: meta
@@ -91,7 +95,7 @@ module AlphaExecutionService
     end
 
     def find_derivative(signal)
-      Derivative.find_by_params(
+      Instrument.find_derivative_by_params(
         underlying_symbol: signal[:index_key].to_s.upcase,
         strike_price: signal[:strike],
         expiry_date: signal[:expiry],

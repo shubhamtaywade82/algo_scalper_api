@@ -4,14 +4,14 @@ module DataQuality
   # Once-daily rollup of Section 9 data quality KPIs (docs/AlgoScalperPlatform-v2.0.md):
   # missing candle count, candle alignment accuracy, tick staleness rate, instrument
   # mapping accuracy, expired-instrument handling. Observability only — finds and records,
-  # never mutates instrument/derivative state.
+  # never mutates instrument state.
   #
-  # Note: Instrument/Derivative have no `active` boolean column — the catalog is a raw daily
-  # CSV import differentiated only by expiry_date, so "expired instrument handling" here means
-  # stale (already-expired) rows still present for the underlyings we actually trade, not a
-  # deactivation-flag check. The live-trading risk this could cause is already independently
-  # covered by Live::ExitEngine#expired_contract? at exit time — this is catalog housekeeping
-  # visibility, not a new safety gate.
+  # Note: expired contracts are intentionally KEPT in the consolidated instruments master
+  # (historical trades / backtesting need them) but are marked tradable = false at import
+  # time — "expired instrument handling" here reports stale (already-expired, still
+  # tradable-flagged) rows for the underlyings we actually trade. The live-trading risk is
+  # independently covered by Live::ExitEngine#expired_contract? at exit time — this is
+  # catalog housekeeping visibility, not a new safety gate.
   class DailyCheckJob < ApplicationJob
     queue_as :background
 
@@ -98,13 +98,12 @@ module DataQuality
       symbols = traded_symbols
       return 100.0 if symbols.empty?
 
-      instrument_scope = Instrument.where(symbol_name: symbols)
-      derivative_scope = Derivative.where(underlying_symbol: symbols)
-      total = instrument_scope.count + derivative_scope.count
+      scope = Instrument.where(symbol_name: symbols)
+                        .or(Instrument.where(underlying_symbol: symbols))
+      total = scope.count
       return 100.0 if total.zero?
 
-      valid = instrument_scope.where.not(security_id: [nil, '']).count +
-              derivative_scope.where.not(security_id: [nil, '']).count
+      valid = scope.where.not(security_id: [nil, '']).count
       ((valid.to_f / total) * 100).round(4)
     end
 
@@ -112,9 +111,9 @@ module DataQuality
 
     def expired_derivatives_for_traded_symbols
       symbols = traded_symbols
-      return Derivative.none if symbols.empty?
+      return Instrument.none if symbols.empty?
 
-      Derivative.where(underlying_symbol: symbols).where('expiry_date < ?', Date.current)
+      Instrument.where(underlying_symbol: symbols).where('expiry_date < ?', Date.current)
     end
 
     def audit_expired_derivatives!(expired)

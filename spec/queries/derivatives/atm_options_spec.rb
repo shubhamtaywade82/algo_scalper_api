@@ -5,8 +5,8 @@ require 'rails_helper'
 RSpec.describe Derivatives::AtmOptions do
   let!(:in_range_call) do
     create(
-      :derivative,
-      :call_option,
+      :instrument,
+      :nifty_call_option,
       underlying_symbol: 'NIFTY',
       expiry_date: Date.current,
       strike_price: 25_000
@@ -15,8 +15,8 @@ RSpec.describe Derivatives::AtmOptions do
 
   let!(:in_range_put) do
     create(
-      :derivative,
-      :put_option,
+      :instrument,
+      :nifty_put_option,
       underlying_symbol: 'NIFTY',
       expiry_date: Date.current,
       strike_price: 25_050
@@ -25,8 +25,8 @@ RSpec.describe Derivatives::AtmOptions do
 
   let!(:next_expiry_option) do
     create(
-      :derivative,
-      :call_option,
+      :instrument,
+      :nifty_call_option,
       underlying_symbol: 'NIFTY',
       expiry_date: Date.current + 1.day,
       strike_price: 25_000
@@ -35,8 +35,8 @@ RSpec.describe Derivatives::AtmOptions do
 
   let!(:out_of_range_option) do
     create(
-      :derivative,
-      :call_option,
+      :instrument,
+      :nifty_call_option,
       underlying_symbol: 'NIFTY',
       expiry_date: Date.current,
       strike_price: 26_000

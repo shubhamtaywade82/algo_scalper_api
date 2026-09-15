@@ -14,7 +14,10 @@ class PositionTracker < ApplicationRecord
 
       cache_live_pnl(cache[:pnl], pnl_pct: cache[:pnl_pct]) if cache[:pnl]
       self.high_water_mark_pnl = BigDecimal(cache[:hwm_pnl].to_s) if cache[:hwm_pnl]
-    rescue StandardError
+    rescue StandardError => e
+      # Hydration is best-effort (DB row stays authoritative), but the failure
+      # is logged — it used to be a silent nil (wave 3).
+      log_pnl_cache_error(e)
       nil
     end
 

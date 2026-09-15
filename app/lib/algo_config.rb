@@ -78,9 +78,26 @@ class AlgoConfig
       end
     end
 
+    # Run mode resolution. ENV wins when set; otherwise the config document
+    # must define it — a missing run_mode used to silently mean "production"
+    # (error-handling review 2026-09: never assume the riskiest mode).
+    #
+    # Test-env carve-out: the spec suite stubs AlgoConfig.fetch with partial
+    # hashes everywhere; test keeps the legacy 'production' default so those
+    # stubs stay valid. development/production refuse to guess.
+    #
+    # @return [String]
+    # @raise [Errors::ConfigurationError]
     def run_mode
-      base = (ENV['RUN_MODE'].presence || fetch[:run_mode] || 'production').to_s.strip
-      base.presence || 'production'
+      mode = ENV['RUN_MODE'].presence || fetch[:run_mode].presence
+      if mode.blank?
+        return 'production' if Rails.env.test?
+
+        raise Errors::ConfigurationError,
+              "run_mode is not configured — set RUN_MODE or run_mode: in algo.yml/profiles"
+      end
+
+      mode.to_s.strip
     end
 
     # Identity of the effective config at this moment — stamped on signals/positions so a
@@ -98,18 +115,38 @@ class AlgoConfig
       fetch.except(*SENSITIVE_SECTIONS)
     end
 
+    # Paper trading is a SAFETY-CRITICAL switch: "unknown" must never be
+    # read as either "on" or "off". The config document must state it
+    # explicitly (algo.yml ships with paper_trading.enabled: true).
+    # Previously `!= false` treated a missing/corrupt section as ENABLED.
+    #
+    # Test-env carve-out (see #run_mode): partial fetch stubs keep the legacy
+    # default of enabled; development/production refuse to guess.
+    #
+    # @return [Boolean]
+    # @raise [Errors::ConfigurationError] when the flag is absent or not a boolean
     def paper_trading_enabled?
-      fetch.dig(:paper_trading, :enabled) != false
+      enabled = fetch.dig(:paper_trading, :enabled)
+      if enabled != true && enabled != false
+        return true if Rails.env.test?
+
+        raise Errors::ConfigurationError,
+              "paper_trading.enabled must be explicitly true or false " \
+              "(algo.yml / profiles) — got #{enabled.inspect}; refusing to guess"
+      end
+
+      enabled
     end
 
     # Tick-triggered AI (+Smc::TickAi::AnalysisService+) or explicit event-driven mode.
     # DB JSON overrides may store booleans as strings — treat "true" like true.
+    # An absent :signals section means the feature is simply not configured
+    # (documented default: off). A broken config document now RAISES instead
+    # of masquerading as "disabled".
     def event_driven_intraday_ai?
       s = fetch[:signals] || {}
       truthy_signal_flag?(s[:tick_ai_analysis_enabled]) ||
         truthy_signal_flag?(s[:event_driven_ai_alerts])
-    rescue StandardError
-      false
     end
 
     # When true during open session, Solid Queue should not run 15m AI/SMC jobs; daemon tick path owns alerts.
@@ -117,8 +154,6 @@ class AlgoConfig
       return false if market_closed_for_scheduling?
 
       event_driven_intraday_ai?
-    rescue StandardError
-      false
     end
 
     def scheduled_ai_technical_analysis_job_deferred?
@@ -138,10 +173,11 @@ class AlgoConfig
       defer_scheduled_intraday_ai_jobs?
     end
 
+    # Scheduling gate. A TradingSession failure used to read as "market open"
+    # (rescue -> false) — i.e. jobs kept running on an unknown session state.
+    # Now the failure propagates: the job logs loudly and retries.
     def market_closed_for_scheduling?
       TradingSession::Service.market_closed?
-    rescue StandardError
-      false
     end
 
     def reset!
@@ -161,24 +197,38 @@ class AlgoConfig
       val == true || val.to_s.strip.casecmp('true').zero?
     end
 
+    # Profile overlay. Contract (error-handling review 2026-09):
+    #   * profile FILE absent ....... fine — the profile is an optional overlay,
+    #     base config stands on its own
+    #   * profile UNREADABLE/CORRUPT  Errors::ConfigurationError — a production
+    #     run must never quietly continue on the wrong configuration
     def apply_profile(config)
-      mode = (ENV['RUN_MODE'].presence || config[:run_mode] || 'production').to_s.strip.presence || 'production'
+      # Resolve locally from ENV or the PASSED base config — this method runs
+      # inside #fetch, so calling the public #run_mode here would recurse.
+      mode = ENV['RUN_MODE'].presence || config[:run_mode].presence
+      if mode.blank?
+        raise Errors::ConfigurationError,
+              "run_mode is not configured — set RUN_MODE or run_mode: in algo.yml/profiles"
+      end
+
+      mode = mode.to_s.strip
       path = Rails.root.join(PROFILES_DIR, "#{mode}.yml")
       unless path.file?
         config[:run_mode] = mode
         return config
       end
 
-      profile = YAML.load_file(path)
-    rescue Psych::SyntaxError, Errno::ENOENT, Errno::EACCES => e
-      Rails.logger.error("[AlgoConfig] Failed to load profile #{mode}: #{e.class} - #{e.message}")
-      config[:run_mode] = mode
-      config
-    else
+      begin
+        profile = YAML.load_file(path)
+      rescue Psych::SyntaxError, Errno::ENOENT, Errno::EACCES => e
+        raise Errors::ConfigurationError,
+              "profile config/#{mode}.yml is unreadable (#{e.class}: #{e.message}) — refusing to run on base config"
+      end
+
       profile = profile.deep_symbolize_keys if profile.is_a?(Hash)
       unless profile.is_a?(Hash)
-        config[:run_mode] = mode
-        return config
+        raise Errors::ConfigurationError,
+              "profile config/#{mode}.yml did not parse to a Hash (got #{profile.class}) — refusing to run on base config"
       end
 
       merged = MergeUtil.deep_merge_hashes_with_arrays(config, profile)

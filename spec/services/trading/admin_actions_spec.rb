@@ -17,10 +17,11 @@ RSpec.describe Trading::AdminActions do
     end
 
     it 'finds derivative and calls buy_option! with resolved index config' do
-      allow(Derivative).to receive(:find).with(42).and_return(derivative)
+      allow(Instruments::LegacyResolver).to receive(:by_legacy_id).with(42, require_derivative: true).and_return(derivative)
 
       expect(derivative).to receive(:buy_option!).with(
         qty: 50,
+        auto_size: false,
         product_type: 'INTRADAY',
         index_cfg: index_cfg,
         meta: {}
@@ -32,10 +33,11 @@ RSpec.describe Trading::AdminActions do
     it 'prefers override index_key when provided' do
       banknifty_cfg = { key: 'BANKNIFTY', segment: 'IDX_I', capital_alloc_pct: 0.30 }
       allow(AlgoConfig).to receive(:fetch).and_return({ indices: [index_cfg, banknifty_cfg] })
-      allow(Derivative).to receive(:find).with(99).and_return(derivative)
+      allow(Instruments::LegacyResolver).to receive(:by_legacy_id).with(99, require_derivative: true).and_return(derivative)
 
       expect(derivative).to receive(:buy_option!).with(
         qty: nil,
+        auto_size: true,
         product_type: 'INTRADAY',
         index_cfg: banknifty_cfg,
         meta: { foo: 'bar' }
@@ -49,11 +51,12 @@ RSpec.describe Trading::AdminActions do
     end
 
     it 'uses underlying_symbol to find index config when no override' do
-      allow(Derivative).to receive(:find).with(123).and_return(derivative)
+      allow(Instruments::LegacyResolver).to receive(:by_legacy_id).with(123, require_derivative: true).and_return(derivative)
       allow(derivative).to receive(:underlying_symbol).and_return('NIFTY')
 
       expect(derivative).to receive(:buy_option!).with(
         qty: nil,
+        auto_size: true,
         product_type: 'INTRADAY',
         index_cfg: index_cfg,
         meta: {}
@@ -66,11 +69,12 @@ RSpec.describe Trading::AdminActions do
       alt_derivative = create(:derivative, :banknifty_call_option, instrument: instrument, security_id: '60002')
       banknifty_cfg = { key: 'BANKNIFTY', segment: 'IDX_I' }
       allow(AlgoConfig).to receive(:fetch).and_return({ indices: [banknifty_cfg] })
-      allow(Derivative).to receive(:find).with(456).and_return(alt_derivative)
+      allow(Instruments::LegacyResolver).to receive(:by_legacy_id).with(456, require_derivative: true).and_return(alt_derivative)
       allow(alt_derivative).to receive_messages(underlying_symbol: nil, symbol_name: 'BANKNIFTY')
 
       expect(alt_derivative).to receive(:buy_option!).with(
         qty: nil,
+        auto_size: true,
         product_type: 'INTRADAY',
         index_cfg: banknifty_cfg,
         meta: {}
@@ -81,10 +85,11 @@ RSpec.describe Trading::AdminActions do
 
     it 'passes nil index_cfg when lookup fails' do
       allow(AlgoConfig).to receive(:fetch).and_return({ indices: [] })
-      allow(Derivative).to receive(:find).with(789).and_return(derivative)
+      allow(Instruments::LegacyResolver).to receive(:by_legacy_id).with(789, require_derivative: true).and_return(derivative)
 
       expect(derivative).to receive(:buy_option!).with(
         qty: nil,
+        auto_size: true,
         product_type: 'INTRADAY',
         index_cfg: nil,
         meta: {}
@@ -93,27 +98,23 @@ RSpec.describe Trading::AdminActions do
       described_class.buy_derivative!(derivative_id: 789)
     end
 
-    it 'handles errors gracefully when config lookup fails' do
+    it 'propagates config lookup failures instead of silently passing nil' do
       allow(AlgoConfig).to receive(:fetch).and_raise(StandardError, 'Config error')
-      allow(Rails.logger).to receive(:error)
-      allow(Derivative).to receive(:find).with(999).and_return(derivative)
+      allow(Instruments::LegacyResolver).to receive(:by_legacy_id).with(999, require_derivative: true).and_return(derivative)
 
-      expect(derivative).to receive(:buy_option!).with(
-        qty: 10,
-        product_type: 'INTRADAY',
-        index_cfg: nil,
-        meta: {}
-      )
+      expect(derivative).not_to receive(:buy_option!)
 
-      described_class.buy_derivative!(derivative_id: 999, qty: 10)
-      expect(Rails.logger).to have_received(:error)
+      expect do
+        described_class.buy_derivative!(derivative_id: 999, qty: 10)
+      end.to raise_error(StandardError, 'Config error')
     end
 
     it 'passes custom product_type' do
-      allow(Derivative).to receive(:find).with(111).and_return(derivative)
+      allow(Instruments::LegacyResolver).to receive(:by_legacy_id).with(111, require_derivative: true).and_return(derivative)
 
       expect(derivative).to receive(:buy_option!).with(
         qty: 25,
+        auto_size: false,
         product_type: 'CNC',
         index_cfg: index_cfg,
         meta: {}
@@ -125,23 +126,23 @@ RSpec.describe Trading::AdminActions do
 
   describe '.sell_derivative!' do
     it 'finds derivative and calls sell_option!' do
-      allow(Derivative).to receive(:find).with(42).and_return(derivative)
+      allow(Instruments::LegacyResolver).to receive(:by_legacy_id).with(42, require_derivative: true).and_return(derivative)
 
       expect(derivative).to receive(:sell_option!).with(qty: 50, meta: {})
 
       described_class.sell_derivative!(derivative_id: 42, qty: 50)
     end
 
-    it 'passes meta hash when provided' do
-      allow(Derivative).to receive(:find).with(99).and_return(derivative)
+    it 'routes an omitted qty to the explicit close_position! command' do
+      allow(Instruments::LegacyResolver).to receive(:by_legacy_id).with(99, require_derivative: true).and_return(derivative)
 
-      expect(derivative).to receive(:sell_option!).with(qty: nil, meta: { note: 'exit' })
+      expect(derivative).to receive(:close_position!).with(meta: { note: 'exit' })
 
       described_class.sell_derivative!(derivative_id: 99, meta: { note: 'exit' })
     end
 
     it 'handles missing derivative gracefully' do
-      allow(Derivative).to receive(:find).with(999).and_raise(ActiveRecord::RecordNotFound)
+      allow(Instruments::LegacyResolver).to receive(:by_legacy_id).with(999, require_derivative: true).and_return(nil)
 
       expect do
         described_class.sell_derivative!(derivative_id: 999)

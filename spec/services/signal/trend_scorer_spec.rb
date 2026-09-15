@@ -66,13 +66,11 @@ RSpec.describe Signal::TrendScorer do
         allow(instrument).to receive(:candle_series).and_return(nil)
       end
 
-      it 'returns zero scores' do
+      it 'reports insufficient data instead of a fake zero score (wave 3)' do
         result = scorer.compute_trend_score
-        expect(result[:trend_score]).to eq(0)
-        expect(result[:breakdown][:pa]).to eq(0)
-        expect(result[:breakdown][:ind]).to eq(0)
-        expect(result[:breakdown][:mtf]).to eq(0)
-        expect(result[:breakdown][:vol]).to eq(0)
+        expect(result[:status]).to eq(:insufficient_data)
+        expect(result[:trend_score]).to be_nil
+        expect(result[:breakdown]).to be_nil
       end
     end
 
@@ -83,9 +81,10 @@ RSpec.describe Signal::TrendScorer do
         allow(instrument).to receive(:candle_series).and_return(empty_series)
       end
 
-      it 'returns zero scores' do
+      it 'reports insufficient data instead of a fake zero score (wave 3)' do
         result = scorer.compute_trend_score
-        expect(result[:trend_score]).to eq(0)
+        expect(result[:status]).to eq(:insufficient_data)
+        expect(result[:trend_score]).to be_nil
       end
     end
 
@@ -94,10 +93,11 @@ RSpec.describe Signal::TrendScorer do
         allow(instrument).to receive(:candle_series).and_raise(StandardError, 'Test error')
       end
 
-      it 'handles errors gracefully' do
+      it 'reports an error status — never a score (0 is a real bearish-side score)' do
         result = scorer.compute_trend_score
-        expect(result[:trend_score]).to eq(0)
-        expect(result[:breakdown]).to eq({ pa: 0, ind: 0, mtf: 0, vol: 0 })
+        expect(result[:status]).to eq(:error)
+        expect(result[:trend_score]).to be_nil
+        expect(result[:breakdown]).to be_nil
       end
     end
   end
@@ -259,10 +259,11 @@ RSpec.describe Signal::TrendScorer do
         allow(nil_instrument).to receive(:candle_series).and_return(nil)
       end
 
-      it 'handles nil gracefully' do
+      it 'reports insufficient data instead of a fake zero score (wave 3)' do
         scorer = described_class.new(instrument: nil_instrument)
         result = scorer.compute_trend_score
-        expect(result[:trend_score]).to eq(0)
+        expect(result[:status]).to eq(:insufficient_data)
+        expect(result[:trend_score]).to be_nil
       end
     end
   end

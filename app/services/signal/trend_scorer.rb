@@ -11,14 +11,26 @@ module Signal
   class TrendScorer
     attr_reader :instrument, :primary_tf, :confirmation_tf
 
+    # Result contract (error-handling review 2026-09, wave 3):
+    #   { direction:, trend_score:, breakdown:, status: }
+    #   status: :ok | :instrument_unavailable | :insufficient_data | :error
+    # A computation failure or missing candle data is NEVER reported as
+    # trend_score 0 — 0 is a real, bearish-side score, and faking it used to
+    # flip the direction to :bearish (score 0 <= bearish threshold). Callers
+    # treat a nil trend_score / nil direction as "no signal" (scheduler
+    # skips, monitor's mtf_confirmed? reads false).
     def self.compute_direction(index_cfg:, primary_tf: '1m', confirmation_tf: '5m',
                                bullish_threshold: 14.0, bearish_threshold: 7.0)
       instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
-      return { direction: nil, trend_score: nil, breakdown: nil } unless instrument
+      unless instrument
+        return { direction: nil, trend_score: nil, breakdown: nil, status: :instrument_unavailable }
+      end
 
       scorer = new(instrument: instrument, primary_tf: primary_tf, confirmation_tf: confirmation_tf)
       result = scorer.compute_trend_score
-      score = result[:trend_score].to_f
+      score = result[:trend_score]
+      return { direction: nil, trend_score: nil, breakdown: result[:breakdown], status: result[:status] } if score.nil?
+
       breakdown = result[:breakdown]
 
       direction =
@@ -33,11 +45,11 @@ module Signal
           "breakdown=pa:#{breakdown[:pa]}, ind:#{breakdown[:ind]}, mtf:#{breakdown[:mtf]}"
       end
 
-      { direction: direction, trend_score: score, breakdown: breakdown }
+      { direction: direction, trend_score: score, breakdown: breakdown, status: result[:status] }
     rescue StandardError => e
       Rails.logger.error("[TrendScorer] compute_direction error: #{e.class} - #{e.message}")
       Rails.logger.error("[TrendScorer] Backtrace: #{e.backtrace.first(5).join(', ')}")
-      { direction: nil, trend_score: nil, breakdown: nil }
+      { direction: nil, trend_score: nil, breakdown: nil, status: :error }
     end
 
     def initialize(instrument:, primary_tf: '1m', confirmation_tf: '5m')
@@ -47,10 +59,16 @@ module Signal
     end
 
     # Compute composite trend score
-    # @return [Hash] { trend_score: 0-21, breakdown: { pa: 0-7, ind: 0-7, mtf: 0-7, vol: 0.0 } }
+    # @return [Hash] { trend_score: 0-21, breakdown: { pa:, ind:, mtf:, vol:, mtf_available: }, status: }
+    #   trend_score is nil unless the primary series yielded candles AND no
+    #   error occurred (see .compute_direction contract above).
     def compute_trend_score
       primary_series = get_series(@primary_tf)
       confirmation_series = get_series(@confirmation_tf) if @confirmation_tf != @primary_tf
+
+      unless primary_series&.candles&.any?
+        return { trend_score: nil, breakdown: nil, status: :insufficient_data }
+      end
 
       pa = pa_score(primary_series)
       ind = ind_score(primary_series)
@@ -65,15 +83,14 @@ module Signal
           pa: pa,
           ind: ind,
           mtf: mtf,
-          vol: 0.0
-        }
+          vol: 0.0,
+          mtf_available: confirmation_available?(confirmation_series)
+        },
+        status: :ok
       }
     rescue StandardError => e
       Rails.logger.error("[TrendScorer] Error computing trend score: #{e.class} - #{e.message}")
-      {
-        trend_score: 0,
-        breakdown: { pa: 0, ind: 0, mtf: 0, vol: 0.0 }
-      }
+      { trend_score: nil, breakdown: nil, status: :error }
     end
 
     private
@@ -234,16 +251,16 @@ module Signal
     # Multi-timeframe score (0-7)
     # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
     # Uses: Primary TF vs Confirmation TF alignment
+    #
+    # Missing confirmation data scores 0 (wave 3): the old partial credit
+    # (3.5/1.5 points for data absence) biased the composite toward the
+    # bullish threshold — unknown alignment is unknown, not half-aligned.
+    # breakdown[:mtf_available] flags the condition for diagnosis.
     def mtf_score(primary_series, confirmation_series)
-      return 0 unless primary_series&.candles&.any?
+      return 0.0 unless primary_series&.candles&.any?
+      return 0.0 unless confirmation_series&.candles&.any?
 
       score = 0.0
-
-      # If no confirmation timeframe, score based on primary only
-      unless confirmation_series&.candles&.any?
-        # Give partial score for having primary data
-        return primary_series.candles.size >= 20 ? 3.5 : 1.5
-      end
 
       primary_calculator = Indicators::Calculator.new(primary_series)
       confirmation_calculator = Indicators::Calculator.new(confirmation_series)
@@ -300,6 +317,12 @@ module Signal
 
     def normalize_numeric_series(values)
       Array(values).filter_map { |val| numeric(val) }
+    end
+
+    # True when a distinct confirmation timeframe was requested AND its series
+    # yielded candles — drives breakdown[:mtf_available].
+    def confirmation_available?(confirmation_series)
+      @confirmation_tf != @primary_tf && confirmation_series&.candles&.any?
     end
 
     def numeric(value)

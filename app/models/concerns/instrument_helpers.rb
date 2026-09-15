@@ -72,19 +72,29 @@ module InstrumentHelpers
 
   # Resolves an actionable LTP for downstream order placement.
   # Priority order:
-  # 1. `meta[:ltp]` if provided
+  # 1. `meta[:ltp]` if provided (validated — see below)
   # 2. WebSocket tick cache via Live::RedisPnlCache (if WS connected and fresh)
   # 3. REST API via instrument/derivative object (fallback when WS unavailable)
   # 4. nil (if all methods fail)
+  #
+  # Error-handling review 2026-09 (wave 2):
+  #   * The meta shortcut used to accept any present value — 0, negative or NaN
+  #     flowed straight into order placement while the WS/API paths enforce
+  #     positivity. The meta path now enforces the same contract and raises
+  #     Errors::InvalidMarketData on garbage (a caller-supplied price that is
+  #     not a positive finite number is corrupt input, not "no price").
+  #   * The blanket rescue is for INFRASTRUCTURE failures only (REST/WS
+  #     outages -> documented nil); domain errors are re-raised.
   #
   # @param segment [String]
   # @param security_id [String, Integer]
   # @param meta [Hash]
   # @param fallback_to_api [Boolean] Whether to fallback to REST API if WS unavailable
   # @return [BigDecimal, nil]
+  # @raise [Errors::InvalidMarketData] when meta[:ltp] is present but not a positive finite number
   def resolve_ltp(segment:, security_id:, meta: {}, fallback_to_api: true)
     ltp_from_meta = meta&.dig(:ltp)
-    return BigDecimal(ltp_from_meta.to_s) if ltp_from_meta.present?
+    return valid_meta_ltp!(ltp_from_meta, segment: segment, security_id: security_id) if ltp_from_meta.present?
 
     # Try WebSocket cache if hub is connected and ticks are fresh
     hub = Live::MarketFeedHub.instance
@@ -100,9 +110,30 @@ module InstrumentHelpers
     end
 
     nil
+  rescue Errors::InvalidMarketData
+    raise
   rescue StandardError => e
     Rails.logger.error("Failed to resolve LTP for #{segment}:#{security_id} - #{e.message}")
     nil
+  end
+
+  # The meta LTP is caller-supplied and trusted downstream for order placement,
+  # so it gets the same positivity contract as the WS/API paths.
+  # @raise [Errors::InvalidMarketData]
+  def valid_meta_ltp!(value, segment:, security_id:)
+    parsed = nil
+    begin
+      parsed = BigDecimal(value.to_s)
+    rescue ArgumentError
+      parsed = nil
+    end
+
+    unless parsed&.finite? && parsed.positive?
+      raise Errors::InvalidMarketData,
+            "meta[:ltp] must be a positive number for #{segment}:#{security_id} — got #{value.inspect}"
+    end
+
+    parsed
   end
 
   # Fetches LTP from REST API for a specific segment and security_id
@@ -187,7 +218,9 @@ module InstrumentHelpers
   end
 
   # Creates a PositionTracker immediately after order placement and primes caches.
-  # @param instrument [Instrument]
+  # @param instrument [Instrument] The TRADED instrument (option/future/equity
+  #   itself). The tracker's `instrument` FK resolves to the underlying for
+  #   derivative trades and to the instrument itself otherwise.
   # @param order_no [String]
   # @param segment [String]
   # @param security_id [String]
@@ -200,8 +233,10 @@ module InstrumentHelpers
   # @return [PositionTracker]
   def after_order_track!(instrument:, order_no:, segment:, security_id:, side:, qty:, entry_price:, symbol:, # rubocop:disable Metrics/ParameterLists
                          index_key: nil, meta: {})
-    # Determine watchable: if self is a Derivative, use self; otherwise use instrument
-    watchable = is_a?(Derivative) ? self : instrument
+    # watchable is always the traded instrument now that the derivative
+    # master is consolidated. Legacy Derivative callers still route through
+    # their consolidated Instrument (see Derivative#buy_option!).
+    watchable = is_a?(Derivative) ? consolidated_instrument || instrument : instrument
 
     # Build base meta with index_key
     base_meta = index_key ? { 'index_key' => index_key.to_s } : {}
@@ -210,7 +245,7 @@ module InstrumentHelpers
 
     tracker = PositionTracker.build_or_average!(
       watchable: watchable,
-      instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
+      instrument: watchable,
       order_no: order_no,
       security_id: security_id.to_s,
       symbol: symbol,

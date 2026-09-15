@@ -98,7 +98,7 @@ module Notifications
         instrument_name = escape_html(@signal.instrument.symbol_name)
         decision_text = escape_html(@signal.decision.to_s.upcase)
         timeframe_text = escape_html(@signal.timeframe)
-        price_text = escape_html(@signal.price.to_s)
+        price_text = escape_html(@signal.price.nil? ? 'N/A' : @signal.price.to_s)
         time_text = escape_html(Time.current.strftime('%d %b %Y, %H:%M'))
 
         <<~MSG
@@ -137,12 +137,13 @@ module Notifications
 
         atm = strikes_data[:atm_strike]
         interval = strikes_data[:strike_interval]
-        lot_size = strikes_data[:lot_size] || 50
+        lot_size = strikes_data[:lot_size]
         call_options = strikes_data[:call_options] || []
         put_options = strikes_data[:put_options] || []
 
         lines = []
-        lines << "📊 <b>Option Strikes</b> (Lot: #{escape_html(lot_size.to_s)}):"
+        lot_label = lot_size ? " (Lot: #{escape_html(lot_size.to_s)})" : ' (Lot: N/A)'
+        lines << "📊 <b>Option Strikes</b>#{lot_label}:"
         lines << "ATM: #{escape_html(atm.to_s)}"
 
         if call_options.any?
@@ -173,8 +174,9 @@ module Notifications
           lines << "PUT: #{put_parts.join(', ')}"
         end
 
-        # Add quantity suggestion (1 lot)
-        if call_options.any? || put_options.any?
+        # Add quantity suggestion (1 lot) — only when the lot size actually
+        # resolved; a fabricated number here is trading advice (wave 3).
+        if (call_options.any? || put_options.any?) && lot_size&.positive?
           lines << "💡 <b>Suggested Qty</b>: #{escape_html(lot_size.to_s)} (1 lot)"
         end
 
@@ -266,6 +268,12 @@ module Notifications
         nil
       end
 
+      # Lot-size resolution chain of REAL sources only (wave 3): derivatives
+      # master -> index config -> index rules. Unresolvable returns nil — the
+      # old `else 50` / rescue->50 used to print "Suggested Qty: 50 (1 lot)"
+      # for instruments whose actual lot size differs (misleading advice).
+      # Errors propagate to fetch_atm_strikes_with_premiums' logged rescue
+      # (strikes section simply omitted).
       def get_lot_size_for_instrument
         # First, try to get from nearest future expiry derivative in database
         lot_size = @signal.instrument.lot_size_from_derivatives
@@ -274,7 +282,7 @@ module Notifications
         # Fallback to index config
         symbol_name = @signal.instrument.symbol_name.to_s.upcase
         index_cfg = IndexConfigLoader.load_indices.find { |idx| idx[:key].to_s.upcase == symbol_name }
-        return index_cfg[:lot_size].to_i if index_cfg && index_cfg[:lot_size]
+        return index_cfg[:lot_size].to_i if index_cfg && index_cfg[:lot_size]&.to_i&.positive?
 
         # Fallback to index rules
         case symbol_name
@@ -284,12 +292,7 @@ module Notifications
           Options::IndexRules::Banknifty.new.lot_size
         when 'SENSEX'
           Options::IndexRules::Sensex.new.lot_size
-        else
-          50 # Default fallback
         end
-      rescue StandardError => e
-        Rails.logger.debug { "[SmcAlert] Failed to get lot size: #{e.class} - #{e.message}" }
-        50 # Default fallback
       end
 
       def formatted_reasons

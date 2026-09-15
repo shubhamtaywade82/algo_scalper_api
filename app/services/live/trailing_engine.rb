@@ -417,11 +417,10 @@ module Live
     end
 
     def feature_flags
-      @feature_flags ||= begin
-        AlgoConfig.fetch[:feature_flags] || {}
-      rescue StandardError
-        {}
-      end
+      # Strict read (wave 3): a corrupt config document used to read as
+      # "feature off" — silently disabling the peak-drawdown activation.
+      # Trailing evaluation rescues log-and-isolate.
+      @feature_flags ||= AlgoConfig.fetch[:feature_flags] || {}
     end
 
     # Returns SL offset as percentage (e.g. 10.0 for 10%) for display/logging

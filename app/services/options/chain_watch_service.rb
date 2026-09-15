@@ -58,7 +58,7 @@ module Options
       atm = (spot / increment).round * increment
       strikes = (-STRIKE_WINDOW..STRIKE_WINDOW).map { |offset| atm + (offset * increment) }.select(&:positive?)
 
-      Derivative.options
+      Instrument.options
                 .where(underlying_symbol: @index_key, expiry_date: expiry, strike_price: strikes)
                 .where.not("security_id LIKE 'TEST_%'")
                 .map do |d|

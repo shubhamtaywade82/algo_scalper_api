@@ -72,18 +72,18 @@ RSpec.describe DataQuality::DailyCheckJob do
     end
 
     it 'reports 100% instrument mapping accuracy when all traded-symbol rows have a security_id' do
-      instrument = create(:instrument, symbol_name: 'NIFTY')
-      create(:derivative, instrument: instrument, underlying_symbol: 'NIFTY')
+      create(:instrument, symbol_name: 'NIFTY')
+      create(:instrument, :nifty_call_option, underlying_symbol: 'NIFTY')
 
       described_class.new.perform
 
       expect(DataQualityDailyMetric.last.instrument_mapping_accuracy_pct).to eq(100.0)
     end
 
-    it 'creates an AuditLog entry and records the count when expired derivatives exist for a traded symbol' do
-      instrument = create(:instrument, symbol_name: 'NIFTY')
-      create(:derivative, instrument: instrument, underlying_symbol: 'NIFTY', expiry_date: 1.day.ago)
-      create(:derivative, instrument: instrument, underlying_symbol: 'NIFTY', expiry_date: 1.month.from_now)
+    it 'creates an AuditLog entry and records the count when expired contracts exist for a traded symbol' do
+      create(:instrument, symbol_name: 'NIFTY')
+      create(:instrument, :nifty_call_option, underlying_symbol: 'NIFTY', expiry_date: 1.day.ago)
+      create(:instrument, :nifty_call_option, underlying_symbol: 'NIFTY', expiry_date: 1.month.from_now)
 
       expect { described_class.new.perform }.to change(AuditLog, :count).by(1)
 
@@ -93,16 +93,16 @@ RSpec.describe DataQuality::DailyCheckJob do
       expect(log.metadata['count']).to eq(1)
     end
 
-    it 'does not create an AuditLog entry when no expired derivatives exist' do
-      instrument = create(:instrument, symbol_name: 'NIFTY')
-      create(:derivative, instrument: instrument, underlying_symbol: 'NIFTY', expiry_date: 1.month.from_now)
+    it 'does not create an AuditLog entry when no expired contracts exist' do
+      create(:instrument, symbol_name: 'NIFTY')
+      create(:instrument, :nifty_call_option, underlying_symbol: 'NIFTY', expiry_date: 1.month.from_now)
 
       expect { described_class.new.perform }.not_to change(AuditLog, :count)
     end
 
-    it 'does not mutate any Instrument/Derivative rows (observability only, no auto-remediation)' do
-      instrument = create(:instrument, symbol_name: 'NIFTY')
-      expired = create(:derivative, instrument: instrument, underlying_symbol: 'NIFTY', expiry_date: 1.day.ago)
+    it 'does not mutate any Instrument rows (observability only, no auto-remediation)' do
+      create(:instrument, symbol_name: 'NIFTY')
+      expired = create(:instrument, :nifty_call_option, underlying_symbol: 'NIFTY', expiry_date: 1.day.ago)
 
       described_class.new.perform
 

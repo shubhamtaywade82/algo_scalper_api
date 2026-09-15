@@ -16,7 +16,7 @@ RSpec.describe Entries::Guards::WeeklyExpiryGuard do
     let(:pick) { { security_id: '12345', segment: 'NFO-OPT', derivative_id: nil } }
     let(:is_supertrend) { false }
     let(:is_paper) { false }
-    let(:derivative) { instance_double(Derivative, expiry_flag: 'W-NIFTY') }
+    let(:derivative) { instance_double(Instrument, expiry_flag: 'W-NIFTY') }
 
     context 'when in supertrend mode' do
       let(:is_supertrend) { true }
@@ -49,11 +49,11 @@ RSpec.describe Entries::Guards::WeeklyExpiryGuard do
       let(:index_cfg) { { key: 'NIFTY', segment: 'NFO-OPT' } }
 
       before do
-        allow(Derivative).to receive(:find_by).and_return(derivative)
+        allow(Instruments::LegacyResolver).to receive(:resolve_pick).and_return(derivative)
       end
 
       context 'and contract is a weekly expiry' do
-        let(:derivative) { instance_double(Derivative, expiry_flag: 'W-NIFTY') }
+        let(:derivative) { instance_double(Instrument, expiry_flag: 'W-NIFTY') }
 
         it 'allows entry' do
           result = described_class.call(context)
@@ -62,7 +62,7 @@ RSpec.describe Entries::Guards::WeeklyExpiryGuard do
       end
 
       context 'and contract is NOT a weekly expiry (monthly)' do
-        let(:derivative) { instance_double(Derivative, expiry_flag: 'NIFTY') }
+        let(:derivative) { instance_double(Instrument, expiry_flag: 'NIFTY') }
 
         it 'blocks entry' do
           result = described_class.call(context)
@@ -74,7 +74,7 @@ RSpec.describe Entries::Guards::WeeklyExpiryGuard do
         let(:derivative) { nil }
 
         before do
-          allow(Derivative).to receive(:find_by).and_return(nil)
+          allow(Instruments::LegacyResolver).to receive(:resolve_pick).and_return(nil)
         end
 
         it 'blocks entry' do
@@ -85,7 +85,7 @@ RSpec.describe Entries::Guards::WeeklyExpiryGuard do
 
       context 'and an error occurs during lookup' do
         before do
-          allow(Derivative).to receive(:find_by).and_raise(StandardError.new('lookup error'))
+          allow(Instruments::LegacyResolver).to receive(:resolve_pick).and_raise(StandardError.new('lookup error'))
         end
 
         it 'blocks entry (fails closed)' do

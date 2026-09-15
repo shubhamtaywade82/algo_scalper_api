@@ -163,6 +163,16 @@ risk:
   sl_pct: 0.1
   tp_pct: 0.5
   per_trade_risk_pct: 0.15
+  # DTE-mapped entry/exit tuning. Opt-in: the resolver refuses to guess when
+  # enabled but under-specified (no silent multiplier/SL defaults).
+  dte_parameters:
+    enabled: true
+    defaults:
+      volume_velocity_multiplier: 2.0
+  # Option-contract volume velocity gate. Opt-in: absent section = gate off
+  # (was: absent section silently treated as enabled).
+  volume_velocity_gate:
+    enabled: true
   percentage_pnl_exit:
     enabled: true
     target_pct: 0.05

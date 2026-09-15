@@ -16,12 +16,19 @@ module Policies
   #   )
   #   policy.permitted?  # => false
   #   policy.reasons     # => ["max_active_positions_exceeded", "max_exposure_exceeded"]
+  #
+  # Quantity contract (error-handling review 2026-09): a garbage sizing
+  # value used to coerce to 0 — which TRIVIALLY PASSED every exposure check.
+  # proposed_qty and lot_size are now strictly validated; the policy refuses
+  # to evaluate a trade it cannot size.
+  #
+  # @raise [Errors::InvalidQuantity]
   class RiskPolicy < BasePolicy
     def initialize(index_key:, proposed_qty:, entry_price:, lot_size: 1)
       @index_key    = index_key.to_s
-      @proposed_qty = SafeNumeric.to_non_negative_integer(proposed_qty)
+      @proposed_qty = Orders::Quantity.resolve!(proposed_qty, context: "RiskPolicy##{index_key}")
       @entry_price  = entry_price.to_f
-      @lot_size     = [SafeNumeric.to_non_negative_integer(lot_size), 1].max
+      @lot_size     = lot_size.nil? ? 1 : Orders::Quantity.resolve!(lot_size, context: "RiskPolicy##{index_key} lot_size")
       @violations   = nil
     end
 

@@ -31,11 +31,7 @@ module Live
         @ws_client.on(:update) { |payload| handle_update(payload) }
         @ws_client.start
         @running = true
-        begin
-          Live::SystemStatusCache.instance.report_heartbeat(:ws_order_update)
-        rescue StandardError
-          nil
-        end
+        report_heartbeat('start')
         @started_at = Time.current
         @connection_state = :connecting
         @last_error = nil
@@ -95,6 +91,20 @@ module Live
 
     private
 
+    # Heartbeat/health beacons must never kill the feed loop, but they may not
+    # fail silently either — monitoring outages are logged (they used to be
+    # swallowed with `rescue; nil`).
+    def report_heartbeat(scope)
+      case scope
+      when 'start', 'watchdog'
+        Live::SystemStatusCache.instance.report_heartbeat(:ws_order_update)
+      when 'update'
+        Live::FeedHealthService.instance.mark_success!(:order_updates)
+      end
+    rescue StandardError => e
+      Rails.logger.warn("[OrderUpdateHub] Heartbeat report failed (#{scope}): #{e.class} - #{e.message}")
+    end
+
     def enabled?
       # Don't start in paper trading mode - paper mode handles positions locally via GatewayPaper
       # OrderUpdateHub is only needed for live trading to receive WebSocket updates from broker
@@ -107,10 +117,12 @@ module Live
       client_id.present? && access.present?
     end
 
+    # Strict mode resolution (error-handling review 2026-09, wave 2): a config
+    # failure used to read as "not paper" — i.e. the hub ASSUMED live mode and
+    # connected to the broker. Unknown mode now propagates; #start!'s rescue
+    # fails closed (feed not started) and logs loudly.
     def paper_trading_enabled?
-      AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
-    rescue StandardError
-      false
+      AlgoConfig.paper_trading_enabled?
     end
 
     def config
@@ -123,11 +135,7 @@ module Live
       @connection_state = :connected
       @reconnect_attempts = 0
 
-      begin
-        Live::FeedHealthService.instance.mark_success!(:order_updates)
-      rescue StandardError
-        nil
-      end
+      report_heartbeat('update')
 
       ActiveSupport::Notifications.instrument('dhanhq.order_update', normalized)
       @callbacks.each { |callback| safe_invoke(callback, normalized) }
@@ -155,11 +163,7 @@ module Live
           sleep 5
           break unless running?
 
-          begin
-            Live::SystemStatusCache.instance.report_heartbeat(:ws_order_update)
-          rescue StandardError
-            nil
-          end
+          report_heartbeat('watchdog')
           check_connection_health!
         end
       end
@@ -181,8 +185,8 @@ module Live
 
       begin
         Live::FeedHealthService.instance.mark_failure!(:order_updates, error: RuntimeError.new('order_updates feed stale'))
-      rescue StandardError
-        nil
+      rescue StandardError => e
+        Rails.logger.warn("[OrderUpdateHub] Failed to report feed staleness: #{e.class} - #{e.message}")
       end
 
       restart!

@@ -164,34 +164,22 @@ module Live
       trackers_by_id = PositionTracker.includes(:watchable, :instrument).where(id: tracker_ids).index_by(&:id)
 
       batch.each do |tracker_id, payload|
-        begin
-          tracker = trackers_by_id[tracker_id]
+        tracker = begin
+          trackers_by_id[tracker_id]
         rescue StandardError => e
           @logger.error("[PnlUpdater] DB lookup failed for tracker #{tracker_id}: #{e.message}")
-          begin
-            Live::RedisPnlCache.instance.clear_tracker(tracker_id)
-          rescue StandardError
-            nil
-          end
+          clear_tracker_cache(tracker_id)
           next
         end
 
         unless tracker
           # No tracker => stale Redis entry must be cleared
-          begin
-            Live::RedisPnlCache.instance.clear_tracker(tracker_id)
-          rescue StandardError
-            nil
-          end
+          clear_tracker_cache(tracker_id)
           next
         end
 
         if tracker.exited?
-          begin
-            Live::RedisPnlCache.instance.clear_tracker(tracker_id)
-          rescue StandardError
-            nil
-          end
+          clear_tracker_cache(tracker_id)
           next
         end
 
@@ -231,17 +219,22 @@ module Live
         # Ensure entry_price & quantity exist and are numeric
         if tracker.entry_price.blank? || tracker.quantity.blank? || tracker.quantity.to_i <= 0
           @logger.warn("[PnlUpdater] Invalid tracker data for #{tracker_id} - entry_price=#{tracker.entry_price.inspect}, quantity=#{tracker.quantity.inspect}. Clearing redis key.")
-          begin
-            Live::RedisPnlCache.instance.clear_tracker(tracker_id)
-          rescue StandardError
-            nil
-          end
+          clear_tracker_cache(tracker_id)
           next
         end
 
-        # Calculate with BigDecimal (all safe)
-        ltp_bd = safe_decimal(tick_ltp) || BigDecimal(0)
-        entry_bd = safe_decimal(tracker.entry_price) || BigDecimal(0)
+        # Strict decimal parsing (wave 4): `safe_decimal(...) || BigDecimal(0)`
+        # used to manufacture an entry price / LTP of ZERO on unparseable
+        # values, producing a completely fabricated PnL (e.g. entry "abc" ->
+        # pnl == ltp * qty). Unparseable or non-positive values now skip the
+        # tracker and clear its Redis key instead.
+        ltp_bd = safe_decimal(tick_ltp)
+        entry_bd = safe_decimal(tracker.entry_price)
+        if ltp_bd.nil? || !ltp_bd.positive? || entry_bd.nil? || !entry_bd.positive?
+          @logger.warn("[PnlUpdater] Unparseable entry/ltp for #{tracker_id} - entry=#{tracker.entry_price.inspect}, ltp=#{tick_ltp.inspect}. Clearing redis key.")
+          clear_tracker_cache(tracker_id)
+          next
+        end
         qty_bd = BigDecimal(tracker.quantity.to_i.to_s)
 
         # Short: profit when price falls, so the price delta is inverted vs. long.
@@ -252,11 +245,8 @@ module Live
 
         # Deduct broker fees (₹20 per order, ₹40 per trade if exited)
         pnl_bd = BrokerFeeCalculator.net_pnl(gross_pnl_bd, is_exited: tracker.exited?)
-        pnl_pct_bd = begin
-          payload[:pnl_pct] || (price_delta_bd / entry_bd)
-        rescue StandardError
-          BigDecimal(0)
-        end
+        # entry_bd is validated positive above — the division cannot trap.
+        pnl_pct_bd = payload[:pnl_pct] || (price_delta_bd / entry_bd)
 
         # HWM: prefer payload, then Redis (real-time), then DB (stale up to 30s)
         hwm_bd = payload[:hwm]
@@ -266,7 +256,6 @@ module Live
         end
         hwm_bd ||= (tracker.high_water_mark_pnl.present? ? safe_decimal(tracker.high_water_mark_pnl) : BigDecimal(0))
         hwm_bd = BigDecimal(0) if hwm_bd.nil?
-
         # Continuously update HWM from current PnL (don't wait for DB sync)
         hwm_bd = [hwm_bd, pnl_bd].max if pnl_bd.positive?
 
@@ -323,23 +312,53 @@ module Live
       @queue.empty?
     end
 
+    # Clear a tracker's Redis PnL entry. Best-effort by design (the Redis
+    # outage that broke the clear is logged, not swallowed — wave 4).
+    def clear_tracker_cache(tracker_id)
+      Live::RedisPnlCache.instance.clear_tracker(tracker_id)
+    rescue StandardError => e
+      @logger.warn("[PnlUpdater] failed to clear redis pnl key for #{tracker_id}: #{e.class} - #{e.message}")
+    end
+
     def demand_driven_enabled?
       feature_flags[:enable_demand_driven_services] == true
     end
 
+    # Absent section -> {} (documented "flag off"); corrupt config document
+    # raises via AlgoConfig.fetch (no blanket rescue — wave 4).
     def feature_flags
       AlgoConfig.fetch[:feature_flags] || {}
-    rescue StandardError
-      {}
     end
 
     def loop_intervals
       risk = AlgoConfig.fetch[:risk] || {}
-      idle_ms = (risk[:loop_interval_idle] || 5000).to_i
-      active_ms = (risk[:loop_interval_active] || (FLUSH_INTERVAL_SECONDS * 1000)).to_i
-      [idle_ms.to_f / 1000.0, active_ms.to_f / 1000.0]
-    rescue StandardError
-      [5.0, FLUSH_INTERVAL_SECONDS]
+      idle_ms = positive_interval_ms!(risk[:loop_interval_idle], :loop_interval_idle, 5000)
+      active_ms = positive_interval_ms!(risk[:loop_interval_active], :loop_interval_active, (FLUSH_INTERVAL_SECONDS * 1000).to_i)
+      [idle_ms / 1000.0, active_ms / 1000.0]
+    end
+
+    # Absent key -> documented default; present-but-invalid raises instead of
+    # silently producing a 0ms busy-loop via `.to_i` on garbage (wave 4).
+    def positive_interval_ms!(raw, key, default_ms)
+      return default_ms if raw.nil?
+
+      value = begin
+        Integer(raw)
+      rescue ArgumentError, TypeError
+        begin
+          Float(raw)
+        rescue ArgumentError, TypeError => e
+          raise Errors::ConfigurationError,
+                "risk.#{key} is unparseable (#{raw.inspect}): #{e.message}"
+        end
+      end
+
+      unless value.positive?
+        raise Errors::ConfigurationError,
+              "risk.#{key} must be > 0 ms (got #{raw.inspect})"
+      end
+
+      value
     end
 
     def next_interval(queue_empty:)
@@ -428,14 +447,11 @@ module Live
       entry_f = entry.to_f
       pnl_pct = entry_f.positive? ? (((ltp_f - entry_f) / entry_f) * 100).round(2) : 0.0
 
-      begin
-        pos_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker_id)
-        pos_data&.sl_price || (entry_f.positive? ? entry_f * 0.70 : nil)
-        pos_data&.tp_price || (entry_f.positive? ? entry_f * 1.60 : nil)
-      rescue StandardError
-        entry_f.positive? ? entry_f * 0.70 : nil
-        entry_f.positive? ? entry_f * 1.60 : nil
-      end
+      # NOTE (wave 4): a dead begin/rescue block used to sit here computing
+      # pos_data SL/TP fallbacks (entry * 0.70 / 1.60) whose results were
+      # never used — the broadcast payload below does not carry sl_price or
+      # tp_price. Deleted; do not resurrect fallback values that nothing
+      # consumes.
 
       ActionCable.server.broadcast("positions", {
         type: "pnl_update",
@@ -448,8 +464,8 @@ module Live
       })
       begin
         Rails.cache.delete("pnl_stale:#{tracker_id}")
-      rescue StandardError
-        nil
+      rescue StandardError => e
+        @logger.warn("[PnlUpdater] pnl_stale cache clear failed for #{tracker_id}: #{e.message}")
       end
     rescue StandardError => e
       @logger.debug("[PnlUpdater] broadcast_pnl_update failed: #{e.message}")
@@ -511,23 +527,33 @@ module Live
         ),
         timestamp: Time.current.iso8601
       }
-    rescue StandardError
+    rescue StandardError => e
+      # Display-path degrade, but LOUD — the payload keeps the frontend shape
+      # while ops see that the stats pipeline is broken (wave 4).
+      @logger.error("[PnlUpdater] build_dashboard_stats failed: #{e.class} - #{e.message}")
       { type: "stats", error: true, timestamp: Time.current.iso8601 }
     end
 
     def safe_wallet_snapshot
       Orders.config.gateway.wallet_snapshot
-    rescue StandardError
+    rescue StandardError => e
+      # Frontend shape preserved, but the degrade is logged — a wallet API
+      # outage must not read as a silent ₹0 balance in logs (wave 4).
+      @logger.error("[PnlUpdater] wallet snapshot unavailable: #{e.class} - #{e.message}")
       { cash: 0, equity: 0, mtm: 0, exposure: 0 }
     end
 
     # Check if Telegram milestone notifications are enabled
     # @return [Boolean]
+    # Deliberate fail-closed rescue: notifications are advisory, and "off" is
+    # the safe direction for a spam-generating feature when its config or the
+    # notifier itself is broken.
     def telegram_milestones_enabled?
       config = AlgoConfig.fetch[:telegram] || {}
       enabled = config[:enabled] != false && config[:notify_pnl_milestones] != false
       enabled && Notifications::TelegramNotifier.instance.enabled?
-    rescue StandardError
+    rescue StandardError => e
+      @logger.warn("[PnlUpdater] telegram_milestones_enabled? error: #{e.class} - #{e.message} - treating as disabled")
       false
     end
   end

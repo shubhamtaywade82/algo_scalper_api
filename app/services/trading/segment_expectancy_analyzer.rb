@@ -89,9 +89,9 @@ module Trading
     end
 
     def paper_trading_mode?
-      AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
-    rescue StandardError
-      false
+      # Strict mode resolution (test env keeps the documented default) — a
+      # corrupt config document must not silently switch the analytics scope.
+      AlgoConfig.paper_trading_enabled?
     end
 
     def cache_key(index_key, regime)
@@ -114,10 +114,11 @@ module Trading
       cfg.fetch(:cache_ttl_minutes, DEFAULT_CACHE_TTL_MINUTES).to_i
     end
 
+    # Optional analytics section: absent keys use the documented DEFAULT_*
+    # constants above. A corrupt config document propagates (no rescue) — the
+    # difference between "tuned by operator" and "broken" must stay visible.
     def cfg
       AlgoConfig.fetch.dig(:trading, :segment_expectancy) || {}
-    rescue StandardError
-      {}
     end
   end
 end

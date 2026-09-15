@@ -14,19 +14,23 @@ RSpec.describe Options::ChainWatchService do
 
   describe '#resolve_atm_legs' do
     it 'returns the 11 nearest strikes both sides of ATM for NIFTY' do
-      # Seed 21 CE/PE derivative pairs around strike 24800 in 50pt steps
-      instrument = Instrument.create!(
+      # Seed 21 CE/PE option pairs around strike 24800 in 50pt steps
+      # (post-consolidation: options are Instrument rows in the FNO segment)
+      underlying = Instrument.create!(
         exchange: 'nse', segment: 'index', security_id: '13',
         symbol_name: 'NIFTY', display_name: 'NIFTY', instrument_code: 'index'
       )
       (-10..10).each do |offset|
         strike = 24_800.0 + (offset * 50)
         %w[CE PE].each do |type|
-          Derivative.create!(
-            instrument: instrument, exchange: 'nse', segment: 'derivatives',
-            underlying_symbol: 'NIFTY', expiry_date: expiry, strike_price: strike,
+          Instrument.create!(
+            exchange: 'nse', segment: 'derivatives',
+            underlying_symbol: 'NIFTY', underlying_security_id: '13',
+            underlying_instrument_id: underlying.id,
+            expiry_date: expiry, strike_price: strike,
             option_type: type, lot_size: 50, security_id: "#{strike.to_i}#{type}",
-            symbol_name: "NIFTY-#{strike.to_i}-#{type}"
+            symbol_name: "NIFTY-#{strike.to_i}-#{type}",
+            instrument_code: 'options_index', instrument_type: 'OPTION'
           )
         end
       end

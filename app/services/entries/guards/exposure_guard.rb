@@ -42,8 +42,11 @@ module Entries
           max_allowed = max_same_side.to_i
           max_allowed = 1 if max_allowed <= 0
 
+          # Exposure per underlying: the tracker's instrument_id is the parent
+          # (underlying) for derivative trades; post-consolidation the traded
+          # contract is an Instrument linked via underlying_instrument_id.
           active_positions = PositionTracker.active.where(side: side).where(
-            "(instrument_id = ? OR (watchable_type = 'Derivative' AND watchable_id IN (SELECT id FROM derivatives WHERE instrument_id = ?)))",
+            "(instrument_id = ? OR (watchable_type = 'Instrument' AND watchable_id IN (SELECT id FROM instruments WHERE underlying_instrument_id = ?)))",
             instrument.id, instrument.id
           ).limit(max_allowed + 1)
           current_count = active_positions.count

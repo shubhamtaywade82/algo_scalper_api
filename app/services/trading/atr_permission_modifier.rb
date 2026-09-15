@@ -80,8 +80,6 @@ module Trading
 
       def numeric_finite?(value)
         value.is_a?(Numeric) && value.finite?
-      rescue StandardError
-        false
       end
     end
   end

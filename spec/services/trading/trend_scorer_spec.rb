@@ -109,5 +109,30 @@ RSpec.describe Trading::TrendScorer do
         expect(score2).to eq(score1 * 0.5)
       end
     end
+
+    context 'when ADX is unavailable' do
+      before do
+        30.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (50 - i).minutes, open: 100 + i, high: 100 + i + 1, low: 100 + i - 1, close: 100 + i, volume: 1000)) }
+        allow(series_5m).to receive(:adx).and_return(nil)
+      end
+
+      it 'reports the ADX as unavailable instead of pretending it measured 0' do
+        result = scorer.call
+
+        expect(result[:adx]).to be_nil
+        expect(result[:adx_available]).to be false
+      end
+
+      it 'keeps the conservative weak-trend score treatment' do
+        scorer_strong_adx = described_class.new(series_5m: series_5m)
+        allow(series_5m).to receive(:adx).and_return(30)
+        score_with_adx = scorer_strong_adx.call[:score]
+
+        allow(series_5m).to receive(:adx).and_return(nil)
+        score_without_adx = scorer.call[:score]
+
+        expect(score_without_adx).to eq(score_with_adx * 0.5)
+      end
+    end
   end
 end

@@ -379,16 +379,19 @@ RSpec.describe Live::OrderUpdateHub do
       expect(hub.send(:paper_trading_enabled?)).to be false
     end
 
-    it 'returns false when AlgoConfig.fetch raises error' do
+    it 'returns false when AlgoConfig.fetch raises error and fails closed on start!' do
       allow(AlgoConfig).to receive(:fetch).and_raise(StandardError.new('Config error'))
 
-      expect(hub.send(:paper_trading_enabled?)).to be false
+      # Unknown mode must propagate — it may not be read as "live".
+      expect { hub.send(:paper_trading_enabled?) }.to raise_error(StandardError)
+      expect(hub.start!).to be false
+      expect(hub.running?).to be false
     end
 
-    it 'returns false when paper_trading key is missing' do
+    it 'treats a missing flag as enabled in test env (documented carve-out)' do
       allow(AlgoConfig).to receive(:fetch).and_return({})
 
-      expect(hub.send(:paper_trading_enabled?)).to be false
+      expect(hub.send(:paper_trading_enabled?)).to be true
     end
   end
 end

@@ -298,10 +298,13 @@ module Live
       "AS-EXIT-#{Digest::SHA256.hexdigest(seed)[0, 20]}"
     end
 
-    # Resolve LTP via the market-data query boundary
+    # Resolve LTP via the market-data query boundary. nil = no usable tick:
+    # an exit is NEVER priced off a fabricated value. The failure is logged
+    # so "broken" is distinguishable from "no tick" (wave 3).
     def safe_ltp(tracker)
       Live::TickQuery.ltp_for(tracker)
-    rescue StandardError
+    rescue StandardError => e
+      Rails.logger.warn("[ExitEngine] LTP resolution failed for #{tracker.order_no}: #{e.class} - #{e.message}")
       nil
     end
 

@@ -247,8 +247,11 @@ module Smc
       reasons
     end
 
+    # Best-known price for the alert payload, or nil when no source has one.
+    # A fabricated 0.0 here used to flow into signal events and duplicate-suppression
+    # math (error-handling review 2026-09, wave 2).
     def current_price
-      @instrument.ltp&.to_f || @instrument.latest_ltp&.to_f || 0.0
+      @instrument.ltp || @instrument.latest_ltp
     end
   end
 end

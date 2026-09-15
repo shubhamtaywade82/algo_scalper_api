@@ -28,7 +28,7 @@ module Api
 (spot >= 10_000 ? 50 : 25)
                         end
             atm = (spot / increment).round * increment
-            contract = Derivative.options.find_by(underlying_symbol: symbol.upcase, expiry_date: expiry, strike_price: atm, option_type: 'CE')
+            contract = Instrument.options.find_by(underlying_symbol: symbol.upcase, expiry_date: expiry, strike_price: atm, option_type: 'CE')
             if contract
               depth = try_dhan_quote(contract)
               return depth if depth

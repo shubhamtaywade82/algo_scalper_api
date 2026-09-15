@@ -102,7 +102,7 @@ module Api
 
     def nearest_listed_option_expiry_fields(index_key)
       sym = index_key.to_s.upcase
-      nearest = Derivative.options
+      nearest = Instrument.options
                           .where(underlying_symbol: sym)
                           .where(expiry_date: Time.zone.today..)
                           .minimum(:expiry_date)

@@ -13,9 +13,12 @@ module Orders
       coid = client_order_id || "PAPER-EXIT-#{tracker.id}"
 
       # Return normalized shape with exit_price - ExitEngine remains the single source of truth.
+      # bid/ask are exposed for Execution recording (fills are first-class now).
       {
         success: true,
         exit_price: exit_price,
+        bid: tick&.bid&.to_f,
+        ask: tick&.ask&.to_f,
         order_id: coid,
         client_order_id: coid,
         status: :accepted,
@@ -29,7 +32,17 @@ module Orders
       fill_price = resolve_entry_fill(side, tick, nil)
 
       # Simulate broker ack only; domain services own tracker persistence.
-      { success: true, order_id: order_no, paper: true, fill_price: fill_price&.to_f }
+      # bid/ask are exposed so Execution records carry the full fill context
+      # (side touched + slippage applied) instead of a bare price.
+      {
+        success: true,
+        order_id: order_no,
+        paper: true,
+        fill_price: fill_price&.to_f,
+        bid: tick&.bid&.to_f,
+        ask: tick&.ask&.to_f,
+        requested_price: tick&.ltp&.to_f
+      }
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] place_market failed for #{segment}-#{security_id}: #{e.class} - #{e.message}")
       { success: false, error: e.message, paper: true }

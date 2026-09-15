@@ -51,6 +51,38 @@ RSpec.describe Entries::Guards::LtpResolutionGuard do
     expect(result[:blocked]).to include('fresh_ltp_unavailable')
   end
 
+  context 'when the max-age knob is misconfigured (wave 3)' do
+    it 'blocks with a configuration failure instead of silently using the default' do
+      allow(AlgoConfig).to receive(:fetch).and_return({ realtime: { entry_ltp_max_age_seconds: 'soon' } })
+
+      result = described_class.call(context)
+
+      expect(result).to be_a(Hash)
+      expect(result[:blocked]).to include('ltp_resolution_failed')
+    end
+
+    it 'blocks when the configured max age is not positive' do
+      allow(AlgoConfig).to receive(:fetch).and_return({ realtime: { entry_ltp_max_age_seconds: 0 } })
+
+      result = described_class.call(context)
+
+      expect(result).to be_a(Hash)
+      expect(result[:blocked]).to include('ltp_resolution_failed')
+    end
+  end
+
+  context 'when the max-age knob is absent (documented default 2.0s)' do
+    it 'uses the default window' do
+      allow(AlgoConfig).to receive(:fetch).and_return({})
+      allow(Live::TickQuery).to receive(:for_security).and_return(build_tick(ltp: '102.5', age_seconds: 0.2))
+      allow(Entries::EntryGuard).to receive(:resolve_entry_ltp)
+
+      result = described_class.call(context)
+
+      expect(result).to eq(Entries::EntryGuardPipeline::PASS)
+    end
+  end
+
   def build_tick(ltp:, age_seconds:)
     MarketTick.new(
       segment: 'NSE_FNO',

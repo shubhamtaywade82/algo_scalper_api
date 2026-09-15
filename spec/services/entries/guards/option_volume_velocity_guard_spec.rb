@@ -54,5 +54,20 @@ RSpec.describe Entries::Guards::OptionVolumeVelocityGuard do
         expect(result[:blocked]).to include('volume velocity too low')
       end
     end
+
+    context 'when the multiplier is unresolvable' do
+      before do
+        allow(OptionsBuying::StateStore).to receive(:stream_window).with('55112').and_return(
+          [{ vol: 1000 }, { vol: 1100 }, { vol: 1250 }]
+        )
+        allow(Trading::DteParameterResolver).to receive(:volume_velocity_multiplier).and_return(nil)
+      end
+
+      it 'blocks with an explicit reason instead of assuming a multiplier' do
+        result = described_class.call(context)
+        expect(result).to be_a(Hash)
+        expect(result[:blocked]).to include('volume_velocity_multiplier_unconfigured')
+      end
+    end
   end
 end

@@ -30,7 +30,7 @@ module Console
     def fetch_for(symbol_name:, security_id:)
       Rails.logger.debug "\n📊 Fetching #{symbol_name} candles..."
 
-      instrument = Instrument.find_by_sid_and_segment(
+      instrument = Instrument.resolve_index_by_sid_or_symbol(
         security_id: security_id,
         segment_code: 'IDX_I',
         symbol_name: symbol_name

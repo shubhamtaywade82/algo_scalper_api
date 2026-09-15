@@ -31,6 +31,10 @@ module Orders
         @side        = side.to_s
         @segment     = segment
         @security_id = security_id
+        @raw_qty     = qty
+        # SafeNumeric coerces unparseable input to 0, which #validate then
+        # rejects deterministically — the original value is kept alongside so
+        # the failure payload shows WHAT was wrong, not just that something was.
         @qty         = SafeNumeric.to_non_negative_integer(qty)
         @meta        = meta || {}
       end
@@ -43,7 +47,7 @@ module Orders
         return failure('invalid_side', payload: { side: @side }) unless VALID_SIDES.include?(@side)
         return failure('missing_segment') if @segment.blank?
         return failure('missing_security_id') if @security_id.blank?
-        return failure('invalid_quantity', payload: { qty: @qty }) unless @qty.positive?
+        return failure('invalid_quantity', payload: { qty: @qty, raw_qty: @raw_qty.inspect }) unless @qty.positive?
 
         nil
       end

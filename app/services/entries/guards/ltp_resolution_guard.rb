@@ -48,16 +48,31 @@ module Entries
 
           context[:ltp] = tick.ltp
           EntryGuardPipeline::PASS
+        rescue Errors::Error => e
+          # Domain failures (config corruption) block — fail-closed, same
+          # contract as the other wave-2 guards.
+          { blocked: "ltp_resolution_failed: #{e.class} - #{e.message}" }
         end
 
         private
 
+        # Absent -> documented default. Present-but-invalid raises (wave 3):
+        # a typo'd staleness window used to silently revert to 2.0s while the
+        # operator believed their value was active.
         def entry_ltp_max_age_seconds
-          cfg = AlgoConfig.fetch
-          value = cfg.dig(:realtime, :entry_ltp_max_age_seconds).to_f
-          value.positive? ? value : DEFAULT_ENTRY_LTP_MAX_AGE_SECONDS
-        rescue StandardError
-          DEFAULT_ENTRY_LTP_MAX_AGE_SECONDS
+          raw = AlgoConfig.fetch.dig(:realtime, :entry_ltp_max_age_seconds)
+          return DEFAULT_ENTRY_LTP_MAX_AGE_SECONDS if raw.nil?
+
+          value = Float(raw)
+          unless value.positive?
+            raise Errors::ConfigurationError,
+                  "realtime.entry_ltp_max_age_seconds must be > 0 (got #{raw.inspect})"
+          end
+
+          value
+        rescue ArgumentError, TypeError => e
+          raise Errors::ConfigurationError,
+                "realtime.entry_ltp_max_age_seconds is unparseable (#{raw.inspect}): #{e.message}"
         end
 
         def fresh_tick?(tick, max_age_seconds)

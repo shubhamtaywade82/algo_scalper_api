@@ -64,9 +64,36 @@ RSpec.describe Ledger do
       )
     end
 
-    it 'posts entry fill journals' do
+    it 'returns a deterministic Result, never nil' do
+      result = described_class.post!(tracker: tracker, fill_price: 100, quantity: 10, order_no: tracker.order_no)
+
+      expect(result).to be_a(Ledger::EntryPoster::Result)
+      expect(result).to be_posted
+      expect(result.success?).to be(true)
+    end
+
+    it 'stamps the ledger outcome onto the tracker meta' do
       described_class.post!(tracker: tracker, fill_price: 100, quantity: 10, order_no: tracker.order_no)
 
+      expect(tracker.reload.meta['ledger_status']).to eq('posted')
+    end
+
+    context 'when the paper account cannot afford the entry' do
+      it 'returns a rejected result with the reason persisted on the tracker' do
+        result = described_class.post!(tracker: tracker, fill_price: 1_000_000, quantity: 10,
+                                       order_no: tracker.order_no)
+
+        expect(result).to be_rejected
+        expect(result.success?).to be(false)
+        expect(tracker.reload.meta['ledger_status']).to eq('rejected')
+        expect(tracker.reload.meta['ledger_error']).to be_present
+      end
+    end
+
+    it 'posts entry fill journals' do
+      result = described_class.post!(tracker: tracker, fill_price: 100, quantity: 10, order_no: tracker.order_no)
+
+      expect(result).to be_posted
       cash = LedgerAccount.fetch!('cash')
       deployed = LedgerAccount.fetch!('premium_deployed')
       expect(deployed.balance_cache.to_d).to eq(1000)
@@ -80,9 +107,10 @@ RSpec.describe Ledger do
       end
 
       it 'credits cash for premium received and blocks margin out of free cash' do
-        journal = described_class.post!(tracker: tracker, fill_price: 100, quantity: 10, order_no: tracker.order_no)
+        result = described_class.post!(tracker: tracker, fill_price: 100, quantity: 10, order_no: tracker.order_no)
 
-        expect(journal.ledger_postings.sum(:debit)).to eq(journal.ledger_postings.sum(:credit))
+        expect(result).to be_posted
+        expect(result.journal.ledger_postings.sum(:debit)).to eq(result.journal.ledger_postings.sum(:credit))
 
         cash = LedgerAccount.fetch!('cash')
         margin_blocked = LedgerAccount.fetch!('margin_blocked')
@@ -131,9 +159,10 @@ RSpec.describe Ledger do
       end
 
       it 'releases margin, clears the written premium, and posts the correct gain' do
-        journal = described_class.post!(tracker: tracker, exit_price: 40)
+        result = described_class.post!(tracker: tracker, exit_price: 40)
 
-        expect(journal.ledger_postings.sum(:debit)).to eq(journal.ledger_postings.sum(:credit))
+        expect(result).to be_posted
+        expect(result.journal.ledger_postings.sum(:debit)).to eq(result.journal.ledger_postings.sum(:credit))
 
         realized = LedgerAccount.fetch!('realized_pnl')
         margin_blocked = LedgerAccount.fetch!('margin_blocked')

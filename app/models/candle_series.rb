@@ -52,44 +52,127 @@ class CandleSeries
     normalize_hash_format(resp)
   end
 
+  # Strict numeric parse for market data (error-handling review 2026-09).
+  # Ruby's `.to_f` is permissive: nil and "abc" silently became 0.0, so a
+  # corrupt candle collapsed toward a zero-like price instead of failing.
+  # Zero is a meaningful financial value — it must never be a fallback.
+  #
+  # @raise [Errors::InvalidMarketData]
+  # @return [Float]
+  def parse_price!(value, field:, index: nil)
+    case value
+    when Numeric
+      unless value.respond_to?(:finite?) && value.finite?
+        raise Errors::InvalidMarketData, "candle #{field}#{"[#{index}]" if index} is not finite: #{value.inspect}"
+      end
+
+      value.to_f
+    when String
+      unless value.strip.match?(NUMERIC_PATTERN)
+        raise Errors::InvalidMarketData, "candle #{field}#{"[#{index}]" if index} is not numeric: #{value.inspect}"
+      end
+
+      value.to_f
+    else
+      raise Errors::InvalidMarketData, "candle #{field}#{"[#{index}]" if index} is missing/not numeric: #{value.inspect}"
+    end
+  end
+
   def normalize_hash_format(resp)
     raise "Unexpected candle format: #{resp.class}" unless resp.is_a?(Hash) && resp['high'].is_a?(Array)
 
+    %w[open high low close].each do |key|
+      next if resp[key].is_a?(Array)
+
+      raise Errors::InvalidMarketData, "candle payload is missing the '#{key}' array"
+    end
+
     size = resp['high'].size
     (0...size).map do |i|
+      timestamp = (resp['timestamp'] || [])[i]
+      raise Errors::InvalidMarketData, "candle timestamp[#{i}] is missing" if timestamp.nil?
+
       {
-        open: resp['open'][i].to_f,
-        close: resp['close'][i].to_f,
-        high: resp['high'][i].to_f,
-        low: resp['low'][i].to_f,
-        timestamp: Time.zone.at(resp['timestamp'][i]),
-        volume: resp['volume'][i].to_i
+        open: parse_price!(resp['open'][i], field: 'open', index: i),
+        close: parse_price!(resp['close'][i], field: 'close', index: i),
+        high: parse_price!(resp['high'][i], field: 'high', index: i),
+        low: parse_price!(resp['low'][i], field: 'low', index: i),
+        timestamp: Time.zone.at(timestamp),
+        # Volume is the one documented exception: index feeds legitimately
+        # deliver volumeless candles (key absent), so missing -> 0 is a
+        # representation decision, not a fallback for corrupt data.
+        # Non-numeric garbage still raises via the strict parse below.
+        volume: parse_volume!((resp['volume'] || [])[i], index: i)
       }
     end
   end
 
-  def slice_candle(candle)
-    if candle.is_a?(Hash)
-      {
-        open: candle[:open] || candle['open'],
-        close: candle[:close] || candle['close'],
-        high: candle[:high] || candle['high'],
-        low: candle[:low] || candle['low'],
-        timestamp: candle[:timestamp] || candle['timestamp'],
-        volume: candle[:volume] || candle['volume'] || 0
-      }
-    elsif candle.respond_to?(:[]) && candle.size >= 6
-      {
-        timestamp: candle[0],
-        open: candle[1],
-        high: candle[2],
-        low: candle[3],
-        close: candle[4],
-        volume: candle[5]
-      }
+  # @raise [Errors::InvalidMarketData]
+  # @return [Integer]
+  def parse_volume!(value, index: nil)
+    return 0 if value.nil?
+
+    case value
+    when Integer then value
+    when Float, BigDecimal
+      unless value.respond_to?(:finite?) && value.finite?
+        raise Errors::InvalidMarketData, "candle volume[#{index}] is not finite: #{value.inspect}"
+      end
+
+      value.to_i
+    when String
+      unless value.strip.match?(INTEGER_PATTERN)
+        raise Errors::InvalidMarketData, "candle volume[#{index}] is not an integer: #{value.inspect}"
+      end
+
+      value.to_i
     else
-      raise "Unexpected candle format: #{candle.inspect}"
+      raise Errors::InvalidMarketData, "candle volume[#{index}] is not numeric: #{value.inspect}"
     end
+  end
+
+  NUMERIC_PATTERN = /\A[+-]?\d+(\.\d+)?([eE][+-]?\d+)?\z/
+  INTEGER_PATTERN = /\A[+-]?\d+\z/
+
+  # Representation adapter for the two known candle payload shapes
+  # (symbol-keyed vs string-keyed hashes, plus positional arrays), followed
+  # by STRICT validation: previously a candle whose :open was missing in both
+  # representations flowed through as nil and detonated deep inside an
+  # indicator. Malformed candles now fail at the boundary with the field named.
+  #
+  # @raise [Errors::InvalidMarketData]
+  def slice_candle(candle)
+    sliced =
+      if candle.is_a?(Hash)
+        {
+          open: candle[:open] || candle['open'],
+          close: candle[:close] || candle['close'],
+          high: candle[:high] || candle['high'],
+          low: candle[:low] || candle['low'],
+          timestamp: candle[:timestamp] || candle['timestamp'],
+          volume: candle[:volume] || candle['volume'] || 0
+        }
+      elsif candle.respond_to?(:[]) && candle.size >= 6
+        {
+          timestamp: candle[0],
+          open: candle[1],
+          high: candle[2],
+          low: candle[3],
+          close: candle[4],
+          volume: candle[5]
+        }
+      else
+        raise "Unexpected candle format: #{candle.inspect}"
+      end
+
+    %i[open high low close timestamp].each do |field|
+      next if sliced[field].present?
+
+      raise Errors::InvalidMarketData, "candle field #{field.inspect} missing: #{candle.inspect[0, 200]}"
+    end
+
+    sliced[:volume] = parse_volume!(sliced[:volume])
+    sliced
   end
 
   def opens  = candles.map(&:open)
@@ -123,6 +206,13 @@ class CandleSeries
     end
   end
 
+  # VWAP over the candle window. Contract (error-handling review 2026-09):
+  # when cumulative volume is zero VWAP is mathematically UNDEFINED — the
+  # previous code substituted the typical price, which is a different number
+  # wearing VWAP's name. Zero-volume prefixes now yield nil; consumers
+  # treat nil as "VWAP not yet available".
+  #
+  # @return [Array<Float, nil>] per-candle VWAP; nil where volume has not started
   def vwap
     return [] if candles.empty?
 
@@ -133,7 +223,7 @@ class CandleSeries
       typical_price = (c.high + c.low + c.close) / 3.0
       cum_pv += typical_price * c.volume
       cum_v += c.volume
-      cum_v.positive? ? (cum_pv / cum_v).round(2) : typical_price.round(2)
+      cum_v.positive? ? (cum_pv / cum_v).round(2) : nil
     end
   end
 
@@ -141,6 +231,12 @@ class CandleSeries
     vwap.last
   end
 
+  # ATR. Return contract: nil ONLY for the documented domain outcome
+  # "not enough candles / invalid input shape for the gem". Unexpected
+  # calculation errors now PROPAGATE instead of collapsing to nil — a
+  # strategy reading nil must never have to wonder whether the gem broke.
+  #
+  # @return [Float, nil]
   def atr(period = 14)
     return nil if candles.size < period + 1
 
@@ -149,15 +245,14 @@ class CandleSeries
 
     result.last.atr
   rescue TechnicalAnalysis::Validation::ValidationError, ArgumentError, TypeError => e
-    Rails.logger.warn("[CandleSeries] ATR calculation failed: #{e.message}")
-    nil
-  rescue StandardError => e
-    raise if e.is_a?(NoMethodError)
-
-    Rails.logger.warn("[CandleSeries] ATR calculation failed: #{e.message}")
+    Rails.logger.warn("[CandleSeries] ATR not computable: #{e.message}")
     nil
   end
 
+  # ADX. Same contract as #atr: nil only for insufficient/invalid input;
+  # unexpected errors propagate.
+  #
+  # @return [Float, nil]
   def adx(period = 14)
     # ADX needs at least period + 1 candles, but TechnicalAnalysis gem typically needs 2*period for accuracy
     # We'll check for period + 1 here (minimum), but callers should ensure 2*period for best results
@@ -167,19 +262,10 @@ class CandleSeries
     return nil if result.empty?
 
     result.last.adx
-  rescue ArgumentError, TypeError => e
-    # Suppress "Not enough data" warnings - they're expected when called too early
+  rescue TechnicalAnalysis::Validation::ValidationError, ArgumentError, TypeError => e
+    # "Not enough data" is expected when called early in a session — debug, not warn
     unless e.message.to_s.include?('Not enough data') || e.message.to_s.include?('insufficient')
-      Rails.logger.warn("[CandleSeries] ADX calculation failed: #{e.message}")
-    end
-    nil
-  rescue StandardError => e
-    # Don't catch NoMethodError as it indicates programming errors
-    raise if e.is_a?(NoMethodError)
-
-    # Suppress "Not enough data" warnings - they're expected when called too early
-    unless e.message.to_s.include?('Not enough data') || e.message.to_s.include?('insufficient')
-      Rails.logger.warn("[CandleSeries] ADX calculation failed: #{e.message}")
+      Rails.logger.warn("[CandleSeries] ADX not computable: #{e.message}")
     end
     nil
   end
@@ -248,17 +334,15 @@ class CandleSeries
       candles.last.bullish?
   end
 
+  # RSI. Same contract as #atr: nil only for insufficient/invalid input.
+  #
+  # @return [Float, nil]
   def rsi(period = 14)
     return nil if candles.empty?
 
     RubyTechnicalAnalysis::RelativeStrengthIndex.new(series: closes, period: period).call
-  rescue ArgumentError, TypeError => e
-    Rails.logger.warn("[CandleSeries] RSI calculation failed: #{e.message}")
-    nil
-  rescue StandardError => e
-    raise if e.is_a?(NoMethodError)
-
-    Rails.logger.warn("[CandleSeries] RSI calculation failed: #{e.message}")
+  rescue TechnicalAnalysis::Validation::ValidationError, ArgumentError, TypeError => e
+    Rails.logger.warn("[CandleSeries] RSI not computable: #{e.message}")
     nil
   end
 
@@ -280,6 +364,9 @@ class CandleSeries
     moving_average(period)&.ema
   end
 
+  # MACD. Same contract as #atr: nil only for insufficient/invalid input.
+  #
+  # @return [Array(Float, Float, Float), nil] [macd, signal, histogram]
   def macd(fast_period = 12, slow_period = 26, signal_period = 9)
     return nil if candles.empty?
     return nil if closes.size < slow_period + signal_period
@@ -290,10 +377,8 @@ class CandleSeries
     return nil if result.nil? || !result.is_a?(Array) || result.size < 3
 
     result # Returns [macd, signal, histogram] array
-  rescue StandardError => e
-    raise e if e.is_a?(NoMethodError)
-
-    Rails.logger.warn("[CandleSeries] MACD calculation failed: #{e.message}")
+  rescue TechnicalAnalysis::Validation::ValidationError, ArgumentError, TypeError => e
+    Rails.logger.warn("[CandleSeries] MACD not computable: #{e.message}")
     nil
   end
 
@@ -310,6 +395,10 @@ class CandleSeries
     end
   end
 
+  # Supertrend signal. Default resolution is EXPLICIT (error-handling
+  # review 2026-09): the method signature is the single authoritative source
+  # of defaults; supertrend_cfg only ever OVERRIDES, it never fills gaps with
+  # hidden magic numbers.
   def supertrend_signal(period: 7, multiplier: 3.0, supertrend_cfg: {})
     cfg = supertrend_cfg.is_a?(Hash) ? supertrend_cfg.dup : {}
     cfg[:period] ||= period
@@ -370,6 +459,9 @@ class CandleSeries
     TechnicalAnalysis::Dc.calculate(dc, period: period)
   end
 
+  # OBV. Same contract as #atr: nil only for insufficient/invalid input.
+  #
+  # @return [Array, nil]
   def obv
     return nil if candles.empty?
 
@@ -384,11 +476,8 @@ class CandleSeries
     # OBV.calculate is a class method that takes an array of hashes
     # The gem expects the data in a specific format
     TechnicalAnalysis::Obv.calculate(dcv)
-  rescue StandardError => e
-    raise e if e.is_a?(NoMethodError)
-
-    # OBV.calculate might have different signature - try alternative approach
-    Rails.logger.warn("[CandleSeries] OBV calculation failed: #{e.message}")
+  rescue TechnicalAnalysis::Validation::ValidationError, ArgumentError, TypeError => e
+    Rails.logger.warn("[CandleSeries] OBV not computable: #{e.message}")
     nil
   end
 end
