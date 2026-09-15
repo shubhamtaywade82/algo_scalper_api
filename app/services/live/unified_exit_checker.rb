@@ -355,7 +355,12 @@ module Live
           # (earlier exit), > 1 gives the runner more room, 1.0 is exactly the
           # analyzer stop.
           sl_effective = ltp - ((ltp - sl_price) * tightening_multiplier.to_f)
-          ltp <= sl_effective
+          # RETURN, not a bare tail expression: without it, an index position
+          # whose analyzer stop sits below the LTP fell through to the generic
+          # hwm-based check below and could exit against a completely
+          # different (unintended) formula — e.g. a snapshot without :pnl read
+          # as (hwm - 0) / hwm = 100% drawdown. The index branch is exclusive.
+          return ltp <= sl_effective
         end
 
         hwm = snapshot[:hwm_pnl].to_f

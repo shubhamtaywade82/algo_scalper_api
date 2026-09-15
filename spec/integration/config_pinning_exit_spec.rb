@@ -18,13 +18,14 @@ RSpec.describe 'Config pinning on exit path' do
         active?: true,
         entry_price: 100.0,
         quantity: 1,
+        symbol: 'NIFTY24MAR22000CE',
         meta: {
           'direction' => 'bullish',
           'config_snapshot' => {
             'risk' => {
               'adaptive_trailing' => {
                 'enabled' => true,
-                'stages' => [{ 'min_profit' => 0.0, 'trail_behind_peak' => 0.40, 'hard_stop' => -0.20 }]
+                'stages' => [{ 'min_profit' => 0.0, 'trail_behind_peak' => 0.40, 'hard_stop' => -0.50 }]
               }
             }
           }
@@ -46,8 +47,12 @@ RSpec.describe 'Config pinning on exit path' do
       allow(AlgoConfig).to receive(:fetch).and_return(
         risk: { sl_pct: 0.30 }
       )
+      # -35% breaches the LIVE stop (30%) but NOT the pinned snapshot's own
+      # hard_stop (-50%): only a path reading the live config can exit here.
+      # (The inverse fixture — pinned tighter than live — would exit either way
+      # and prove nothing.)
       allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(
-        { pnl_pct: -0.25, ltp: 75.0, pnl: -25.0, hwm_pnl: 0.0 }
+        { pnl_pct: -0.35, ltp: 65.0, pnl: -35.0, hwm_pnl: 0.0 }
       )
 
       result = Live::UnifiedExitChecker.check_exit_conditions(tracker)
