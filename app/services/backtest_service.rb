@@ -164,7 +164,7 @@ class BacktestService
 
       if open_position.nil?
         signal = strategy.generate_signal(i)
-        open_position = option_enter_position(signal, candle, i) if signal
+        open_position = option_enter_position(signal, i) if signal
       end
 
       i += 1
@@ -177,8 +177,15 @@ class BacktestService
     @results << exit_result
   end
 
-  def option_enter_position(signal, candle, index)
-    position = @option_sim.enter_position(signal, candle, index)
+  # The signal is only known once bar +signal_index+ CLOSES, so the entry is
+  # booked against the NEXT bar — the first bar the signal could actually be
+  # traded on. Booking against the signal bar itself used a premium from before
+  # the signal existed (one-bar lookahead).
+  def option_enter_position(signal, signal_index)
+    booking_candle = @series.candles[signal_index + 1]
+    return nil if booking_candle.nil? # signal on the final bar — nothing left to trade
+
+    position = @option_sim.enter_position(signal, booking_candle, signal_index + 1)
     instrument_event('trade.entered', position) if position
     position
   end

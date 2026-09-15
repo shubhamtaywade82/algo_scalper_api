@@ -89,7 +89,10 @@ module Backtest
         end
       end
 
-      if candle.timestamp.hour >= 15 && candle.timestamp.min >= 20
+      # EOD time exit: at/after 15:20 IST. The old `hour >= 15 && min >= 20`
+      # form let 16:00-16:19 bars slip through (hour passes, min fails).
+      t = candle.timestamp.in_time_zone('Asia/Kolkata')
+      if t.hour > 15 || (t.hour == 15 && t.min >= 20)
         return build_exit_result(position, candle, index, pnl_percent, current_price, 'time_exit')
       end
 
@@ -114,14 +117,20 @@ module Backtest
       build_exit_result(position, candle, index, pnl_percent, current_price, reason)
     end
 
-    # One trade from entry bar to exit (same semantics as {BacktestService} loop).
+    # One trade from entry to exit. +entry_index+ is the SIGNAL bar: the entry is
+    # booked against the NEXT bar (the first bar the signal could actually be
+    # traded on) — booking on the signal bar itself was a one-bar lookahead.
+    # Exit scanning starts strictly after the booking bar.
     def simulate_trade(series:, entry_index:, signal_type:)
       signal = { type: signal_type }
-      candle = series.candles[entry_index]
-      position = enter_position(signal, candle, entry_index)
+      booking_index = entry_index + 1
+      booking_candle = series.candles[booking_index]
+      return nil if booking_candle.nil? # signal on the final bar — nothing left to trade
+
+      position = enter_position(signal, booking_candle, booking_index)
       return nil if position.blank?
 
-      ((entry_index + 1)...series.candles.size).each do |j|
+      ((booking_index + 1)...series.candles.size).each do |j|
         c = series.candles[j]
         hit = check_exit(position, c, j, series)
         return hit.merge(exit_bar_index: j) if hit
