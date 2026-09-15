@@ -30,7 +30,7 @@ gem 'connection_pool', '~> 3.0'
 # calls JSON.parse(json, options) positionally, so json 3.x breaks every JSON
 # column cast at boot (db:prepare/seeds die with ArgumentError). Stay on 2.x
 # until Rails ships json-3 compatibility.
-gem 'json', '~> 2.21'
+gem 'json', '~> 3.0'
 gem 'redis', '~> 6.0'
 gem 'ruby-technical-analysis'
 gem 'technical-analysis'
