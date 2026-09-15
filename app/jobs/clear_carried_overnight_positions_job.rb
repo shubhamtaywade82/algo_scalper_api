@@ -43,7 +43,11 @@ class ClearCarriedOvernightPositionsJob < ApplicationJob
       return unless tracker.active? && tracker.exit_requested_at.present?
 
       Rails.logger.info("[ClearCarriedOvernightPositionsJob] #{tracker.order_no} stuck; clearing intent and retrying")
-      tracker.update_columns(exit_requested_at: nil, exit_sent_at: nil, exit_coid: nil, updated_at: Time.current)
+      # update_columns on purpose: recovery path for a wedged exit intent —
+      # must not run validations/callbacks (an update! here could re-trigger
+      # the very exit machinery being reset) and must not bump updated_at
+      # through the normal touch pipeline mid-retry.
+      tracker.update_columns(exit_requested_at: nil, exit_sent_at: nil, exit_coid: nil, updated_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
       tracker.reload
       result = exit_engine.execute_exit(tracker, REASON)
     end

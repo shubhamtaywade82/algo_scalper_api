@@ -120,7 +120,7 @@ class AnalysisJob < ApplicationJob
   def compute_component(label)
     yield
     nil
-  rescue Timeout::Error => e
+  rescue Timeout::Error
     Rails.logger.warn("[AnalysisJob] #{label} timed out after #{AI_TIMEOUT}s")
     label
   rescue StandardError => e

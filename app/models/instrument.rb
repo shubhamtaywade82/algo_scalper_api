@@ -86,9 +86,7 @@ class Instrument < ApplicationRecord
   # --- Associations -------------------------------------------------------
   belongs_to :underlying_instrument, class_name: 'Instrument', optional: true,
                                      inverse_of: :derivative_contracts
-  has_many :derivative_contracts, class_name: 'Instrument',
-           foreign_key: :underlying_instrument_id,
-           inverse_of: :underlying_instrument, dependent: :nullify
+  has_many :derivative_contracts, class_name: 'Instrument', foreign_key: :underlying_instrument_id, inverse_of: :underlying_instrument, dependent: :nullify
 
   # Legacy association over the frozen `derivatives` table (Derivative is a
   # deprecated read-only facade — see that class). This is the ORIGINAL name
@@ -97,8 +95,7 @@ class Instrument < ApplicationRecord
   # reader (specs, rake tasks, chain analyzers) got back. The consolidated
   # contract rows live on #derivative_contracts above — use that for anything
   # new (review P1: one name, one meaning).
-  has_many :derivatives, class_name: 'Derivative',
-           inverse_of: :instrument, dependent: :destroy
+  has_many :derivatives, class_name: 'Derivative', inverse_of: :instrument, dependent: :destroy
 
   has_many :position_trackers, dependent: :restrict_with_error
   has_many :executions, dependent: :restrict_with_error
