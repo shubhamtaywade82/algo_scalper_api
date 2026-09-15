@@ -40,7 +40,9 @@ class SupertrendVwapStrategy < BaseStrategy
     last_idx = result[:line]&.rindex { |v| !v.nil? }
     return Signals::Hold.new(reason: 'supertrend_unavailable') unless last_idx
 
-    vwap = series.current_vwap
+    # vwap_or_twap: index candles carry volume=0 (DhanHQ), so strict VWAP is
+    # nil forever on index data — use the TWAP-fallback variant (CandleSeries).
+    vwap = series.vwap_or_twap.last
     return Signals::Hold.new(reason: 'vwap_unavailable') if vwap.nil? || vwap.zero?
 
     close = series.candles[last_idx].close

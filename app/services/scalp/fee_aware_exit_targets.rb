@@ -24,7 +24,7 @@ module Scalp
   #                          multiple of friction) that locking breakeven is worth it
   #
   # Friction model (per long option position, round trip):
-  #   fees_pct   = fee_per_trade / (entry_price * quantity)      -- flat, qty-scaled
+  #   fees_pct   = statutory_fee_per_trade / (entry_price * quantity)  -- flat, qty-scaled
   #   spread_pct = spread_rupees / entry_price                    -- per unit premium
   #   friction   = fees_pct + spread_pct
   # The spread is read from the live tick (bid/ask) when available; otherwise the
@@ -139,13 +139,17 @@ module Scalp
       peak_profit_pct.to_f >= friction * cfg_value(:breakeven_arm_factor)
     end
 
-    # Fees as a fraction of deployed capital (Rs.40 round-trip / position value).
+    # Fees as a fraction of deployed capital: the FULL statutory round trip
+    # (brokerage + STT + txn + GST + stamp + SEBI per Orders::ChargesCalculator)
+    # over position value — not the brokerage-only Rs.40 figure. The old
+    # brokerage-only floor understated real friction by ~Rs.30+/round-trip on
+    # a typical NIFTY lot, so "PnL > fees" exits could still lose real money.
     # Zero when broker fee simulation is disabled (paper without fees).
     # @return [Float]
     def fees_pct
       return 0.0 unless BrokerFeeCalculator.enabled? && position_value.positive?
 
-      BrokerFeeCalculator.fee_per_trade.to_f / position_value
+      fee_per_trade / position_value
     end
 
     private
@@ -186,18 +190,17 @@ module Scalp
       ask - bid
     end
 
-    def fee_per_order
-      return 0.0 unless BrokerFeeCalculator.enabled?
-
-      BrokerFeeCalculator.fee_per_order.to_f
-    end
-
-    # Round-trip order fees (entry + exit) in rupees; zero when broker fee
-    # simulation is disabled (paper without fees).
+    # Round-trip fees (entry + exit) in rupees: full statutory stack per leg
+    # from Orders::ChargesCalculator (STT on the sell leg included), booked at
+    # the entry premium as the forward estimate — exit premium is unknown at
+    # targeting time and the approximation errs on the safe side for winners.
+    # Zero when broker fee simulation is disabled (paper without fees).
     def fee_per_trade
       return 0.0 unless BrokerFeeCalculator.enabled?
 
-      BrokerFeeCalculator.fee_per_trade.to_f
+      buy_leg = Orders::ChargesCalculator.call(side: :buy, quantity: @quantity, price: @entry_price)
+      sell_leg = Orders::ChargesCalculator.call(side: :sell, quantity: @quantity, price: @entry_price)
+      (buy_leg + sell_leg).to_f
     end
 
     # Strict numeric read: absent key -> documented default; garbage raises.

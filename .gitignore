@@ -34,3 +34,6 @@ dashboard/out/
 graphify-out/
 .worktrees/
 .railsforge
+
+# Legacy algo_trading_system artifacts (expired-credential .env + generated result JSONs removed 2026-09)
+lib/trading_system/algo_trading_system/

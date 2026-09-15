@@ -112,6 +112,67 @@ RSpec.describe OrbBreakoutStrategy do
       end
     end
 
+    context 'when a CE breakout already resolved today (per-direction cap)' do
+      # Doc contract: one signal per direction per day (max 2 trades/day — one
+      # CE break, one PE break). A resolved CE break retires only the CE side.
+      #
+      # Shared day shape (1m candles, rolled up to 5m by the context):
+      #   09:15-09:44  ORB formation — deterministic oscillation, range ~24930-25050
+      #   09:45        inside the range
+      #   09:50        closes 25,180 above ORH — the CE side has resolved
+      #   09:55        back inside the range (no failed-breakout wicks)
+      #   10:00        current bucket; its final candle (i=49) sets the close
+      # `final_candle` decides what the evaluating bar closes as.
+      def ce_resolved_day_series(final_candle)
+        build_series(
+          base_date: base_date, count: 50, interval: 1,
+          &lambda { |i, _prev_close|
+            if i < 30
+              close = i.even? ? 25_040.0 : 24_960.0
+              { open: close, high: close + 10, low: close - 10, close: close, volume: 100_000 }
+            elsif i < 35
+              { open: 25_020.0, high: 25_030.0, low: 25_010.0, close: 25_020.0, volume: 100_000 }
+            elsif i < 39
+              { open: 25_010.0, high: 25_020.0, low: 25_000.0, close: 25_010.0, volume: 100_000 }
+            elsif i == 39
+              { open: 25_010.0, high: 25_200.0, low: 25_000.0, close: 25_180.0, volume: 1_000_000 }
+            elsif i < 45
+              { open: 25_020.0, high: 25_040.0, low: 25_010.0, close: 25_030.0, volume: 1_000_000 }
+            elsif i < 49
+              { open: 25_020.0, high: 25_030.0, low: 25_010.0, close: 25_020.0, volume: 100_000 }
+            else
+              final_candle.merge(volume: 1_000_000)
+            end
+          }
+        )
+      end
+
+      it 'blocks a second CE breakout with already_resolved_today' do
+        # CE side already resolved (09:50 bucket closed above ORH); the current
+        # bar closes above ORH again — a second CE attempt the one-per-direction
+        # cap must block.
+        rebreak = ce_resolved_day_series({ open: 25_110.0, high: 25_220.0, low: 25_100.0, close: 25_200.0 })
+        cutoff = rebreak.candles[49].timestamp
+        context = build_context(series: rebreak, cutoff: cutoff)
+        result = strategy.call(context)
+        expect(result).to be_a(Signals::Hold)
+        expect(result.reason).to eq('already_resolved_today')
+      end
+
+      it 'still allows the PE breakout on the opposite side (2 trades/day: one CE, one PE)' do
+        # Same day, CE side already resolved (09:50 bucket closed above ORH);
+        # the current bar closes below ORL — the doc's one-per-direction cap
+        # must let this PE signal through (the old any-direction gate blocked
+        # both sides after the first break, capping the day at 1 trade).
+        series = ce_resolved_day_series({ open: 25_020.0, high: 25_030.0, low: 24_790.0, close: 24_800.0 })
+        cutoff = series.candles[49].timestamp
+        context = build_context(series: series, cutoff: cutoff)
+        result = strategy.call(context)
+        expect(result).to be_a(Signals::BuyPut)
+        expect(result.reason).to include('orb_breakout_down')
+      end
+    end
+
     context 'when range is too narrow' do
       let(:strategy_narrow) do
         described_class.new(params: default_params.merge(min_range_pct: 0.15))

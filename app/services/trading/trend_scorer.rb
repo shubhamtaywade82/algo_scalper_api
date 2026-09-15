@@ -63,7 +63,7 @@ module Trading
 
     def score_vwap_bias
       ltp = series_5m.candles.last.close
-      vwap = series_5m.current_vwap
+      vwap = series_5m.vwap_or_twap.last
       return { score: 0, bias: :neutral } unless vwap
 
       return { score: 20, bias: :bullish } if ltp > vwap

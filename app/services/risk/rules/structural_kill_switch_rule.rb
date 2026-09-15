@@ -34,7 +34,7 @@ module Risk
         series = Live::CandleSeriesCache.fetch(instrument: index_instrument, interval: 1, backfill: false)
         return no_action_result unless series&.candles&.size&.>= 10
 
-        vwap = series.current_vwap
+        vwap = series.vwap_or_twap.last
         ema9 = series.ema(9)
         return no_action_result unless vwap && ema9
 

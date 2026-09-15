@@ -13,7 +13,10 @@ RSpec.describe Orders::ChargesCalculator do
     it 'computes sell-side charges (brokerage, STT, exchange txn, GST, SEBI — no stamp duty)' do
       result = described_class.call(side: 'sell', quantity: 50, price: 200.0, segment: 'NSE_FNO')
 
-      expect(result).to eq(BigDecimal('31.114'))
+      # STT on options sell premium is 0.1% (effective 2024-10-01):
+      # 20 (brokerage) + 10.0 (STT on 10,000 turnover) + 5.3 (txn)
+      # + 4.554 (GST on 25.3) + 0.01 (SEBI) = 39.864
+      expect(result).to eq(BigDecimal('39.864'))
     end
 
     it 'charges scale with turnover (price x quantity)' do

@@ -15,8 +15,10 @@ module Strategies
     end
 
     def initialize(slug)
-      @slug = slug
-      @dir = STRATEGIES_ROOT.join(slug)
+      # Path-traversal guard: @dir flows into join/mkpath/cp below, so the slug
+      # must be a plain single path segment before anything touches the filesystem.
+      @slug = SlugValidator.validate!(slug.to_s)
+      @dir = STRATEGIES_ROOT.join(@slug)
       @errors = []
     end
 

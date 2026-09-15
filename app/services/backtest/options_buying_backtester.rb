@@ -335,9 +335,23 @@ module Backtest
       end
     end
 
+    # The signal is only known once the entry bar CLOSES, so the first honestly
+    # tradeable price is the NEXT bar. Booking at the signal bar's own timestamp
+    # used the premium from ~one bar BEFORE the signal existed (lookahead bias) —
+    # systematically inflating backtest P&L.
+    def booking_timestamp(candle, day_close_time)
+      ts = candle.timestamp + @entry_interval.to_i.minutes
+      return nil if ts > day_close_time
+
+      ts
+    end
+
     def build_futures_entry(signal, candle, day_close_time, series_1m)
+      booking_ts = booking_timestamp(candle, day_close_time)
+      return nil if booking_ts.nil?
+
       day_1m = series_1m.candles.select { |c| c.timestamp.to_date == candle.timestamp.to_date }
-      entry_bar = nearest_index_bar(day_1m, candle.timestamp)
+      entry_bar = nearest_index_bar(day_1m, booking_ts)
       return nil if entry_bar.nil?
 
       exit_bars = day_1m
@@ -346,7 +360,7 @@ module Backtest
 
       {
         signal_type: signal[:type],
-        entry_time: candle.timestamp,
+        entry_time: entry_bar.timestamp,
         entry_price: entry_bar.close,
         entry_index_price: candle.close,
         exit_bars: exit_bars,
@@ -357,15 +371,18 @@ module Backtest
     end
 
     def build_options_entry(signal, candle, day_close_time)
-      option_data = fetch_option_data(signal[:type], candle.timestamp, strike_pref: signal[:strike_pref])
+      booking_ts = booking_timestamp(candle, day_close_time)
+      return nil if booking_ts.nil?
+
+      option_data = fetch_option_data(signal[:type], booking_ts, strike_pref: signal[:strike_pref])
       return nil if option_data.blank?
 
-      entry_bar = nearest_bar(option_data, candle.timestamp)
+      entry_bar = nearest_bar(option_data, booking_ts)
       return nil if entry_bar.nil? || entry_bar[:close].to_f <= 0
 
       {
         signal_type: signal[:type],
-        entry_time: candle.timestamp,
+        entry_time: entry_bar[:timestamp] || booking_ts,
         entry_price: entry_bar[:close].to_f,
         entry_index_price: candle.close,
         entry_strike: entry_bar[:strike],

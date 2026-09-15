@@ -23,7 +23,7 @@ RSpec.describe Risk::Rules::StructuralKillSwitchRule do
   end
   let(:context) { Risk::Rules::RuleContext.new(position: position_data, tracker: tracker, risk_config: {}) }
 
-  let(:series) { instance_double(CandleSeries, candles: Array.new(10), current_vwap: 25_000.0, ema: 25_000.0) }
+  let(:series) { instance_double(CandleSeries, candles: Array.new(10), vwap_or_twap: [25_000.0], ema: 25_000.0) }
   let(:underlying_ltp) { 25_000.0 }
 
   before do

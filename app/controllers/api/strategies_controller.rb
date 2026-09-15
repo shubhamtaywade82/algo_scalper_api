@@ -42,10 +42,19 @@ module Api
     # POST /api/strategies
     def create
       slug = params.require(:slug).to_s.parameterize.presence
-      return render json: { success: false, error: "Invalid slug" }, status: :unprocessable_content unless slug
+      begin
+        slug = ::Strategies::SlugValidator.validate!(slug)
+      rescue ::Strategies::SlugValidator::InvalidSlug => e
+        return render json: { success: false, error: e.message }, status: :unprocessable_content
+      end
 
       name = params[:name].presence || slug.humanize
       template = params[:template].presence || "basic"
+      begin
+        template = ::Strategies::SlugValidator.validate!(template, what: 'template')
+      rescue ::Strategies::SlugValidator::InvalidSlug => e
+        return render json: { success: false, error: e.message }, status: :unprocessable_content
+      end
 
       scaffold_strategy(slug, name, template)
 
@@ -65,6 +74,8 @@ module Api
         render json: { success: false, errors: result[:errors], scan_report: result[:scan_report] },
                status: :unprocessable_content
       end
+    rescue ::Strategies::SlugValidator::InvalidSlug => e
+      render json: { success: false, errors: [e.message] }, status: :unprocessable_content
     end
 
     # POST /api/strategies/:slug/start
