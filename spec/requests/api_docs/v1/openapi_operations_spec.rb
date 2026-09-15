@@ -167,7 +167,9 @@ RSpec.describe 'OpenAPI v1 — settings, calibration, risk, debug', openapi_spec
   end
 
   path '/api/drawdown_guard/reset' do
-    delete 'Reset intraday drawdown guard' do
+    # The route is POST (action endpoint: config/routes.rb post 'drawdown_guard/reset');
+    # a DELETE here 404s because no DELETE route exists.
+    post 'Reset intraday drawdown guard' do
       tags 'Risk'
       produces 'application/json'
       description 'Requires operator token when API_OPERATOR_TOKEN is set.'

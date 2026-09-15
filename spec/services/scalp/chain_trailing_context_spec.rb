@@ -223,8 +223,11 @@ RSpec.describe Scalp::ChainTrailingContext do
     end
 
     it 'widens when the premium amplifies a favourable underlying move' do
-      # Evaluation 1 seeds the underlying history at 24,000.
+      # Evaluation 1 seeds the per-TTL history: underlying 24,000, premium 120
+      # (the sampled baseline is price_history#last — review P1 samples both
+      # series once per evaluation so the returns span the same window).
       allow(Live::TickQuery).to receive(:for_security).and_return(underlying_tick(24_000.0))
+      allow(pos_data).to receive(:price_history).and_return([119.0, 120.0])
       described_class.evaluate(tracker, snapshot)
       force_stale!
 

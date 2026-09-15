@@ -17,8 +17,11 @@ RSpec.describe Portfolio::PnlTracker do
     allow(redis).to receive(:incrbyfloat)
     allow(redis).to receive_messages(get: nil, hgetall: {})
     allow(redis).to receive(:set)
-    # mark_realized also records the tracker id in the realized-trackers set
-    allow(redis).to receive(:sadd)
+    # mark_realized also records the tracker id in the realized-trackers set.
+    # SADD returns 1 when the element was newly added — the idempotency gate
+    # treats any other value as "already counted today" and skips the
+    # bookkeeping, so the default stub must report a fresh add.
+    allow(redis).to receive(:sadd).and_return(1)
 
     allow(AlgoConfig).to receive(:fetch).and_return({ profit_lock: { enabled: true } })
   end

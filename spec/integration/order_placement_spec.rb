@@ -191,9 +191,31 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         expect(result).to be_nil
       end
 
-      it 'handles network timeout errors' do
-        # Override the global mock to raise a timeout error
+      it 're-raises network timeouts so the gateway retry layer can engage' do
+        # Override the global mock to raise a timeout error.
+        # Timeout::Error is in Placer::RETRYABLE_ERROR_CLASSES: with_token_auto_heal
+        # logs the failure, releases the claim, and re-raises so
+        # GatewayLive#with_retries (which wraps buy_market!) can retry the order.
         expect(DhanHQ::Models::Order).to receive(:create).and_raise(Timeout::Error, 'Request timeout')
+
+        expect(Rails.logger).to receive(:error).with(/failed|BUY failed/).at_least(:once)
+
+        expect do
+          order_placer.buy_market!(
+            seg: 'NSE_FNO',
+            sid: '12345',
+            qty: 50,
+            client_order_id: 'TEST-BUY-001'
+          )
+        end.to raise_error(Timeout::Error)
+      end
+
+      it 'handles invalid order parameters' do
+        # Override the global mock to raise an ArgumentError.
+        # Validation errors are NOT in RETRYABLE_ERROR_CLASSES: the placer logs
+        # the failure and returns nil — only retryable transport errors are
+        # re-raised for the gateway retry layer.
+        expect(DhanHQ::Models::Order).to receive(:create).and_raise(ArgumentError, 'Invalid parameters')
 
         expect(Rails.logger).to receive(:error).with(/failed|BUY failed/).at_least(:once)
 
@@ -205,24 +227,6 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         )
 
         expect(result).to be_nil
-      end
-
-      it 'handles invalid order parameters' do
-        # Override the global mock to raise an ArgumentError
-        expect(DhanHQ::Models::Order).to receive(:create).and_raise(ArgumentError, 'Invalid parameters')
-
-        expect(Rails.logger).to receive(:error).with(/failed|BUY failed/).at_least(:once)
-
-        # Retryable transport errors are re-raised out of the placer so
-        # GatewayLive#with_retries can retry; the claim is released on the way out.
-        expect do
-          order_placer.buy_market!(
-            seg: 'NSE_FNO',
-            sid: '12345',
-            qty: 50,
-            client_order_id: 'TEST-BUY-001'
-          )
-        end.to raise_error(Timeout::Error)
       end
     end
   end

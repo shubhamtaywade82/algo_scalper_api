@@ -121,11 +121,14 @@ RSpec.describe Scalp::FeeAwareExitTargets do
   end
 
   describe '#breakeven_lock_price' do
-    it 'covers the exit fee and half spread spread over quantity' do
-      # entry 100, qty 50, fees enabled, estimate half spread 100 x 0.01 = 1.0
+    it 'covers the round-trip fees and full spread spread over quantity' do
+      # entry 100, qty 50, fees enabled (round trip 2 x 20 = 40),
+      # estimated full spread 100 x 0.01 x 2 = 2.0
+      # 100 + (40 + 2.0)/50 = 100.84 (net-zero on the whole trade, not the
+      # exit leg alone — review P2)
       tracker = instance_double(PositionTracker, entry_price: 100.0, quantity: 50)
       targets = described_class.new(tracker)
-      expect(targets.breakeven_lock_price).to eq(100.42)
+      expect(targets.breakeven_lock_price).to eq(100.84)
     end
 
     it 'uses the live half spread when a quote is available' do
@@ -136,8 +139,9 @@ RSpec.describe Scalp::FeeAwareExitTargets do
         bid: 98.0, ask: 102.0, volume: 0, prev_close: 0.0
       )
       targets = described_class.new(tracker, tick: tick)
-      # spread 4 -> half 2.0: 100 + (20 + 2.0)/50 = 100.44
-      expect(targets.breakeven_lock_price).to eq(100.44)
+      # spread 4 (full, both legs) + round-trip fees 40:
+      # 100 + (40 + 4.0)/50 = 100.88
+      expect(targets.breakeven_lock_price).to eq(100.88)
     end
 
     it 'returns nil for unusable economics' do

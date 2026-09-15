@@ -6,7 +6,17 @@ RSpec.describe TradingSystem::PositionHeartbeat do
   let(:service) { described_class.new }
 
   describe '#start' do
-    after { service.stop }
+    # Shared singleton: always start each example with a cold cache so the
+    # stubbed relation below is what the heartbeat thread actually sees.
+    before { Positions::ActivePositionsCache.instance.clear! }
+
+    after do
+      service.stop
+      # The heartbeat thread caches the stubbed relation in the shared
+      # ActivePositionsCache singleton — bust it so the double cannot leak
+      # into later specs within the 5s TTL.
+      Positions::ActivePositionsCache.instance.clear!
+    end
 
     context 'when market is closed and no active positions' do
       before do
@@ -30,9 +40,11 @@ RSpec.describe TradingSystem::PositionHeartbeat do
         allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
         # ActivePositionsCache#active_trackers walks active.includes(:instrument)
         # in its own thread - the relation double must accept the full chain.
+        # to_a must be NON-EMPTY: the heartbeat's market-closed gate skips
+        # bulk_load_active! exactly when active_trackers is empty.
         allow(PositionTracker).to receive(:active).and_return(
           double('ActiveRelation', count: 1,
-                                 includes: double('IncRelation', to_a: []),
+                                 includes: double('IncRelation', to_a: [double('tracker', id: 1)]),
                                  find_each: nil)
         )
         allow(Live::PositionIndex.instance).to receive(:bulk_load_active!)
