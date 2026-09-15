@@ -78,6 +78,9 @@ The system employs a multi-layered risk management strategy, prioritizing capita
 - Exit when `pnl_pct >= tp` (DECIMAL format)
 - Config: `exit.take_profit: 0.25` (25% profit)
 - Note: `risk.take_profit` or `exit.take_profit` — UnifiedExitChecker reads from AlgoConfig
+- **Fee-aware floor** (`risk.scalp_exit.enabled: true`): the effective target is
+  `max(static_tp, min(friction x friction_multiple, max_target_pct))` — see the
+  Scalp Exit Overlay section below. Never lower than the static target.
 
 ### 4. Trailing Stop
 
@@ -101,6 +104,17 @@ The system employs a multi-layered risk management strategy, prioritizing capita
 - Only runs when `trade_state == 'expansion'` or breakeven is set
 - Supports tiered drawdown thresholds configured in `indices[].trailing_tiers`
 - Direct trailing mode: `direct_trailing.distance_pct` from HWM (DECIMAL)
+- **Fee-aware breakeven lock** (step 2.5 in `process_tick`, `risk.scalp_exit.enabled`):
+  once peak profit covers `breakeven_arm_factor x` round-trip friction, the SL is
+  pinned at the exit price that nets >= 0 after the exit fee and half spread —
+  the "PnL > fees" guarantee. The lock only ever raises the SL.
+
+**Trailing context multipliers** (armed positions only): the allowed drawdown is
+scaled by up to two independent multipliers before the trailing check —
+underlying momentum (`risk.underlying_context_exit.momentum_scaling`, continuous
+0.6x–1.4x with a momentum-death hard exit) and chain telemetry
+(`risk.scalp_exit.chain_context`, tighten 0.5x / widen 1.2x). See the Scalp Exit
+Overlay section below.
 
 ### 5. Profit Floor
 
@@ -181,6 +195,87 @@ The system employs a multi-layered risk management strategy, prioritizing capita
 
 - Forces exit at configured time (default 15:20) to avoid end-of-day risk
 - Optional minimum profit gate (`risk.min_profit_rupees`) before forcing exit
+
+---
+
+## Scalp Exit Overlay (Fee-Aware Targets + Momentum + Chain Telemetry)
+
+**Opt-in layer** (`risk.scalp_exit.enabled: true` — absent = shipped static behaviour) that
+makes the exit stack respect round-trip friction, underlying momentum and live option-chain
+telemetry. Three services, all under `app/services/scalp/`:
+
+### Scalp::FeeAwareExitTargets — "PnL > fees"
+
+Broker fees are a flat ₹20/order (₹40 round-trip) regardless of quantity, so a static "5%
+target" is a real gain on a ₹150 NIFTY premium but nearly worthless on a ₹50 SENSEX premium
+after fees and spread. Per position:
+
+- `friction_pct` = fees/position_value + spread/premium (spread from the live tick
+  bid/ask, else `default_spread_pct` estimate)
+- **TP / percentage targets** become `max(base, min(friction x friction_multiple,
+  max_target_pct))` — never lower than base
+- **Breakeven lock** (TrailingEngine step 2.5): once peak profit covers
+  `breakeven_arm_factor x` friction, SL is pinned at the exit price that nets >= 0 after
+  the exit fee and half spread (entry + (fee + half_spread)/qty). Only raises the SL.
+
+### Scalp::MomentumScaler — continuous trail scaling
+
+Replaces the binary tighten/hold trailing feedback (when
+`risk.underlying_context_exit.momentum_scaling.enabled: true`) with a continuous momentum
+score M ∈ [0,1] from trend score, ATR ratio, MTF confirmation and BOS alignment:
+
+- M < `death_threshold` (0.30) → **exit now** (`UNDERLYING_MOMENTUM_DEATH`) — don't wait
+  for a trail to be hit on a dying scalp
+- otherwise multiplier interpolates `min_multiplier` (0.6) … `max_multiplier` (1.4):
+  fading momentum tightens the trail, strong momentum **widens** it (`:scale`) so one-tick
+  pullbacks don't shake out a runner
+- BOS-against and dual-weakness hard exits still fire first (unchanged)
+
+### Scalp::ChainTrailingContext — in-trade chain telemetry
+
+Consulted by `UnifiedExitChecker#evaluate_trailing_stop` once trailing is armed; TTL-cached
+per tracker (default 15s) and backed by the same ~2-min cached `Instrument#fetch_option_chain`
+used by the greeks rules (no extra per-tick chain fetches):
+
+| Signal | Source | Action |
+|--------|--------|--------|
+| Own-strike IV collapse vs `iv_at_entry` (>= 15%) | chain leg | **exit** |
+| Gamma wall (max-OI strike) within `wall_buffer_pct` of spot, peak >= 2% | chain OI | **exit** (bank into the wall) |
+| OI unwind at own strike (>= 10% below baseline) | chain OI vs `meta['scalp_oi_baseline']` | tighten 0.5x |
+| Fresh writing at own strike (>= 15%) while flat/underwater | chain OI vs baseline | tighten 0.5x |
+| Premium convexity (premium/underlying return >= 8, favourable direction) | tick history | widen 1.2x |
+
+Any internal failure logs and degrades to `:hold` — telemetry must never take the exit path
+down.
+
+### Config
+
+```yaml
+risk:
+  scalp_exit:                        # OPT-IN — absent = off
+    enabled: true
+    friction_multiple: 3.0           # target >= 3x friction
+    breakeven_arm_factor: 1.2        # lock once peak >= 1.2x friction
+    default_spread_pct: 0.01         # half-spread estimate without a live quote
+    max_target_pct: 0.30             # caps the fee floor only (never lowers base)
+    chain_context:
+      enabled: true
+      eval_ttl_seconds: 15
+      iv_collapse_pct: 0.15
+      oi_unwind_pct: 0.10
+      oi_write_pct: 0.15
+      convexity_min_ratio: 8.0
+      convexity_widen_multiplier: 1.2
+      wall_buffer_pct: 0.003
+      wall_exit_min_peak_pct: 0.02
+  underlying_context_exit:
+    momentum_scaling:                # OPT-IN — absent = legacy binary behaviour
+      enabled: true
+      death_threshold: 0.30
+      trend_score_max: 45.0
+      min_multiplier: 0.6
+      max_multiplier: 1.4
+```
 
 ---
 

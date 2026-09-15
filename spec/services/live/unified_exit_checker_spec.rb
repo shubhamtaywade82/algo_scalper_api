@@ -231,8 +231,15 @@ RSpec.describe Live::UnifiedExitChecker do
       expect(result).to be false
     end
 
-    it 'returns nil gracefully when TickQuery fails' do
+    it 'propagates infra failures from TickQuery (wave-3 contract: no-data != broken)' do
       allow(Live::TickQuery).to receive(:for_security).and_raise(StandardError)
+      # Callers (RiskManager/ExitPolicy) rescue-and-log; the resolver itself must
+      # stay loud so a broken tick path is never confused with "no tick yet".
+      expect { described_class.send(:resolve_underlying_ltp, 'NIFTY') }.to raise_error(StandardError)
+    end
+
+    it 'returns nil when no tick is available for the underlying' do
+      allow(Live::TickQuery).to receive(:for_security).and_return(nil)
       result = described_class.send(:resolve_underlying_ltp, 'NIFTY')
       expect(result).to be_nil
     end
@@ -1021,6 +1028,156 @@ RSpec.describe Live::UnifiedExitChecker do
       allow(AlgoConfig).to receive(:fetch).and_return(exit: { trailing: { enabled: false } }, risk: {})
       result = described_class.live_sl_price(tracker, { pnl: 1_800.0, hwm_pnl: 2_000.0 }, 180.0)
       expect(result).to be_nil
+    end
+  end
+
+  describe 'fee-aware exit targets (Scalp::FeeAwareExitTargets integration)' do
+    # SENSEX fee-hostile fixture: entry 50 x qty 20 = 1,000 value.
+    # fees 40/1000 = 0.04; estimated spread (50 x 0.01 x 2)/50 = 0.02 -> friction 0.06
+    # -> fee floor 3 x 0.06 = 0.18, above the 0.05 static target.
+    let(:fee_hostile_tracker) do
+      instance_double(
+        PositionTracker,
+        id: 9, active?: true, entry_price: 50.0, quantity: 20,
+        current_pnl_pct: 0.0, meta: {}, order_no: 'ORD-9',
+        symbol: 'SENSEX24SEP81000CE', instrument: mock_instrument, watchable: nil,
+        side: 'long_ce', created_at: 5.minutes.ago,
+        last_pnl_rupees: 0.0, high_water_mark_pnl: 0.0
+      )
+    end
+
+    before do
+      described_class.instance_variable_set(:@exit_config, nil)
+      described_class.instance_variable_set(:@exit_config_expires_at, nil)
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        risk: {
+          scalp_exit: { enabled: true },
+          percentage_pnl_exit: { enabled: true, target_pct: 0.05 }
+        },
+        broker_fees: { enabled: true, fee_per_order: 20 },
+        position_sizing: { drawdown: { emergency_peak_loss_exit: false } },
+        exit: {},
+        indices: []
+      })
+      allow(Live::TickQuery).to receive(:for).and_return(nil) # no live quote -> spread estimate
+      allow(described_class).to receive_messages(
+        portfolio_floor_breach?: false, emergency_peak_loss_exit_triggered?: false
+      )
+    end
+
+    context 'when the position is fee-hostile (cheap premium, small lot)' do
+      it 'raises the percentage target to cover friction — 15% profit no longer exits' do
+        # fee-aware target = max(0.05, 0.18) = 0.18; pnl 0.15 < 0.18
+        snapshot = { pnl_pct: 0.15, ltp: 57.5, pnl: 150.0, hwm_pnl: 0.0 }
+        expect(described_class.send(:percentage_pnl_exit_hit?, fee_hostile_tracker, snapshot)).to be false
+      end
+
+      it 'exits once profit clears the fee-aware floor' do
+        snapshot = { pnl_pct: 0.19, ltp: 59.5, pnl: 190.0, hwm_pnl: 0.0 }
+        expect(described_class.send(:percentage_pnl_exit_hit?, fee_hostile_tracker, snapshot)).to be true
+      end
+    end
+
+    context 'when scalp_exit is disabled (opt-out restores static behaviour)' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          risk: { percentage_pnl_exit: { enabled: true, target_pct: 0.05 } },
+          exit: {}
+        })
+      end
+
+      it 'uses the static target — 15% profit exits again' do
+        snapshot = { pnl_pct: 0.15, ltp: 57.5, pnl: 150.0, hwm_pnl: 0.0 }
+        expect(described_class.send(:percentage_pnl_exit_hit?, fee_hostile_tracker, snapshot)).to be true
+      end
+    end
+
+    context 'when the fee layer raises a domain error' do
+      it 'falls back to the base target without taking the waterfall down' do
+        allow(Scalp::FeeAwareExitTargets).to receive(:new).and_raise(Errors::ConfigurationError, 'garbage config')
+        allow(Rails.logger).to receive(:error)
+
+        snapshot = { pnl_pct: 0.06, ltp: 53.0, pnl: 60.0, hwm_pnl: 0.0 }
+        expect(described_class.send(:percentage_pnl_exit_hit?, fee_hostile_tracker, snapshot)).to be true
+        expect(Rails.logger).to have_received(:error).with(/fee-aware target unavailable/)
+      end
+    end
+  end
+
+  describe 'chain telemetry + momentum scaling in evaluate_trailing_stop' do
+    let(:config) do
+      {
+        stop_loss: { type: 'static', value: 0.50 },
+        take_profit: 5.0,
+        trailing: { enabled: true, type: 'adaptive', activation_profit: 0.10, drop_threshold: 0.05 },
+        early_exit: { enabled: false, profit_threshold: 0.07 },
+        premium_momentum_failure: { enabled: false },
+        time_based: { enabled: false, exit_time: '15:20' }
+      }
+    end
+
+    # hwm 2000 / entry_value 10000 = 20% >= 10% activation -> armed
+    let(:armed_snapshot) { { ltp: 130.0, pnl_pct: 0.30, pnl: 1_500.0, hwm_pnl: 2_000.0 } }
+
+    before do
+      described_class.instance_variable_set(:@exit_config, nil)
+      described_class.instance_variable_set(:@exit_config_expires_at, nil)
+      allow(described_class).to receive(:exit_config).and_return(config)
+      allow(AlgoConfig).to receive(:fetch).and_return({ risk: {}, exit: {} })
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(nil)
+    end
+
+    context 'when the chain layer signals an exit (IV collapse / gamma wall)' do
+      it 'returns a chain_context_exit' do
+        allow(described_class).to receive(:evaluate_underlying_context).and_return({ action: :hold, multiplier: 1.0, reason: nil })
+        allow(Scalp::ChainTrailingContext).to receive(:evaluate)
+          .and_return({ action: :exit, multiplier: 1.0, reason: 'SCALP_IV_COLLAPSE (test)' })
+
+        result = described_class.evaluate_trailing_stop(tracker, armed_snapshot)
+        expect(result).to include(exit: true, path: 'chain_context_exit')
+        expect(result[:reason]).to include('SCALP_IV_COLLAPSE')
+      end
+    end
+
+    context 'when underlying momentum scales and the chain layer widens' do
+      it 'multiplies both into the trailing multiplier (0.5 x 1.2 = 0.6)' do
+        allow(described_class).to receive(:evaluate_underlying_context)
+          .and_return({ action: :tighten, multiplier: 0.5, reason: 'UNDERLYING_MOMENTUM_FADING' })
+        allow(Scalp::ChainTrailingContext).to receive(:evaluate)
+          .and_return({ action: :widen, multiplier: 1.2, reason: 'SCALP_CONVEXITY' })
+        allow(described_class).to receive(:trailing_stop_hit?)
+
+        expect(described_class.evaluate_trailing_stop(tracker, armed_snapshot)).to be_nil
+        expect(described_class).to have_received(:trailing_stop_hit?)
+          .with(tracker, armed_snapshot, tightening_multiplier: 0.6)
+      end
+    end
+
+    context 'when the evaluator returns :scale (strong momentum widens the trail)' do
+      it 'passes a multiplier above 1.0 through to the trailing check' do
+        allow(described_class).to receive(:evaluate_underlying_context)
+          .and_return({ action: :scale, multiplier: 1.4, reason: 'UNDERLYING_MOMENTUM_STRONG' })
+        allow(Scalp::ChainTrailingContext).to receive(:evaluate)
+          .and_return({ action: :hold, multiplier: 1.0, reason: nil })
+        allow(described_class).to receive(:trailing_stop_hit?)
+
+        expect(described_class.evaluate_trailing_stop(tracker, armed_snapshot)).to be_nil
+        expect(described_class).to have_received(:trailing_stop_hit?)
+          .with(tracker, armed_snapshot, tightening_multiplier: 1.4)
+      end
+    end
+
+    context 'when trailing is not armed' do
+      it 'skips both context layers entirely' do
+        unarmored = { ltp: 105.0, pnl_pct: 0.05, pnl: 250.0, hwm_pnl: 100.0 } # peak 1% < 10%
+        allow(described_class).to receive(:evaluate_underlying_context)
+        allow(Scalp::ChainTrailingContext).to receive(:evaluate)
+        allow(described_class).to receive(:trailing_stop_hit?).and_return(false)
+
+        expect(described_class.evaluate_trailing_stop(tracker, unarmored)).to be_nil
+        expect(described_class).not_to have_received(:evaluate_underlying_context)
+        expect(Scalp::ChainTrailingContext).not_to have_received(:evaluate)
+      end
     end
   end
 end

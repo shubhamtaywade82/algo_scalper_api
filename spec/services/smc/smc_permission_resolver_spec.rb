@@ -65,11 +65,12 @@ RSpec.describe Smc::SmcPermissionResolver do
         bos_recent: true,
         displacement: true,
         active_liquidity_trap: false,
+        trap_resolved: true,
         trend: :bullish
       }
-      avrz = { 'state' => 'expanding_early' }
+      avrz = { 'state' => 'expanding' }
 
-      expect(described_class.resolve(smc_result: smc, avrz_result: avrz)).to eq(:scale_ready)
+      expect(described_class.resolve(smc_result: smc, avrz_result: avrz)).to eq(:full_deploy)
     end
 
     it 'returns :full_deploy' do

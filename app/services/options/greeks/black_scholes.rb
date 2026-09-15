@@ -137,7 +137,7 @@ module Options
         call ? (discount_q * norm_cdf(d1)) : (discount_q * (norm_cdf(d1) - 1.0))
       end
 
-      # rubocop:disable Metrics/ParameterLists
+      # rubocop:disable-next Metrics/ParameterLists
       def theta_for(call, s, k, t, sigma, r, q, d1, d2, pdf_d1, discount_r, discount_q)
         decay_term = -(s * sigma * discount_q * pdf_d1) / (2 * Math.sqrt(t))
 
@@ -147,7 +147,6 @@ module Options
           decay_term + (r * k * discount_r * norm_cdf(-d2)) - (q * s * discount_q * norm_cdf(-d1))
         end
       end
-      # rubocop:enable Metrics/ParameterLists
 
       def rho_for(call, k, t, discount_r, d2)
         if call
@@ -157,7 +156,7 @@ module Options
         end
       end
 
-      # rubocop:disable Metrics/ParameterLists
+      # rubocop:disable-next Metrics/ParameterLists
       def newton_raphson_iv(target, spot_price, strike_price, time_to_expiry_years,
                             option_type, risk_free_rate, dividend_yield)
         sigma = 0.25
@@ -182,9 +181,8 @@ module Options
 
         nil
       end
-      # rubocop:enable Metrics/ParameterLists
 
-      # rubocop:disable Metrics/ParameterLists
+      # rubocop:disable-next Metrics/ParameterLists
       def bisection_iv(target, spot_price, strike_price, time_to_expiry_years,
                        option_type, risk_free_rate, dividend_yield)
         low = MIN_VOLATILITY
@@ -210,7 +208,6 @@ module Options
 
         nil
       end
-      # rubocop:enable Metrics/ParameterLists
 
       private_class_method :price_for, :delta_for, :theta_for, :rho_for,
                            :newton_raphson_iv, :bisection_iv, :clamp_volatility

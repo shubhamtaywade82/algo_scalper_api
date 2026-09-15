@@ -2,7 +2,7 @@
 
 require 'swagger_helper'
 
-# rubocop:disable RSpec/DescribeClass, RSpec/EmptyExampleGroup, RSpec/ScatteredSetup -- RSwag OpenAPI specs
+# rubocop:disable-next RSpec/DescribeClass, RSpec/EmptyExampleGroup, RSpec/ScatteredSetup -- RSwag OpenAPI specs
 RSpec.describe 'OpenAPI v1 — SMC & analysis', openapi_spec: 'v1/swagger.yaml' do
   path '/api/smc/decision' do
     get 'SMC bias / structure' do
@@ -135,4 +135,3 @@ RSpec.describe 'OpenAPI v1 — SMC & analysis', openapi_spec: 'v1/swagger.yaml' 
     end
   end
 end
-# rubocop:enable RSpec/DescribeClass, RSpec/EmptyExampleGroup, RSpec/ScatteredSetup

@@ -10,6 +10,28 @@ BaseStrategy = Strategies::Base unless defined?(BaseStrategy)
 class OrbBreakoutStrategy < BaseStrategy
   IST = 'Asia/Kolkata'
 
+  class << self
+    # Mirrors strategies/orb-breakout/manifest.yml so specs and tooling can read
+    # the deployment contract off the class itself.
+    def timeframes = %w[5m]
+
+    def instruments = %w[NIFTY BANKNIFTY SENSEX]
+
+    def params_schema
+      {
+        range_minutes: { type: Integer, default: 30 },
+        min_range_pct: { type: Float, default: 0.20 },
+        max_gap_pct: { type: Float, default: 0.80 },
+        target_r_multiple: { type: Float, default: 2.0 },
+        volume_multiplier: { type: Float, default: 1.5 },
+        force_exit_hour: { type: Integer, default: 14 },
+        force_exit_minute: { type: Integer, default: 30 },
+        max_failed_breakouts: { type: Integer, default: 2 },
+        strike_pref: { type: String, default: 'ATM' }
+      }
+    end
+  end
+
   def call(context)
     series = context.candles.call('5m')
     return Signals::Hold.new(reason: 'no_candle_data') unless series&.candles&.any?

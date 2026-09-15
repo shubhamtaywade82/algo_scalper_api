@@ -27,7 +27,7 @@ VCR.configure do |config|
 
   sensitive_env_vars.each do |key|
     val = ENV.fetch(key, nil)
-    config.filter_sensitive_data("<#{key}>") { val } if val && !val.empty?
+    config.filter_sensitive_data("<#{key}>") { val } if val.present?
   end
 
   # Mask the Trader API base URL specifically if it's set
@@ -43,7 +43,7 @@ VCR.configure do |config|
   # Filter sensitive headers - more comprehensive approach
   # We use blocks that return the value to be replaced.
   # VCR will replace all occurrences of these values in the cassette.
-  
+
   config.filter_sensitive_data('<ACCESS_TOKEN>') do |interaction|
     # Check various header formats for access-token
     (interaction.request.headers['Access-Token'] ||
@@ -62,7 +62,7 @@ VCR.configure do |config|
   # Masking JWT tokens (starting with eyJ) in headers and bodies
   config.filter_sensitive_data('<ACCESS_TOKEN>') do |interaction|
     jwt_regex = /eyJ[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+/
-    
+
     # Check Authorization header for JWT
     auth_header = (interaction.request.headers['Authorization'] || interaction.request.headers['authorization'])&.first
     if auth_header && (match = auth_header.match(jwt_regex))

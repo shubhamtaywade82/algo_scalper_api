@@ -70,7 +70,7 @@ RSpec.describe AlgoConfig do
       allow(YAML).to receive(:load_file).with(path).and_raise(Psych::SyntaxError.new(1, 1, 1, 1, 'bad', 'yaml'))
 
       expect { described_class.send(:apply_profile, { run_mode: 'production' }) }
-        .to raise_error(Errors::ConfigurationError, /profile config\/production\.yml is unreadable/)
+        .to raise_error(Errors::ConfigurationError, %r{profile config/production\.yml is unreadable})
     end
 
     it 'raises when the profile does not parse to a Hash' do
@@ -78,10 +78,21 @@ RSpec.describe AlgoConfig do
       path = Rails.root.join('config/profiles/production.yml')
       allow(File).to receive(:file?).and_call_original
       allow(path).to receive(:file?).and_return(true)
-      allow(YAML).to receive(:load_file).with(path).and_return(['not', 'a', 'hash'])
+      allow(YAML).to receive(:load_file).with(path).and_return(%w[not a hash])
 
       expect { described_class.send(:apply_profile, { run_mode: 'production' }) }
         .to raise_error(Errors::ConfigurationError, /did not parse to a Hash/)
+    end
+
+    it 'treats a comments-only profile (nil document) as no overrides' do
+      allow(described_class).to receive(:run_mode).and_return('production')
+      path = Rails.root.join('config/profiles/production.yml')
+      allow(File).to receive(:file?).and_call_original
+      allow(path).to receive(:file?).and_return(true)
+      allow(YAML).to receive(:load_file).with(path).and_return(nil)
+
+      result = described_class.send(:apply_profile, { run_mode: 'production', risk: { x: 1 } })
+      expect(result).to include(run_mode: 'production', risk: { x: 1 })
     end
 
     it 'passes through base config when the profile file is absent' do

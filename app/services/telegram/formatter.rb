@@ -17,14 +17,14 @@ module Telegram
         code_blocks = []
         normalized = normalized.gsub(/```(.*?)```/m) do
           code_blocks << ::Regexp.last_match(1)
-          "%%CODE_BLOCK_#{code_blocks.size - 1}%%"
+          "@@CODEBLOCK#{code_blocks.size - 1}@@"
         end
 
         # 2️⃣ Protect inline code
         inline_codes = []
         normalized = normalized.gsub(/`([^`]+)`/) do
           inline_codes << ::Regexp.last_match(1)
-          "%%INLINE_CODE_#{inline_codes.size - 1}%%"
+          "@@INLINECODE#{inline_codes.size - 1}@@"
         end
 
         # 3️⃣ Escape everything
@@ -45,7 +45,7 @@ module Telegram
         # 8️⃣ Restore inline code
         inline_codes.each_with_index do |code, i|
           formatted.gsub!(
-            "%%INLINE_CODE_#{i}%%",
+            "@@INLINECODE#{i}@@",
             "<code>#{CGI.escapeHTML(code)}</code>"
           )
         end
@@ -53,7 +53,7 @@ module Telegram
         # 9️⃣ Restore code blocks
         code_blocks.each_with_index do |code, i|
           formatted.gsub!(
-            "%%CODE_BLOCK_#{i}%%",
+            "@@CODEBLOCK#{i}@@",
             "<pre><code>#{CGI.escapeHTML(code)}</code></pre>"
           )
         end

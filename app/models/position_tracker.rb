@@ -104,7 +104,7 @@ class PositionTracker < ApplicationRecord
   belongs_to :leg_group, optional: true
   belongs_to :watchable, polymorphic: true
   has_one :trade_analytic, dependent: :destroy
-  has_one :trade_telemetry, foreign_key: :tracker_id, class_name: 'TradeTelemetry', dependent: :destroy
+  has_one :trade_telemetry, foreign_key: :tracker_id, class_name: 'TradeTelemetry', dependent: :destroy, inverse_of: :tracker
   has_one :trade_memory, dependent: :destroy
   has_one :meta_snapshot, class_name: 'PositionMetaSnapshot', dependent: :destroy
   has_many :executions, dependent: :nullify
@@ -417,7 +417,7 @@ class PositionTracker < ApplicationRecord
   # When a leg's status changes, the owning trade (LegGroup) derives its own
   # status from its legs instead of being maintained by hand.
   def refresh_leg_group_status_if_relevant
-    return unless leg_group_id.present?
+    return if leg_group_id.blank?
     return unless saved_change_to_status?
 
     leg_group&.refresh_status!

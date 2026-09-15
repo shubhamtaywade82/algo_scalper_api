@@ -24,8 +24,12 @@ RSpec.describe Ai::Agents::RiskManagementAgent do
   end
 
   it 'reports :elevated after 2+ consecutive losing exits today' do
-    create(:position_tracker, :exited, exited_at: 1.hour.ago, last_pnl_rupees: -100)
-    create(:position_tracker, :exited, exited_at: 30.minutes.ago, last_pnl_rupees: -200)
+    # Day-relative timestamps: the agent scopes to exited_at >= local
+    # beginning_of_day, and CI can run near local midnight where plain
+    # N.hours.ago fixtures cross into yesterday and silently drop out.
+    base = Time.current.beginning_of_day + 1.hour
+    create(:position_tracker, :exited, exited_at: base, last_pnl_rupees: -100)
+    create(:position_tracker, :exited, exited_at: base + 30.minutes, last_pnl_rupees: -200)
 
     result = agent.run
     expect(result[:output][:risk_level]).to eq(:elevated)

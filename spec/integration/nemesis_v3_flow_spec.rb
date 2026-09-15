@@ -20,8 +20,14 @@ RSpec.describe 'NEMESIS V3 Flow Integration', :vcr, type: :integration do
     allow(AlgoConfig).to receive(:fetch).and_return(
       indices: [index_cfg],
       risk: {
-        max_daily_loss_pct: 5000.0, # ₹5000
-        max_global_daily_loss_pct: 10_000.0, # ₹10000
+        # Current DailyLimits schema: percentage-of-capital loss limits under
+        # risk.daily_limits (merged from position_sizing.daily_limits by
+        # DailyLimits#load_risk_config — risk: wins on conflicts).
+        daily_limits: {
+          enabled: true,
+          per_index: { NIFTY: 0.02 }, # 2% of capital
+          global_limit_pct: 0.04
+        },
         max_daily_trades: 10,
         max_global_daily_trades: 20
       }
@@ -215,7 +221,7 @@ RSpec.describe 'NEMESIS V3 Flow Integration', :vcr, type: :integration do
       expect(result[:exit_triggered]).to be true
       expect(exit_engine).to have_received(:execute_exit).with(
         tracker,
-        match(/peak_drawdown_exit/)
+        include('peak_drawdown_exit')
       )
     end
   end
@@ -272,11 +278,16 @@ RSpec.describe 'NEMESIS V3 Flow Integration', :vcr, type: :integration do
     it 'blocks trading when daily loss limit is exceeded' do
       daily_limits = Live::DailyLimits.new
 
-      # Record some profit first to enable loss limit enforcement (threshold is ₹20k)
+      # Deterministic capital base for the percentage-of-capital limit:
+      # ₹5,000 loss on ₹100,000 capital = 5% >= 2% per-index limit.
+      allow(Capital::Allocator).to receive(:available_cash).and_return(100_000.0)
+
+      # Record some profit first (profit target check must not shadow the
+      # loss-limit reason below)
       daily_limits.record_profit(index_key: 'NIFTY', amount: 25_000.0)
 
-      # Record losses up to limit
-      daily_limits.record_loss(index_key: 'NIFTY', amount: 5000.0) # Hit limit
+      # Record losses past the limit: 5% of capital >= 2% per-index cap
+      daily_limits.record_loss(index_key: 'NIFTY', amount: 5000.0)
 
       # Try to trade - should be blocked
       limit_check = daily_limits.can_trade?(index_key: 'NIFTY')

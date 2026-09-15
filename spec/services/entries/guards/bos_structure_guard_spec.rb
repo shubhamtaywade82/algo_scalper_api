@@ -23,8 +23,7 @@ RSpec.describe Entries::Guards::BosStructureGuard do
     before do
       allow(instrument).to receive(:candle_series).with(interval: anything).and_return(candle_series)
       allow(candle_series).to receive(:candles).and_return(candles)
-      allow(Entries::BosExtractor).to receive(:last_confirmed_bos).and_return(nil)
-      allow(Entries::BosExtractor).to receive(:bos_id).and_return('bos_123')
+      allow(Entries::BosExtractor).to receive_messages(last_confirmed_bos: nil, bos_id: 'bos_123')
       allow(Rails.cache).to receive(:read).and_return(false)
     end
 
@@ -107,8 +106,7 @@ RSpec.describe Entries::Guards::BosStructureGuard do
         let(:bos) { { direction: :bullish, confirmed_index: 3, origin_swing: { price: 22_400 }, broken_swing: { price: 22_450 }, confirmed_at: Time.current } }
 
         before do
-          allow(Entries::BosExtractor).to receive(:last_confirmed_bos).and_return(bos)
-          allow(Entries::BosExtractor).to receive(:bos_id).and_return('bos_123')
+          allow(Entries::BosExtractor).to receive_messages(last_confirmed_bos: bos, bos_id: 'bos_123')
           allow(Rails.cache).to receive(:read).with("bos:consumed:NIFTY:bos_123").and_return(true)
         end
 
@@ -132,8 +130,7 @@ RSpec.describe Entries::Guards::BosStructureGuard do
         end
 
         before do
-          allow(Entries::BosExtractor).to receive(:last_confirmed_bos).and_return(bos)
-          allow(Entries::BosExtractor).to receive(:bos_id).and_return('bos_123')
+          allow(Entries::BosExtractor).to receive_messages(last_confirmed_bos: bos, bos_id: 'bos_123')
           allow(Rails.cache).to receive(:read).and_return(false)
         end
 

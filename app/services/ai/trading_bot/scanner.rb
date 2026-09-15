@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# rubocop:disable Rails/Output
+# rubocop:disable-next Rails/Output
 module Ai
   module TradingBot
     # SMC event scanner for the trading bot.
@@ -119,4 +119,3 @@ module Ai
     end
   end
 end
-# rubocop:enable Rails/Output

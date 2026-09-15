@@ -24,19 +24,27 @@ class TelegramNotifier
     return if chat_id.blank?
 
     chunks(text).each do |chunk|
-      chunk = Telegram::Formatter.to_html(chunk) unless skip_formatter
+      params = extra_params.dup
+      if skip_formatter
+        formatted_chunk = chunk
+      else
+        formatted_chunk = Telegram::Formatter.to_html(chunk)
+        params[:parse_mode] = 'HTML'
+      end
+
       response = post('sendMessage',
                       chat_id: chat_id,
-                      text: chunk,
-                      **extra_params)
+                      text: formatted_chunk,
+                      **params)
 
       # Telegram rejects malformed HTML/Markdown entities; resend as plain text
       # so the message is never dropped (stray <, >, & in dynamic content).
       next if response
-      next if extra_params[:parse_mode].blank?
+      next if params[:parse_mode].blank?
 
-      retry_params = extra_params.except(:parse_mode)
-      post('sendMessage', chat_id: chat_id, text: chunk, **retry_params)
+      retry_params = params.except(:parse_mode)
+      plain_chunk = skip_formatter ? chunk : CGI.unescapeHTML(formatted_chunk.gsub(/<[^>]+>/, ''))
+      post('sendMessage', chat_id: chat_id, text: plain_chunk, **retry_params)
     end
   end
 

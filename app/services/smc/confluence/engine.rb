@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # Ported from delta_exchange_bot Trading::Analysis::SmcConfluence::Engine (Pine parity).
-# rubocop:disable Metrics/ClassLength, Metrics/MethodLength, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity, Layout/SpaceInsideArrayLiteralBrackets, Style/NegatedIf, Lint/AmbiguousOperatorPrecedence
+# rubocop:disable-next Metrics/ClassLength, Metrics/MethodLength, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity, Layout/SpaceInsideArrayLiteralBrackets, Style/NegatedIf, Lint/AmbiguousOperatorPrecedence
 module Smc
   module Confluence
     # Bar-by-bar replay of `smc_confluence.pine` signal logic (Pine v6).
@@ -444,4 +444,3 @@ module Smc
     end
   end
 end
-# rubocop:enable Metrics/ClassLength, Metrics/MethodLength, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity, Layout/SpaceInsideArrayLiteralBrackets, Style/NegatedIf, Lint/AmbiguousOperatorPrecedence

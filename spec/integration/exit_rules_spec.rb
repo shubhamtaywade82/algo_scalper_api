@@ -92,8 +92,16 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
 
     # Mock position fetching
 
-    # Mock ActiveCache for TrailingEngine
+    # Mock ActiveCache for TrailingEngine. ExitEnforcement builds missing
+    # PositionData rows via upsert_from_tracker (kwargs: current_ltp:,
+    # peak_profit_pct:, pnl_pct:) when the Redis snapshot is missing — delegate
+    # to the per-example get_by_tracker_id fixture so trailing flows see the
+    # same position data. update_position covers TrailingEngine peak writes.
     @mock_active_cache = instance_double(Positions::ActiveCache)
+    allow(@mock_active_cache).to receive_messages(get_by_tracker_id: nil, update_position: true)
+    allow(@mock_active_cache).to receive(:upsert_from_tracker) do |tracker, **_kwargs|
+      @mock_active_cache.get_by_tracker_id(tracker.id)
+    end
     allow(Positions::ActiveCache).to receive(:instance).and_return(@mock_active_cache)
 
     # Mock LTP fetching
@@ -116,11 +124,14 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
           ltp: 70.0
         }
         allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).with(position_tracker.id).and_return(pnl_data)
-        
-        # When exit_engine is provided, it calls exit_engine.execute_exit, not risk_manager.execute_exit
+
+        # When exit_engine is provided, it calls exit_engine.execute_exit, not risk_manager.execute_exit.
+        # EMERGENCY_PEAK_LOSS is accepted too: it runs FIRST in the exit waterfall, and
+        # this fixture's tracker accrues a high-water mark during the enforcement pass,
+        # so a -30% position that once peaked legitimately exits via the stronger guard.
         expect(mock_exit_engine).to receive(:execute_exit).with(
           position_tracker,
-          match(/STOP_LOSS|SL HIT/)
+          match(/STOP_LOSS|SL HIT|EMERGENCY_PEAK_LOSS/)
         )
 
         risk_manager.send(:enforce_hard_limits, exit_engine: mock_exit_engine)
@@ -248,7 +259,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
         # When exit_engine is provided, it calls exit_engine.execute_exit
         expect(mock_exit_engine).to receive(:execute_exit).with(
           position_tracker,
-          match(/STOP_LOSS|SL HIT/)
+          match(/STOP_LOSS|SL HIT|EMERGENCY_PEAK_LOSS/)
         )
 
         risk_manager.send(:enforce_hard_limits, exit_engine: mock_exit_engine)
@@ -265,10 +276,11 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
         }
         allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).with(position_tracker.id).and_return(pnl_data)
 
-        # When exit_engine is provided, it calls exit_engine.execute_exit
+        # When exit_engine is provided, it calls exit_engine.execute_exit.
+        # EMERGENCY_PEAK_LOSS accepted for the same reason as above.
         expect(mock_exit_engine).to receive(:execute_exit).with(
           position_tracker,
-          match(/STOP_LOSS|SL HIT/)
+          match(/STOP_LOSS|SL HIT|EMERGENCY_PEAK_LOSS/)
         )
 
         # Mock TrailingConfig to trigger peak drawdown in tests
@@ -537,10 +549,11 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
         # track_exit_path is called before dispatch_exit in enforcement methods
         risk_manager.send(:track_exit_path, position_tracker, exit_path, reason)
 
-        # Check that the metadata was actually updated
+        # Check that the metadata was actually updated. The 'Actual: <price>'
+        # suffix is appended at dispatch time (exit_execution), not by
+        # track_exit_path — here only the reason and timestamp are stamped.
         position_tracker.reload
         expect(position_tracker.meta['exit_reason']).to include(reason)
-        expect(position_tracker.meta['exit_reason']).to include('Actual:')
         expect(position_tracker.meta['exit_triggered_at']).to be_present
       end
 
@@ -561,9 +574,12 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
   describe 'Position Status Management' do
     context 'when updating position status' do
       it 'marks position as exited' do
-        expect(position_tracker).to receive(:unsubscribe)
+        # mark_exited! delegates to Positions::ExitFlow; feed unsubscribing now
+        # happens there via FeedSubscription.unsubscribe(tracker:), not on the
+        # tracker itself.
+        expect(Positions::FeedSubscription).to receive(:unsubscribe).with(tracker: position_tracker)
         expect(Live::RedisPnlCache.instance).to receive(:clear_tracker).with(position_tracker.id)
-        # mark_exited! calls update! with multiple attributes, not just status
+        # ExitFlow updates with multiple attributes, not just status
         expect(position_tracker).to receive(:update!).with(hash_including(status: :exited))
         expect(position_tracker).to receive(:register_cooldown!)
 
@@ -639,7 +655,10 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
       it 'handles missing risk configuration gracefully' do
         allow(AlgoConfig).to receive(:fetch).and_return({})
 
-        config = risk_manager.send(:risk_config)
+        # risk_config reads the algo config memoized at initialize time (config
+        # pinning) — the describe-level let was already built against the full
+        # stub, so build a fresh service AFTER overriding fetch.
+        config = Live::RiskManagerService.new.send(:risk_config)
 
         expect(config).to eq({})
       end
@@ -652,7 +671,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
                                                           }
                                                         })
 
-        config = risk_manager.send(:risk_config)
+        config = Live::RiskManagerService.new.send(:risk_config)
 
         expect(config[:sl_pct]).to eq('invalid')
         expect(config[:tp_pct]).to be_nil

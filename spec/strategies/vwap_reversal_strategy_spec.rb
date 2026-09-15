@@ -8,45 +8,54 @@ RSpec.describe 'VwapReversalStrategy', type: :strategy_plugin do
   let(:tz) { '+05:30' }
   let(:strategy) { VwapReversalStrategy.new(params: { slope_lookback: 17 }) }
 
-  # A long enough uptrend that a short, steep pullback still leaves RSI(14) in the neutral
-  # 40-60 band (a "healthy pullback", not an oversold extreme) while the VWAP slope measured
-  # over slope_lookback candles stays positive — the two conditions the doc requires together.
+  # A tradeable VWAP pullback needs three things at once: VWAP established BELOW the
+  # pullback low (achieved by anchoring it with heavy-volume flat candles), a pullback deep
+  # enough to drag RSI(14) back into the neutral 40-60 band, and a final confirming candle
+  # that closes back above VWAP. With uniform volume VWAP sits near the move's mid-range and
+  # any RSI-neutral pullback lands below it — hence the 5x-volume anchor candles.
   def uptrend_pullback_series
     prices = []
+    5.times { prices << 24_000.0 } # heavy-volume flat anchor: pins VWAP near 24,000
     p = 24_000.0
-    14.times do
-      p += 6.0
- prices << p
+    12.times do
+      p += 10.0
+      prices << p
     end
-    4.times do
-      p -= 14.0
- prices << p
+    3.times do
+      p -= 36.0
+      prices << p
     end
-    prices << (p + 2.0) # final confirming bullish candle: closes back above VWAP
+    prices << (p + 30.0) # final confirming bullish candle: closes back above VWAP
 
     candles = prices.each_with_index.map do |close, i|
       t = Time.zone.parse("2026-08-24 09:33:00 #{tz}") + (i * 3).minutes
-      build_plugin_candle(t, open: close - 1.5, high: close + 1.0, low: close - 3.0, close: close)
+      anchor_volume = i < 5 ? 500_000 : 100_000
+      build_plugin_candle(t, open: close - 1.5, high: close + 1.0, low: close - 3.0, close: close, volume: anchor_volume)
     end
     build_plugin_series(candles, interval: '3')
   end
 
+  # Mirror image of uptrend_pullback_series: heavy-volume flat candles anchor VWAP ABOVE
+  # the rally high, the rally is deep enough to pull RSI(14) into the neutral band, and the
+  # final candle closes back below VWAP.
   def downtrend_rally_series
     prices = []
+    5.times { prices << 24_000.0 } # heavy-volume flat anchor: pins VWAP near 24,000
     p = 24_000.0
-    14.times do
-      p -= 6.0
- prices << p
+    12.times do
+      p -= 10.0
+      prices << p
     end
-    4.times do
-      p += 14.0
- prices << p
+    3.times do
+      p += 36.0
+      prices << p
     end
-    prices << (p - 2.0) # final confirming bearish candle: closes back below VWAP
+    prices << (p - 30.0) # final confirming bearish candle: closes back below VWAP
 
     candles = prices.each_with_index.map do |close, i|
       t = Time.zone.parse("2026-08-24 09:33:00 #{tz}") + (i * 3).minutes
-      build_plugin_candle(t, open: close + 1.5, high: close + 3.0, low: close - 1.0, close: close)
+      anchor_volume = i < 5 ? 500_000 : 100_000
+      build_plugin_candle(t, open: close + 1.5, high: close + 3.0, low: close - 1.0, close: close, volume: anchor_volume)
     end
     build_plugin_series(candles, interval: '3')
   end
@@ -99,7 +108,7 @@ RSpec.describe 'VwapReversalStrategy', type: :strategy_plugin do
   it 'holds when VWAP has no meaningful slope' do
     candles = (0..20).map do |i|
       t = Time.zone.parse("2026-08-24 09:33:00 #{tz}") + (i * 3).minutes
-      build_plugin_candle(t, open: 24_000, high: 24_001, low: 23_999, close: 24_000)
+      build_plugin_candle(t, open: 24_000, high: 24_001, low: 23_999, close: 24_000, volume: 100_000)
     end
     series = build_plugin_series(candles, interval: '3')
     signal = strategy.call(build_plugin_context(series, cutoff: series.candles.last.timestamp))

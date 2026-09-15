@@ -329,6 +329,54 @@ module Positions
       false
     end
 
+    # Build or refresh the cached PositionData for a tracker.
+    #
+    # ExitEnforcement calls this when it needs PositionData for a tracker
+    # (kwargs are its tracker-derived fallback: latest LTP, peak profit and
+    # PnL percentage). Semantics:
+    #   * cached row that has seen a live tick -> returned untouched (its
+    #     LTP/peak/PnL state is tick-driven and always fresher than the
+    #     caller's fallback — a cold-start fallback must never clobber it);
+    #   * missing row -> built from the tracker record;
+    #   * cold row (never saw a tick) -> seeded with the caller's values so
+    #     the enforcement pass can still evaluate the position (peaks stay
+    #     monotonic — never lowered).
+    #
+    # NOTE: this method was referenced by ExitEnforcement since 81eabbbd
+    # (2026-08-28) but never implemented — the NoMethodError was silently
+    # rescued, so the institutional trailing path never executed. The
+    # specs surfaced the gap; do not remove the method again.
+    #
+    # @param tracker [PositionTracker] live tracker record
+    # @param current_ltp [Float, nil] latest LTP when known
+    # @param peak_profit_pct [Float, nil] peak profit percentage (decimal)
+    # @param pnl_pct [Float, nil] current PnL percentage (decimal)
+    # @return [PositionData, nil] the cached row, or nil when the tracker
+    #   cannot be cached (inactive / missing entry price)
+    def upsert_from_tracker(tracker, current_ltp: nil, peak_profit_pct: nil, pnl_pct: nil)
+      position = get_by_tracker_id(tracker.id)
+      if position
+        return position if position.current_ltp.to_f.positive?
+      else
+        position = add_position(tracker: tracker)
+        return nil unless position
+      end
+
+      updates = {}
+      updates[:current_ltp] = current_ltp.to_f if current_ltp.to_f.positive?
+      updates[:pnl_pct] = pnl_pct.to_f if pnl_pct
+      if peak_profit_pct && peak_profit_pct.to_f > position.peak_profit_pct.to_f
+        updates[:peak_profit_pct] = peak_profit_pct.to_f
+      end
+      update_position(tracker.id, **updates) unless updates.empty?
+
+      position
+    rescue StandardError => e
+      @stats[:errors] += 1
+      Rails.logger.error("[Positions::ActiveCache] Failed to upsert position #{tracker.id}: #{e.class} - #{e.message}")
+      nil
+    end
+
     # Bulk load positions from database
     # @return [Integer] Number of positions loaded
     # rubocop:disable-next Metrics/AbcSize

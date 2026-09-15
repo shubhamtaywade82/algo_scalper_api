@@ -19,6 +19,11 @@ RSpec.describe Instruments::LegacyResolver do
     end
 
     it 'falls back to security_id (FNO segment first)' do
+      # Materialize the lazy let first: resolve_pick runs before the eq()
+      # matcher would create the option, so the security_id lookup would
+      # otherwise miss.
+      expect(option).to be_persisted
+
       expect(described_class.resolve_pick(security_id: '49081')).to eq(option)
     end
 
@@ -40,7 +45,12 @@ RSpec.describe Instruments::LegacyResolver do
     end
 
     it 'returns nil when require_derivative is set and the id is not a contract' do
-      plain = create(:instrument, :equity, security_id: '99992')
+      # The instrument factory defaults set underlying_security_id/expiry_date,
+      # and Instrument#derivative? counts either of those as a contract — zero
+      # them out to build a genuinely plain (non-contract) instrument.
+      plain = create(:instrument, :equity, security_id: '99992',
+                                           underlying_security_id: nil, underlying_symbol: nil,
+                                           expiry_date: nil)
 
       expect(described_class.by_legacy_id(plain.id, require_derivative: true)).to be_nil
     end

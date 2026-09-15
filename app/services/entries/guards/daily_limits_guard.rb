@@ -23,7 +23,7 @@ module Entries
           # Per-strategy frequency check
           if strategy_slug.present?
             max_strategy = strategy_limits_config.dig(strategy_slug.to_sym, :max_trades_per_day) ||
-                            strategy_limits_config.dig(strategy_slug, 'max_trades_per_day')
+                           strategy_limits_config.dig(strategy_slug, 'max_trades_per_day')
             if max_strategy
               current = daily_limits.get_strategy_daily_trades(strategy_slug)
               return false if current >= max_strategy.to_i

@@ -398,7 +398,7 @@ module Smc
                           'STOP CALLING TOOLS IMMEDIATELY. You have reached the maximum iterations or encountered multiple tool errors/empty results. You MUST provide your analysis NOW based on the SMC market structure data provided initially and the LTP (₹85,762.01 for SENSEX). Calculate strikes from LTP (round to nearest 50 for SENSEX). Provide your complete trading recommendation with: 1) Trade Decision (BUY CE/PE or AVOID), 2) Specific Strike Selection, 3) Entry Strategy, 4) Exit Strategy, 5) Risk Management. DO NOT call any more tools.'
                         elsif consecutive_errors >= 2
                           'STOP CALLING TOOLS. You have encountered multiple tool errors or empty results. Provide your analysis NOW based on the SMC market structure data provided initially and the LTP you have. Calculate strikes from LTP (round to nearest 50 for indices). Provide your complete trading recommendation with strike selection, entry/exit strategy, and risk management.'
-                        elsif consecutive_errors > 0
+                        elsif consecutive_errors.positive?
                           'You have encountered some tool errors or empty results. Please provide your analysis now based on the SMC data and any successful tool results. Calculate strikes from the LTP if needed. Do not call more tools - provide your complete trading recommendation.'
                         else
                           'Based on the tool results, continue your analysis. If you have all the data you need, provide your complete analysis now.'
@@ -718,8 +718,6 @@ module Smc
         :bearish
       elsif bullish_count > bearish_count
         :bullish
-      else
-        nil
       end
     end
 
@@ -764,7 +762,7 @@ module Smc
 
     def get_current_ltp
       ltp = @instrument.ltp || @instrument.latest_ltp
-      { ltp: ltp&.to_f || 0.0, symbol: @instrument.symbol_name }
+      { ltp: ltp.to_f, symbol: @instrument.symbol_name }
     end
 
     def get_historical_candles(interval:, limit:)
@@ -916,8 +914,6 @@ module Smc
             rescue ArgumentError
               nil
             end
-          else
-            nil
           end
         end
 
@@ -978,7 +974,7 @@ module Smc
 
       # Keep system message and most recent messages
       system_msg = messages.first
-      conversation_msgs = messages[1..-1] || []
+      conversation_msgs = messages[1..] || []
       recent_msgs = conversation_msgs.last(MAX_MESSAGE_HISTORY - 1)
 
       [system_msg] + recent_msgs

@@ -3,6 +3,8 @@
 require 'rails_helper'
 
 RSpec.describe AdaptiveSupertrendKnnStrategy do
+  subject { described_class.new(series: series, k_neighbors: 3, min_confidence: 50.0) }
+
   let(:candles) do
     (1..35).map do |i|
       double(
@@ -17,8 +19,6 @@ RSpec.describe AdaptiveSupertrendKnnStrategy do
   end
 
   let(:series) { double('CandleSeries', candles: candles, rsi: 65.0, adx: 25.0, atr: 1.5) }
-
-  subject { described_class.new(series: series, k_neighbors: 3, min_confidence: 50.0) }
 
   describe '#generate_signal' do
     it 'returns nil when candles size is less than 30' do

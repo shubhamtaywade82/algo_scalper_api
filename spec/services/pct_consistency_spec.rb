@@ -95,12 +95,42 @@ RSpec.describe 'Percentage format consistency across the trading pipeline' do
       })
     end
 
+    before do
+      # The rule resolves its threshold via UnifiedExitChecker#percentage_pnl_exit_hit?,
+      # which reads risk.percentage_pnl_exit from AlgoConfig (not the rule's own config).
+      allow(AlgoConfig).to receive(:fetch).and_return(
+        risk: { percentage_pnl_exit: { enabled: true, target_pct: 0.30 } }
+      )
+      # UnifiedExitChecker memoizes exit_config on its singleton (30s TTL) — reset
+      # so the stub above is honoured regardless of example ordering.
+      Live::UnifiedExitChecker.instance_variable_set(:@exit_config, nil)
+    end
+
+    after { Live::UnifiedExitChecker.instance_variable_set(:@exit_config, nil) }
+
     def context_with(pnl_decimal)
+      tracker = instance_double(
+        PositionTracker,
+        id: 1,
+        entry_price: 100.0,
+        quantity: 1
+      )
       instance_double(
         Risk::Rules::RuleContext,
         active?: true,
         pnl_pct: BigDecimal(pnl_decimal.to_s),
-        risk_config: {}
+        risk_config: {},
+        tracker: tracker,
+        # The rule reads PnL from a tracker snapshot (Redis cache shape) and hands
+        # the tracker to UnifiedExitChecker#percentage_pnl_exit_hit? (fee-aware
+        # target lookup + trailing_armed? both only need entry_price/quantity).
+        tracker_snapshot: {
+          pnl: pnl_decimal * 100.0,
+          pnl_pct: BigDecimal(pnl_decimal.to_s),
+          hwm_pnl: nil,
+          hwm_pnl_pct: nil,
+          ltp: 100.0 * (1.0 + pnl_decimal)
+        }
       )
     end
 
@@ -163,7 +193,13 @@ RSpec.describe 'Percentage format consistency across the trading pipeline' do
         meta: nil,
         instrument: nil,
         watchable: nil,
-        side: 'long_ce'
+        side: 'long_ce',
+        # emergency_peak_loss_exit_triggered? reads the HWM column plus
+        # PositionTracker#current_pnl_pct; check_structure_invalidation falls
+        # back to the index_key column when meta is nil.
+        high_water_mark_pnl: 0,
+        current_pnl_pct: nil,
+        index_key: nil
       )
     end
 

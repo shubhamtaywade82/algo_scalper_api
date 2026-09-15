@@ -35,7 +35,7 @@ RSpec.describe SupertrendV1 do
 
       signal = strategy.call(context)
       expect(signal).to be_a(Signals::BuyCall)
-      expect(signal.reason).to include('mtf_supertrend_bullish_adx_25.0')
+      expect(signal.reason).to include('supertrend_bullish_adx_25.0')
     end
   end
 
@@ -50,12 +50,12 @@ RSpec.describe SupertrendV1 do
 
       signal = strategy.call(context)
       expect(signal).to be_a(Signals::BuyPut)
-      expect(signal.reason).to include('mtf_supertrend_bearish_adx_22.0')
+      expect(signal.reason).to include('supertrend_bearish_adx_22.0')
     end
   end
 
-  context 'when 1m and 5m trends mismatch' do
-    it 'returns Hold signal with mtf_trend_mismatch reason' do
+  context 'when 5m data diverges (single-timeframe strategy by design)' do
+    it 'ignores the 5m series and returns the 1m-based BuyCall signal' do
       st_service_1m = instance_double(Indicators::Supertrend, call: supertrend_bullish)
       st_service_5m = instance_double(Indicators::Supertrend, call: supertrend_bearish)
       allow(Indicators::Supertrend).to receive(:new).with(series: candles_1m, period: 10, base_multiplier: 2.0).and_return(st_service_1m)
@@ -64,8 +64,8 @@ RSpec.describe SupertrendV1 do
       allow(candles_1m).to receive(:adx).with(14).and_return(25.0)
 
       signal = strategy.call(context)
-      expect(signal).to be_a(Signals::Hold)
-      expect(signal.reason).to include('mtf_trend_mismatch')
+      expect(signal).to be_a(Signals::BuyCall)
+      expect(signal.reason).to include('supertrend_bullish_adx_25.0')
     end
   end
 

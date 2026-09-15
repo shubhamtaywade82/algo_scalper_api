@@ -58,9 +58,11 @@ class OrderIntent < ApplicationRecord
     end
 
     event :aasm_approve_risk do
-      transitions from: [:created, :risk_pending], to: :risk_approved
+      transitions from: %i[created risk_pending], to: :risk_approved
       after do
-        update_column(:risk_approved, true)
+        # update_column on purpose: we are inside the aasm transition —
+        # update! here would re-enter the state machine's own save path.
+        update_column(:risk_approved, true) # rubocop:disable Rails/SkipsModelValidations
         sync_status!
       end
     end
@@ -71,9 +73,10 @@ class OrderIntent < ApplicationRecord
     end
 
     event :aasm_approve_margin do
-      transitions from: [:risk_approved, :margin_pending], to: :approved
+      transitions from: %i[risk_approved margin_pending], to: :approved
       after do
-        update_column(:margin_approved, true)
+        # update_column on purpose: same aasm re-entrancy rationale as above.
+        update_column(:margin_approved, true) # rubocop:disable Rails/SkipsModelValidations
         sync_status!
       end
     end
@@ -94,22 +97,22 @@ class OrderIntent < ApplicationRecord
     end
 
     event :aasm_fill do
-      transitions from: [:submitted, :acknowledged, :partially_filled], to: :filled
+      transitions from: %i[submitted acknowledged partially_filled], to: :filled
       after { sync_status! }
     end
 
     event :partial_fill do
-      transitions from: [:submitted, :acknowledged], to: :partially_filled
+      transitions from: %i[submitted acknowledged], to: :partially_filled
       after { sync_status! }
     end
 
     event :request_cancel do
-      transitions from: [:submitted, :acknowledged, :partially_filled], to: :cancel_pending
+      transitions from: %i[submitted acknowledged partially_filled], to: :cancel_pending
       after { sync_status! }
     end
 
     event :aasm_cancel do
-      transitions from: [:submitted, :acknowledged, :partially_filled, :cancel_pending], to: :cancelled
+      transitions from: %i[submitted acknowledged partially_filled cancel_pending], to: :cancelled
       after { sync_status! }
     end
 
@@ -119,7 +122,7 @@ class OrderIntent < ApplicationRecord
     end
 
     event :expire do
-      transitions from: [:submitted, :acknowledged], to: :expired
+      transitions from: %i[submitted acknowledged], to: :expired
       after { sync_status! }
     end
 
@@ -171,7 +174,9 @@ class OrderIntent < ApplicationRecord
   private
 
   def sync_status!
-    update_column(:status, aasm_state) if status != aasm_state
+    # update_column on purpose: mirrors the aasm state column without
+    # triggering validations/callbacks while a transition is still in flight.
+    update_column(:status, aasm_state) if status != aasm_state # rubocop:disable Rails/SkipsModelValidations
   end
 
   def assign_correlation_id

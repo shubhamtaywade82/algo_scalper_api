@@ -494,8 +494,10 @@ RSpec.describe Capital::Allocator do
 
         cash = described_class.available_cash
 
-        # Should return 0 on error (not raise)
-        expect(cash).to eq(BigDecimal(0))
+        # Error path falls back to the configured paper-trading balance
+        # (default ₹100k) instead of zeroing out, so sizing keeps a workable
+        # capital base.
+        expect(cash).to eq(BigDecimal(described_class.paper_trading_balance.to_s))
       end
     end
   end

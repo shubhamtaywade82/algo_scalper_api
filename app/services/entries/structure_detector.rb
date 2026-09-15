@@ -56,49 +56,6 @@ module Entries
         end
       end
 
-      # Change of Character (CHOCH) - structure shift with confirmation
-      # CHOCH occurs when price breaks structure AND maintains direction
-      # @param bars [Array<Candle>] Array of candle objects
-      # @param lookback_minutes [Integer] Minutes to look back
-      # @return [Symbol] :bullish, :bearish, or :neutral
-      def choch?(bars, lookback_minutes: 15)
-        return :neutral if bars.blank? || bars.size < 4
-
-        lookback_count = [lookback_minutes, bars.size].min
-        recent_bars = bars.last(lookback_count)
-        return :neutral if recent_bars.size < 4
-
-        # Need at least 4 candles: 2 for structure break, 1 for confirmation
-        current = recent_bars.last
-        prev = recent_bars[-2]
-        return :neutral unless current && prev
-
-        # Check for bullish CHOCH
-        # 1. Price breaks above previous swing high
-        # 2. Confirmation: current candle maintains bullish structure
-        previous_bars = recent_bars[0..-3]
-        return :neutral if previous_bars.empty?
-
-        previous_swing_high = previous_bars.map(&:high).max
-        previous_swing_low = previous_bars.map(&:low).min
-
-        return :neutral unless previous_swing_high && previous_swing_low
-
-        # Bullish CHOCH: Break above swing high + confirmation
-        if prev.close > previous_swing_high && current.close > prev.close && (current.high > previous_swing_high)
-          # Additional confirmation: current high > previous swing high
-          return :bullish
-        end
-
-        # Bearish CHOCH: Break below swing low + confirmation
-        if prev.close < previous_swing_low && current.close < prev.close && (current.low < previous_swing_low)
-          # Additional confirmation: current low < previous swing low
-          return :bearish
-        end
-
-        :neutral
-      end
-
       # Check if structure aligns with trade direction
       # @param bars [Array<Candle>] Array of candle objects
       # @param direction [Symbol] :bullish or :bearish

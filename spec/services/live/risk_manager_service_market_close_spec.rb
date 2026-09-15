@@ -26,7 +26,12 @@ RSpec.describe Live::RiskManagerService do
       before do
         allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
         allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([instance_double(PositionTracker)])
-        allow(PositionTracker).to receive_message_chain(:active, :includes, :to_a).and_return([instance_double(PositionTracker)])
+        # Runner#run_enforcement_cycle iterates PositionTracker.active.find_each
+        # (the old includes/to_a chain is gone) - a relation double that yields
+        # nothing keeps the cycle quiet.
+        allow(PositionTracker).to receive(:active).and_return(
+          double('ActiveRelation', find_each: nil, includes: double('IncRelation', to_a: []), count: 1)
+        )
         allow(service).to receive(:update_paper_positions_pnl_if_due)
         allow(service).to receive(:ensure_all_positions_in_redis)
         allow(service).to receive(:ensure_all_positions_in_active_cache)

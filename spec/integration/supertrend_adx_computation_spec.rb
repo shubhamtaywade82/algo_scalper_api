@@ -403,7 +403,7 @@ RSpec.describe 'Supertrend & ADX Computation Integration', :vcr, type: :integrat
         series.add_candle(nil)
 
         # The system should raise an error for nil candle data
-        expect { series.rsi }.to raise_error(NoMethodError, /undefined method `close' for nil/)
+        expect { series.rsi }.to raise_error(NoMethodError, /undefined method .close. for nil/)
       end
 
       it 'handles empty candle series' do

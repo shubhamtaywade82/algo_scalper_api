@@ -45,9 +45,11 @@ RSpec.describe Positions::Serializer do
 
         expect(result[:id]).to eq(tracker.id)
         expect(result[:ltp]).to be_present # from base `open` serializer
+        # expiry_date is derived from the consolidated instrument linked as
+        # the tracker's watchable when neither meta nor the tracker carries it.
         expect(result[:entry_context]).to eq(
           iv_at_entry: 18.5, vix_at_entry: 13.2, dte_at_entry: 2,
-          atm_strike: 25_000.0, expiry_date: nil,
+          atm_strike: 25_000.0, expiry_date: tracker.instrument.expiry_date.to_s,
           entry_underlying_price: 24_980.5, entry_tf: '1m',
           alpha_source: 'supertrend_v1', entry_path: 'strategy_platform',
           signal_confidence: 0.7

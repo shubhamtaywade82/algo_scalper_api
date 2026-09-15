@@ -12,7 +12,10 @@ RSpec.describe Entries::OrderExecutionService do
     allow(Orders::Commands::PlaceOrderCommand).to receive(:new).and_call_original
     allow_any_instance_of(Orders::Commands::PlaceOrderCommand).to receive(:call).and_return(command_result) # rubocop:disable RSpec/AnyInstance
     allow(Entries::EntryGuard).to receive(:create_paper_tracker!).and_return(create(:position_tracker, instrument: instrument, paper: true))
+    # EntryPoster.post! never returns nil (always a Result); the service
+    # branches on rejected?/failed?, so the stub must honour that contract.
     allow(Ledger::EntryPoster).to receive(:post!)
+      .and_return(Ledger::EntryPoster::Result.new(status: :posted))
   end
 
   def call_with(side)

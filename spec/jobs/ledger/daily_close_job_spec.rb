@@ -55,13 +55,19 @@ RSpec.describe Ledger::DailyCloseJob do
         )
       end
 
-      it 'uses yesterday closing cash as opening cash when no prior row is found' do
+      it 'snapshots today cash and leaves opening cash at the column default for a fresh row' do
         described_class.new.perform(trading_date: trading_date)
         row = PaperDailyWallet.find_by(trading_date: trading_date, mode: 'paper')
-        expect(row.opening_cash).to eq(BigDecimal('100000.00'))
+
+        # Post-ledger-consolidation semantics: the job never chains yesterday's
+        # closing cash and never consults the paper balance. Fresh rows carry
+        # the NOT NULL column default (0.0); the `presence ||` fallback only
+        # preserves an opening_cash already stored on the row (re-runs).
+        expect(row.opening_cash).to eq(BigDecimal('0.00'))
+        expect(row.closing_cash).to eq(BigDecimal('120000.00'))
       end
 
-      it 'uses yesterday closing cash as opening cash when prior row is present' do
+      it 'keeps a fresh row independent of the previous day row and leaves equity extremes unset' do
         PaperDailyWallet.create!(
           trading_date: trading_date - 1.day,
           mode: 'paper',
@@ -74,9 +80,12 @@ RSpec.describe Ledger::DailyCloseJob do
 
         described_class.new.perform(trading_date: trading_date)
         row = PaperDailyWallet.find_by(trading_date: trading_date, mode: 'paper')
-        expect(row.opening_cash).to eq(BigDecimal('108159.25'))
-        expect(row.max_equity).to eq(BigDecimal('120000.00'))
-        expect(row.min_equity).to eq(BigDecimal('108159.25'))
+
+        # Yesterday's closing cash is not carried over, and the paper path does
+        # not populate max_equity/min_equity — they keep their column defaults.
+        expect(row.opening_cash).to eq(BigDecimal('0.00'))
+        expect(row.max_equity).to eq(BigDecimal('0.00'))
+        expect(row.min_equity).to eq(BigDecimal('0.00'))
       end
     end
 

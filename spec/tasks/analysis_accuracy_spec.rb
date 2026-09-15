@@ -3,7 +3,7 @@
 require 'rails_helper'
 require 'rake'
 
-# rubocop:disable RSpec/DescribeClass, RSpec/BeforeAfterAll
+# rubocop:disable-next RSpec/DescribeClass, RSpec/BeforeAfterAll
 RSpec.describe 'analysis:accuracy rake task' do
   before(:all) do
     Rails.application.load_tasks
@@ -80,7 +80,7 @@ RSpec.describe 'analysis:accuracy rake task' do
   end
 
   describe 'log parsing patterns' do
-    let(:decision_pattern) { /\[SMCSanner\]\s+(\w+):\s+(call|put|no_trade)/i }
+    let(:decision_pattern) { /\[SmcScanner\]\s+(\w+):\s+(call|put|no_trade)/i }
     let(:price_pattern) { /Current price:\s*₹?([\d,]+\.?\d*)/ }
     let(:recommendation_pattern) { /(BUY\s+(?:CE|PE)|AVOID(?:\s+TRADING)?)/i }
 
@@ -287,4 +287,3 @@ RSpec.describe 'analysis:accuracy rake task' do
     end
   end
 end
-# rubocop:enable RSpec/DescribeClass, RSpec/BeforeAfterAll

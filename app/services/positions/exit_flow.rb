@@ -90,6 +90,9 @@ module Positions
 
     def execute_post_exit_effects(final_pnl_rupees, cache_data)
       Portfolio::PnlTracker.mark_realized(tracker_id: tracker.id, pnl: final_pnl_rupees.to_f)
+      # Evict the chain-telemetry cache entry for this tracker (class-level map
+      # keyed by tracker id; without this it leaks one entry per closed position).
+      Scalp::ChainTrailingContext.forget(tracker.id)
       Ledger::ExitPoster.post!(tracker: tracker)
       Positions::DailyPnlRecorder.call(tracker: tracker)
       tracker.send(:cleanup_exit_caches)

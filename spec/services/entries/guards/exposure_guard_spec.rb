@@ -2,7 +2,7 @@
 
 require 'rails_helper'
 
-# rubocop:disable RSpec/VerifiedDoubles
+# rubocop:disable-next RSpec/VerifiedDoubles
 RSpec.describe Entries::Guards::ExposureGuard do
   let(:instrument) { instance_double(Instrument, id: 101) }
   let(:count_relation) { double('count_relation', count: 0) }
@@ -345,4 +345,3 @@ RSpec.describe Entries::Guards::ExposureGuard do
     end
   end
 end
-# rubocop:enable RSpec/VerifiedDoubles

@@ -163,7 +163,7 @@ module Live
       def percentage_pnl_exit_hit?(tracker, snapshot)
         cfg = AlgoConfig.fetch.dig(:risk, :percentage_pnl_exit) || {}
         return false unless cfg[:enabled]
-        target = cfg[:target_pct].to_f
+        target = fee_aware_target_pct(tracker, cfg[:target_pct].to_f)
         return false unless target.positive?
         pnl_pct = snapshot[:pnl_pct].to_f
         return false unless pnl_pct >= target
@@ -174,9 +174,25 @@ module Live
       def profit_target_hit?(tracker, snapshot)
         config = exit_config
         pnl_pct = snapshot[:pnl_pct].to_f
-        tp = config[:take_profit].to_f
+        tp = fee_aware_target_pct(tracker, config[:take_profit].to_f)
         return false unless pnl_pct >= tp
         !trailing_armed?(tracker, snapshot, config)
+      end
+
+      # Fee-aware replacement for a static target percentage: never below base,
+      # raised to a multiple of this position's round-trip friction (fees +
+      # spread) when that is higher — a 5% target on a fee-hostile premium is a
+      # net-zero trade otherwise. Falls back to the base target (logged) when
+      # fee-awareness is disabled or the data is unusable; domain failures never
+      # take the rest of the exit waterfall down with them.
+      def fee_aware_target_pct(tracker, base_pct)
+        Scalp::FeeAwareExitTargets.new(tracker).min_target_pct(base_pct)
+      rescue Errors::Error => e
+        Rails.logger.error(
+          "[UnifiedExitChecker] fee-aware target unavailable for tracker=#{tracker&.id}: " \
+          "#{e.class} - #{e.message} — using base target #{base_pct}"
+        )
+        base_pct.to_f
       end
 
       def check_structure_invalidation(tracker, snapshot)
@@ -260,6 +276,10 @@ module Live
 
         tightening_mult = 1.0
         if trailing_armed?(tracker, snapshot, config)
+          # Isolation boundary (documented divergence from the strict-config
+          # posture, review P3): the telemetry layers below self-isolate — a
+          # failure inside them degrades momentum feedback to :hold (trail
+          # unchanged) instead of taking the trailing path down.
           ctx_res = begin
             evaluate_underlying_context(tracker, snapshot)
           rescue StandardError
@@ -268,8 +288,25 @@ module Live
           if ctx_res.is_a?(Hash)
             if ctx_res[:action] == :exit
               return { exit: true, reason: ctx_res[:reason] || 'UNDERLYING_STRUCTURE_BREAK', path: 'underlying_context_exit' }
-            elsif ctx_res[:action] == :tighten
+            elsif ctx_res[:action] == :tighten || ctx_res[:action] == :scale
+              # :tighten compresses the allowed drawdown (< 1); :scale widens it (> 1)
+              # when underlying momentum is strong — both are the same knob.
               tightening_mult = ctx_res[:multiplier].to_f
+            end
+          end
+
+          # Chain telemetry (IV collapse / OI drift / convexity / gamma wall).
+          # Self-isolating: any internal failure logs and returns :hold.
+          chain_res = begin
+            Scalp::ChainTrailingContext.evaluate(tracker, snapshot)
+          rescue StandardError
+            nil
+          end
+          if chain_res.is_a?(Hash)
+            if chain_res[:action] == :exit
+              return { exit: true, reason: chain_res[:reason] || 'CHAIN_CONTEXT_EXIT', path: 'chain_context_exit' }
+            elsif %i[tighten widen].include?(chain_res[:action])
+              tightening_mult *= chain_res[:multiplier].to_f
             end
           end
         end
@@ -306,7 +343,24 @@ module Live
           prices = pos_data&.price_history || [ltp]
           analyzer = Orders::Analyzer.new(tracker: tracker, ltp: ltp, prices: prices, peak_profit_pct: peak_profit_pct)
           sl_price = analyzer.recommended_sl
-          return sl_price && ltp <= sl_price
+          return false unless sl_price
+          return true if ltp <= sl_price
+
+          # Apply the live momentum/chain multiplier on the analyzer path too
+          # (review P1): without this the continuous-scaling layer only ever
+          # tightened NIFTY (the only index with adaptive_drawdown tiers) and
+          # SENSEX/BANKNIFTY fell through to the raw analyzer stop. The
+          # multiplier scales the remaining cushion between the current price
+          # and the analyzer's stop: < 1 pulls the effective stop closer
+          # (earlier exit), > 1 gives the runner more room, 1.0 is exactly the
+          # analyzer stop.
+          sl_effective = ltp - ((ltp - sl_price) * tightening_multiplier.to_f)
+          # RETURN, not a bare tail expression: without it, an index position
+          # whose analyzer stop sits below the LTP fell through to the generic
+          # hwm-based check below and could exit against a completely
+          # different (unintended) formula — e.g. a snapshot without :pnl read
+          # as (hwm - 0) / hwm = 100% drawdown. The index branch is exclusive.
+          return ltp <= sl_effective
         end
 
         hwm = snapshot[:hwm_pnl].to_f
@@ -320,7 +374,10 @@ module Live
       end
 
       # Best-effort trailing SL price for DISPLAY only — mirrors trailing_stop_hit?'s
-      # logic without ever triggering an exit. Returns nil when trailing hasn't armed
+      # logic without ever triggering an exit. NOTE: unlike the enforcement path,
+      # this does not apply the live momentum/chain tightening multiplier (that
+      # feedback exists only in-trade, per tick); the displayed stop is the
+      # unmultiplied analyzer/tier stop. Returns nil when trailing hasn't armed
       # yet, or when the active rule is PnL-ratio-based and no reliable price
       # equivalent can be derived (falls back to the caller's static SL in that case).
       def live_sl_price(tracker, snapshot, ltp)

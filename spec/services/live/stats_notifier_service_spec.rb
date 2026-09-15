@@ -47,7 +47,8 @@ RSpec.describe Live::StatsNotifierService do
 
     context 'when trades were executed in the previous session' do
       it 'does not send a telegram notification' do
-        allow(PositionTracker).to receive(:where).with(created_at: start_time..end_time).and_return(double(count: 1))
+        # handle_regime_transition tests with .any? (not .count)
+        allow(PositionTracker).to receive(:where).with(created_at: start_time..end_time).and_return(double(count: 1, any?: true))
 
         service.send(:handle_regime_transition, :chop_decay, :close_gamma)
         expect(Notifications::TelegramNotifier.instance).not_to have_received(:send_message)
@@ -56,7 +57,7 @@ RSpec.describe Live::StatsNotifierService do
 
     context 'when no trades were executed in the previous session' do
       before do
-        allow(PositionTracker).to receive(:where).with(created_at: start_time..end_time).and_return(double(count: 0))
+        allow(PositionTracker).to receive(:where).with(created_at: start_time..end_time).and_return(double(count: 0, any?: false))
       end
 
       it 'sends a telegram notification when there are no signals' do

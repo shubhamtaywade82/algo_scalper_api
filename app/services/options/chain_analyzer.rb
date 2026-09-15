@@ -2,8 +2,6 @@
 
 # rubocop:disable Metrics/BlockNesting
 
-# rubocop:disable Metrics/BlockNesting
-
 require 'bigdecimal'
 require 'active_support/core_ext/hash'
 require 'active_support/core_ext/object/blank'
@@ -450,7 +448,7 @@ module Options
       iv_rank = 0.5 # Default - could be calculated from historical IV
       atm_range_percent = self.class.atm_range_pct(iv_rank)
 
-      # rubocop:disable Style/MultilineBlockChain
+      # rubocop:disable-next Style/MultilineBlockChain
       filtered.map do |item|
         strike = item[:strike]
         option_data = item[:option_data]
@@ -477,7 +475,6 @@ module Options
         score = self.class.calculate_strike_score(leg, option_type.to_sym, atm_strike, atm_range_percent)
         leg.merge(score: score)
       end.sort_by { |leg| [-leg[:score], leg[:distance_from_atm]] }
-      # rubocop:enable Style/MultilineBlockChain
     end
 
     def calculate_spread_ratio(option_data)
@@ -737,7 +734,7 @@ module Options
         expiry_date_obj = Date.parse(expiry_date)
         option_type = side_sym.to_s
 
-        available_strikes_bd = instrument.derivatives.where(
+        available_strikes_bd = instrument.derivative_contracts.where(
           expiry_date: expiry_date_obj,
           option_type: option_type
         ).pluck(:strike_price).to_set { |sp| BigDecimal(sp.to_s) }
@@ -1133,9 +1130,9 @@ module Options
           # Use BigDecimal for accurate float comparison
           strike_bd = BigDecimal(strike.to_s)
 
-          derivatives_collection = instrument.respond_to?(:derivatives) ? instrument.derivatives : nil
+          derivatives_collection = instrument.respond_to?(:derivative_contracts) ? instrument.derivative_contracts : nil
 
-          # Try to find derivative using instrument.derivatives association first
+          # Try to find the contract using the derivative_contracts association first
           derivative = if derivatives_collection.respond_to?(:where)
                          derivatives_collection.where(
                            expiry_date: expiry_date_obj,
@@ -1346,7 +1343,7 @@ module Options
         min_oi = AlgoConfig.fetch.dig(:option_chain, :min_oi).to_i
         max_spread_pct = AlgoConfig.fetch.dig(:option_chain, :max_spread_pct).to_f
 
-        # rubocop:disable Style/MultilineBlockChain
+        # rubocop:disable-next Style/MultilineBlockChain
         legs.select do |leg|
           leg[:type] == side &&
             (leg[:strike].to_f - atm.to_f).abs <= window &&
@@ -1354,7 +1351,6 @@ module Options
             leg[:oi].to_i >= min_oi &&
             leg.fetch(:spread_pct, 0.0).to_f <= max_spread_pct
         end.sort_by { |leg| [-leg[:oi].to_i, leg.fetch(:spread_pct, 0.0).to_f] }
-        # rubocop:enable Style/MultilineBlockChain
       end
 
       # Dynamic minimum delta thresholds depending on time of day

@@ -32,7 +32,7 @@ RSpec.describe Backtest::SmcReplayRunner do
   let!(:instrument) { create(:instrument, :nifty_index) }
 
   describe '#call' do
-    # rubocop:disable RSpec/MultipleExpectations -- single result hash contract
+    # rubocop:disable-next RSpec/MultipleExpectations -- single result hash contract
     it 'returns spot_summary and no error for replayable data' do
       index_scope = instance_double(ActiveRecord::Relation)
       allow(Instrument).to receive(:segment_index).and_return(index_scope)
@@ -53,7 +53,6 @@ RSpec.describe Backtest::SmcReplayRunner do
       expect(result[:spot_summary]).to have_key(:count)
       expect(result[:options_summary][:total_trades]).to eq(0)
     end
-    # rubocop:enable RSpec/MultipleExpectations
 
     it 'returns error when instrument is missing' do
       result = described_class.new(symbol: 'UNKNOWN_INDEX_XYZ').call

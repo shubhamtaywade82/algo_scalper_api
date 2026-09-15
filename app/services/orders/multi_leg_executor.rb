@@ -159,9 +159,8 @@ module Orders
     def fetch_order_status(order_id:, coid:)
       return DhanHQ::Models::Order.find(order_id) if order_id.present?
 
-      # rubocop:disable Rails/DynamicFindBy -- DhanHQ::Models::Order method, not an AR dynamic finder
+      # rubocop:disable-next Rails/DynamicFindBy -- DhanHQ::Models::Order method, not an AR dynamic finder
       DhanHQ::Models::Order.find_by_correlation(coid)
-      # rubocop:enable Rails/DynamicFindBy
     rescue StandardError => e
       Rails.logger.error("[MultiLegExecutor] fetch_order_status failed for #{coid}: #{e.class} - #{e.message}")
       nil

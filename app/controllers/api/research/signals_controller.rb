@@ -23,7 +23,7 @@ module Api
       end
 
       def show
-        signal = ::Research::Signal.find(params[:id])
+        signal = ::Research::Signal.find(params.expect(:id))
         candidates = signal.option_candidates.order(:option_type, :strike_distance)
         render json: { signal: serialize_signal(signal), candidates: candidates.map { |c| serialize_candidate(c) } }
       rescue ActiveRecord::RecordNotFound

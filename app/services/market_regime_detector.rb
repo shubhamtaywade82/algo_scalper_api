@@ -71,7 +71,7 @@ class MarketRegimeDetector
 
     metrics = calculate_metrics
 
-    # rubocop:disable Style/MultilineBlockChain
+    # rubocop:disable-next Style/MultilineBlockChain
     case
     when trending?(metrics)
       trend_direction(metrics)
@@ -80,7 +80,6 @@ class MarketRegimeDetector
     else
       { regime: 'CHOPPY', confidence: 50.0 } # Needs more confirmation
     end.merge(metrics: metrics, timestamp: Time.current.iso8601)
-    # rubocop:enable Style/MultilineBlockChain
   end
 
   def calculate_metrics
@@ -118,7 +117,6 @@ class MarketRegimeDetector
     direction = metrics[:price_position] > 0.6 ? 'UP' : 'DOWN'
     { regime: "TRENDING_#{direction}", confidence: metrics[:adx_value] }
   end
-
 
   def price_in_range
     # Calculate where current price is relative to the recent high/low range (e.g. last 20 candles)

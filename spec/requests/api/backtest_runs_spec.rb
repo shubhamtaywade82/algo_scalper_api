@@ -53,7 +53,7 @@ RSpec.describe 'Api::BacktestRuns' do
     it 'returns 422 for an unknown strategy_slug' do
       post '/api/backtest_runs', params: { symbol: 'NIFTY', strategy_slug: 'does-not-exist' }
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(response.parsed_body['error']).to eq('strategy_not_found')
       expect(BacktestRun.count).to eq(0)
     end
@@ -102,11 +102,11 @@ RSpec.describe 'Api::BacktestRuns' do
 
       get "/api/backtest_runs/#{run.id}/download_csv"
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
   end
 
-  describe 'existing synchronous Api::BacktestsController is untouched' do
+  describe 'Api::BacktestsController route is unchanged (now async internally, see equity_backtest_job_spec)' do
     it 'still routes POST /api/backtests to the original controller/action' do
       route = Rails.application.routes.recognize_path('/api/backtests', method: :post)
 

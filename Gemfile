@@ -26,7 +26,11 @@ gem 'solid_queue'
 
 gem 'concurrent-ruby'
 gem 'connection_pool', '~> 3.0'
-gem 'json', '>= 2.19.2'
+# json 3.0 changed JSON.parse to keyword-only args; ActiveSupport 8.1 still
+# calls JSON.parse(json, options) positionally, so json 3.x breaks every JSON
+# column cast at boot (db:prepare/seeds die with ArgumentError). Stay on 2.x
+# until Rails ships json-3 compatibility.
+gem 'json', '~> 2.21'
 gem 'redis', '~> 6.0'
 gem 'ruby-technical-analysis'
 gem 'technical-analysis'
@@ -55,8 +59,8 @@ gem 'DhanHQ', '~> 3.4'
 gem 'telegram-bot-ruby', '~> 2.8'
 
 gem 'aasm', '~> 6.0'
-gem 'prometheus_exporter', '~> 2.3'
 gem 'ollama-client', '~> 1.4'
+gem 'prometheus_exporter', '~> 2.3'
 gem 'ruby_llm', '~> 1.16'
 gem 'ruby_llm-agents', '~> 3.15'
 

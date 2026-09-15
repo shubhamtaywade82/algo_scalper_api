@@ -16,6 +16,18 @@ RSpec.describe Risk::Rules::PercentagePnlRule do
     )
   end
 
+  before do
+    # Pin the rule's static-target semantics: this spec exercises the rule
+    # plumbing (below/reaches/exceeds target, snapshot fallback) against a known
+    # 5% target. The fee-aware floor (risk.scalp_exit — shipped enabled in
+    # algo.yml) raises targets per-position and has its own dedicated specs
+    # (scalp/fee_aware_exit_targets_spec + the unified_exit_checker wiring
+    # specs); leaving it out of this stub keeps those concerns decoupled.
+    allow(AlgoConfig).to receive(:fetch).and_return(
+      risk: { percentage_pnl_exit: { enabled: true, target_pct: 0.05 } }
+    )
+  end
+
   describe '#evaluate' do
     context 'when PnL is below target' do
       let(:pnl_pct) { BigDecimal('0.03') } # 3%

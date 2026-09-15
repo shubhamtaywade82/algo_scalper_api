@@ -86,14 +86,16 @@ class Instrument < ApplicationRecord
   # --- Associations -------------------------------------------------------
   belongs_to :underlying_instrument, class_name: 'Instrument', optional: true,
                                      inverse_of: :derivative_contracts
-  has_many :derivative_contracts, class_name: 'Instrument',
-           foreign_key: :underlying_instrument_id,
-           inverse_of: :underlying_instrument, dependent: :nullify
+  has_many :derivative_contracts, class_name: 'Instrument', foreign_key: :underlying_instrument_id, inverse_of: :underlying_instrument, dependent: :nullify
 
-  # Back-compat alias: `instrument.derivatives` used to hit the duplicated
-  # Derivative master. It now returns consolidated Instrument contract rows
-  # hanging off the underlying via underlying_instrument_id.
-  has_many :derivatives, class_name: 'Instrument', foreign_key: :underlying_instrument_id
+  # Legacy association over the frozen `derivatives` table (Derivative is a
+  # deprecated read-only facade — see that class). This is the ORIGINAL name
+  # and contract; the consolidation briefly repurposed it for the
+  # self-referential contract rows, which silently changed what every legacy
+  # reader (specs, rake tasks, chain analyzers) got back. The consolidated
+  # contract rows live on #derivative_contracts above — use that for anything
+  # new (review P1: one name, one meaning).
+  has_many :derivatives, class_name: 'Derivative', inverse_of: :instrument, dependent: :destroy
 
   has_many :position_trackers, dependent: :restrict_with_error
   has_many :executions, dependent: :restrict_with_error
@@ -769,7 +771,9 @@ class Instrument < ApplicationRecord
   # @return [Integer, nil] Lot size from nearest future expiry contract, or nil if not found
   def lot_size_from_derivatives
     today = Time.zone.today
-    nearest_derivative = derivatives
+    # Read the consolidated contract rows (the legacy `derivatives` table is
+    # frozen — the importer only upserts instruments now).
+    nearest_derivative = derivative_contracts
                          .where(expiry_date: today..)
                          .where.not(lot_size: nil)
                          .order(expiry_date: :asc)

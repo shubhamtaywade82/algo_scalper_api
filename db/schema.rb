@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_28_000003) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_13_000004) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -221,28 +221,30 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_000003) do
   end
 
   create_table "executions", force: :cascade do |t|
+    t.decimal "ask", precision: 12, scale: 4
+    t.decimal "bid", precision: 12, scale: 4
+    t.string "client_order_id"
     t.datetime "created_at", null: false
-    t.decimal "fees", precision: 12, scale: 4, default: "0"
+    t.decimal "fees", precision: 12, scale: 4, default: "0.0"
     t.decimal "fill_price", precision: 12, scale: 4
     t.datetime "filled_at"
     t.bigint "instrument_id", null: false
     t.jsonb "meta", default: {}
     t.string "order_no", null: false
-    t.string "client_order_id"
     t.bigint "position_tracker_id"
     t.string "purpose", default: "entry", null: false
     t.integer "quantity", null: false
     t.decimal "requested_price", precision: 12, scale: 4
-    t.decimal "bid", precision: 12, scale: 4
-    t.decimal "ask", precision: 12, scale: 4
-    t.decimal "slippage", precision: 12, scale: 4
     t.string "side", null: false
+    t.decimal "slippage", precision: 12, scale: 4
     t.string "source", default: "paper", null: false
     t.string "status", default: "filled", null: false
     t.datetime "updated_at", null: false
     t.index ["instrument_id", "filled_at"], name: "index_executions_on_instrument_id_and_filled_at"
+    t.index ["instrument_id"], name: "index_executions_on_instrument_id"
     t.index ["order_no"], name: "index_executions_on_order_no"
     t.index ["position_tracker_id", "purpose"], name: "index_executions_on_position_tracker_id_and_purpose"
+    t.index ["position_tracker_id"], name: "index_executions_on_position_tracker_id"
     t.index ["source", "status"], name: "index_executions_on_source_and_status"
   end
 
@@ -295,8 +297,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_000003) do
     t.string "underlying_symbol"
     t.datetime "updated_at", null: false
     t.index ["exchange", "segment", "security_id"], name: "index_instruments_on_exchange_segment_security_id_unique", unique: true
-    t.index ["exchange", "segment", "underlying_security_id", "expiry_date"], name: "index_instruments_on_future_contract_identity", unique: true, where: "(option_type IS NULL AND expiry_date IS NOT NULL AND underlying_security_id IS NOT NULL AND instrument_type LIKE 'FUT%')"
-    t.index ["exchange", "segment", "underlying_security_id", "expiry_date", "strike_price", "option_type"], name: "index_instruments_on_option_contract_identity", unique: true, where: "(option_type IS NOT NULL AND underlying_security_id IS NOT NULL AND expiry_date IS NOT NULL)"
+    t.index ["exchange", "segment", "underlying_security_id", "expiry_date", "strike_price", "option_type"], name: "index_instruments_on_option_contract_identity", unique: true, where: "((option_type IS NOT NULL) AND (underlying_security_id IS NOT NULL) AND (expiry_date IS NOT NULL))"
+    t.index ["exchange", "segment", "underlying_security_id", "expiry_date"], name: "index_instruments_on_future_contract_identity", unique: true, where: "((option_type IS NULL) AND (expiry_date IS NOT NULL) AND (underlying_security_id IS NOT NULL) AND ((instrument_type)::text ~~ 'FUT%'::text))"
     t.index ["instrument_code"], name: "index_instruments_on_instrument_code"
     t.index ["security_id", "segment"], name: "index_instruments_on_security_id_and_segment"
     t.index ["settlement_type"], name: "index_instruments_on_settlement_type"

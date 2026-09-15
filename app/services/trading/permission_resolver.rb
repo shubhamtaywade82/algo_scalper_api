@@ -40,8 +40,6 @@ module Trading
         permission_mode = config[:permission_mode] || 'strict'
         permission_mode == 'lenient' ? :execution_only : :blocked
       end
-
-      private
     end
   end
 end

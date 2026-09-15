@@ -107,7 +107,7 @@ class AdaptiveSupertrendKnnStrategy
 
   def calculate_distances(target_vector, window_indices)
     candles = extract_candles
-    window_indices.map do |h_idx|
+    window_indices.filter_map do |h_idx|
       h_vector = extract_feature_at(h_idx)
       next_close = candles[h_idx + 1]&.close.to_f
       curr_close = candles[h_idx]&.close.to_f
@@ -115,7 +115,7 @@ class AdaptiveSupertrendKnnStrategy
 
       dist = euclidean_distance(target_vector, h_vector)
       { dist: dist, outcome_bullish: outcome_bullish }
-    end.compact
+    end
   end
 
   def euclidean_distance(v1, v2)

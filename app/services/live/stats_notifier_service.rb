@@ -95,7 +95,7 @@ module Live
 
       start_time = Time.zone.parse(regime_cfg[:start])
       end_time = Time.zone.parse(regime_cfg[:end])
-      return if PositionTracker.where(created_at: start_time..end_time).count.positive?
+      return if PositionTracker.where(created_at: start_time..end_time).any?
 
       signals = Strategies::Signal.where(created_at: start_time..end_time)
       regime_label = from_regime.to_s.tr('_', ' ').upcase

@@ -44,7 +44,11 @@ RSpec.describe Ai::DynamicConfig::ContextBuilder do
 
   it 'reports today\'s risk snapshot' do
     allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).and_return(nil)
-    create(:position_tracker, :exited, exited_at: 1.hour.ago, last_pnl_rupees: -100)
+    # Day-relative timestamp: the snapshot scopes to exited_at >= local
+    # beginning_of_day; near local midnight a plain 1.hour.ago fixture
+    # crosses into yesterday and drops out of the sum.
+    create(:position_tracker, :exited,
+           exited_at: Time.current.beginning_of_day + 1.hour, last_pnl_rupees: -100)
 
     result = described_class.call(index_key: 'NIFTY')
 

@@ -27,6 +27,11 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
     # Reset TrailingConfig memoization so it picks up the test config
     Positions::TrailingConfig.instance_variable_set(:@config, nil)
 
+    # UnifiedExitChecker memoizes its exit config for 30s at class level - reset
+    # so each example's AlgoConfig stub is actually honoured.
+    Live::UnifiedExitChecker.instance_variable_set(:@exit_config, nil)
+    Live::UnifiedExitChecker.instance_variable_set(:@exit_config_expires_at, nil)
+
     # Ensure ActiveCache is clean
     Positions::ActiveCache.instance.clear
   end
@@ -93,7 +98,12 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
               atr_ratio_threshold: 0.60
             },
             # Direct trailing enabled for conservative
-            direct_trailing: { enabled: true }
+            direct_trailing: { enabled: true },
+            # The NIFTY trailing path reads tier config from here - peak 5%
+            # with current 2% must breach the 3%-of-peak drawdown allowance.
+            institutional_trailing: {
+              nifty: { adaptive_drawdown: [{ min_profit: 0.03, drawdown: 0.03 }] }
+            }
           }
         }
       end
@@ -260,6 +270,11 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
       end
 
       it 'executes all enforcement methods in order' do
+        # monitor_loop routes to EOD force-close (and skips the enforcement chain)
+        # whenever Time.current is at/past market_close_hhmm — freeze mid-session
+        # so the full chain actually runs regardless of the wall clock.
+        travel_to(Time.zone.parse('2026-07-06 10:30:00'))
+
         pnl_data = {
           pnl: BigDecimal('250.0'),
           pnl_pct: BigDecimal('0.05'),
@@ -268,9 +283,15 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
         setup_active_cache(tracker, pnl_data)
 
         expect(service).to receive(:enforce_hard_limits_for).with(tracker, exit_engine: exit_engine).and_call_original
-        expect(service).to receive(:enforce_early_trend_failure_for).with(tracker, exit_engine: exit_engine).and_call_original
+        # NOTE: enforce_early_trend_failure is deliberately NOT part of the interval
+        # chain — it was retired in #115 ("LEGACY RULES DISABLED... replaced by
+        # premium_momentum_failure"). Its bulk entrypoint stays covered by the
+        # strict-config example below.
         expect(service).to receive(:enforce_premium_r_stop_for).with(tracker, exit_engine: exit_engine).and_call_original
         expect(service).to receive(:enforce_dynamic_trailing_stops_for).with(tracker, exit_engine: exit_engine).and_call_original
+
+        # have_received requires the method to have been stubbed (spy semantics)
+        allow(service).to receive(:run_interval_enforcement_if_needed).and_call_original
 
         service.instance_variable_set(:@exit_engine, exit_engine)
         service.send(:monitor_loop, Time.current)

@@ -11,10 +11,9 @@ RSpec.describe Orders::Placer do
   let(:quantity) { 50 }
 
   before do
-    allow(Rails.cache).to receive(:read).and_return(nil)
     # write(..., unless_exist: true) returns truthy on first claim, falsy on a repeat id —
     # Orders::Placer#claim! relies on that return value, so the default here must claim.
-    allow(Rails.cache).to receive(:write).and_return(true)
+    allow(Rails.cache).to receive_messages(read: nil, write: true)
     allow(DhanHQ::Models::Order).to receive(:create!) do |attributes|
       captured_attrs << attributes
       order_double
@@ -631,8 +630,7 @@ RSpec.describe Orders::Placer do
         exchange_segment: segment,
         position_type: DhanHQ::Constants::PositionType::LONG
       )
-      allow(Orders::Slicer).to receive(:slice_quantity).and_return([quantity / 2, quantity / 2])
-      allow(Orders::Slicer).to receive(:delay_seconds).and_return(0)
+      allow(Orders::Slicer).to receive_messages(slice_quantity: [quantity / 2, quantity / 2], delay_seconds: 0)
       call_count = 0
       allow(DhanHQ::Models::Order).to receive(:create!) do
         call_count += 1

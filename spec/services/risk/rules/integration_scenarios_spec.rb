@@ -57,6 +57,18 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
   end
 
   describe 'Scenario 2: Take Profit Hit' do
+    before do
+      # PercentagePnlRule delegates to UnifiedExitChecker#percentage_pnl_exit_hit?,
+      # which reads risk.percentage_pnl_exit from the LIVE config and applies the
+      # fee-aware floor. Pin a bare 5% target with fee-awareness off so the
+      # scenario exercises the rule math itself (a +7% move vs a 5% target).
+      allow(AlgoConfig).to receive(:fetch).and_return(
+        risk: { percentage_pnl_exit: { enabled: true, target_pct: 0.05 } }
+      )
+      Live::UnifiedExitChecker.instance_variable_set(:@exit_config, nil)
+      Live::UnifiedExitChecker.instance_variable_set(:@exit_config_expires_at, nil)
+    end
+
     let(:position_data) do
       Positions::PositionData.new(
         tracker_id: tracker.id,

@@ -6,7 +6,7 @@ RSpec.describe 'Signal Generation Strategies Integration', :vcr, type: :integrat
   let(:instrument) { create(:instrument, :nifty_future, security_id: '12345') }
   let(:signal_engine) { Signal::Engine }
   # Removed: Trading::TrendIdentifier (redundant legacy implementation)
-  let(:holy_grail_service) { Indicators::HolyGrail.new(candles: candle_data, config: Indicators::HolyGrail.demo_config) }
+  let(:holy_grail_service) { Indicators::HolyGrail.new(candles: candle_data, config: Indicators::HolyGrail::DEFAULTS) }
   let(:candle_data) do
     {
       'close' => Array.new(100) { |i| 100.0 + (i * 0.1) },
@@ -302,7 +302,9 @@ RSpec.describe 'Signal Generation Strategies Integration', :vcr, type: :integrat
 
   describe 'Signal Validation and Filtering' do
     context 'when validating signals' do
-      let(:signal_validator) { Signal::Validator.new }
+      # Signal::Validator (confidence-threshold-only) was removed as dead code
+      # with zero callers; live pre-entry validation now runs through
+      # Signal::MomentumValidator / Signal::ValidationGates.
 
       it 'validates bullish signals' do
         # Test basic signal validation functionality
@@ -325,21 +327,19 @@ RSpec.describe 'Signal Generation Strategies Integration', :vcr, type: :integrat
       end
 
       it 'rejects weak signals' do
-        signal_data = {
+        series = create_candle_series_with_trend_data
+
+        # 6-candle trend data confirms only 2 of 3 momentum checks (no swing
+        # high breakout), so the validator rejects the weak signal.
+        validation = Signal::MomentumValidator.validate(
+          instrument: instrument,
+          series: series,
           direction: :bullish,
-          confidence: 0.3,
-          timeframe: '5m',
-          indicators: {
-            supertrend: :bullish,
-            adx: 15.0,
-            rsi: 45.0
-          }
-        }
+          min_confirmations: 3
+        )
 
-        validation = signal_validator.validate(signal_data)
-
-        expect(validation[:valid]).to be false
-        expect(validation[:reason]).to include('low confidence')
+        expect(validation.valid).to be false
+        expect(validation.reasons.join(' ')).to include('Insufficient momentum confirmation')
       end
 
       it 'validates multi-timeframe signals' do
@@ -618,10 +618,13 @@ RSpec.describe 'Signal Generation Strategies Integration', :vcr, type: :integrat
       end
 
       it 'handles indicator calculation errors' do
-        # Test that RSI method handles errors gracefully by stubbing the internal call
+        # Test that RSI method handles recognized calculation errors gracefully
+        # by stubbing the internal call (CandleSeries#rsi rescues
+        # ValidationError/ArgumentError/TypeError and returns nil; unexpected
+        # errors are no longer silently swallowed).
         allow(RubyTechnicalAnalysis::RelativeStrengthIndex).to receive(:new).and_return(
           instance_double(RubyTechnicalAnalysis::RelativeStrengthIndex, call: nil).tap do |double|
-            allow(double).to receive(:call).and_raise(StandardError, 'RSI calculation failed')
+            allow(double).to receive(:call).and_raise(ArgumentError, 'RSI calculation failed')
           end
         )
 
