@@ -1067,13 +1067,14 @@ RSpec.describe Live::UnifiedExitChecker do
 
     context 'when the position is fee-hostile (cheap premium, small lot)' do
       it 'raises the percentage target to cover friction — 15% profit no longer exits' do
-        # fee-aware target = max(0.05, 0.18) = 0.18; pnl 0.15 < 0.18
+        # fee-aware target = max(0.05, 3 x 0.0695) = 0.2084 (statutory fees
+        # 49.48/1000 + spread 0.02); pnl 0.15 < 0.2084
         snapshot = { pnl_pct: 0.15, ltp: 57.5, pnl: 150.0, hwm_pnl: 0.0 }
         expect(described_class.send(:percentage_pnl_exit_hit?, fee_hostile_tracker, snapshot)).to be false
       end
 
       it 'exits once profit clears the fee-aware floor' do
-        snapshot = { pnl_pct: 0.19, ltp: 59.5, pnl: 190.0, hwm_pnl: 0.0 }
+        snapshot = { pnl_pct: 0.22, ltp: 61.0, pnl: 220.0, hwm_pnl: 0.0 }
         expect(described_class.send(:percentage_pnl_exit_hit?, fee_hostile_tracker, snapshot)).to be true
       end
     end
