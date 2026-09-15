@@ -14,14 +14,22 @@ module Backtest
       option_data = fetch_option_series(signal_type, candle.timestamp)
       return if option_data.blank?
 
-      entry_premium = fetch_premium_price(option_data, candle.timestamp)
+      entry_bar = nearest_bar(option_data, candle.timestamp)
+      return if entry_bar.blank?
+
+      entry_premium = entry_bar[:close].to_f
 
       {
         signal_type: signal_type,
         entry_index: index,
         entry_time: candle.timestamp,
         entry_price: entry_premium,
-        option_data: option_data,
+        # DhanHQ's expired-options "ATM" series re-resolves the strike per bar as spot drifts —
+        # it's a rolling composite, not one contract's continuous price (see
+        # Backtest::OptionsBuyingBacktester#same_strike_bars for the full explanation). A real
+        # position holds ONE strike from entry to exit, so every later premium lookup on this
+        # position must only see bars quoting the strike actually entered.
+        option_data: same_strike_bars(option_data, entry_bar[:strike]),
         stop_loss: calculate_stop_loss(entry_premium, signal_type),
         target: calculate_target(entry_premium, signal_type)
       }
@@ -119,10 +127,18 @@ module Backtest
     end
 
     def fetch_premium_price(option_data, ts)
-      return 0.0 if option_data.blank?
+      bar = nearest_bar(option_data, ts)
+      bar ? bar[:close].to_f : 0.0
+    end
 
-      bar = option_data.min_by { |b| (b[:timestamp] - ts).abs }
-      bar[:close].to_f
+    def nearest_bar(option_data, ts)
+      return nil if option_data.blank?
+
+      option_data.min_by { |b| (b[:timestamp] - ts).abs }
+    end
+
+    def same_strike_bars(option_data, entry_strike)
+      option_data.select { |b| b[:strike].to_i == entry_strike.to_i }
     end
 
     def calculate_stop_loss(entry_price, signal_type)

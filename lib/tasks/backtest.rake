@@ -264,47 +264,46 @@ namespace :backtest do
     puts '=' * 100
 
     symbols.each do |symbol|
-      intervals.each do |interval|
-        puts "\n#{'=' * 100}"
-        puts "📊 #{symbol} - #{interval}min Timeframe"
-        puts '=' * 100
+      puts "\n#{'=' * 100}"
+      puts "📊 #{symbol}"
+      puts '=' * 100
 
-        strategies.each do |strategy_name, strategy_lambda|
-          puts "\n#{'-' * 100}"
-          puts "  Strategy: #{strategy_name}"
-          puts '-' * 100
+      strategies.each do |strategy_name, strategy_lambda|
+        interval = strategy_lambda[:interval]
+        puts "\n#{'-' * 100}"
+        puts "  Strategy: #{strategy_name} (#{interval}min)"
+        puts '-' * 100
 
-          begin
-            result = BacktestService.run(
-              symbol: symbol,
-              interval: interval,
-              days_back: days,
-              strategy: strategy_lambda
-            )
+        begin
+          result = BacktestService.run(
+            symbol: symbol,
+            interval: interval,
+            days_back: days,
+            strategy: strategy_lambda
+          )
 
-            summary = result.summary
-            next if summary.empty?
+          summary = result.summary
+          next if summary.empty?
 
-            all_results << {
-              symbol: symbol,
-              interval: interval,
-              strategy: strategy_name,
-              summary: summary
-            }
+          all_results << {
+            symbol: symbol,
+            interval: interval,
+            strategy: strategy_name,
+            summary: summary
+          }
 
-            puts "  Total Trades:    #{summary[:total_trades]}"
-            puts "  Win Rate:        #{summary[:win_rate]}%"
-            puts "  Total P&L:       #{'+' if summary[:total_pnl_percent].positive?}#{summary[:total_pnl_percent]}%"
-            puts "  Expectancy:      #{'+' if summary[:expectancy].positive?}#{summary[:expectancy]}% per trade"
-            puts "  Avg Win:         +#{summary[:avg_win_percent]}%"
-            puts "  Avg Loss:        #{summary[:avg_loss_percent]}%"
-          rescue StandardError => e
-            puts "  ❌ Error: #{e.message}"
-            Rails.logger.error("[Backtest] Failed for #{symbol}/#{details[:interval]}min/#{strategy_name}: #{e.message}")
-          end
+          puts "  Total Trades:    #{summary[:total_trades]}"
+          puts "  Win Rate:        #{summary[:win_rate]}%"
+          puts "  Total P&L:       #{'+' if summary[:total_pnl_percent].positive?}#{summary[:total_pnl_percent]}%"
+          puts "  Expectancy:      #{'+' if summary[:expectancy].positive?}#{summary[:expectancy]}% per trade"
+          puts "  Avg Win:         +#{summary[:avg_win_percent]}%"
+          puts "  Avg Loss:        #{summary[:avg_loss_percent]}%"
+        rescue StandardError => e
+          puts "  ❌ Error: #{e.message}"
+          Rails.logger.error("[Backtest] Failed for #{symbol}/#{interval}min/#{strategy_name}: #{e.message}")
+        end
 
         sleep 1 # Rate limit protection
-        end
       end
     end
 
@@ -390,5 +389,43 @@ namespace :backtest do
 
     puts "\n✅ Exported #{summary[:trades].size} trades to #{output_file}"
     result.print_summary
+  end
+
+  desc 'Backtest the doc strategy pack (ORB, VWAP+RSI pullback, EMA crossover, Supertrend+VWAP) on expired options'
+  task :doc_strategies, %i[symbol days slug] => %i[env environment] do |_t, args|
+    symbol = (args[:symbol] || 'NIFTY').upcase
+    days = (args[:days] || '90').to_i
+    only_slug = args[:slug]
+
+    slugs = %w[orb-breakout vwap-reversal ema-crossover supertrend-vwap]
+    slugs = slugs.select { |s| s == only_slug } if only_slug.present?
+
+    # Picks up strategies/<slug>/ plugins that haven't been deployed to a Strategies::Version
+    # yet on this box — safe to call every run, it no-ops when nothing changed.
+    Strategies::Discovery.sync!
+
+    puts "\n#{'=' * 100}"
+    puts "📚 DOC STRATEGY PACK BACKTEST: #{symbol} | Last #{days} trading days | expired options, same-strike locked"
+    puts '=' * 100
+
+    slugs.each do |slug|
+      version = Strategies::Record.find_by(slug: slug)&.current_version
+      unless version
+        puts "\n⚠️  #{slug}: no deployed version found (check strategies/#{slug}/manifest.yml)"
+        next
+      end
+
+      puts "\n#{'-' * 100}"
+      puts "▶ #{slug} (v#{version.version})"
+      puts '-' * 100
+
+      result = Backtest::StrategyBacktester.call(
+        symbol: symbol,
+        strategy_version: version,
+        days_back: days,
+        trading_type: :options
+      )
+      result.print_summary
+    end
   end
 end
