@@ -38,7 +38,13 @@ module Api
       expiry = analyzer.find_nearest_expiry
       return nil unless spot&.positive? && expiry
 
-      increment = spot >= 50_000 ? 100 : (spot >= 10_000 ? 50 : 25)
+      increment = if spot >= 50_000
+                    100
+                  elsif spot >= 10_000
+                    50
+                  else
+                    25
+                  end
       atm = (spot / increment).round * increment
       contract = Instrument.options.find_by(underlying_symbol: symbol.upcase, expiry_date: expiry, strike_price: atm, option_type: 'CE')
       return nil unless contract

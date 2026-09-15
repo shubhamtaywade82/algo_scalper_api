@@ -60,7 +60,9 @@ class OrderIntent < ApplicationRecord
     event :aasm_approve_risk do
       transitions from: %i[created risk_pending], to: :risk_approved
       after do
-        update_column(:risk_approved, true)
+        # update_column on purpose: we are inside the aasm transition —
+        # update! here would re-enter the state machine's own save path.
+        update_column(:risk_approved, true) # rubocop:disable Rails/SkipsModelValidations
         sync_status!
       end
     end
@@ -73,7 +75,8 @@ class OrderIntent < ApplicationRecord
     event :aasm_approve_margin do
       transitions from: %i[risk_approved margin_pending], to: :approved
       after do
-        update_column(:margin_approved, true)
+        # update_column on purpose: same aasm re-entrancy rationale as above.
+        update_column(:margin_approved, true) # rubocop:disable Rails/SkipsModelValidations
         sync_status!
       end
     end
@@ -171,7 +174,9 @@ class OrderIntent < ApplicationRecord
   private
 
   def sync_status!
-    update_column(:status, aasm_state) if status != aasm_state
+    # update_column on purpose: mirrors the aasm state column without
+    # triggering validations/callbacks while a transition is still in flight.
+    update_column(:status, aasm_state) if status != aasm_state # rubocop:disable Rails/SkipsModelValidations
   end
 
   def assign_correlation_id

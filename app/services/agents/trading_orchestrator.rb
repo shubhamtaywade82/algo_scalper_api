@@ -29,13 +29,13 @@ module Agents
       log "Starting pipeline for #{@index_key}"
 
       index_cfg = resolve_index_cfg
-      return abort("No index config for #{@index_key}") unless index_cfg
+      return halt("No index config for #{@index_key}") unless index_cfg
 
       # ── Stage 1: Market Analysis ──────────────────────────────────────────
       analyst_result = run_agent("MarketAnalystAgent") do
         MarketAnalystAgent.call(index_key: @index_key, interval: @interval)
       end
-      return abort("MarketAnalystAgent failed: #{analyst_result[:error]}") if analyst_result[:error]
+      return halt("MarketAnalystAgent failed: #{analyst_result[:error]}") if analyst_result[:error]
 
       analysis = analyst_result[:content]
 
@@ -46,7 +46,7 @@ module Agents
           market_analysis: format_for_prompt(analysis)
         )
       end
-      return abort("StrategyAgent failed: #{strategy_result[:error]}") if strategy_result[:error]
+      return halt("StrategyAgent failed: #{strategy_result[:error]}") if strategy_result[:error]
 
       strategy = strategy_result[:content]
       action   = extract_action(strategy)
@@ -62,7 +62,7 @@ module Agents
       risk_result = run_agent("RiskAgent") do
         RiskAgent.call(strategy_details: format_for_prompt(strategy))
       end
-      return abort("RiskAgent failed: #{risk_result[:error]}") if risk_result[:error]
+      return halt("RiskAgent failed: #{risk_result[:error]}") if risk_result[:error]
 
       risk    = risk_result[:content]
       verdict = extract_verdict(risk)
@@ -80,7 +80,7 @@ module Agents
       selector_result = run_agent("OptionSelectorAgent") do
         OptionSelectorAgent.call(index_key: @index_key, direction: direction.to_s)
       end
-      return abort("OptionSelectorAgent failed: #{selector_result[:error]}") if selector_result[:error]
+      return halt("OptionSelectorAgent failed: #{selector_result[:error]}") if selector_result[:error]
 
       selection = selector_result[:content]
 
@@ -348,7 +348,7 @@ module Agents
       Rails.logger.info("#{TAG} #{msg}")
     end
 
-    def abort(reason)
+    def halt(reason)
       log "Aborted: #{reason}"
       { error: reason, entered: false }
     end
