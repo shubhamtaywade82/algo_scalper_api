@@ -141,7 +141,7 @@ module Research
       end
 
       def vwap_relation(series)
-        vwap = series.current_vwap
+        vwap = series.vwap_or_twap.last
         return "unknown" if vwap.nil? || vwap.zero?
 
         close = series.candles.last.close

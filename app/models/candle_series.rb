@@ -241,6 +241,38 @@ class CandleSeries
     vwap.last
   end
 
+  # VWAP when volume data exists; otherwise the cumulative typical-price
+  # average (TWAP) — the standard index-VWAP proxy. DhanHQ reports volume=0
+  # for ALL index candles (documented in Signal::TrendScorer,
+  # OptionsBuyingBacktester, orb-breakout), so a strict VWAP is permanently
+  # undefined on index data and the volume-weighted contract above makes every
+  # index consumer Hold forever. This variant keeps the same per-candle shape
+  # but substitutes the unweighted typical-price mean for the zero-volume
+  # case so index strategies have an honest, documented proxy instead of nil.
+  #
+  # @return [Array<Float>] per-candle VWAP (or TWAP fallback); never nil entries
+  def vwap_or_twap
+    return [] if candles.empty?
+
+    cum_pv = 0.0
+    cum_v = 0.0
+    cum_tp = 0.0
+    n = 0
+
+    candles.map do |c|
+      typical_price = (c.high + c.low + c.close) / 3.0
+      cum_pv += typical_price * c.volume
+      cum_v += c.volume
+      cum_tp += typical_price
+      n += 1
+      if cum_v.positive?
+        (cum_pv / cum_v).round(2)
+      else
+        (cum_tp / n).round(2)
+      end
+    end
+  end
+
   # ATR. Return contract: nil ONLY for the documented domain outcome
   # "not enough candles / invalid input shape for the gem". Unexpected
   # calculation errors now PROPAGATE instead of collapsing to nil — a

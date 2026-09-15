@@ -25,7 +25,7 @@ module Research
 
         series = build_series(symbol, rows)
         last = series.candles.last
-        vwap = series.current_vwap
+        vwap = series.vwap_or_twap.last
 
         {
           "close" => last&.close,

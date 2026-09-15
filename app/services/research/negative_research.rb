@@ -29,7 +29,7 @@ module Research
             timestamp: cand[:timestamp], open: cand[:open], high: cand[:high], low: cand[:low], close: cand[:close], volume: cand[:volume]
           ))
         end
-        vwap = series.current_vwap
+        vwap = series.vwap_or_twap.last
         if vwap
           if breakout_type == :bullish && c[:close] < vwap
             vwap_reclaimed = true

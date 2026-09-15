@@ -90,7 +90,7 @@ module MarketContext
     end
 
     def classify_vwap_behavior(candles)
-      vw = @series.current_vwap
+      vw = @series.vwap_or_twap.last
       return :around unless vw&.positive?
 
       last_close = candles.last.close.to_f
