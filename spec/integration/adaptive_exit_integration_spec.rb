@@ -278,7 +278,10 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
         setup_active_cache(tracker, pnl_data)
 
         expect(service).to receive(:enforce_hard_limits_for).with(tracker, exit_engine: exit_engine).and_call_original
-        expect(service).to receive(:enforce_early_trend_failure_for).with(tracker, exit_engine: exit_engine).and_call_original
+        # enforce_early_trend_failure passes the resolved etf activation profit
+        # through as an extra kwarg — match on the kwargs we care about.
+        expect(service).to receive(:enforce_early_trend_failure_for)
+          .with(tracker, hash_including(exit_engine: exit_engine)).and_call_original
         expect(service).to receive(:enforce_premium_r_stop_for).with(tracker, exit_engine: exit_engine).and_call_original
         expect(service).to receive(:enforce_dynamic_trailing_stops_for).with(tracker, exit_engine: exit_engine).and_call_original
 

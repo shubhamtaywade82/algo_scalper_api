@@ -92,12 +92,16 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
 
     # Mock position fetching
 
-    # Mock ActiveCache for TrailingEngine. upsert_from_tracker is called with
-    # kwargs (current_ltp:, peak_profit_pct:, pnl_pct:) by ExitEnforcement when
-    # the Redis snapshot is missing — allow it so the strict instance_double
-    # does not explode on the first cache refresh.
+    # Mock ActiveCache for TrailingEngine. ExitEnforcement builds missing
+    # PositionData rows via upsert_from_tracker (kwargs: current_ltp:,
+    # peak_profit_pct:, pnl_pct:) when the Redis snapshot is missing — delegate
+    # to the per-example get_by_tracker_id fixture so trailing flows see the
+    # same position data. update_position covers TrailingEngine peak writes.
     @mock_active_cache = instance_double(Positions::ActiveCache)
-    allow(@mock_active_cache).to receive(:upsert_from_tracker)
+    allow(@mock_active_cache).to receive_messages(get_by_tracker_id: nil, update_position: true)
+    allow(@mock_active_cache).to receive(:upsert_from_tracker) do |tracker, **_kwargs|
+      @mock_active_cache.get_by_tracker_id(tracker.id)
+    end
     allow(Positions::ActiveCache).to receive(:instance).and_return(@mock_active_cache)
 
     # Mock LTP fetching
