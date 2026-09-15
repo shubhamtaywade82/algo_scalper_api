@@ -151,17 +151,6 @@ module OptionsBuying
       StateStore.set_compression_arm!(index_key)
     end
 
-    def compression_check_due?(index_key)
-      return false if index_key.blank?
-
-      now = Time.current.to_i
-      last = @last_compression_check[index_key]
-      return false if last && (now - last) < COMPRESSION_CHECK_INTERVAL
-
-      @last_compression_check[index_key] = now
-      true
-    end
-
     def instrument_for_index(index_key)
       idx = IndexConfigLoader.load_indices.find { |c| c[:key].to_s.upcase == index_key.to_s }
       return unless idx

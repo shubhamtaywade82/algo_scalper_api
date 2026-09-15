@@ -86,7 +86,6 @@ RSpec.describe Live::DailyLimits do
         allow(redis).to receive(:get).with(/daily_limits:loss:.*:global/).and_return('1000.0')
       end
 
-      # rubocop:disable RSpec/MultipleExpectations
       it 'returns not allowed with daily_loss_limit_exceeded reason' do
         result = daily_limits.can_trade?(index_key: 'NIFTY')
 
@@ -156,7 +155,6 @@ RSpec.describe Live::DailyLimits do
         expect(result[:max_trades]).to eq(10)
         expect(result[:index_key]).to eq('NIFTY')
       end
-      # rubocop:enable RSpec/MultipleExpectations
     end
 
     context 'when global trade frequency limit is exceeded' do

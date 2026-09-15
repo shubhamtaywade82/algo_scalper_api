@@ -47,7 +47,7 @@ module Positions
     end
 
     def detail(tracker)
-      base = tracker.exited_at.present? ? closed(tracker) : open(tracker)
+      base = tracker.exited_at.present? ? closed(tracker) : Serializer.open(tracker)
 
       base.merge(
         entry_context: entry_context(tracker),
