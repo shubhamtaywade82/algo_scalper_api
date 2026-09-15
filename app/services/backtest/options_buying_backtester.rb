@@ -307,9 +307,10 @@ module Backtest
 
       day_close_time = candles_5m.last.timestamp
       entries_today = 0
+      max_trades_today = (@params[:max_trades_per_day] || MAX_TRADES_PER_DAY).to_i
 
       candles_5m.each_with_index do |candle, idx|
-        break if entries_today >= MAX_TRADES_PER_DAY
+        break if entries_today >= max_trades_today
         next unless trading_hours?(candle.timestamp)
 
         prefix = candles_5m[0..idx]
@@ -350,12 +351,13 @@ module Backtest
         entry_index_price: candle.close,
         exit_bars: exit_bars,
         day_close_time: day_close_time,
-        reason: signal[:reason]
+        reason: signal[:reason],
+        exit_rules: signal[:exit_rules] || {}
       }
     end
 
     def build_options_entry(signal, candle, day_close_time)
-      option_data = fetch_option_data(signal[:type], candle.timestamp)
+      option_data = fetch_option_data(signal[:type], candle.timestamp, strike_pref: signal[:strike_pref])
       return nil if option_data.blank?
 
       entry_bar = nearest_bar(option_data, candle.timestamp)
@@ -369,7 +371,8 @@ module Backtest
         entry_strike: entry_bar[:strike],
         option_data: option_data,
         day_close_time: day_close_time,
-        reason: signal[:reason]
+        reason: signal[:reason],
+        exit_rules: signal[:exit_rules] || {}
       }
     end
 
@@ -451,11 +454,14 @@ module Backtest
     # ── Exit Simulation (pure — no network) ───────────────────────────────
 
     def simulate_trade(entry)
+      rules = entry[:exit_rules] || {}
+      underlying_managed = rules[:stop_index_level] || rules[:target_index_level]
+
       position = {
         entry_price: entry[:entry_price],
         entry_time: entry[:entry_time],
-        stop_loss: entry[:entry_price] * @params[:stop_loss_pct],
-        target: entry[:entry_price] * @params[:target_pct],
+        stop_loss: underlying_managed ? nil : entry[:entry_price] * @params[:stop_loss_pct],
+        target: underlying_managed ? nil : entry[:entry_price] * @params[:target_pct],
         hwm: entry[:entry_price],
         hwm_time: entry[:entry_time],
         giveback_active: false
@@ -471,7 +477,8 @@ module Backtest
           position[:hwm_time] = bar[:timestamp]
         end
 
-        reason = exit_reason_for(position, premium, bar[:timestamp])
+        spot = underlying_price_for(bar)
+        reason = exit_reason_for(entry, position, premium, spot, bar[:timestamp], rules)
         next unless reason
 
         return build_exit(entry, position, premium, bar[:timestamp], reason)
@@ -480,11 +487,41 @@ module Backtest
       force_exit(entry, position)
     end
 
+    # A bar's underlying reference price: the option bar's own `spot` field for options trades
+    # (ExpiredOptionsData reports spot alongside premium per bar), or the index close itself
+    # for futures trades (the underlying IS the traded instrument there).
+    def underlying_price_for(bar)
+      return bar[:close] if @trading_type == :futures
+
+      bar[:spot]
+    end
+
     # Ordered stop_loss-before-target: if both are technically touched within the same bar
     # we can't tell which happened first, so assume the worse outcome (conservative backtest).
-    def exit_reason_for(position, premium, now)
-      return 'stop_loss' if premium <= position[:stop_loss]
-      return 'target' if premium >= position[:target]
+    #
+    # `rules` (from a Strategies::Base plugin's Signal#metadata[:exit_rules]) lets a strategy
+    # express its stop/target on the UNDERLYING instead of the premium — e.g. "stop when spot
+    # closes back inside the opening range" rather than "stop at 65% of entry premium". When
+    # present, underlying-level checks take priority and the fixed-%-of-premium/giveback/
+    # time-stop machinery below is skipped for that leg (each is individually opt-out via
+    # rules[:stop_index_level]/[:target_index_level]/[:giveback_enabled] so a strategy can mix,
+    # e.g. underlying stop + no giveback but keep the shared time-stop). Absent any exit_rules,
+    # behavior is byte-for-byte the pre-existing premium-based engine.
+    def exit_reason_for(entry, position, premium, spot, now, rules)
+      if rules[:stop_index_level] && spot && underlying_breach?(entry[:signal_type], spot, rules[:stop_index_level], :stop)
+        return 'underlying_stop'
+      end
+
+      if rules[:target_index_level] && spot && underlying_breach?(entry[:signal_type], spot, rules[:target_index_level], :target)
+        return 'underlying_target'
+      end
+
+      return 'stop_loss' if rules[:stop_index_level].nil? && premium <= position[:stop_loss]
+      return 'target' if rules[:target_index_level].nil? && premium >= position[:target]
+
+      return 'force_exit_time' if rules[:force_exit_time] && now >= rules[:force_exit_time]
+
+      return nil if rules[:giveback_enabled] == false
 
       gain_pct = pnl_pct_for(position[:entry_price], premium)
       position[:giveback_active] ||= gain_pct >= @params[:giveback_activation_pct]
@@ -492,11 +529,25 @@ module Backtest
       if position[:giveback_active]
         giveback_floor = position[:hwm] * (1 - @params[:giveback_pct])
         return 'giveback_stop' if premium <= giveback_floor
-      elsif now - position[:entry_time] >= @params[:max_hold_minutes].minutes
+      elsif rules[:stop_index_level].nil? && (now - position[:entry_time] >= @params[:max_hold_minutes].minutes)
         return 'time_stop'
       end
 
       nil
+    end
+
+    # CE/long profits as the underlying rises, so its stop is a downside breach and its target
+    # an upside one; PE/short is the mirror image.
+    def underlying_breach?(signal_type, spot, level, kind)
+      bullish = %i[ce long].include?(signal_type)
+      up_breach = spot >= level
+      down_breach = spot <= level
+
+      if kind == :stop
+        bullish ? down_breach : up_breach
+      else
+        bullish ? up_breach : down_breach
+      end
     end
 
     def force_exit(entry, position)
@@ -541,15 +592,28 @@ module Backtest
 
     # ── Option Data ────────────────────────────────────────────────────────
 
-    def fetch_option_data(signal_type, timestamp)
+    def fetch_option_data(signal_type, timestamp, strike_pref: nil)
       Options::ExpiredFetcher.call(
         symbol: @symbol,
         expiry_flag: 'WEEK',
-        date: timestamp.to_date
+        date: timestamp.to_date,
+        strike: resolve_strike_label(signal_type, strike_pref)
       )[signal_type]
     rescue StandardError => e
       $stdout.puts "  ⚠️  Option data error for #{timestamp.to_date}: #{e.message}"
       nil
+    end
+
+    # DhanHQ's ATM+N/ATM-N offsets are an absolute strike-price direction (the next strike UP
+    # or DOWN from spot), not option-type-relative — "ATM-1" means the same thing whether you're
+    # asking for a call or a put. But "one-strike-ITM" flips which side of ATM that is depending
+    # on option type: a lower strike is ITM for a call (already has intrinsic value) yet OTM for
+    # a put, so a CE ITM request must ask for ATM-1 while a PE ITM request must ask for ATM+1.
+    def resolve_strike_label(signal_type, strike_pref)
+      pref = strike_pref.to_s.upcase.presence || 'ATM'
+      return 'ATM' unless pref == 'ITM1'
+
+      %i[ce long].include?(signal_type) ? 'ATM-1' : 'ATM+1'
     end
 
     def nearest_bar(option_data, timestamp)

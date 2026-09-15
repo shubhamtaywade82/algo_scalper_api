@@ -1,125 +1,58 @@
 # frozen_string_literal: true
 
-# Supertrend + VWAP — doc-compliant implementation.
-#
-# Rules (from "Intraday Options Buying Strategies for Indian Index Derivatives"):
-# - Supertrend(10,3) on 5-min index chart.
-# - Buy CE only when: Supertrend is green (bullish) AND price above VWAP.
-# - Buy PE only when: Supertrend is red (bearish) AND price below VWAP.
-# - Doc notes Supertrend raw hit rate is only ~40-45%; no credible options-buying
-#   backtest exists. Treat as a trend filter, not a standalone edge.
-# - SL at the Supertrend line; target previous swing high/low.
-# - No entries during 11:00 AM – 1:00 PM dead zone.
-# - Skip when VWAP is flat (no clear trend).
-#
-# Exit is handled by the parent backtester's exit simulation.
-# This strategy only decides entry timing and direction.
-
 BaseStrategy = Strategies::Base unless defined?(BaseStrategy)
 
+# Supertrend + VWAP confluence, per the doc's Strategy 3 community setup: buy CE only when
+# Supertrend is bullish AND price is above VWAP (PE is the symmetric mirror). The doc is
+# explicit that this setup has "no credible quantified options-buying backtest" and should be
+# treated as a trend filter, not a standalone edge — included here per the doc's full strategy
+# list, with that caveat carried into the strategy's own reasoning tag. Stop is the Supertrend
+# line value at entry (frozen, not recomputed bar-by-bar); target is the prior swing extreme,
+# extended to meet a minimum 1.5:1 if the raw swing distance falls short.
 class SupertrendVwapStrategy < BaseStrategy
-  WARMUP_BARS = 20
-  DEAD_ZONE_START = 11
-  DEAD_ZONE_END   = 13
-
-  def self.timeframes = %w[5m]
-  def self.instruments = %w[NIFTY BANKNIFTY SENSEX]
-
-  def self.params_schema
-    {
-      supertrend_period: { type: :integer, default: 10 },
-      supertrend_multiplier: { type: :float, default: 3.0 },
-      dead_zone_start_hour: { type: :integer, default: 11 },
-      dead_zone_end_hour: { type: :integer, default: 13 }
-    }
-  end
-
   def call(context)
     series = context.candles.call('5m')
     return Signals::Hold.new(reason: 'no_candle_data') unless series&.candles&.any?
 
-    candles = series.candles
-    return Signals::Hold.new(reason: 'insufficient_data') if candles.size < WARMUP_BARS
-
-    now = candles.last.timestamp.in_time_zone('Asia/Kolkata')
-
-    # Dead zone filter
-    dz_start = (params[:dead_zone_start_hour] || DEAD_ZONE_START).to_i
-    dz_end   = (params[:dead_zone_end_hour] || DEAD_ZONE_END).to_i
-    if now.hour >= dz_start && now.hour < dz_end
-      return Signals::Hold.new(reason: 'midday_dead_zone')
-    end
-
-    # No entries after 2:30 PM
-    if now.hour >= 14 && now.min >= 30
-      return Signals::Hold.new(reason: 'late_entry_theta_risk')
-    end
-
-    # VWAP check
-    vwap_values = series.vwap
-    return Signals::Hold.new(reason: 'vwap_unavailable') if vwap_values.blank? || vwap_values.size < 5
-
-    current_vwap = vwap_values.last
-    return Signals::Hold.new(reason: 'vwap_zero') if current_vwap.nil? || current_vwap.zero?
-
-    close = candles.last.close
-    above_vwap = close > current_vwap
-    below_vwap = close < current_vwap
-
-    # VWAP slope check — flat VWAP = no trade
-    slope = compute_vwap_slope(vwap_values)
-    min_slope = 0.002
-    unless slope.abs > min_slope
-      return Signals::Hold.new(reason: 'flat_vwap_no_trend')
-    end
-
-    # Supertrend signal
     st_period = (params[:supertrend_period] || 10).to_i
-    st_mult   = (params[:supertrend_multiplier] || 3.0).to_f
-    st_signal = series.supertrend_signal(period: st_period, multiplier: st_mult)
-    return Signals::Hold.new(reason: 'supertrend_warming_up') if st_signal.nil?
+    st_multiplier = (params[:supertrend_multiplier] || 3.0).to_f
+    min_rr = (params[:min_reward_risk] || 1.5).to_f
+    strike_pref = (params[:strike_pref] || 'ATM').to_s
 
-    st_bullish = st_signal == :long_entry
-    st_bearish = st_signal == :short_entry
+    result = Indicators::Supertrend.new(series: series, period: st_period, base_multiplier: st_multiplier).call
+    last_idx = result[:line]&.rindex { |v| !v.nil? }
+    return Signals::Hold.new(reason: 'supertrend_unavailable') unless last_idx
 
-    # CE: Supertrend bullish AND price above VWAP AND VWAP sloping up
-    if st_bullish && above_vwap && slope.positive?
-      confidence = 0.55
-      confidence += 0.10 if slope > min_slope * 3
-      confidence += 0.05 if (close - current_vwap).abs / current_vwap > 0.003
-      confidence = confidence.clamp(0.50, 0.85).round(2)
+    vwap = series.current_vwap
+    return Signals::Hold.new(reason: 'vwap_unavailable') if vwap.nil? || vwap.zero?
 
-      return Signals::BuyCall.new(
-        confidence: confidence,
-        reason: "st_vwap_ce st=:bullish above_vwap dist=#{((close - current_vwap) / current_vwap * 100).round(3)}% slope=#{slope.round(4)}"
+    close = series.candles[last_idx].close
+    line_value = result[:line][last_idx]
+
+    if result[:trend] == :bullish && close > line_value && close > vwap
+      stop = line_value
+      risk = close - stop
+      return Signals::Hold.new(reason: 'invalid_risk') if risk <= 0
+
+      target = [series.previous_swing_high, close + (min_rr * risk)].compact.max
+      Signals::BuyCall.new(
+        confidence: 0.6,
+        reason: "supertrend_vwap_bullish(unvalidated) st=#{line_value.round(1)} vwap=#{vwap.round(1)}",
+        metadata: { strike_pref: strike_pref, exit_rules: { stop_index_level: stop, target_index_level: target, giveback_enabled: false } }
       )
-    end
+    elsif result[:trend] == :bearish && close < line_value && close < vwap
+      stop = line_value
+      risk = stop - close
+      return Signals::Hold.new(reason: 'invalid_risk') if risk <= 0
 
-    # PE: Supertrend bearish AND price below VWAP AND VWAP sloping down
-    if st_bearish && below_vwap && slope.negative?
-      confidence = 0.55
-      confidence += 0.10 if slope < -min_slope * 3
-      confidence += 0.05 if (current_vwap - close).abs / current_vwap > 0.003
-      confidence = confidence.clamp(0.50, 0.85).round(2)
-
-      return Signals::BuyPut.new(
-        confidence: confidence,
-        reason: "st_vwap_pe st=:bearish below_vwap dist=#{((current_vwap - close) / current_vwap * 100).round(3)}% slope=#{slope.round(4)}"
+      target = [series.previous_swing_low, close - (min_rr * risk)].compact.min
+      Signals::BuyPut.new(
+        confidence: 0.6,
+        reason: "supertrend_vwap_bearish(unvalidated) st=#{line_value.round(1)} vwap=#{vwap.round(1)}",
+        metadata: { strike_pref: strike_pref, exit_rules: { stop_index_level: stop, target_index_level: target, giveback_enabled: false } }
       )
+    else
+      Signals::Hold.new(reason: 'trend_vwap_not_aligned')
     end
-
-    Signals::Hold.new(reason: 'no_aligned_setup')
-  end
-
-  private
-
-  def compute_vwap_slope(vwap_values, lookback: 5)
-    return 0.0 if vwap_values.size < 3
-
-    recent = vwap_values.last([lookback, vwap_values.size].min)
-    n = recent.size
-    return 0.0 if n < 2
-
-    (recent.last - recent.first).to_f / (n - 1)
   end
 end

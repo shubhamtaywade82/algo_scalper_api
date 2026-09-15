@@ -1,6 +1,6 @@
 ---
 slug: supertrend-vwap
-name: Supertrend VWAP
+name: Supertrend + VWAP
 class_name: SupertrendVwapStrategy
 timeframes:
 - 5m
@@ -15,9 +15,9 @@ params:
   supertrend_multiplier:
     type: Float
     default: '3.0'
-  dead_zone_start_hour:
-    type: Integer
-    default: '11'
-  dead_zone_end_hour:
-    type: Integer
-    default: '13'
+  min_reward_risk:
+    type: Float
+    default: '1.5'
+  strike_pref:
+    type: String
+    default: ATM

@@ -54,9 +54,9 @@ gem 'DhanHQ', '~> 3.4'
 # Telegram bot for notifications
 gem 'telegram-bot-ruby', '~> 2.8'
 
-gem 'aasm', '~> 5.5'
-gem 'ollama-client', '~> 1.4'
+gem 'aasm', '~> 6.0'
 gem 'prometheus_exporter', '~> 2.3'
+gem 'ollama-client', '~> 1.4'
 gem 'ruby_llm', '~> 1.16'
 gem 'ruby_llm-agents', '~> 3.15'
 
@@ -77,7 +77,7 @@ group :development, :test do
   gem 'brakeman', require: false
 
   # Code quality and style enforcement
-  gem 'rubocop', '~> 1.89', require: false
+  gem 'rubocop', '~> 1.91', require: false
   gem 'rubocop-factory_bot', '~> 2.28', require: false
   gem 'rubocop-performance', '~> 1.27', require: false
   gem 'rubocop-rails', '~> 2.37', require: false

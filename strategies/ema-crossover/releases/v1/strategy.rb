@@ -1,128 +1,110 @@
 # frozen_string_literal: true
 
-# EMA Crossover — doc-compliant implementation.
-#
-# Rules (from "Intraday Options Buying Strategies for Indian Index Derivatives"):
-# - EMA 9/26 crossover on index chart (5-min), execute in ATM CE (bullish) / ATM PE (bearish).
-# - One entry/exit per day.
-# - Trading window: 9:15 – 15:20 IST.
-# - Doc'd performance: ~35% win rate, 727 trades, 18-day losing streak,
-#   but average gain far exceeds average loss (asymmetric payoff).
-# - No entries during 11:00 AM – 1:00 PM dead zone.
-# - ADX filter: only take crossover signals when ADX > threshold (trending market).
-# - The SAHI variant (9/21 on 3-min) claims higher win rates, but is marketing
-#   without published trade logs; we stick with the documented 9/26 on 5-min.
-#
-# Exit is handled by the parent backtester's exit simulation.
-# This strategy only decides entry timing and direction.
-
 BaseStrategy = Strategies::Base unless defined?(BaseStrategy)
 
+# EMA 9/26 crossover, per the doc's Strategy 3 (Marketcalls): buy ATM CE on a bullish 9/26
+# crossover, ATM PE on a bearish one, one signal per day. The doc reports this setup's own
+# backtest (35% win rate, average win >> average loss, no published SL/target rule) without
+# a documented exit methodology, so the exit here follows the doc's Stage 3 universal risk
+# architecture instead: an ATR-based underlying stop (1.5-2x ATR) rather than a fixed-%
+# premium stop, with a 2:1 target off that same ATR distance.
 class EmaCrossoverStrategy < BaseStrategy
-  WARMUP_BARS = 30
-  DEAD_ZONE_START = 11
-  DEAD_ZONE_END   = 13
-
-  def self.timeframes = %w[5m]
-  def self.instruments = %w[NIFTY BANKNIFTY SENSEX]
-
-  def self.params_schema
-    {
-      fast_ema_period: { type: :integer, default: 9 },
-      slow_ema_period: { type: :integer, default: 26 },
-      min_separation_pct: { type: :float, default: 0.02 },
-      adx_threshold: { type: :float, default: 20.0 },
-      dead_zone_start_hour: { type: :integer, default: 11 },
-      dead_zone_end_hour: { type: :integer, default: 13 }
-    }
-  end
+  IST = 'Asia/Kolkata'
 
   def call(context)
     series = context.candles.call('5m')
     return Signals::Hold.new(reason: 'no_candle_data') unless series&.candles&.any?
 
+    fast = (params[:fast_period] || 9).to_i
+    slow = (params[:slow_period] || 26).to_i
+    atr_period = (params[:atr_period] || 14).to_i
+    atr_mult = (params[:atr_multiplier] || 1.75).to_f
+    r_multiple = (params[:target_r_multiple] || 2.0).to_f
+    strike_pref = (params[:strike_pref] || 'ATM').to_s
+
     candles = series.candles
-    return Signals::Hold.new(reason: 'insufficient_data') if candles.size < WARMUP_BARS
+    return Signals::Hold.new(reason: 'insufficient_history') if candles.size <= slow
 
-    now = candles.last.timestamp.in_time_zone('Asia/Kolkata')
+    current = candles.last
+    now = current.timestamp.in_time_zone(IST)
+    today = now.to_date
 
-    # Dead zone filter
-    dz_start = (params[:dead_zone_start_hour] || DEAD_ZONE_START).to_i
-    dz_end   = (params[:dead_zone_end_hour] || DEAD_ZONE_END).to_i
-    if now.hour >= dz_start && now.hour < dz_end
-      return Signals::Hold.new(reason: 'midday_dead_zone')
-    end
+    day_candles = candles.select { |c| c.timestamp.in_time_zone(IST).to_date == today }
+    return Signals::Hold.new(reason: 'no_day_candles') if day_candles.empty?
+    return Signals::Hold.new(reason: 'already_traded_today') if already_crossed_today?(candles, day_candles, fast, slow)
 
-    # No entries after 3:15 PM
-    if now.hour >= 15 && now.min >= 15
-      return Signals::Hold.new(reason: 'late_entry')
-    end
+    ema_fast_curr = series.ema(fast)
+    ema_slow_curr = series.ema(slow)
+    return Signals::Hold.new(reason: 'ema_unavailable') if ema_fast_curr.nil? || ema_slow_curr.nil?
 
-    fast_period = (params[:fast_ema_period] || 9).to_i
-    slow_period = (params[:slow_ema_period] || 26).to_i
+    prev_series = sub_series_upto(candles, candles.size - 2)
+    ema_fast_prev = prev_series.ema(fast)
+    ema_slow_prev = prev_series.ema(slow)
+    return Signals::Hold.new(reason: 'ema_unavailable') if ema_fast_prev.nil? || ema_slow_prev.nil?
 
-    # Compute EMAs using the RubyTechnicalAnalysis gem via CandleSeries
-    fast_ema = series.ema(fast_period)
-    slow_ema = series.ema(slow_period)
-    return Signals::Hold.new(reason: 'ema_unavailable') if fast_ema.nil? || slow_ema.nil?
+    atr = series.atr(atr_period)
+    return Signals::Hold.new(reason: 'atr_unavailable') if atr.nil? || atr <= 0
 
-    # EMAs are arrays aligned with candles — we need the last two values
-    # to detect a crossover.
-    fast_arr = Array(fast_ema)
-    slow_arr = Array(slow_ema)
-    return Signals::Hold.new(reason: 'ema_arrays_too_short') if fast_arr.size < 2 || slow_arr.size < 2
+    stop_distance = atr * atr_mult
+    bullish_cross = ema_fast_prev <= ema_slow_prev && ema_fast_curr > ema_slow_curr
+    bearish_cross = ema_fast_prev >= ema_slow_prev && ema_fast_curr < ema_slow_curr
 
-    prev_fast = fast_arr[-2]
-    curr_fast = fast_arr[-1]
-    prev_slow = slow_arr[-2]
-    curr_slow = slow_arr[-1]
-
-    # Guard against nil EMA values (gem may pad leading values with nil)
-    return Signals::Hold.new(reason: 'ema_values_nil') if [prev_fast, curr_fast, prev_slow, curr_slow].any?(&:nil?)
-
-    # Detect crossover on the CURRENT bar (just happened)
-    bullish_crossover = prev_fast <= prev_slow && curr_fast > curr_slow
-    bearish_crossover = prev_fast >= prev_slow && curr_fast < curr_slow
-
-    unless bullish_crossover || bearish_crossover
-      return Signals::Hold.new(reason: 'no_crossover')
-    end
-
-    # ADX trend-strength filter (doc: EMA crossover needs trending market)
-    adx_threshold = (params[:adx_threshold] || 20.0).to_f
-    adx_val = series.adx(14)
-    if adx_val && adx_val < adx_threshold
-      return Signals::Hold.new(reason: "weak_trend_adx=#{adx_val.round(1)}")
-    end
-
-    # Separation filter: EMAs should be meaningfully separated after crossover
-    close = candles.last.close
-    min_sep = (params[:min_separation_pct] || 0.02).to_f
-    separation_pct = ((curr_fast - curr_slow).abs / close * 100.0)
-    if separation_pct < min_sep
-      return Signals::Hold.new(reason: "insufficient_separation_#{separation_pct.round(3)}%")
-    end
-
-    if bullish_crossover
-      confidence = 0.55
-      confidence += 0.10 if adx_val && adx_val > 30
-      confidence += 0.05 if separation_pct > min_sep * 2
-      confidence = confidence.clamp(0.5, 0.85).round(2)
-
-      Signals::BuyCall.new(
-        confidence: confidence,
-        reason: "ema_bullish_xover fast=#{curr_fast.round(2)} slow=#{curr_slow.round(2)} adx=#{adx_val&.round(1)}"
+    if bullish_cross
+      stop = current.close - stop_distance
+      target = current.close + (r_multiple * stop_distance)
+      return Signals::BuyCall.new(
+        confidence: 0.55,
+        reason: "ema_crossover_up #{fast}/#{slow} atr=#{atr.round(1)}",
+        metadata: { strike_pref: strike_pref, exit_rules: { stop_index_level: stop, target_index_level: target, giveback_enabled: false } }
       )
-    else
-      confidence = 0.55
-      confidence += 0.10 if adx_val && adx_val > 30
-      confidence += 0.05 if separation_pct > min_sep * 2
-      confidence = confidence.clamp(0.5, 0.85).round(2)
-
-      Signals::BuyPut.new(
-        confidence: confidence,
-        reason: "ema_bearish_xover fast=#{curr_fast.round(2)} slow=#{curr_slow.round(2)} adx=#{adx_val&.round(1)}"
+    elsif bearish_cross
+      stop = current.close + stop_distance
+      target = current.close - (r_multiple * stop_distance)
+      return Signals::BuyPut.new(
+        confidence: 0.55,
+        reason: "ema_crossover_down #{fast}/#{slow} atr=#{atr.round(1)}",
+        metadata: { strike_pref: strike_pref, exit_rules: { stop_index_level: stop, target_index_level: target, giveback_enabled: false } }
       )
     end
+
+    Signals::Hold.new(reason: 'no_crossover')
+  end
+
+  private
+
+  # CandleSeries#ema(period) only exposes the latest value (no full series), so a crossover
+  # check needs two truncated series — one ending at the current bar, one ending at the prior
+  # bar — to compare the fast/slow relationship across a single step.
+  def sub_series_upto(all_candles, upto_index)
+    sub = CandleSeries.new(symbol: 'ema_crossover_scan', interval: '5')
+    all_candles.first(upto_index + 1).each { |c| sub.add_candle(c) }
+    sub
+  end
+
+  # One trade/day: suppress a new signal if the fast/slow relationship already flipped at any
+  # earlier candle today (i.e. a crossover already fired today), regardless of what today's
+  # first candle happened to be relative to slow.
+  def already_crossed_today?(all_candles, day_candles, fast, slow)
+    first_ts = day_candles.first.timestamp
+    start_idx = all_candles.index { |c| c.timestamp == first_ts }
+    return false if start_idx.nil?
+
+    end_idx = all_candles.size - 2 # exclude the current (last) candle
+    scan_start = [start_idx, slow].max
+    return false if end_idx < scan_start
+
+    # NOTE: deliberately not filter_map — it drops `false` results along with `nil`, which
+    # would silently discard every "not yet crossed" reading and leave only `true`s behind.
+    relations = []
+    (scan_start..end_idx).each do |i|
+      s = sub_series_upto(all_candles, i)
+      f = s.ema(fast)
+      sl = s.ema(slow)
+      next if f.nil? || sl.nil?
+
+      relations << (f > sl)
+    end
+
+    relations.uniq.size > 1
   end
 end

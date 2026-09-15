@@ -1,148 +1,118 @@
 # frozen_string_literal: true
 
-# Opening Range Breakout (ORB) — doc-compliant implementation.
-#
-# Rules (from "Intraday Options Buying Strategies for Indian Index Derivatives"):
-# - Opening range = high/low of first N minutes (default 30 min) on the UNDERLYING index.
-# - Entry: candle CLOSE beyond range high (CE) or below range low (PE).
-# - Volume filter: current candle volume >= volume_multiplier * average volume during ORB period.
-# - Skip if range < min_range_points (~40 pts for NIFTY, proxy for 0.2% of index).
-# - Skip if opening gap > max_open_gap_pct (0.8%) to avoid gap-trap days.
-# - Max 2 trades/day (one CE breakout, one PE breakout).
-# - No entries after force_exit_time (2:30 PM IST) to avoid theta bleed.
-# - No entries during 11:00 AM – 1:30 PM dead zone (theta/volume bleed).
-# - Confidence scales with volume strength and range width quality.
-#
-# Exit is handled by the parent backtester's exit simulation (SL/target/giveback/time-stop),
-# not by this strategy.  The strategy only decides entry timing and direction.
-
 BaseStrategy = Strategies::Base unless defined?(BaseStrategy)
 
+# Opening Range Breakout, per the doc's Stage 1 core design: range formed on the underlying
+# (not the option premium — premiums are distorted by IV/theta), CE on a candle CLOSE above
+# the range high, PE on a close below the range low, underlying-based stop at the opposite
+# range edge, 2:1 target projected off the range width, forced exit mid-afternoon, capped at
+# one signal per direction per day (so at most 2 trades/day: one CE break, one PE break).
 class OrbBreakoutStrategy < BaseStrategy
-  DEAD_ZONE_START = 11  # 11:00 AM IST
-  DEAD_ZONE_END   = 13  # 1:00 PM IST (exit dead zone at 1:00 to allow 1:00 PM bar)
-  ORB_END_BUFFER  = 5   # minutes after ORB period before entries are accepted
-
-  def self.timeframes = %w[1m]
-  def self.instruments = %w[NIFTY BANKNIFTY SENSEX]
-
-  def self.params_schema
-    {
-      orb_period_minutes: { type: :integer, default: 30 },
-      min_range_points: { type: :float,   default: 40.0 },
-      max_open_gap_pct: { type: :float,   default: 0.8 },
-      volume_multiplier: { type: :float, default: 1.5 },
-      max_trades_per_day: { type: :integer, default: 2 },
-      force_exit_time: { type: :string, default: '14:30' }
-    }
-  end
+  IST = 'Asia/Kolkata'
 
   def call(context)
-    series = context.candles.call('1m')
+    series = context.candles.call('5m')
     return Signals::Hold.new(reason: 'no_candle_data') unless series&.candles&.any?
 
+    range_minutes = (params[:range_minutes] || 30).to_i
+    min_range_pct = (params[:min_range_pct] || 0.20).to_f
+    max_gap_pct   = (params[:max_gap_pct] || 0.80).to_f
+    r_multiple    = (params[:target_r_multiple] || 2.0).to_f
+    vol_mult      = (params[:volume_multiplier] || 1.5).to_f
+    force_hour    = (params[:force_exit_hour] || 14).to_i
+    force_minute  = (params[:force_exit_minute] || 30).to_i
+    max_failed    = (params[:max_failed_breakouts] || 2).to_i
+    strike_pref   = (params[:strike_pref] || 'ATM').to_s
+
     candles = series.candles
-    return Signals::Hold.new(reason: 'insufficient_data') if candles.size < 5
+    current = candles.last
+    now = current.timestamp.in_time_zone(IST)
+    today = now.to_date
 
-    now = candles.last.timestamp.in_time_zone('Asia/Kolkata')
-    orb_minutes  = (params[:orb_period_minutes] || 30).to_i
-    market_open  = Time.zone.parse("#{now.to_date} 09:15:00")
-    orb_end      = market_open + orb_minutes.minutes
+    day_candles = candles.select { |c| c.timestamp.in_time_zone(IST).to_date == today }
+    return Signals::Hold.new(reason: 'no_day_candles') if day_candles.empty?
 
-    # Wait until ORB period is complete + small buffer for bar confirmation
-    if now < orb_end + ORB_END_BUFFER.minutes
-      return Signals::Hold.new(reason: 'orb_forming')
+    # Hardcode the NSE/BSE cash-session open rather than deriving it from day_candles.first:
+    # the context's 6h trailing window can clip the very first candle on late-afternoon
+    # evaluations, and 09:15 IST is a fixed constant of the exchange, not derived data.
+    session_open = now.change(hour: 9, min: 15, sec: 0)
+    range_end = session_open + range_minutes.minutes
+    return Signals::Hold.new(reason: 'range_forming') if now < range_end
+
+    range_candles = day_candles.select { |c| c.timestamp.in_time_zone(IST) >= session_open && c.timestamp.in_time_zone(IST) < range_end }
+    return Signals::Hold.new(reason: 'range_unavailable') if range_candles.empty?
+
+    orh = range_candles.map(&:high).max
+    orl = range_candles.map(&:low).min
+    range_width = orh - orl
+    return Signals::Hold.new(reason: 'range_unavailable') if range_width <= 0
+
+    ref_price = range_candles.last.close
+    if ref_price.positive? && (range_width / ref_price * 100.0) < min_range_pct
+      return Signals::Hold.new(reason: 'range_too_narrow')
     end
 
-    # No entries after force_exit_time
-    exit_h, exit_m = (params[:force_exit_time] || '14:30').split(':').map(&:to_i)
-    if now.hour > exit_h || (now.hour == exit_h && now.min >= exit_m)
-      return Signals::Hold.new(reason: 'past_force_exit_time')
+    gap_hold = gap_filter_hold(day_candles, candles, today, max_gap_pct)
+    return gap_hold if gap_hold
+
+    post_range = day_candles.select { |c| c.timestamp.in_time_zone(IST) >= range_end }
+    return Signals::Hold.new(reason: 'no_post_range_candles') if post_range.empty?
+
+    prior_bars = post_range[0...-1]
+    already_fired = prior_bars.any? { |c| c.close > orh || c.close < orl }
+    return Signals::Hold.new(reason: 'already_resolved_today') if already_fired
+
+    failed_breakouts = prior_bars.count do |c|
+      (c.high > orh && c.close <= orh) || (c.low < orl && c.close >= orl)
+    end
+    return Signals::Hold.new(reason: 'two_failed_breakouts') if failed_breakouts >= max_failed
+
+    # DhanHQ reports volume=0 for index candles (see options_buying_backtester.rb's own note
+    # on this), which makes avg_volume 0 far more often than not — in that case the filter
+    # can't discriminate anything, so we don't gate on it rather than silently blocking or
+    # silently always-passing on a divide-by-zero.
+    avg_volume = range_candles.sum(&:volume) / range_candles.size.to_f
+    volume_ok = avg_volume <= 0 || current.volume >= (avg_volume * vol_mult)
+
+    force_exit_time = now.change(hour: force_hour, min: force_minute, sec: 0)
+    exit_rules_for = lambda do |stop, target|
+      { stop_index_level: stop, target_index_level: target, force_exit_time: force_exit_time, giveback_enabled: false }
     end
 
-    # Dead zone: 11:00 AM – 1:00 PM IST
-    if now.hour >= DEAD_ZONE_START && now.hour < DEAD_ZONE_END
-      return Signals::Hold.new(reason: 'midday_dead_zone')
-    end
+    if current.close > orh
+      return Signals::Hold.new(reason: 'volume_filter') unless volume_ok
 
-    orb_candles = candles.select do |c|
-      t = c.timestamp.in_time_zone('Asia/Kolkata')
-      t >= market_open && t < orb_end
-    end
-    return Signals::Hold.new(reason: 'no_orb_candles') if orb_candles.size < 2
-
-    range_high = orb_candles.map(&:high).max
-    range_low  = orb_candles.map(&:low).min
-    range_width = range_high - range_low
-    prev_close = candles[0]&.open || range_high
-    open_gap_pct = ((orb_candles.first.open - prev_close).abs / prev_close * 100.0)
-
-    # Skip tiny-range days (doc: skip if range < ~0.2% of index ≈ 40 NIFTY pts)
-    min_range = (params[:min_range_points] || 40.0).to_f
-    if range_width < min_range
-      return Signals::Hold.new(reason: "range_too_narrow_#{range_width.round(1)}")
-    end
-
-    # Skip large-gap days (doc: skip if open gap > 0.8%)
-    max_gap = (params[:max_open_gap_pct] || 0.8).to_f
-    if open_gap_pct > max_gap
-      return Signals::Hold.new(reason: "open_gap_too_large_#{open_gap_pct.round(2)}%")
-    end
-
-    # Volume baseline: average volume during ORB period
-    orb_volumes = orb_candles.map(&:volume)
-    avg_volume  = orb_volumes.sum.to_f / orb_volumes.size
-    vol_mult    = (params[:volume_multiplier] || 1.5).to_f
-    volume_ok   = candles.last.volume >= avg_volume * vol_mult
-
-    close = candles.last.close
-
-    # CE breakout: candle CLOSE above range high, with volume confirmation
-    if close > range_high && volume_ok
-      confidence = compute_confidence(range_width, close - range_high, volume_ok, avg_volume, candles.last.volume)
+      target = current.close + (r_multiple * range_width)
       return Signals::BuyCall.new(
-        confidence: confidence,
-        reason: "orb_ce_breakout range=#{range_width.round(1)} vol=#{(candles.last.volume / [avg_volume, 1].max).round(2)}x"
+        confidence: 0.6,
+        reason: "orb_breakout_up range=#{range_width.round(1)} orh=#{orh.round(1)}",
+        metadata: { strike_pref: strike_pref, exit_rules: exit_rules_for.call(orl, target) }
       )
-    end
+    elsif current.close < orl
+      return Signals::Hold.new(reason: 'volume_filter') unless volume_ok
 
-    # PE breakout: candle CLOSE below range low, with volume confirmation
-    if close < range_low && volume_ok
-      confidence = compute_confidence(range_width, range_low - close, volume_ok, avg_volume, candles.last.volume)
+      target = current.close - (r_multiple * range_width)
       return Signals::BuyPut.new(
-        confidence: confidence,
-        reason: "orb_pe_breakdown range=#{range_width.round(1)} vol=#{(candles.last.volume / [avg_volume, 1].max).round(2)}x"
+        confidence: 0.6,
+        reason: "orb_breakout_down range=#{range_width.round(1)} orl=#{orl.round(1)}",
+        metadata: { strike_pref: strike_pref, exit_rules: exit_rules_for.call(orh, target) }
       )
     end
 
-    # Close beyond range but no volume confirmation — hold, don't enter on weak volume
-    if close > range_high || close < range_low
-      Signals::Hold.new(reason: 'orb_break_no_volume_confirmation')
-    else
-      Signals::Hold.new(reason: 'inside_orb_range')
-    end
+    Signals::Hold.new(reason: 'inside_range')
   end
 
   private
 
-  def compute_confidence(range_width, breakout_distance, volume_ok, avg_vol, current_vol)
-    confidence = 0.55
+  def gap_filter_hold(day_candles, all_candles, today, max_gap_pct)
+    first_today = day_candles.first
+    return nil if first_today.nil?
 
-    # Wider range = more meaningful breakout
-    confidence += 0.05 if range_width > 80
-    confidence += 0.10 if range_width > 120
+    prev_day_candles = all_candles.select { |c| c.timestamp.in_time_zone(IST).to_date < today }
+    prev_close = prev_day_candles.last&.close
+    return nil unless prev_close&.positive?
 
-    # Stronger volume = higher confidence
-    if volume_ok && avg_vol.positive?
-      vol_ratio = current_vol / avg_vol
-      confidence += 0.05 if vol_ratio >= 2.0
-      confidence += 0.05 if vol_ratio >= 3.0
-    end
-
-    # Clean break (close well beyond range, not just barely)
-    confidence += 0.05 if breakout_distance > range_width * 0.1
-    confidence += 0.05 if breakout_distance > range_width * 0.2
-
-    confidence.clamp(0.5, 0.95).round(2)
+    gap_pct = ((first_today.open - prev_close).abs / prev_close) * 100.0
+    Signals::Hold.new(reason: 'gap_too_large') if gap_pct > max_gap_pct
   end
 end

@@ -72,10 +72,13 @@ module Backtest
              else
                bullish ? :ce : :pe
              end
+      metadata = signal.respond_to?(:metadata) ? (signal.metadata || {}) : {}
       {
         type: type,
         price: current_candle.close,
-        reason: "#{@strategy_version.strategy_record.slug}@v#{@strategy_version.version} #{signal.reason} conf=#{signal.confidence}"
+        reason: "#{@strategy_version.strategy_record.slug}@v#{@strategy_version.version} #{signal.reason} conf=#{signal.confidence}",
+        exit_rules: metadata[:exit_rules] || {},
+        strike_pref: metadata[:strike_pref]
       }
     end
   end
