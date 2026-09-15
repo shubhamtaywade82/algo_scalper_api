@@ -3,6 +3,13 @@
 require 'rails_helper'
 
 RSpec.describe Market::MarketRegimeResolver do
+  # The candle generators below use `rand` — unseeded, every full-suite run
+  # drew different OHLC paths and this file flaked (e.g. an unlucky
+  # gap_up_held draw resolving :bearish). Seeding per example makes the
+  # fixtures deterministic; if you change a generator, re-run the file and,
+  # if needed, pick a seed where all examples stay green.
+  before { srand(20_260_916) }
+
   describe '.resolve' do
     subject(:regime) { described_class.resolve(candles_15m: candles) }
 
