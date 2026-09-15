@@ -89,4 +89,62 @@ RSpec.describe Strategies::SecurityScanner do
       expect(result[:blocked].first[:message]).to include('Syntax error')
     end
   end
+
+  context 'with IO.popen (RCE vector missed before the 2026-09 expansion)' do
+    let(:content) { 'IO.popen("ls") { |io| io.read }' }
+
+    it 'blocks IO.popen' do
+      expect(result[:pass]).to be false
+      expect(result[:blocked].pluck(:message)).to include(satisfy { |m| m.include?('popen') })
+    end
+  end
+
+  context 'with Process.spawn' do
+    let(:content) { 'Process.spawn("touch /tmp/x")' }
+
+    it 'blocks Process.spawn' do
+      expect(result[:pass]).to be false
+    end
+  end
+
+  context 'with send dispatch' do
+    let(:content) { 'series.send(:system, "ls")' }
+
+    it 'blocks send regardless of receiver' do
+      expect(result[:pass]).to be false
+      expect(result[:blocked].pluck(:message)).to include(satisfy { |m| m.include?('send') })
+    end
+  end
+
+  context 'with constantize' do
+    let(:content) { '"Orders::Gateway".constantize' }
+
+    it 'blocks constantize' do
+      expect(result[:pass]).to be false
+    end
+  end
+
+  context 'with require' do
+    let(:content) { 'require "open3"' }
+
+    it 'blocks require' do
+      expect(result[:pass]).to be false
+    end
+  end
+
+  context 'with Rails constant access' do
+    let(:content) { 'Rails.logger.info("x")' }
+
+    it 'blocks Rails references' do
+      expect(result[:pass]).to be false
+    end
+  end
+
+  context 'with ENV access' do
+    let(:content) { 'ENV.fetch("DHAN_ACCESS_TOKEN", nil)' }
+
+    it 'blocks ENV references' do
+      expect(result[:pass]).to be false
+    end
+  end
 end

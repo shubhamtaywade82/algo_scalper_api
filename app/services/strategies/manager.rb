@@ -179,6 +179,9 @@ module Strategies
         status: "starting",
         thread: nil,
         version_id: version.id,
+        # Registry key the Loader registered this class under (manifest
+        # class_name — e.g. "OrbBreakoutStrategy", NOT slug.camelize).
+        class_name: version.manifest["class_name"],
         strategy: strategy_instance,
         run: run_record,
         log_stream: log_stream,
@@ -223,7 +226,12 @@ module Strategies
         )
       )
 
-      Runtime.remove(slug.camelize)
+      # Remove by the manifest class_name the Loader registered under —
+      # slug.camelize misses the 6/8 strategies whose class name carries a
+      # "Strategy" suffix, leaking registry entries (and their anonymous
+      # modules) on every stop.
+      registered_name = state[:class_name] || slug.camelize
+      Runtime.remove(registered_name)
 
       @runners.delete(slug)
       @log_streams.delete(slug)

@@ -5,16 +5,24 @@ module Strategies
     BLOCKER_METHODS = %w[
       system exec spawn fork
       eval instance_eval class_eval module_eval
+      send __send__ public_send
+      constantize
+      require require_relative load
+      popen syscall
     ].freeze
 
     BLOCKER_RECEIVER_CALLS = {
-      "File" => %w[write open rename delete chmod chown mkdir rm cp mv symlink link unlink chdir],
+      "File" => %w[write open rename delete chmod chown mkdir rm cp mv symlink link unlink chdir binread],
       "FileUtils" => %w[cp mv rm mkdir rmdir rm_r rm_f rm_rf remove_entry remove_entry_secure
                         touch chmod chown ln ln_s cp_r],
       "Thread" => %w[new start fork],
       "TCPSocket" => %w[new open],
       "UDPSocket" => %w[new open],
-      "Socket" => %w[new open open_tcp open_udp]
+      "Socket" => %w[new open open_tcp open_udp],
+      "IO" => %w[popen read write binread sysread open foreach readlines],
+      "Open3" => %w[capture2 capture2e capture3 pipeline popen system],
+      "Process" => %w[spawn exec fork kill detach setsid wait wait2 waitpid waitpid2],
+      "Kernel" => %w[system exec spawn fork abort]
     }.freeze
 
     BLOCKER_CONST_PREFIXES = %w[
@@ -23,6 +31,7 @@ module Strategies
 
     BLOCKER_CONST_REFERENCES = %w[
       Orders Entries:: Live:: Redis Dhanhq Dhan
+      Rails ENV Process Open3 IO Socket
     ].freeze
 
     WARNING_METHODS = %w[sleep].freeze
@@ -81,8 +90,16 @@ module Strategies
     end
 
     def check_receiver_call(node)
-      receiver = resolve_receiver_name(node)
       method_name = node.children[1].to_s
+
+      # Method-name blockers apply regardless of receiver: `obj.send(...)`,
+      # `x.constantize`, `foo.instance_eval` must not slip through just
+      # because they are attached to a receiver the lists don't know.
+      if BLOCKER_METHODS.include?(method_name)
+        return add_finding("blocker", "Uses #{method_name}", node.first_lineno)
+      end
+
+      receiver = resolve_receiver_name(node)
       return unless receiver
 
       if BLOCKER_RECEIVER_CALLS[receiver]&.include?(method_name)
