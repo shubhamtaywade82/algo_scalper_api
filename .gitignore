@@ -1,5 +1,11 @@
-log/
-tmp/
+# Standard Rails pattern: ignore directory CONTENTS but keep the dirs in git
+# (log/.keep, tmp/.keep) so fresh checkouts — and the Docker build, which
+# chowns db log storage tmp — always have the runtime directories.
+/log/*
+/tmp/*
+!/log/.keep
+!/tmp/.keep
+!/tmp/pids/.keep
 coverage/
 spec/failed_examples.txt
 /failed_examples*.txt
