@@ -121,6 +121,12 @@ end
 
 # Prefer DHAN_CLIENT_ID; fall back to CLIENT_ID for compatibility.
 client_id = ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
+# DhanHQ gem 3.4.0 raises InvalidAuthenticationError for DATA APIs
+# (/v2/charts, /v2/optionchain, ...) when client_id is nil, and CI runs
+# specs without credentials. VCR cassette replays never validate the
+# header value, so a fixed test placeholder keeps the gem's contract
+# satisfied without touching recorded cassettes.
+client_id ||= 'test-client-id' if Rails.env.test?
 DhanHQ.configuration.client_id = client_id if client_id
 
 # Inject access token from DB so the gem always uses the latest valid token.
