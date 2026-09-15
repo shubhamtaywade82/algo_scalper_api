@@ -11,7 +11,9 @@ RSpec.describe 'SupertrendVwapStrategy', type: :strategy_plugin do
   def series_from(prices, open_offset:, high_offset:, low_offset:)
     candles = prices.each_with_index.map do |close, i|
       t = Time.zone.parse("2026-08-24 09:15:00 #{tz}") + (i * 5).minutes
-      build_plugin_candle(t, open: close + open_offset, high: close + high_offset, low: close + low_offset, close: close)
+      # VWAP needs non-zero cumulative volume — CandleSeries#vwap returns nil for
+      # zero-volume series, which the strategy surfaces as a vwap_unavailable Hold.
+      build_plugin_candle(t, open: close + open_offset, high: close + high_offset, low: close + low_offset, close: close, volume: 100_000)
     end
     build_plugin_series(candles)
   end

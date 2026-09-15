@@ -270,6 +270,11 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
       end
 
       it 'executes all enforcement methods in order' do
+        # monitor_loop routes to EOD force-close (and skips the enforcement chain)
+        # whenever Time.current is at/past market_close_hhmm — freeze mid-session
+        # so the full chain actually runs regardless of the wall clock.
+        travel_to(Time.zone.parse('2026-07-06 10:30:00'))
+
         pnl_data = {
           pnl: BigDecimal('250.0'),
           pnl_pct: BigDecimal('0.05'),
@@ -278,10 +283,10 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
         setup_active_cache(tracker, pnl_data)
 
         expect(service).to receive(:enforce_hard_limits_for).with(tracker, exit_engine: exit_engine).and_call_original
-        # enforce_early_trend_failure passes the resolved etf activation profit
-        # through as an extra kwarg — match on the kwargs we care about.
-        expect(service).to receive(:enforce_early_trend_failure_for)
-          .with(tracker, hash_including(exit_engine: exit_engine)).and_call_original
+        # NOTE: enforce_early_trend_failure is deliberately NOT part of the interval
+        # chain — it was retired in #115 ("LEGACY RULES DISABLED... replaced by
+        # premium_momentum_failure"). Its bulk entrypoint stays covered by the
+        # strict-config example below.
         expect(service).to receive(:enforce_premium_r_stop_for).with(tracker, exit_engine: exit_engine).and_call_original
         expect(service).to receive(:enforce_dynamic_trailing_stops_for).with(tracker, exit_engine: exit_engine).and_call_original
 

@@ -11,6 +11,25 @@ BaseStrategy = Strategies::Base unless defined?(BaseStrategy)
 class EmaCrossoverStrategy < BaseStrategy
   IST = 'Asia/Kolkata'
 
+  class << self
+    # Mirrors strategies/ema-crossover/manifest.yml so specs and tooling can read
+    # the deployment contract off the class itself.
+    def timeframes = %w[5m]
+
+    def instruments = %w[NIFTY BANKNIFTY SENSEX]
+
+    def params_schema
+      {
+        fast_period: { type: Integer, default: 9 },
+        slow_period: { type: Integer, default: 26 },
+        atr_period: { type: Integer, default: 14 },
+        atr_multiplier: { type: Float, default: 1.75 },
+        target_r_multiple: { type: Float, default: 2.0 },
+        strike_pref: { type: String, default: 'ATM' }
+      }
+    end
+  end
+
   def call(context)
     series = context.candles.call('5m')
     return Signals::Hold.new(reason: 'no_candle_data') unless series&.candles&.any?
