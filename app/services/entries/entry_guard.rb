@@ -441,6 +441,7 @@ module Entries
           placed_at: Time.current,
           paper_trading: true
         }
+        iv_at_entry = entry_iv_from_pick(pick)
 
         # Add entry strategy/path metadata if provided
         if entry_metadata.is_a?(Hash)
@@ -481,6 +482,7 @@ module Entries
           paper: false,
           index_key: index_cfg[:key],
           entry_strategy: meta_hash[:entry_strategy],
+          iv_at_entry: iv_at_entry,
           meta: meta_hash
         )
       end
@@ -492,6 +494,7 @@ module Entries
           placed_at: Time.current,
           paper_trading: true
         }
+        iv_at_entry = entry_iv_from_pick(pick)
 
         apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
@@ -518,8 +521,27 @@ module Entries
           status: :active,
           paper: true,
           index_key: index_cfg[:key],
+          iv_at_entry: iv_at_entry,
           meta: meta_hash
         )
+      end
+
+      # Entry-time implied volatility of the traded strike, stamped on the tracker
+      # so the scalp IV-collapse exit (Scalp::ChainTrailingContext#iv_collapse_signal)
+      # and Risk::Rules::IvCollapseRule have a baseline to compare the live chain's
+      # implied_volatility against — both no-op on a nil/zero baseline, so a missing
+      # value just leaves those signals dormant (previously NOTHING wrote the
+      # column, making the IV-collapse exit dead code for new positions; only the
+      # 2026-06-25 meta backfill ever populated it).
+      #
+      # Option-chain-derived picks carry the strike's IV (Options::ChainAnalyzer
+      # #pick_strikes / #pick_strikes_with_qualification slice :iv; Guards::
+      # IvVolGateGuard reads the same keys). Pick paths without chain data
+      # (SignalScheduler#build_pick_from_signal, broker position sync) get nil.
+      def entry_iv_from_pick(pick)
+        raw = pick[:iv] || pick['iv'] || pick[:implied_volatility] || pick['implied_volatility']
+        value = raw.to_f
+        value.positive? ? value : nil
       end
 
       def apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price:, quantity:)

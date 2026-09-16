@@ -6,7 +6,11 @@ module Orders
   # Rates per docs/AlgoScalperPlatform-v2.0.md PR-012. Pure function — no I/O, no state.
   class ChargesCalculator
     BROKERAGE_PER_ORDER = BigDecimal('20.0')
-    STT_SELL_PCT = BigDecimal('0.000125')      # 0.0125% on sell-side turnover, options only
+    # Options STT: 0.1% on sell-side premium turnover (effective 2024-10-01,
+    # up from 0.0625%). docs/AlgoScalperPlatform-v2.0.md PR-012 still documents
+    # the old 0.0125% figure, which was wrong even for the pre-2024 regime —
+    # the doc is outdated, the rate here is the statutory one.
+    STT_SELL_PCT = BigDecimal('0.001') # 0.1% on sell-side turnover, options only
     EXCHANGE_TXN_PCT = BigDecimal('0.00053')   # ~0.053% on turnover
     GST_PCT = BigDecimal('0.18')               # on brokerage + exchange transaction charges
     STAMP_DUTY_BUY_PCT = BigDecimal('0.00003') # 0.003% on buy-side turnover

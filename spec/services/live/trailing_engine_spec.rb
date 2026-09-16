@@ -226,10 +226,11 @@ RSpec.describe Live::TrailingEngine do
 
   describe '#apply_fee_aware_breakeven_lock' do
     # With defaults: entry 100, qty 50 -> position value 5000.
-    # fees 40/5000 = 0.008; spread estimate 100 x 0.01 x 2 = 2 -> spread_pct 0.02.
-    # friction = 0.028; lock price = 100 + (40 + 2)/50 = 100.84
-    # (round-trip net-zero: both order fees + full spread — review P2).
-    # Armed when peak >= 0.028 x 1.2 = 0.0336.
+    # statutory round-trip fees 58.61/5000 = 0.0117 (Orders::ChargesCalculator);
+    # spread estimate 100 x 0.01 x 2 = 2 -> spread_pct 0.02.
+    # friction = 0.0317; lock price = 100 + (58.61 + 2)/50 = 101.21
+    # (round-trip net-zero: statutory fees + full spread — review P2).
+    # Armed when peak >= 0.0317 x 1.2 = 0.0381.
     before do
       allow(Scalp::FeeAwareExitTargets).to receive(:enabled?).and_return(true)
       allow(AlgoConfig).to receive(:fetch).and_return({
@@ -248,14 +249,14 @@ RSpec.describe Live::TrailingEngine do
 
       expect(bracket_placer).to have_received(:update_bracket).with(
         tracker: tracker,
-        sl_price: 100.84,
+        sl_price: 101.21,
         reason: /fee_aware_breakeven_lock/
       )
       expect(result[:sl_updated]).to be true
-      expect(result[:new_sl_price]).to eq(100.84)
+      expect(result[:new_sl_price]).to eq(101.21)
       expect(result[:reason]).to eq('fee_aware_breakeven_lock')
       expect(active_cache).to have_received(:update_position).with(
-        42, hash_including(sl_price: 100.84)
+        42, hash_including(sl_price: 101.21)
       )
     end
 

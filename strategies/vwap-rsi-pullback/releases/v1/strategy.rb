@@ -61,12 +61,18 @@ class VwapRsiPullbackStrategy < BaseStrategy
       return Signals::Hold.new(reason: 'midday_dead_zone')
     end
 
-    # No entries after 2:30 PM (theta bleed)
-    if now.hour >= 14 && now.min >= 30
+    # No entries at/after 2:30 PM (theta bleed). Must block ALL times >= 14:30:
+    # `hour > 14 || (hour == 14 && min >= 30)`. The previous `hour >= 14 &&
+    # now.min >= 30` form only blocked 14:30-14:59 and 15:30+ — a 15:05 candle
+    # (hour=15>=14 true, min=05>=30 false) failed the AND and slipped through,
+    # exactly the final-half-hour theta window this gate targets.
+    if now.hour > 14 || (now.hour == 14 && now.min >= 30)
       return Signals::Hold.new(reason: 'late_entry_theta_risk')
     end
 
-    vwap_values = series.vwap
+    # vwap_or_twap: DhanHQ index candles carry volume=0, so strict VWAP is nil
+    # forever on index data — use the TWAP-fallback variant (see CandleSeries).
+    vwap_values = series.vwap_or_twap
     return Signals::Hold.new(reason: 'vwap_unavailable') if vwap_values.blank? || vwap_values.size < 5
 
     current_vwap = vwap_values.last
@@ -75,9 +81,14 @@ class VwapRsiPullbackStrategy < BaseStrategy
     close = candles.last.close
     distance_pct = ((close - current_vwap) / current_vwap) * 100.0
 
-    # VWAP slope check: compare VWAP from 5 bars ago to current
+    # VWAP slope check, normalized as PERCENT of the VWAP level per bar (the same
+    # price-normalized approach the vwap-reversal sibling uses) so min_slope_per_bar
+    # is instrument-agnostic: 0.002 means "VWAP must rise/fall >= 0.002% per bar"
+    # (~0.5 pts/bar on a 25,000 index). compute_vwap_slope used to return RAW
+    # points per bar, so on NIFTY/SENSEX-scale prices virtually any slope cleared
+    # the 0.002 threshold and the flat-VWAP gate never tripped.
     slope = compute_vwap_slope(vwap_values)
-    min_slope = (params[:min_slope_per_bar] || 0.002).to_f
+    min_slope = (params[:min_slope_per_bar] || 0.002).to_f # in % of VWAP level per bar
     vwap_sloping_up   = slope > min_slope
     vwap_sloping_down = slope < -min_slope
 
@@ -107,7 +118,7 @@ class VwapRsiPullbackStrategy < BaseStrategy
 
       return Signals::BuyCall.new(
         confidence: confidence.clamp(0.5, 0.90).round(2),
-        reason: "vwap_ce_pullback rsi=#{rsi_val.round(1)} dist=#{distance_pct.round(2)}% slope=#{slope.round(4)}"
+        reason: "vwap_ce_pullback rsi=#{rsi_val.round(1)} dist=#{distance_pct.round(2)}% slope=#{slope.round(4)}%/bar"
       )
     end
 
@@ -120,7 +131,7 @@ class VwapRsiPullbackStrategy < BaseStrategy
 
       return Signals::BuyPut.new(
         confidence: confidence.clamp(0.5, 0.90).round(2),
-        reason: "vwap_pe_rally rsi=#{rsi_val.round(1)} dist=#{distance_pct.round(2)}% slope=#{slope.round(4)}"
+        reason: "vwap_pe_rally rsi=#{rsi_val.round(1)} dist=#{distance_pct.round(2)}% slope=#{slope.round(4)}%/bar"
       )
     end
 
@@ -129,8 +140,10 @@ class VwapRsiPullbackStrategy < BaseStrategy
 
   private
 
-  # VWAP slope: linear regression of last 5 VWAP values, returned as change per bar.
-  # Positive = VWAP rising (uptrend), negative = VWAP falling (downtrend).
+  # VWAP slope: linear regression of the last 5 VWAP values, normalized as a
+  # percentage of the current VWAP level per bar (0.01 == +0.01%/bar) so the
+  # min_slope_per_bar threshold means the same thing on NIFTY, BANKNIFTY and
+  # SENSEX alike. Positive = VWAP rising (uptrend), negative = falling.
   def compute_vwap_slope(vwap_values, lookback: 5)
     return 0.0 if vwap_values.size < 3
 
@@ -138,7 +151,12 @@ class VwapRsiPullbackStrategy < BaseStrategy
     n = recent.size
     return 0.0 if n < 2
 
-    # Simple linear slope: (last - first) / (n - 1)
-    (recent.last - recent.first).to_f / (n - 1)
+    # Simple linear slope: (last - first) / (n - 1), in raw points per bar
+    raw_slope = (recent.last - recent.first).to_f / (n - 1)
+    level = recent.last.to_f
+    return 0.0 unless level.positive?
+
+    # Normalize to % of VWAP level per bar
+    (raw_slope / level) * 100.0
   end
 end

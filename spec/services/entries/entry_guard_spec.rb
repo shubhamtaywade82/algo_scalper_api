@@ -156,6 +156,85 @@ RSpec.describe Entries::EntryGuard do
     end
   end
 
+  # Regression coverage for the iv_at_entry stamp: NOTHING in the repo used to
+  # write the column (only the 2026-06-25 meta backfill), which left the scalp
+  # IV-collapse exit (Scalp::ChainTrailingContext#iv_collapse_signal) and
+  # Risk::Rules::IvCollapseRule dead for every newly opened position — both
+  # compare the live chain's implied_volatility against tracker.iv_at_entry and
+  # no-op when the baseline is nil/zero.
+  describe 'iv_at_entry stamping at tracker creation' do
+    let(:iv_pick) do
+      {
+        symbol: 'NIFTY 24SEP26 25000 CE',
+        security_id: '99991',
+        segment: 'NSE_FNO',
+        # Picks built by Options::ChainAnalyzer#pick_strikes slice :iv straight
+        # off the option chain (analyze_strike's iv: option_data['implied_volatility']).
+        iv: 16.5,
+        strike: 25_000.0,
+        ltp: 120.0
+      }
+    end
+
+    it 'stamps the pick IV on the live tracker' do
+      tracker = described_class.create_tracker!(
+        instrument: instrument, order_no: "ORD-IV-#{SecureRandom.hex(6)}", pick: iv_pick,
+        side: 'long_ce', quantity: 75, index_cfg: index_cfg, ltp: 120.0
+      )
+      expect(tracker).to be_persisted
+      expect(tracker.iv_at_entry).to eq(16.5)
+    end
+
+    it 'stamps the pick IV on the paper tracker' do
+      tracker = described_class.create_paper_tracker!(
+        instrument: instrument, pick: iv_pick, side: 'long_ce', quantity: 75,
+        index_cfg: index_cfg, ltp: 120.0, order_no: "ORD-IVP-#{SecureRandom.hex(6)}"
+      )
+      expect(tracker).to be_persisted
+      expect(tracker.paper).to be(true)
+      expect(tracker.iv_at_entry).to eq(16.5)
+    end
+
+    it 'accepts stringified IV values from chain-shaped picks' do
+      pick = iv_pick.merge(iv: '18.25')
+      tracker = described_class.create_paper_tracker!(
+        instrument: instrument, pick: pick, side: 'long_pe', quantity: 75,
+        index_cfg: index_cfg, ltp: 110.0, order_no: "ORD-IVS-#{SecureRandom.hex(6)}"
+      )
+      expect(tracker.iv_at_entry).to eq(18.25)
+    end
+
+    it 'reads implied_volatility as an alias key' do
+      pick = iv_pick.except(:iv).merge(implied_volatility: 14.0)
+      tracker = described_class.create_paper_tracker!(
+        instrument: instrument, pick: pick, side: 'long_ce', quantity: 75,
+        index_cfg: index_cfg, ltp: 100.0, order_no: "ORD-IVA-#{SecureRandom.hex(6)}"
+      )
+      expect(tracker.iv_at_entry).to eq(14.0)
+    end
+
+    it 'leaves the baseline nil (signal dormant, not blocked) when the pick has no IV' do
+      # SignalScheduler#build_pick_from_signal and broker position sync build
+      # picks without chain data — the IV-collapse exit must no-op for those,
+      # not fabricate a zero baseline.
+      pick = iv_pick.except(:iv, :implied_volatility)
+      tracker = described_class.create_paper_tracker!(
+        instrument: instrument, pick: pick, side: 'long_ce', quantity: 75,
+        index_cfg: index_cfg, ltp: 100.0, order_no: "ORD-IVN-#{SecureRandom.hex(6)}"
+      )
+      expect(tracker.iv_at_entry).to be_nil
+    end
+
+    it 'rejects non-positive IV values rather than stamping a zero baseline' do
+      pick = iv_pick.merge(iv: 0)
+      tracker = described_class.create_paper_tracker!(
+        instrument: instrument, pick: pick, side: 'long_ce', quantity: 75,
+        index_cfg: index_cfg, ltp: 100.0, order_no: "ORD-IVZ-#{SecureRandom.hex(6)}"
+      )
+      expect(tracker.iv_at_entry).to be_nil
+    end
+  end
+
   # Orders::Entries::OrderExecutionService and Guards::BosStructureGuard call these with an
   # explicit receiver (`Entries::EntryGuard.method_name`). If any of them slip back below
   # `private`, that call raises NoMethodError at runtime for every order — and the specs above

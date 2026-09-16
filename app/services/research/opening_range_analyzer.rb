@@ -142,7 +142,7 @@ module Research
         atr = series.atr(14)
         adx = series.adx(14)
         rsi = series.rsi(14)
-        vwap = series.current_vwap
+        vwap = series.vwap_or_twap.last
         vwap_dist = vwap ? (entry_price - vwap) : 0.0
 
         # First candle features

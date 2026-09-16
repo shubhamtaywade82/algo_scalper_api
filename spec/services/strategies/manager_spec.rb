@@ -84,5 +84,18 @@ RSpec.describe Strategies::Manager do
 
       expect(manager.runner_status('lifecycle_test')).to be_nil
     end
+
+    it 'removes the Runtime registry entry under the manifest class_name on stop' do
+      # The registry key is the manifest class_name ("LifecycleTestStrategy"),
+      # not slug.camelize ("LifecycleTest") — the old remove missed by that
+      # mismatch for 6 of 8 shipped strategies and leaked the anonymous module
+      # on every stop (review P2).
+      manager.send(:start_runner, strategy_record)
+      expect(Strategies::Runtime.lookup('LifecycleTestStrategy')).not_to be_nil
+
+      manager.send(:stop_runner, 'lifecycle_test', 'manual')
+
+      expect(Strategies::Runtime.lookup('LifecycleTestStrategy')).to be_nil
+    end
   end
 end

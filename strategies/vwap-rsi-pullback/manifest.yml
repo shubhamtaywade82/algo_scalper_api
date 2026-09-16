@@ -21,6 +21,8 @@ params:
   vwap_band_pct:
     type: Float
     default: '0.1'
+  # Units: percent of VWAP level per bar (price-normalized, same approach as
+  # vwap-reversal's min_slope_pct). 0.002 = VWAP must slope >= 0.002%/bar.
   min_slope_per_bar:
     type: Float
     default: '0.002'

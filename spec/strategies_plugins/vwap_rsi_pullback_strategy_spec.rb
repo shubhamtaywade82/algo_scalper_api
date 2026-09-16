@@ -62,13 +62,51 @@ RSpec.describe VwapRsiPullbackStrategy do
       end
 
       it 'returns Hold with flat_vwap_no_trend' do
-        # Skip to candle 15 (well past 9:30 AM)
+        # Skip to candle 15 (10:00 AM, past warmup, before dead zone)
         cutoff = series.candles[15].timestamp
         context = build_context(series: series, cutoff: cutoff)
         result = strategy.call(context)
-        # Could be flat_vwap or insufficient RSI data — both valid
+        # A perfectly flat price series has a zero VWAP slope in any unit system,
+        # so the flat-VWAP gate must fire deterministically now that the slope is
+        # price-normalized (it used to be compared in raw points against 0.002,
+        # which on 25,000-scale prices let almost anything through as "sloping").
         expect(result).to be_a(Signals::Hold)
-        expect([result.reason]).to include(match(/flat_vwap|rsi_unavailable|insufficient|no_pullback/))
+        expect(result.reason).to eq('flat_vwap_no_trend')
+      end
+    end
+
+    context 'with a gently sloping VWAP below a raised min_slope_per_bar' do
+      # ~2 pts/bar drift on a 25,000 base = ~0.008%/bar — well below the raised
+      # 0.05 (%/bar) threshold but far above it in RAW points (2 > 0.05). Under
+      # the old raw-points comparison this series always counted as "sloping";
+      # with the percent-normalized slope it must be rejected as flat.
+      let(:strategy_strict) { described_class.new(params: default_params.merge(min_slope_per_bar: 0.05)) }
+      let(:series) do
+        build_series(
+          base_date: base_date, count: 30, interval: 3,
+          &lambda { |i, prev_close|
+            close = 25_000.0 + (i * 2)
+            { open: prev_close, high: close + 5, low: close - 5, close: close, volume: 100_000 }
+          }
+        )
+      end
+
+      it 'returns Hold with flat_vwap_no_trend (slope threshold is in %/bar, not points)' do
+        cutoff = series.candles[25].timestamp
+        context = build_context(series: series, cutoff: cutoff)
+        result = strategy_strict.call(context)
+        expect(result).to be_a(Signals::Hold)
+        expect(result.reason).to eq('flat_vwap_no_trend')
+      end
+
+      it 'passes the flat-VWAP gate with the default 0.002 %/bar threshold' do
+        cutoff = series.candles[25].timestamp
+        context = build_context(series: series, cutoff: cutoff)
+        result = strategy.call(context)
+        # ~0.008%/bar clears the 0.002 %/bar default, so the gate must NOT fire
+        # (the strategy may still Hold for other reasons: RSI zone, proximity...).
+        flat_blocked = result.is_a?(Signals::Hold) && result.reason == 'flat_vwap_no_trend'
+        expect(flat_blocked).to be(false)
       end
     end
 
@@ -96,10 +134,10 @@ RSpec.describe VwapRsiPullbackStrategy do
       end
     end
 
-    context 'with late entry (after 2:30 PM)' do
+    context 'with late entry (at/after 2:30 PM)' do
       let(:series) do
         build_series(
-          base_date: base_date, count: 100, interval: 3,
+          base_date: base_date, count: 120, interval: 3,
           &lambda { |i, prev_close|
             close = 25_000.0 + (i * 2)
             { open: prev_close, high: close + 5, low: close - 5, close: close, volume: 100_000 }
@@ -107,23 +145,62 @@ RSpec.describe VwapRsiPullbackStrategy do
         )
       end
 
-      it 'returns Hold with late_entry_theta_risk' do
-        # 3m * 98 = 294 min from 9:15 = 14:09. 3m * 99 = 14:12. 3m * 100 = 14:15
-        # 14:30 = 315 min from 9:15 = index 105
-        # But we have 100 candles, max index = 99 → 14:12. Not quite 14:30.
-        # Let's use index 99 and check the logic still works for late entries
-        # Actually 14:30 requires more candles. Let's test with 110.
-        # But we already built 100. Let's just test with the 100th candle at 14:12.
-        # The strategy checks hour >= 14 && min >= 30, so 14:12 wouldn't trigger.
-        # Let me just verify it doesn't fire a signal at 14:12 (it shouldn't because
-        # it's not a pullback setup, but let's confirm the late-entry gate works by
-        # checking a candle that IS at 14:30+)
-        # With 100 candles at 3min, last candle = 9:15 + 99*3 = 9:15 + 297 = 14:12
-        # Not yet 14:30. Let's just confirm it's a Hold (no pullback in steady uptrend)
-        cutoff = series.candles.last.timestamp
+      it 'returns Hold with late_entry_theta_risk at exactly 14:30' do
+        # 3m candles from 9:15: 14:30 = 315 min elapsed = index 105
+        cutoff = series.candles[105].timestamp
+        expect(cutoff.in_time_zone('Asia/Kolkata').strftime('%H:%M')).to eq('14:30')
         context = build_context(series: series, cutoff: cutoff)
         result = strategy.call(context)
         expect(result).to be_a(Signals::Hold)
+        expect(result.reason).to eq('late_entry_theta_risk')
+      end
+
+      it 'returns Hold with late_entry_theta_risk in the 15:00-15:29 window (regression)' do
+        # 15:03 = 348 min from 9:15 = index 116. The old gate
+        # (`hour >= 14 && min >= 30`) let every 15:00-15:29 candle through
+        # (hour=15>=14 true, min<30 false -> AND fails), exactly the final
+        # half-hour theta window the rule exists to block.
+        cutoff = series.candles[116].timestamp
+        expect(cutoff.in_time_zone('Asia/Kolkata').strftime('%H:%M')).to eq('15:03')
+        context = build_context(series: series, cutoff: cutoff)
+        result = strategy.call(context)
+        expect(result).to be_a(Signals::Hold)
+        expect(result.reason).to eq('late_entry_theta_risk')
+      end
+
+      it 'does not apply the late-entry gate before 14:30' do
+        # 14:27 = index 104 — one candle before the cutoff; must pass the gate
+        # (the strategy may still Hold for setup reasons, just not this one).
+        cutoff = series.candles[104].timestamp
+        expect(cutoff.in_time_zone('Asia/Kolkata').strftime('%H:%M')).to eq('14:27')
+        context = build_context(series: series, cutoff: cutoff)
+        result = strategy.call(context)
+        late_blocked = result.is_a?(Signals::Hold) && result.reason == 'late_entry_theta_risk'
+        expect(late_blocked).to be(false)
+      end
+    end
+
+    context 'with a 15:05-completing bar (rolled up from 1m)' do
+      let(:series) do
+        build_series(
+          base_date: base_date, count: 351, interval: 1,
+          &lambda { |i, prev_close|
+            close = 25_000.0 + (i * 0.5)
+            { open: prev_close, high: close + 5, low: close - 5, close: close, volume: 100_000 }
+          }
+        )
+      end
+
+      it 'returns Hold with late_entry_theta_risk for the 15:05 candle' do
+        # 1m candles 9:15..15:05 (index 350). The context rolls them up to 3m;
+        # the final bucket (15:03-15:05) completes at 15:05 and evaluates in
+        # the previously-ungated 15:00-15:29 window.
+        cutoff = series.candles[350].timestamp
+        expect(cutoff.in_time_zone('Asia/Kolkata').strftime('%H:%M')).to eq('15:05')
+        context = build_context(series: series, cutoff: cutoff)
+        result = strategy.call(context)
+        expect(result).to be_a(Signals::Hold)
+        expect(result.reason).to eq('late_entry_theta_risk')
       end
     end
 

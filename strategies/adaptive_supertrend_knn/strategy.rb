@@ -5,6 +5,15 @@
 # implementation (app/strategies/adaptive_supertrend_knn_strategy.rb) to the
 # platform plugin contract (call(context) -> Signals::*).
 class AdaptiveSupertrendKnn < Strategies::Base
+  # Explicit indicator allowlist instead of `send` — dynamic dispatch would
+  # trip the platform SecurityScanner (correctly: send bypasses every
+  # receiver-based block) and widen the attack surface if the symbol ever
+  # became externally controlled.
+  INDICATOR_CALLS = {
+    rsi: ->(series, period) { series.rsi(period) },
+    adx: ->(series, period) { series.adx(period) },
+    atr: ->(series, period) { series.atr(period) }
+  }.freeze
   class << self
     def timeframes = %w[1m]
     def instruments = %w[NIFTY BANKNIFTY SENSEX]
@@ -87,7 +96,10 @@ class AdaptiveSupertrendKnn < Strategies::Base
   end
 
   def fetch_indicator_val(series, indicator, period, idx)
-    res = series.send(indicator, period)
+    fn = INDICATOR_CALLS[indicator]
+    return nil unless fn
+
+    res = fn.call(series, period)
     res.is_a?(Array) ? res[idx] : res
   rescue StandardError
     nil

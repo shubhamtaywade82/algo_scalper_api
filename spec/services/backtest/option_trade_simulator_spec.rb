@@ -213,14 +213,21 @@ RSpec.describe Backtest::OptionTradeSimulator do
       allow(Options::ExpiredFetcher).to receive(:call).and_return({ ce: option_data_ce, pe: [] })
     end
 
-    it 'runs a full trade using only same-strike bars' do
+    it 'runs a full trade, booking the entry on the bar after the signal' do
       result = simulator.simulate_trade(series: series, entry_index: 0, signal_type: :ce)
       expect(result).not_to be_nil
       expect(result[:signal_type]).to eq(:ce)
-      # The entry is at strike 24500, price 200
-      expect(result[:entry_price]).to eq(200.0)
-      # Should only consider even-indexed bars (strike 24500)
-      expect(result[:entry_time]).to eq(base_time)
+      # No-lookahead booking: the signal fires on bar 0 but the entry is booked
+      # against bar 1 — the first bar the signal could actually be traded on.
+      # Bar 1 quotes strike 24600 at 210.
+      expect(result[:entry_price]).to eq(210.0)
+      expect(result[:entry_time]).to eq(base_time + 1.minute)
+      # Exits only consider same-strike (24600 = odd-indexed) bars; none of them
+      # hit target/SL/trailing, so the trade runs to end-of-data.
+      expect(result[:exit_reason]).to eq('end_of_data')
+      # No same-strike bar within tolerance of the final bar: documented 50%
+      # haircut fallback (210 * 0.5).
+      expect(result[:exit_price]).to eq(105.0)
     end
   end
 end
