@@ -586,7 +586,7 @@ Default simulated latency:
 Default charges:
 
 - brokerage: 20 per executed order
-- STT: 0.0125% on sell side for options
+- STT: 0.1% on sell side for options (statutory rate since Oct 2024)
 - exchange transaction charge: configurable, approx 0.053%
 - GST: 18% on brokerage + transaction charges
 - stamp duty: 0.003% on buy side
@@ -4257,7 +4257,7 @@ Default Dhan/NSE-style approximation:
 | Charge | Rule |
 | --- | --- |
 | Brokerage | ₹20 per executed order |
-| STT | 0.0125% on sell side for options |
+| STT | 0.1% on sell side for options (since Oct 2024) |
 | Exchange transaction charge | approx 0.053% on turnover |
 | GST | 18% on brokerage + transaction charges |
 | Stamp duty | 0.003% on buy side |

@@ -116,4 +116,21 @@ RSpec.describe 'VwapReversalStrategy', type: :strategy_plugin do
     expect(signal).to be_a(Signals::Hold)
     expect(signal.reason).to eq('flat_vwap')
   end
+
+  it 'evaluates past the VWAP gate on zero-volume index candles (DhanHQ index feed)' do
+    # DhanHQ reports volume=0 for index candles; the weighted VWAP is nil
+    # series-wide, which used to Hold this strategy forever with
+    # 'vwap_unavailable' on every real NIFTY/BANKNIFTY/SENSEX feed (review P1).
+    # On the unweighted fallback line a flat series is a flat VWAP — Hold, but
+    # for slope reasons, never because VWAP was missing.
+    candles = (0..20).map do |i|
+      t = Time.zone.parse("2026-08-24 09:33:00 #{tz}") + (i * 3).minutes
+      build_plugin_candle(t, open: 24_000, high: 24_001, low: 23_999, close: 24_000, volume: 0)
+    end
+    series = build_plugin_series(candles, interval: '3')
+    signal = strategy.call(build_plugin_context(series, cutoff: series.candles.last.timestamp))
+
+    expect(signal).to be_a(Signals::Hold)
+    expect(signal.reason).not_to eq('vwap_unavailable')
+  end
 end

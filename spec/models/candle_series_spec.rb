@@ -588,4 +588,42 @@ RSpec.describe CandleSeries do
       expect(values.last).to be_within(0.01).of((115.0 + 95.0 + 110.0) / 3.0)
     end
   end
+
+  describe '#vwap_or_twap' do
+    it 'returns the unweighted cumulative typical-price mean for a volumeless (index) series' do
+      # DhanHQ index feeds report volume=0 for every candle — strict VWAP is
+      # nil series-wide there, which used to leave every VWAP strategy Holding
+      # forever on real index data (review P1).
+      c1 = build(:candle, open: 100, high: 110, low: 90, close: 105, volume: 0)
+      c2 = build(:candle, open: 105, high: 115, low: 95, close: 110, volume: 0)
+      c3 = build(:candle, open: 110, high: 120, low: 100, close: 115, volume: 0)
+      [c1, c2, c3].each { |c| series.add_candle(c) }
+
+      values = series.vwap_or_twap
+
+      expect(values).to all(be_a(Float))
+      expect(values.first).to be_within(0.01).of((110.0 + 90.0 + 105.0) / 3.0)
+      expect(values.last).to be_within(0.01).of(
+        ((110.0 + 90.0 + 105.0) + (115.0 + 95.0 + 110.0) + (120.0 + 100.0 + 115.0)) / 9.0
+      )
+    end
+
+    it 'falls back per candle: TWAP until volume starts, weighted thereafter' do
+      c1 = build(:candle, open: 100, high: 110, low: 90, close: 105, volume: 0)
+      c2 = build(:candle, open: 105, high: 115, low: 95, close: 110, volume: 100)
+      series.add_candle(c1)
+      series.add_candle(c2)
+
+      values = series.vwap_or_twap
+
+      # Candle 1 has no volume yet: TWAP = its own typical price
+      expect(values.first).to be_within(0.01).of((110.0 + 90.0 + 105.0) / 3.0)
+      # Candle 2 carries volume: weighted VWAP = its typical price
+      expect(values.last).to be_within(0.01).of((115.0 + 95.0 + 110.0) / 3.0)
+    end
+
+    it 'returns an empty array for an empty series' do
+      expect(series.vwap_or_twap).to eq([])
+    end
+  end
 end
