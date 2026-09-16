@@ -10,6 +10,15 @@ RSpec.describe IndexConfigLoader do
     allow(loader).to receive(:watchlist_table_exists?).and_return(true)
   end
 
+  # The loader is a process-wide singleton with a TTL cache: without this
+  # cleanup the LAST example's (possibly registry-merged, rich-shaped) indices
+  # leak into every later spec file — order-dependently breaking specs that
+  # stub IndexInstrumentCache#get_or_fetch with a minimal config shape
+  # (engine_spec did exactly that in CI).
+  after do
+    loader.clear_cache!
+  end
+
   describe '.load_indices' do
     context 'when watchlist index row has wrong derivative segment' do
       let!(:instrument) { create(:instrument, :nifty_index) }

@@ -9,6 +9,16 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
     # Mock token authority to avoid external HTTP calls and VCR issues
     allow_any_instance_of(Object).to receive(:fetch_authority_token!).and_return('dummy_token')
 
+    # IndexConfigLoader is a process-wide singleton with a 30s TTL cache. When an
+    # earlier spec file populated it with the REAL algo.yml indices, the engine's
+    # DerivativeChainAnalyzer resolves a rich index config and calls
+    # get_or_fetch with it — which mismatches the .with(index_cfg) stub below and
+    # raises MockExpectationError (an Exception, so ExpiryGate's rescue StandardError
+    # cannot swallow it) — an order-dependent failure. Clearing the cache here pins
+    # the analyzer to the stubbed AlgoConfig path (no :indices -> unknown_index,
+    # which ExpiryGate handles) so these examples are order-independent.
+    IndexConfigLoader.instance.clear_cache!
+
     travel_to(Time.zone.parse('2025-11-01 11:47:51'))
     allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).with(index_cfg).and_return(nifty_instrument)
 
