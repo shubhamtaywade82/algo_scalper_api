@@ -123,13 +123,18 @@ module Strategies
 
     def ensure_strategy_record!
       manifest = YAML.safe_load_file(@dir.join("manifest.yml"))
-      # create_or_find_by! retries the find on ActiveRecord::RecordNotUnique,
-      # avoiding a crash under concurrent deploys of the same strategy slug.
-      Strategies::Record.create_or_find_by!(slug: @slug) do |r|
+      # DeployPipeline is invoked from request-scoped entry points (API deploy
+      # endpoints, AdHocDeployer). It is NOT a concurrent-race site — the
+      # Strategies::Discovery control-loop (the real race site) is hardened
+      # separately. We use find_or_create_by! here because the Strategies::Record
+      # model declares `validates :slug, uniqueness: true`, and create_or_find_by!
+      # only rescues RecordNotUnique (DB constraint) — the app-level uniqueness
+      # validator raises RecordInvalid first, which create_or_find_by! does NOT
+      # catch (see https://api.rubyonrails.org/classes/ActiveRecord/Relation.html#method-i-create_or_find_by-21).
+      Strategies::Record.find_or_create_by!(slug: @slug) do |r|
         r.name = manifest["name"] || @slug
         r.status = "draft"
       end
-
     end
 
     def error_result(phase, scan_report = nil)
