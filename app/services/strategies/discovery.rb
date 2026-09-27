@@ -70,10 +70,17 @@ module Strategies
     end
 
     def reconcile_plugin!(plugin)
-      strategy_record = Strategies::Record.find_or_create_by!(slug: plugin[:slug]) do |record|
-        record.name = plugin[:name]
-        record.status = "draft"
-      end
+      # This runs on the 2-second strategy control-loop tick, so it genuinely
+      # races concurrent API deploys / parallel syncs: two callers can both miss
+      # the find and both attempt an INSERT on the unique `strategies.slug`
+      # index. `create_or_find_by!` would be the idiomatic fix, BUT it only
+      # rescues ActiveRecord::RecordNotUnique — the Strategies::Record model
+      # also declares `validates :slug, uniqueness: true`, whose app-level
+      # validator raises ActiveRecord::RecordInvalid *before* the DB constraint
+      # fires, and create_or_find_by! does NOT catch RecordInvalid (see
+      # https://api.rubyonrails.org/classes/ActiveRecord/Relation.html#method-i-create_or_find_by-21).
+      # So we rescue both uniqueness errors and retry the find.
+      strategy_record = find_or_create_strategy_record!(plugin)
 
       release_path = plugin[:dir].join(RELEASE_PATH)
       release_path.dirname.mkpath
@@ -121,6 +128,43 @@ module Strategies
       version
     rescue ActiveRecord::RecordInvalid => e
       raise PluginError, e.message
+    end
+
+    # Race-safe find-or-create for the Strategies::Record slug. Unlike
+    # create_or_find_by! (which only rescues RecordNotUnique), this also catches
+    # RecordInvalid from the model's `validates :slug, uniqueness: true` — that
+    # validator raises *before* the DB unique constraint, so create_or_find_by!
+    # would still crash on the second concurrent caller.
+    def find_or_create_strategy_record!(plugin)
+      Strategies::Record.find_or_create_by!(slug: plugin[:slug]) do |record|
+        record.name = plugin[:name]
+        record.status = "draft"
+      end
+    rescue ActiveRecord::RecordNotUnique
+      # DB-level unique constraint on strategies.slug fired: another caller won
+      # the race. The record now exists — find it.
+      retry_strategy_record_find(plugin)
+    rescue ActiveRecord::RecordInvalid => e
+      # App-level `validates :slug, uniqueness: true` can fire before the DB
+      # constraint. Only treat the slug-uniqueness case as a race; any other
+      # validation failure must propagate (it indicates a bad plugin manifest).
+      raise e unless slug_uniqueness_error?(e)
+
+      retry_strategy_record_find(plugin)
+    end
+
+    def slug_uniqueness_error?(error)
+      # e.record.errors reflects which attribute failed. We only swallow the
+      # race when the *slug* specifically is the duplicate.
+      error.record&.errors&.where(:slug, :taken)&.any? ||
+        error.message.to_s.match?(/Slug.*has already been taken/i)
+    end
+
+    def retry_strategy_record_find(plugin)
+      Rails.logger.warn(
+        "[Strategies::Discovery] slug race for #{plugin[:slug]}; retrying find"
+      )
+      Strategies::Record.find_by!(slug: plugin[:slug])
     end
 
     def validate_plugin!(slug, strategy_path)

@@ -62,10 +62,18 @@ module Risk
       end
 
       def current_stats
+        available = !redis.nil?
         {
           trades_count: redis&.get(trades_count_key).to_i,
           consecutive_losses: redis&.get(consecutive_losses_key).to_i,
-          active_positions: PositionTracker.active.count
+          active_positions: PositionTracker.active.count,
+          # When false, the trades_count / consecutive_losses values above are
+          # meaningless zeros (Redis was unreachable). Dashboards should surface
+          # "data unavailable" rather than report 0/0. The risk gates themselves
+          # already fail CLOSED on Redis outage — see max_trades_reached? and
+          # consecutive_losses_breached?, which return `true` (block) when
+          # redis.nil?.
+          redis_available: available
         }
       end
 

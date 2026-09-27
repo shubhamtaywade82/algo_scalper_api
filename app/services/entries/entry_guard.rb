@@ -277,8 +277,13 @@ module Entries
 
         true
       rescue StandardError => e
-        Rails.logger.error("[EntryGuard] daily_limits_allow_entry? error: #{e.class} - #{e.message}")
-        true # Fail-safe: allow entry if check fails
+        # Fail CLOSED. A daily-limit gate that "fails safe" to `true` silently
+        # bypasses every daily loss / profit / institutional trade-count cap
+        # whenever the check raises (Redis blip, broker-config error, etc.) —
+        # the exact opposite of what a risk gate is for. Block the entry and
+        # surface the error; the operator can retry once the cause is resolved.
+        Rails.logger.error("[EntryGuard] daily_limits_allow_entry? error: #{e.class} - #{e.message} — BLOCKING entry (fail-closed)")
+        false
       end
 
       def daily_limits_enabled?
