@@ -81,13 +81,13 @@ module Smc
       return false unless inst
       return false unless inst.security_id.present? && inst.exchange_segment.present?
 
-      # Basic liquidity heuristics: option must have some recent OI/volume
-      if inst.respond_to?(:fetch_option_chain)
-        # if derivative instrument has on-model attributes, use them
-        true
-      else
-        true
-      end
+      # Liquidity heuristic placeholder: every instrument currently passes.
+      # The previous `if inst.respond_to?(:fetch_option_chain) ... else ... end`
+      # was dead code — both branches returned `true`, so the call/put
+      # distinction was ignored and no OI/volume gate was actually enforced.
+      # When Option::ChainAnalyzer exposes per-strike OI/volume, enforce a
+      # real minimum-liquidity threshold here.
+      true
     rescue StandardError => e
       Rails.logger.error("[Smc::Runner] tradable? check failed: #{e.message}")
       false
@@ -205,14 +205,16 @@ module Smc
       if defined?(Option::ChainAnalyzer) && Option::ChainAnalyzer.respond_to?(:spot_to_option_price)
         Option::ChainAnalyzer.spot_to_option_price(option_inst, sl_spot)
       else
-        # fallback: use small % of current option price as stop cushion
+        # Fallback: use a small % of the current option price as a stop cushion.
+        # The previous `if signal[:type] == :ce ... else ... end` was dead
+        # logic — both branches returned the identical expression, so the
+        # call/put distinction was ignored. Collapsed to a single expression
+        # until a delta-aware mapping (see Option::ChainAnalyzer.spot_to_option_price
+        # above) is wired in for asymmetric CE/PE cushions.
         cp = current_option_ltp.to_f
-        if signal[:type] == :ce
-                 [(cp * 0.6).round(2), (cp - (cp * 0.2)).round(2)].max
-        else
-                 [(cp * 0.6).round(2), (cp - (cp * 0.2)).round(2)].max
-        end
-
+        # Floor at 60% of current option price (never sit below the deep-ITM
+        # threshold) and never wider than a 20% pullback from the current price.
+        [(cp * 0.6).round(2), (cp - (cp * 0.2)).round(2)].max
       end
     end
   end
