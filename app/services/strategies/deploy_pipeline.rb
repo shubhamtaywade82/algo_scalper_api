@@ -123,7 +123,9 @@ module Strategies
 
     def ensure_strategy_record!
       manifest = YAML.safe_load_file(@dir.join("manifest.yml"))
-      Strategies::Record.find_or_create_by!(slug: @slug) do |r|
+      # create_or_find_by! retries the find on ActiveRecord::RecordNotUnique,
+      # avoiding a crash under concurrent deploys of the same strategy slug.
+      Strategies::Record.create_or_find_by!(slug: @slug) do |r|
         r.name = manifest["name"] || @slug
         r.status = "draft"
       end

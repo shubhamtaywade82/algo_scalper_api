@@ -70,7 +70,11 @@ module Strategies
     end
 
     def reconcile_plugin!(plugin)
-      strategy_record = Strategies::Record.find_or_create_by!(slug: plugin[:slug]) do |record|
+      # create_or_find_by! (Rails 6+) handles the concurrent control-loop /
+      # parallel-deploy race where two callers miss the find and both attempt an
+      # INSERT — the second previously raised ActiveRecord::RecordNotUnique on the
+      # unique `slug` index (db/schema.rb strategies.slug unique index).
+      strategy_record = Strategies::Record.create_or_find_by!(slug: plugin[:slug]) do |record|
         record.name = plugin[:name]
         record.status = "draft"
       end
