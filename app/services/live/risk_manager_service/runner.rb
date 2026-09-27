@@ -112,6 +112,17 @@ module Live
 
         PositionTracker.active.find_each do |tracker|
           run_enforcement_for_tracker(tracker, exit_engine)
+        rescue StandardError => e
+          # One tracker's failure must not abort risk enforcement for the
+          # remaining active positions in this cycle. Without this guard a
+          # single `tracker.reload` / cache miss would skip every subsequent
+          # tracker until the next 5s cycle — during which an in-flight exit
+          # could be missed. Mirrors the per-item rescue in
+          # ReconciliationService#reconcile_active_positions.
+          Rails.logger.error(
+            "[RiskManager::Runner] Enforcement failed for tracker #{tracker.id}: " \
+            "#{e.class} - #{e.message}"
+          )
         end
       end
 
