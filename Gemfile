@@ -3,7 +3,7 @@
 source 'https://rubygems.org'
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
-gem 'rails', '~> 8.1.3'
+gem 'rails', '~> 8.1.4'
 # Use postgresql as the database for Active Record
 gem 'pg', '~> 1.6'
 # SQLite for local-agent-stack shared memory & self-healing
