@@ -195,7 +195,6 @@ GEM
     erubis (2.7.0)
     et-orbi (1.4.1)
       tzinfo
-    event_stream_parser (1.0.0)
     eventmachine (1.2.7)
     factory_bot (6.6.0)
       activesupport (>= 6.1.0)
@@ -287,7 +286,8 @@ GEM
       prism (~> 1.5)
     msgpack (1.8.5)
     multipart-post (2.4.1)
-    net-http (0.9.1)
+    net-http (0.10.0)
+      net-protocol (>= 0.3.0)
       uri (>= 0.11.1)
     net-imap (0.6.7)
       date
@@ -496,14 +496,13 @@ GEM
       rubocop-rspec (~> 3.5)
     ruby-progressbar (1.13.0)
     ruby-technical-analysis (1.0.4)
-    ruby_llm (2.0.0)
+    ruby_llm (2.1.1)
       base64
-      event_stream_parser (~> 1)
-      faraday (>= 1.10.0)
+      faraday (>= 1.10.0, != 2.0.0)
       faraday-multipart (>= 1)
       faraday-net_http (>= 1)
       faraday-retry (>= 1)
-      json (< 3)
+      json (< 4)
       marcel (>= 1.0, < 3)
       schematist (~> 1.1)
       zeitwerk (~> 2)
@@ -589,7 +588,7 @@ GEM
       unicode-emoji (~> 4.3)
     unicode-emoji (4.3.0)
     uniform_notifier (1.18.0)
-    uri (1.1.1)
+    uri (1.1.2)
     useragent (0.16.11)
     vcr (6.4.0)
     virtus (2.0.0)
@@ -664,7 +663,7 @@ DEPENDENCIES
   rubocop-rspec (~> 3.8)
   rubocop-rspec_rails
   ruby-technical-analysis
-  ruby_llm (~> 2.0)
+  ruby_llm (~> 2.1)
   ruby_llm-agents (~> 3.15)
   rubycritic
   shoulda-matchers
