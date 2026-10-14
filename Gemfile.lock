@@ -133,7 +133,7 @@ GEM
       activerecord (>= 5.a)
       database_cleaner-core (~> 2.0)
     database_cleaner-core (2.1.0)
-    date (3.5.1)
+    date (3.6.0)
     debride (1.15.2)
       path_expander (~> 2.0)
       prism (~> 1.7)
@@ -287,9 +287,10 @@ GEM
       prism (~> 1.5)
     msgpack (1.8.5)
     multipart-post (2.4.1)
-    net-http (0.9.1)
+    net-http (0.10.0)
+      net-protocol (>= 0.3.0)
       uri (>= 0.11.1)
-    net-imap (0.6.7)
+    net-imap (0.6.8)
       date
       net-protocol
     net-pop (0.1.2)
@@ -300,7 +301,7 @@ GEM
       net-ssh (>= 2.6.5, < 8.0.0)
     net-sftp (4.0.0)
       net-ssh (>= 5.0.0, < 8.0.0)
-    net-smtp (0.5.1)
+    net-smtp (0.5.2)
       net-protocol
     net-ssh (7.3.3)
     nio4r (2.7.5)
@@ -339,7 +340,7 @@ GEM
     pg (1.7.0-x86_64-linux-musl)
     pp (0.6.4)
       prettyprint
-    prettyprint (0.2.0)
+    prettyprint (0.2.1)
     prism (1.9.0)
     prometheus_exporter (2.3.1)
       webrick
@@ -507,7 +508,7 @@ GEM
       marcel (>= 1.0, < 3)
       schematist (~> 1.1)
       zeitwerk (~> 2)
-    ruby_llm-agents (3.15.1)
+    ruby_llm-agents (3.16.0)
       csv
       ostruct
       rails (>= 7.0)
@@ -589,7 +590,7 @@ GEM
       unicode-emoji (~> 4.3)
     unicode-emoji (4.3.0)
     uniform_notifier (1.18.0)
-    uri (1.1.1)
+    uri (1.1.2)
     useragent (0.16.11)
     vcr (6.4.0)
     virtus (2.0.0)
@@ -665,7 +666,7 @@ DEPENDENCIES
   rubocop-rspec_rails
   ruby-technical-analysis
   ruby_llm (~> 2.0)
-  ruby_llm-agents (~> 3.15)
+  ruby_llm-agents (~> 3.16)
   rubycritic
   shoulda-matchers
   simplecov

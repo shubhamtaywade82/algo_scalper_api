@@ -62,7 +62,7 @@ gem 'aasm', '~> 6.0'
 gem 'ollama-client', '~> 1.4'
 gem 'prometheus_exporter', '~> 2.3'
 gem 'ruby_llm', '~> 2.0'
-gem 'ruby_llm-agents', '~> 3.15'
+gem 'ruby_llm-agents', '~> 3.16'
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 # gem "image_processing", "~> 1.2"
