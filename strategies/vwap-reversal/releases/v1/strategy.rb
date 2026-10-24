@@ -36,7 +36,9 @@ class VwapReversalStrategy < BaseStrategy
     return Signals::Hold.new(reason: 'pre_session_window') if clock < SESSION_ENTRY_START
     return Signals::Hold.new(reason: 'midday_dead_zone') if clock >= NO_TRADE_START && clock < NO_TRADE_END
 
-    vwap_series = series.vwap
+    # vwap_or_twap: index candles carry volume=0 (DhanHQ), so strict VWAP is
+    # nil forever on index data — use the TWAP-fallback variant (CandleSeries).
+    vwap_series = series.vwap_or_twap
     return Signals::Hold.new(reason: 'vwap_unavailable') if vwap_series.blank? || vwap_series.size <= slope_lookback
 
     vwap = vwap_series.last

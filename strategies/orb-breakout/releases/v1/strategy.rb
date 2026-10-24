@@ -10,6 +10,28 @@ BaseStrategy = Strategies::Base unless defined?(BaseStrategy)
 class OrbBreakoutStrategy < BaseStrategy
   IST = 'Asia/Kolkata'
 
+  class << self
+    # Mirrors strategies/orb-breakout/manifest.yml so specs and tooling can read
+    # the deployment contract off the class itself.
+    def timeframes = %w[5m]
+
+    def instruments = %w[NIFTY BANKNIFTY SENSEX]
+
+    def params_schema
+      {
+        range_minutes: { type: Integer, default: 30 },
+        min_range_pct: { type: Float, default: 0.20 },
+        max_gap_pct: { type: Float, default: 0.80 },
+        target_r_multiple: { type: Float, default: 2.0 },
+        volume_multiplier: { type: Float, default: 1.5 },
+        force_exit_hour: { type: Integer, default: 14 },
+        force_exit_minute: { type: Integer, default: 30 },
+        max_failed_breakouts: { type: Integer, default: 2 },
+        strike_pref: { type: String, default: 'ATM' }
+      }
+    end
+  end
+
   def call(context)
     series = context.candles.call('5m')
     return Signals::Hold.new(reason: 'no_candle_data') unless series&.candles&.any?
@@ -59,8 +81,12 @@ class OrbBreakoutStrategy < BaseStrategy
     return Signals::Hold.new(reason: 'no_post_range_candles') if post_range.empty?
 
     prior_bars = post_range[0...-1]
-    already_fired = prior_bars.any? { |c| c.close > orh || c.close < orl }
-    return Signals::Hold.new(reason: 'already_resolved_today') if already_fired
+    # Doc contract: one signal per DIRECTION per day (max 2 trades/day — one CE
+    # break, one PE break). A resolved CE break retires only the CE side; the PE
+    # side stays live, and vice versa. (The previous any-direction `already_fired`
+    # check capped the day at 1 trade total, contradicting the documented cap.)
+    ce_already_fired = prior_bars.any? { |c| c.close > orh }
+    pe_already_fired = prior_bars.any? { |c| c.close < orl }
 
     failed_breakouts = prior_bars.count do |c|
       (c.high > orh && c.close <= orh) || (c.low < orl && c.close >= orl)
@@ -80,6 +106,7 @@ class OrbBreakoutStrategy < BaseStrategy
     end
 
     if current.close > orh
+      return Signals::Hold.new(reason: 'already_resolved_today') if ce_already_fired
       return Signals::Hold.new(reason: 'volume_filter') unless volume_ok
 
       target = current.close + (r_multiple * range_width)
@@ -89,6 +116,7 @@ class OrbBreakoutStrategy < BaseStrategy
         metadata: { strike_pref: strike_pref, exit_rules: exit_rules_for.call(orl, target) }
       )
     elsif current.close < orl
+      return Signals::Hold.new(reason: 'already_resolved_today') if pe_already_fired
       return Signals::Hold.new(reason: 'volume_filter') unless volume_ok
 
       target = current.close - (r_multiple * range_width)

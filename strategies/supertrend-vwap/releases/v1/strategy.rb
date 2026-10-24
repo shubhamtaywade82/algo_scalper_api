@@ -10,6 +10,23 @@ BaseStrategy = Strategies::Base unless defined?(BaseStrategy)
 # line value at entry (frozen, not recomputed bar-by-bar); target is the prior swing extreme,
 # extended to meet a minimum 1.5:1 if the raw swing distance falls short.
 class SupertrendVwapStrategy < BaseStrategy
+  class << self
+    # Mirrors strategies/supertrend-vwap/manifest.yml so specs and tooling can read
+    # the deployment contract off the class itself.
+    def timeframes = %w[5m]
+
+    def instruments = %w[NIFTY BANKNIFTY SENSEX]
+
+    def params_schema
+      {
+        supertrend_period: { type: Integer, default: 10 },
+        supertrend_multiplier: { type: Float, default: 3.0 },
+        min_reward_risk: { type: Float, default: 1.5 },
+        strike_pref: { type: String, default: 'ATM' }
+      }
+    end
+  end
+
   def call(context)
     series = context.candles.call('5m')
     return Signals::Hold.new(reason: 'no_candle_data') unless series&.candles&.any?
@@ -23,7 +40,9 @@ class SupertrendVwapStrategy < BaseStrategy
     last_idx = result[:line]&.rindex { |v| !v.nil? }
     return Signals::Hold.new(reason: 'supertrend_unavailable') unless last_idx
 
-    vwap = series.current_vwap
+    # vwap_or_twap: index candles carry volume=0 (DhanHQ), so strict VWAP is
+    # nil forever on index data — use the TWAP-fallback variant (CandleSeries).
+    vwap = series.vwap_or_twap.last
     return Signals::Hold.new(reason: 'vwap_unavailable') if vwap.nil? || vwap.zero?
 
     close = series.candles[last_idx].close
