@@ -33,6 +33,9 @@ const Reports = lazy(() => import('./views/Reports'))
 const Alerts = lazy(() => import('./views/Alerts'))
 const Scheduler = lazy(() => import('./views/Scheduler'))
 const Logs = lazy(() => import('./views/Logs'))
+const Portfolio = lazy(() => import('./views/Portfolio'))
+const System = lazy(() => import('./views/System'))
+const StrategiesHub = lazy(() => import('./views/StrategiesHub'))
 
 function AppShell(props) {
   const {
@@ -115,26 +118,27 @@ export default function App() {
         <Route path="/" component={Dashboard} />
         <Route path="/strategies/creator" component={StrategyCreator} />
         <Route path="/strategies/:id" component={StrategyCreator} />
-        <Route path="/strategies" component={Strategies} />
-        <Route path="/alpha" component={Alpha} />
-        <Route path="/signals" component={Signals} />
-        <Route path="/option-scalper" component={OptionScalper} />
+        <Route path="/strategies" component={() => <StrategiesHub defaultTab="strategies" />} />
+        <Route path="/alpha" component={() => <StrategiesHub defaultTab="alpha" />} />
+        <Route path="/signals" component={() => <StrategiesHub defaultTab="signals" />} />
+        <Route path="/backtester" component={() => <StrategiesHub defaultTab="backtester" />} />
+        <Route path="/replay" component={() => <StrategiesHub defaultTab="replay" />} />
+        <Route path="/option-scalper" component={() => <Navigate href="/option-chain" />} />
         <Route path="/option-chain" component={OptionChain} />
         <Route path="/analysis" component={Analysis} />
-        <Route path="/ledger" component={Ledger} />
-        <Route path="/orders" component={Ledger} />
-        <Route path="/settings" component={Settings} />
-        <Route path="/backtester" component={Backtester} />
-        <Route path="/replay" component={Replay} />
-        {/* New routes from TDD layout */}
+        <Route path="/portfolio" component={Portfolio} />
+        <Route path="/positions" component={() => <Portfolio defaultTab="positions" />} />
+        <Route path="/ledger" component={() => <Portfolio defaultTab="orders" />} />
+        <Route path="/orders" component={() => <Portfolio defaultTab="orders" />} />
+        <Route path="/holdings" component={() => <Portfolio defaultTab="holdings" />} />
+        <Route path="/funds" component={() => <Portfolio defaultTab="funds" />} />
         <Route path="/market-watch" component={MarketWatch} />
-        <Route path="/positions" component={Positions} />
-        <Route path="/holdings" component={Holdings} />
-        <Route path="/funds" component={Funds} />
         <Route path="/reports" component={Reports} />
-        <Route path="/alerts" component={Alerts} />
-        <Route path="/scheduler" component={Scheduler} />
-        <Route path="/logs" component={Logs} />
+        <Route path="/system" component={System} />
+        <Route path="/settings" component={() => <System defaultTab="settings" />} />
+        <Route path="/scheduler" component={() => <System defaultTab="scheduler" />} />
+        <Route path="/logs" component={() => <System defaultTab="logs" />} />
+        <Route path="/alerts" component={() => <System defaultTab="alerts" />} />
         <Route path="*" component={() => <Navigate href="/" />} />
       </Route>
 

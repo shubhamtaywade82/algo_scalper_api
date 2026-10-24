@@ -51,6 +51,13 @@ const ICONS = {
       <path d="M3 3v18h18M7 16l4-8 4 4 4-6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   ),
+  portfolio: () => (
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <rect width="20" height="14" x="2" y="7" rx="2" stroke-width="2"/>
+      <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M12 12v2M2 12h20" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  ),
   positions: () => (
     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <rect width="18" height="14" x="3" y="5" rx="2" stroke-width="2"/>
