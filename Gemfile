@@ -52,8 +52,8 @@ gem 'kamal', require: false
 # Add HTTP asset caching/compression and X-Sendfile acceleration to Puma [https://github.com/basecamp/thruster/]
 gem 'thruster', require: false
 
-# DhanHQ Ruby client (v3 API wrapper and WebSocket feed)
-gem 'DhanHQ', '~> 3.4'
+# DhanHQ Ruby client (v4 API wrapper and WebSocket feed)
+gem 'DhanHQ', '~> 4.1'
 
 # Telegram bot for notifications
 gem 'telegram-bot-ruby', '~> 2.8'
@@ -81,7 +81,7 @@ group :development, :test do
   gem 'brakeman', require: false
 
   # Code quality and style enforcement
-  gem 'rubocop', '~> 1.91', require: false
+  gem 'rubocop', '~> 1.92', require: false
   gem 'rubocop-factory_bot', '~> 2.28', require: false
   gem 'rubocop-performance', '~> 1.27', require: false
   gem 'rubocop-rails', '~> 2.38', require: false
