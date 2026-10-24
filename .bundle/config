@@ -1,0 +1,3 @@
+---
+BUNDLE_BUILD__PG: "--with-pg-config=/home/z/.local/pgenv/bin/pg_config"
+BUNDLE_BUILD__SQLITE3: "--with-sqlite3-include=/usr/include --with-sqlite3-lib=/usr/lib/x86_64-linux-gnu"
