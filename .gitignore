@@ -37,3 +37,4 @@ graphify-out/
 
 # Legacy algo_trading_system artifacts (expired-credential .env + generated result JSONs removed 2026-09)
 lib/trading_system/algo_trading_system/
+.bundle/
