@@ -1,4 +1,4 @@
-import { Show } from 'solid-js'
+import { Show, For } from 'solid-js'
 import { useAlerts } from '../stores/useAlerts'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'

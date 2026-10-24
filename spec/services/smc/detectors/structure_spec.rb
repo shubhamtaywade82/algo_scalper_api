@@ -40,7 +40,7 @@ RSpec.describe Smc::Detectors::Structure do
       allow(series).to receive(:swing_low?) { |i| i == 0 }
 
       detector = described_class.new(series)
-      expect(detector.bos?).to be_truthy
+      expect(detector).to be_bos
     end
   end
 

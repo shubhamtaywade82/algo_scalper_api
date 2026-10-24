@@ -16,7 +16,7 @@ module TradingSystem
       @services[name.to_sym] = instance
     end
 
-    delegate :[], :key?, :fetch, :dig, to: :@services
+    delegate :[], to: :@services
 
     def services
       @services.dup
@@ -30,20 +30,32 @@ module TradingSystem
       @mutex.synchronize do
         return if @running
 
-        @services.each_key { |name| start_one(name) }
+        @services.each do |name, service|
+            service.start
+            Rails.logger.info("[Supervisor] started #{name}")
+        rescue StandardError => e
+            Rails.logger.error("[Supervisor] failed starting #{name}: #{e.class} - #{e.message}")
+        end
 
         @running = true
       end
+      audit_log!('bot_start', metadata: { services: @services.keys })
     end
 
     def stop_all
       @mutex.synchronize do
         return unless @running
 
-        @services.keys.reverse_each { |name| stop_one(name) }
+        @services.reverse_each do |name, service|
+            service.stop
+            Rails.logger.info("[Supervisor] stopped #{name}")
+        rescue StandardError => e
+            Rails.logger.error("[Supervisor] error stopping #{name}: #{e.class} - #{e.message}")
+        end
 
         @running = false
       end
+      audit_log!('bot_stop')
     end
 
     def start_service(name)
@@ -74,6 +86,22 @@ module TradingSystem
       end
     end
 
+    # Best-effort health snapshot for use by API health endpoints.
+    # Returns a hash keyed by service name with boolean statuses.
+    def health_check
+      @services.transform_values do |svc|
+        if svc.respond_to?(:healthy?)
+          svc.healthy?
+        elsif svc.respond_to?(:running?)
+          svc.running?
+        else
+          true
+        end
+      rescue StandardError
+        false
+      end
+    end
+
     private
 
     def start_one(name)
@@ -92,20 +120,10 @@ module TradingSystem
       Rails.logger.error("[Supervisor] error stopping #{name}: #{e.class} - #{e.message}")
     end
 
-    # Best-effort health snapshot for use by API health endpoints.
-    # Returns a hash keyed by service name with boolean statuses.
-    def health_check
-      @services.transform_values do |svc|
-        if svc.respond_to?(:healthy?)
-          svc.healthy?
-        elsif svc.respond_to?(:running?)
-          svc.running?
-        else
-          true
-        end
-      rescue StandardError
-        false
-      end
+    def audit_log!(event_type, metadata: {})
+      AuditLog.create!(event_type: event_type, metadata: metadata)
+    rescue StandardError => e
+      Rails.logger.error("[Supervisor] audit_log! failed for #{event_type}: #{e.class} - #{e.message}")
     end
   end
 end

@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-require "singleton"
-require "concurrent/array"
-require "concurrent/set"
+require 'singleton'
+require 'concurrent/array'
+require 'concurrent/set'
 
 module Live
   class MarketFeedHub
@@ -20,27 +20,22 @@ module Live
       @started_at = nil
       @subscribed_keys = Concurrent::Set.new # Track subscribed segment:security_id pairs
       @watchlist_keys = Concurrent::Set.new
-      @watchdog_thread = nil
-      @restarting = false
+      @reconnect_attempts = 0
     end
 
     def start!
       unless enabled?
-        Rails.logger.warn("[MarketFeedHub] Not enabled - missing credentials (DHAN_CLIENT_ID/CLIENT_ID or DHAN_ACCESS_TOKEN/ACCESS_TOKEN)")
+        Rails.logger.warn('[MarketFeedHub] Not enabled - missing credentials (DHAN_CLIENT_ID/CLIENT_ID or DHAN_ACCESS_TOKEN/ACCESS_TOKEN)')
         return false
       end
 
       if running?
-        Rails.logger.debug("[MarketFeedHub] Already running, skipping start")
+        Rails.logger.debug('[MarketFeedHub] Already running, skipping start')
         return true
       end
 
-      @lock.synchronize do
-        return true if running?
-
-        unless acquire_budget!("market_feed_hub")
-          return false
-        end
+      started = @lock.synchronize do
+        next true if running?
 
         @watchlist = load_watchlist || []
         refresh_watchlist_keys!
@@ -50,8 +45,15 @@ module Live
         setup_connection_handlers
 
         @ws_client.on(:tick) { |tick| handle_tick(tick) }
+        @ws_client.on(:reconnect) { |info| handle_reconnect(info) }
+        @ws_client.on(:open) do
+          @reconnect_attempts = 0
+          Rails.logger.info('[MarketFeedHub] WebSocket opened')
+        end
+        @ws_client.on(:close) { Rails.logger.warn('[MarketFeedHub] WebSocket closed') }
+        @ws_client.on(:error) { |e| Rails.logger.error("[MarketFeedHub] WebSocket error: #{e}") }
         @ws_client.start
-        Rails.logger.info("[MarketFeedHub] WebSocket client started")
+        Rails.logger.info('[MarketFeedHub] WebSocket client started')
 
         @running = true
         @started_at = Time.current
@@ -59,21 +61,30 @@ module Live
         @last_error = nil
 
         start_watchdog!
-        subscribe_watchlist
 
-        Rails.logger.info("[MarketFeedHub] DhanHQ market feed started (watchlist=#{@watchlist.count} instruments)")
         true
       rescue StandardError => e
         Rails.logger.error("Failed to start DhanHQ market feed: #{e.class} - #{e.message}")
-        release_budget!("market_feed_hub")
         stop!
         false
       end
+
+      return false unless started
+
+      # Subscribe to watchlist OUTSIDE the lock to avoid deadlock
+      # (subscribe_many calls ensure_running! which might try to acquire the lock)
+      subscribe_watchlist
+
+      Rails.logger.info("[MarketFeedHub] DhanHQ market feed started (watchlist=#{@watchlist.count} instruments)")
+      true
+    rescue StandardError => e
+      Rails.logger.error("Failed to start DhanHQ market feed: #{e.class} - #{e.message}")
+      stop!
+      false
     end
 
     def stop!
       @lock.synchronize do
-        release_budget!("market_feed_hub")
         @running = false
         @connection_state = :disconnected
         return unless @ws_client
@@ -83,7 +94,13 @@ module Live
 
         begin
           # Attempt graceful disconnect
-          ws_client.disconnect! if ws_client.respond_to?(:disconnect!)
+          if ws_client.respond_to?(:disconnect!)
+            ws_client.disconnect!
+          elsif ws_client.respond_to?(:stop)
+            ws_client.stop
+          elsif ws_client.respond_to?(:close)
+            ws_client.close
+          end
         rescue StandardError => e
           Rails.logger.warn("[MarketFeedHub] Error during disconnect: #{e.message}") if defined?(Rails.logger)
         end
@@ -116,6 +133,21 @@ module Live
       false
     end
 
+    # Delegates to the gem's native health check (frame staleness, not just socket
+    # state) where available; falls back to connected? otherwise.
+    def healthy?(stale_after: 45)
+      return false unless running?
+      return false unless @ws_client
+
+      if @ws_client.respond_to?(:healthy?)
+        @ws_client.healthy?(stale_after: stale_after)
+      else
+        connected?
+      end
+    rescue StandardError
+      false
+    end
+
     # Seconds since last tick, or nil if never received one
     def seconds_since_last_tick
       return nil unless @last_tick_at
@@ -143,8 +175,8 @@ module Live
       result = {
         hub_status: status,
         credentials: {
-          client_id: ENV["DHAN_CLIENT_ID"].presence || ENV["CLIENT_ID"].presence ? "✅ Set" : "❌ Missing",
-          access_token: ENV["DHAN_ACCESS_TOKEN"].presence || ENV["ACCESS_TOKEN"].presence ? "✅ Set" : "❌ Missing"
+          client_id: ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence ? '✅ Set' : '❌ Missing',
+          access_token: ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence ? '✅ Set' : '❌ Missing'
         },
         mode: mode,
         enabled: enabled?
@@ -177,7 +209,7 @@ module Live
       if segment.blank? || security_id.blank?
         Rails.logger.error("[MarketFeedHub] Invalid subscription: segment=#{segment.inspect}, security_id=#{security_id.inspect}")
         return { segment: segment, security_id: security_id, already_subscribed: false,
-                 error: "Invalid segment or security_id" }
+                 error: 'Invalid segment or security_id' }
       end
 
       # Create composite key for tracking
@@ -207,7 +239,7 @@ module Live
       ensure_running!
 
       if instruments.empty?
-        Rails.logger.warn("[MarketFeedHub] subscribe_many called with empty instruments list")
+        Rails.logger.warn('[MarketFeedHub] subscribe_many called with empty instruments list')
         return []
       end
 
@@ -332,7 +364,7 @@ module Live
       wrapper = lambda do |tick|
         return unless tick[:security_id].to_s == security_id.to_s && tick[:segment].to_s == segment.to_s
 
-        block.call(tick)
+        yield(tick)
       end
 
       @callbacks << wrapper
@@ -384,31 +416,34 @@ module Live
 
     private
 
-    def acquire_budget!(connection_id)
-      WsConnectionBudget.acquire!(connection_id)
-    rescue WsConnectionBudget::BudgetExceeded
-      Rails.logger.warn("[MarketFeedHub] WebSocket connection budget exhausted - cannot start feed (#{connection_id})")
-      false
-    end
+    def wait_for_open(timeout = 3)
+      start_time = Time.now
 
-    def release_budget!(connection_id)
-      WsConnectionBudget.release!(connection_id)
-    rescue StandardError => e
-      Rails.logger.warn("[MarketFeedHub] Failed to release connection budget for #{connection_id}: #{e.message}")
-      false
+      until @ws_open
+        sleep 0.05
+        if Time.now - start_time > timeout
+          Rails.logger.warn("[MarketFeedHub] WebSocket open timeout, continuing anyway")
+          break
+        end
+      end
     end
 
     def enabled?
       # Disable in script/backtest mode
-      return false if ENV["BACKTEST_MODE"] == "1" || ENV["SCRIPT_MODE"] == "1"
-      return false if ENV["DISABLE_TRADING_SERVICES"] == "1"
-      return false if defined?($PROGRAM_NAME) && $PROGRAM_NAME.include?("runner") # rubocop:disable Style/GlobalVars
+      return false if ENV['BACKTEST_MODE'] == '1' || ENV['SCRIPT_MODE'] == '1' || ENV['DISABLE_TRADING_SERVICES'] == '1'
+      return false if defined?($PROGRAM_NAME) && $PROGRAM_NAME.include?('runner') # rubocop:disable Style/GlobalVars
 
-      # Always enabled - just check for credentials
-      # Support both naming conventions: CLIENT_ID/DHAN_CLIENT_ID and ACCESS_TOKEN/DHAN_ACCESS_TOKEN
-      client_id = ENV["DHAN_CLIENT_ID"].presence || ENV["CLIENT_ID"].presence
-      access = ENV["DHAN_ACCESS_TOKEN"].presence || ENV["ACCESS_TOKEN"].presence
+      # Support both static ENV credentials and dynamic 3-tier token providers
+      client_id = ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
+      access    = resolved_access_token.presence
       client_id.present? && access.present?
+    end
+
+    def resolved_access_token
+      ENV['DHAN_ACCESS_TOKEN'].presence ||
+        ENV['ACCESS_TOKEN'].presence ||
+        (defined?(DhanHQ) && DhanHQ.configuration.access_token.presence) ||
+        (defined?(Dhan::TokenManager) && Dhan::TokenManager.current_token.presence)
     end
 
     def ensure_running!
@@ -437,6 +472,7 @@ module Live
       was_connected = @connection_state == :connected
       @last_tick_at = Time.current
       @connection_state = :connected
+      @reconnect_attempts = 0
 
       resubscribe_active_positions_after_reconnect unless was_connected
 
@@ -448,6 +484,13 @@ module Live
       end
     end
 
+    def handle_reconnect(info)
+      Rails.logger.warn("[MarketFeedHub] WebSocket reconnected (attempt=#{info[:attempt]})")
+      resubscribe_active_positions_after_reconnect
+    rescue StandardError => e
+      Rails.logger.error("[MarketFeedHub] handle_reconnect failed: #{e.class} - #{e.message}")
+    end
+
     def update_market_caches!(tick, ltp)
       # TickCache handles both ticker (LTP) and prev_close ticks
       Live::TickCache.put(tick) if ltp.positive? || tick[:prev_close].to_f.positive?
@@ -455,22 +498,50 @@ module Live
       return unless ltp.positive?
 
       symbol = tick[:symbol] || tick[:security_id]
-      is_index = tick[:instrument_type].to_s.upcase == "INDEX" || %w[NIFTY SENSEX BANKNIFTY].include?(symbol.to_s.upcase)
+      is_index = tick[:instrument_type].to_s.upcase == 'INDEX' || %w[NIFTY SENSEX BANKNIFTY].include?(symbol.to_s.upcase)
       MarketData::MarketCache.update_ltp(symbol, ltp, is_index: is_index)
 
-      # Keep CandleSeriesCache forming candle up-to-date for index instruments.
-      # Feed both 1-min and 5-min caches used by exit/trailing engines and indicators.
-      if is_index
-        instrument = IndexInstrumentCache.instance.get_or_fetch(
-          key: symbol.to_s.upcase, sid: tick[:security_id].to_s, segment: "IDX_I"
-        )
-        if instrument
-          Live::CandleSeriesCache.append_tick(instrument: instrument, tick: tick, interval: 5)
-          Live::CandleSeriesCache.append_tick(instrument: instrument, tick: tick, interval: 1)
+      # puts tick  # Uncomment only for debugging - very noisy!
+      # Log every tick (segment:security_id and LTP) for verification during development
+      # # Rails.logger.info("[WS tick] #{tick[:segment]}:#{tick[:security_id]} ltp=#{tick[:ltp]} kind=#{tick[:kind]}")
+
+      # Integrated Institutional Market Data Cache
+      if tick[:ltp].to_f.positive?
+        # Resolve symbol if possible, or use security_id
+        symbol = tick[:symbol] || tick[:security_id]
+
+        # Check if it's an index or an option
+        is_index = tick[:instrument_type].to_s.upcase == 'INDEX' || %w[NIFTY SENSEX BANKNIFTY].include?(symbol.to_s.upcase)
+        MarketData::MarketCache.update_ltp(symbol, tick[:ltp], is_index: is_index)
+
+        # If it's an option (OI/Volume present), update option data
+        if tick[:oi].present? || tick[:volume].present?
+          MarketData::MarketCache.update_option_data(symbol, {
+            oi: tick[:oi],
+            volume: tick[:volume],
+            ltp: tick[:ltp],
+            timestamp: Time.current
+          })
         end
       end
 
-      return unless tick[:oi].present? || tick[:volume].present?
+      # # puts Live::TickQuery.for_security(segment: tick[:segment], security_id: tick[:security_id])&.ltp
+      # # Store in Redis for PnL tracking (secondary)
+      # # Only store if we have valid segment, security_id, and LTP
+      # if tick[:segment].present? && tick[:security_id].present? && tick[:ltp].present? && tick[:ltp].to_f.positive?
+      #   begin
+      #     if tick[:ltp].present? && tick[:ltp].to_f.positive?
+      #       Live::RedisPnlCache.instance.store_tick(
+      #         segment: tick[:segment],
+      #         security_id: tick[:security_id].to_s,
+      #         ltp: tick[:ltp],
+      #         timestamp: Time.current
+      #       )
+      #     end
+      #   rescue StandardError => e
+      #     Rails.logger.debug { "[MarketFeedHub] Failed to store tick in Redis: #{e.message}" } if defined?(Rails.logger)
+      #   end
+      # end
 
       MarketData::MarketCache.update_option_data(symbol, {
         oi: tick[:oi],
@@ -481,7 +552,7 @@ module Live
     end
 
     def notify_subscribers!(tick)
-      ActiveSupport::Notifications.instrument("dhanhq.tick", tick)
+      ActiveSupport::Notifications.instrument('dhanhq.tick', tick)
       @callbacks.each { |callback| safe_invoke(callback, tick) }
     end
 
@@ -553,8 +624,12 @@ module Live
       return unless running?
 
       @restarting = true
+      @reconnect_attempts = (@reconnect_attempts || 0) + 1
+      backoff = [2**[@reconnect_attempts, 6].min, 60].min
+
+      Rails.logger.info("[MarketFeedHub] Restarting WebSocket client (attempt ##{@reconnect_attempts}, backoff #{backoff}s)...")
       stop!
-      sleep 1
+      sleep backoff
       start!
     ensure
       @restarting = false
@@ -566,7 +641,7 @@ module Live
       refresh_watchlist_keys!
 
       if @watchlist.empty?
-        Rails.logger.warn("[MarketFeedHub] Watchlist is empty, skipping subscription")
+        Rails.logger.warn('[MarketFeedHub] Watchlist is empty, skipping subscription')
         return
       end
 
@@ -582,7 +657,7 @@ module Live
       end
 
       unless connected?
-        Rails.logger.warn("[MarketFeedHub] WebSocket not connected yet, attempting watchlist subscription anyway")
+        Rails.logger.warn('[MarketFeedHub] WebSocket not connected yet, attempting watchlist subscription anyway')
       end
 
       # Use subscribe_many for efficient batch subscription (up to 100 instruments per message)
@@ -634,18 +709,18 @@ module Live
       watchlist_config = AlgoConfig.fetch[:watchlist] || []
       return watchlist_config if watchlist_config.present?
 
-      raw = ENV.fetch("DHANHQ_WS_WATCHLIST", "").strip
+      raw = ENV.fetch('DHANHQ_WS_WATCHLIST', '').strip
       return [] if raw.blank?
 
       raw.split(/[;\n,]/)
          .map(&:strip)
          .compact_blank
          .filter_map do |entry|
-         segment, security_id = entry.split(":", 2)
-         next if segment.blank? || security_id.blank?
+           segment, security_id = entry.split(':', 2)
+           next if segment.blank? || security_id.blank?
 
-         { segment: segment.strip, security_id: security_id.strip }
-      end
+           { segment: segment.strip, security_id: security_id.strip }
+         end
     end
 
     def build_client
@@ -659,20 +734,9 @@ module Live
     end
 
     def setup_connection_handlers
-      # DhanHQ WebSocket client only supports :tick events
-      # Connection/disconnection monitoring is handled via tick activity tracking
-      # and connection state is inferred from tick reception
-
-      # NOTE: The DhanHQ client handles reconnection internally
-      # We track connection state via:
-      # - Tick reception (sets @connection_state = :connected)
-      # - Time-based fallback (connected? checks if ticks received recently)
-      # - Explicit stop! calls (sets @connection_state = :disconnected)
-
-      # Connection will be marked as :connected when first tick is received
-      # in handle_tick method
-
-      # Rails.logger.debug('[MarketFeedHub] Connection handlers: Using tick-based connection monitoring')
+      # Lifecycle hooks (on :tick/:reconnect/:open/:close/:error) are wired directly
+      # in start! above. This method is kept as an extension point for any future
+      # per-connection setup that needs to run before @ws_client.start.
     end
 
     def config
@@ -728,7 +792,7 @@ module Live
 
     def option_segment?(segment)
       seg = segment.to_s.upcase
-      seg.include?("FNO") || seg.include?("COMM") || seg.include?("CUR")
+      seg.include?('FNO') || seg.include?('COMM') || seg.include?('CUR')
     end
 
     # Resubscribe all active positions and watchlist items after WebSocket reconnect
@@ -749,7 +813,7 @@ module Live
 
         # Skip resubscribing active positions if market is closed
         if TradingSession::Service.market_closed?
-          Rails.logger.debug("[MarketFeedHub] Market closed - skipping resubscribe of active positions")
+          Rails.logger.debug('[MarketFeedHub] Market closed - skipping resubscribe of active positions')
           return
         end
 
@@ -770,16 +834,6 @@ module Live
           rescue StandardError => e
             Rails.logger.error("[MarketFeedHub] Failed to resubscribe position #{tracker.id}: #{e.class} - #{e.message}")
           end
-        end
-        # Trigger historical backfill when reconnecting after a gap > 2 minutes.
-        # This recovers missing minute bars in the Redis tick store so BreakoutEvaluator
-        # and indicators see a continuous series.
-        if @last_tick_at && (Time.current - @last_tick_at) > 120.seconds
-          gap_seconds = (Time.current - @last_tick_at).round
-          Rails.logger.info(
-            "[MarketFeedHub] Detected #{gap_seconds}s WebSocket gap — triggering historical backfill"
-          )
-          Live::HistoricalBackfillService.new.backfill_all(interval: 1)
         end
       ensure
         @resubscribing = false

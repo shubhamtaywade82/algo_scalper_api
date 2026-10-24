@@ -1,0 +1,101 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.dhan.co/v2/marketfeed/ltp
+    body:
+      encoding: UTF-8
+      string: '{"NSE_FNO":[12345],"dhanClientId":"<CLIENT_ID>"}'
+    headers:
+      User-Agent:
+      - Faraday v2.14.3
+      Content-Type:
+      - application/json
+      Accept:
+      - application/json
+      Access-Token:
+      - "<ACCESS_TOKEN>"
+      Client-Id:
+      - "<CLIENT_ID>"
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+  response:
+    status:
+      code: 401
+      message: Unauthorized
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '87'
+      Connection:
+      - keep-alive
+      Date:
+      - Fri, 07 Aug 2026 05:42:43 GMT
+      X-Frame-Options:
+      - SAMEORIGIN
+      Content-Security-Policy:
+      - frame-ancestors 'self' https://dhan.co https://*.dhan.co https://scanx.trade
+        https://*.scanx.trade https://dhanhq.co https://*.dhanhq.co;
+      X-Cache:
+      - Error from cloudfront
+      Via:
+      - 1.1 0097aa34ea66467022ef0da8e933e098.cloudfront.net (CloudFront)
+      X-Amz-Cf-Pop:
+      - BLR50-P1
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      X-Amz-Cf-Id:
+      - 2y3F5fCtrXs1iwhMcv5ewPCrjqS5Qn-WlQcA3ckE66F8Fq8qiiKnCw==
+    body:
+      encoding: UTF-8
+      string: '{"data":{"808":"Authentication Failed - Client ID or Token invalid"},"status":"failed"}'
+  recorded_at: Fri, 07 Aug 2026 05:42:43 GMT
+- request:
+    method: post
+    uri: https://auth.dhan.co/app/generateAccessToken?dhanClientId=1000000001&pin=123456&totp=423799
+    body:
+      encoding: UTF-8
+      string: ''
+    headers:
+      User-Agent:
+      - Faraday v2.14.3
+      Accept:
+      - application/json
+      Content-Length:
+      - '0'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+  response:
+    status:
+      code: 200
+      message: ''
+    headers:
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Date:
+      - Fri, 07 Aug 2026 05:42:43 GMT
+      Content-Security-Policy:
+      - frame-ancestors 'self' https://dhan.co https://*.dhan.co https://scanx.trade
+        https://*.scanx.trade https://dhanhq.co https://*.dhanhq.co;
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Cache:
+      - Miss from cloudfront
+      Via:
+      - 1.1 0097aa34ea66467022ef0da8e933e098.cloudfront.net (CloudFront)
+      X-Amz-Cf-Pop:
+      - BLR50-P1
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      X-Amz-Cf-Id:
+      - eUiOinAxMsUrQmSRnGfRkuOeXWIoKbE7wMKMWVXTiX0XgBpX1cz0fA==
+    body:
+      encoding: UTF-8
+      string: '{"message":"Unauthorized Request","status":"error"}'
+  recorded_at: Fri, 07 Aug 2026 05:42:43 GMT
+recorded_with: VCR 6.4.0

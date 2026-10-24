@@ -59,7 +59,7 @@ module Smc
 
         # Volume confirmation when available (RVR > 1.5x per SMC spec)
         rvr_ok = rvr_above_threshold?(candle)
-        rvr_ok.nil? ? true : rvr_ok
+        rvr_ok.nil? || rvr_ok
       end
 
       # Returns true if volume > RVR_MIN * avg_volume_20, false if below, nil if no volume data

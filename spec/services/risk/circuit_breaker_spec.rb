@@ -28,6 +28,12 @@ RSpec.describe Risk::CircuitBreaker do
       )
       cb.trip!(reason: 'test halt')
     end
+
+    it 'creates a kill_switch_trip audit log entry' do
+      expect { cb.trip!(reason: 'test halt') }.to change(AuditLog, :count).by(1)
+      expect(AuditLog.last).to have_attributes(event_type: 'kill_switch_trip')
+      expect(AuditLog.last.metadata['reason']).to eq('test halt')
+    end
   end
 
   describe '#reset!' do
@@ -40,32 +46,38 @@ RSpec.describe Risk::CircuitBreaker do
       )
       cb.reset!
     end
+
+    it 'creates a kill_switch_reset audit log entry' do
+      expect { cb.reset! }.to change(AuditLog, :count).by(1)
+      expect(AuditLog.last).to have_attributes(event_type: 'kill_switch_reset')
+    end
   end
 
   describe '#tripped?' do
-    context 'when cache read fails' do
-      before do
-        allow(Rails.cache).to receive(:read).and_raise(Redis::BaseError, 'connection refused')
-        allow(Notifications::TelegramNotifier.instance).to receive(:notify_error)
-      end
-
-      it 'fails CLOSED (returns true, blocking entries)' do
-        expect(cb.tripped?).to be true
-      end
-
-      it 'alerts via Telegram' do
-        cb.tripped?
-        expect(Notifications::TelegramNotifier.instance).to have_received(:notify_error).with(
-          a_string_matching(/failing CLOSED/),
-          context: 'CircuitBreaker#tripped?'
-        )
-      end
+    it 'returns false when the breaker has not been tripped' do
+      expect(cb.tripped?).to be false
     end
 
-    context 'when cache is healthy and not tripped' do
-      it 'returns false' do
-        expect(cb.tripped?).to be false
-      end
+    it 'returns true when the breaker has been tripped' do
+      cb.trip!(reason: 'test halt')
+      expect(cb.tripped?).to be true
+    end
+
+    it 'fails closed (returns true) when the cache is unreachable' do
+      allow(Rails.cache).to receive(:read).with(described_class::TRIP_CACHE_KEY).and_raise(StandardError, 'cache down')
+
+      expect(cb.tripped?).to be true
+    end
+  end
+
+  describe '#force_close_all!' do
+    let(:exit_engine) { instance_double(Live::ExitEngine, execute_exit: true) }
+
+    it 'creates a square_off audit log entry with the position count' do
+      expect { cb.force_close_all!(exit_engine: exit_engine, reason: 'manual halt') }
+        .to change(AuditLog, :count).by(1)
+      expect(AuditLog.last).to have_attributes(event_type: 'square_off')
+      expect(AuditLog.last.metadata['reason']).to eq('manual halt')
     end
   end
 end

@@ -31,7 +31,7 @@ RSpec.describe Research::LifecycleRunner do
       )
 
       expect(ranked.size).to eq(2)
-      expect(ranked.all? { |lifecycle| lifecycle.persisted? }).to be true
+      expect(ranked.all?(&:persisted?)).to be true
       expect(ranked.first.status).to eq('computed')
       expect(ranked.first.peak_return_pct).to be >= ranked.last.peak_return_pct
       expect(Research::PremiumLifecycle.count).to eq(2)

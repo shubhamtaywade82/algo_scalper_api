@@ -1,6 +1,23 @@
 import { Show, createMemo } from 'solid-js'
 import AnimatedNumber from './AnimatedNumber'
 
+const CHIP_COLOR = {
+  primary: 'bg-primary-500/10 text-primary-400',
+  emerald: 'bg-emerald-500/10 text-emerald-400',
+  amber: 'bg-amber-500/10 text-amber-400',
+  violet: 'bg-violet-500/10 text-violet-400'
+}
+
+function IconChip(props) {
+  return (
+    <div class={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${CHIP_COLOR[props.color]}`}>
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {props.children}
+      </svg>
+    </div>
+  )
+}
+
 export default function StatsBar(props) {
   const stats = () => props.stats || {}
   const balance = () => props.balance || {}
@@ -28,7 +45,9 @@ export default function StatsBar(props) {
       <div class="glass p-4.5 rounded-2xl flex flex-col justify-between relative overflow-hidden group hover:border-white/10 transition-all duration-300">
         <div class="flex items-center justify-between mb-2">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Net P&L (Today)</span>
-          <span class="text-[14px]">📈</span>
+          <IconChip color="primary">
+            <path d="M3 17l6-6 4 4 8-8M15 7h6v6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </IconChip>
         </div>
         <div class="z-10">
           <div class="text-xl font-black text-data">
@@ -45,7 +64,10 @@ export default function StatsBar(props) {
       <div class="glass p-4.5 rounded-2xl flex flex-col justify-between relative overflow-hidden group hover:border-white/10 transition-all duration-300">
         <div class="flex items-center justify-between mb-2">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Open P&L</span>
-          <span class="text-[14px]">💼</span>
+          <IconChip color="amber">
+            <rect width="20" height="14" x="2" y="7" rx="2" stroke-width="2"/>
+            <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke-width="2" stroke-linecap="round"/>
+          </IconChip>
         </div>
         <div class="z-10">
           <div class="text-xl font-black text-data">
@@ -62,7 +84,10 @@ export default function StatsBar(props) {
       <div class="glass p-4.5 rounded-2xl flex flex-col justify-between hover:border-white/10 transition-all duration-300">
         <div class="flex items-center justify-between mb-2">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Realized P&L</span>
-          <span class="text-[14px]">🏆</span>
+          <IconChip color="emerald">
+            <path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M17 5h3a2 2 0 0 1-2 4M7 5H4a2 2 0 0 0 2 4" stroke-width="2" stroke-linecap="round"/>
+          </IconChip>
         </div>
         <div>
           <div class="text-xl font-black text-data">
@@ -78,7 +103,11 @@ export default function StatsBar(props) {
       <div class="glass p-4.5 rounded-2xl flex flex-col justify-between hover:border-white/10 transition-all duration-300">
         <div class="flex items-center justify-between mb-2">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Win Rate</span>
-          <span class="text-[14px]">🎯</span>
+          <IconChip color="primary">
+            <circle cx="12" cy="12" r="9" stroke-width="2"/>
+            <circle cx="12" cy="12" r="5" stroke-width="2"/>
+            <circle cx="12" cy="12" r="1" fill="currentColor" stroke-width="0"/>
+          </IconChip>
         </div>
         <div>
           <div class="text-xl font-black text-white text-data">
@@ -94,7 +123,9 @@ export default function StatsBar(props) {
       <div class="glass p-4.5 rounded-2xl flex flex-col justify-between hover:border-white/10 transition-all duration-300">
         <div class="flex items-center justify-between mb-2">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Total Trades</span>
-          <span class="text-[14px]">📊</span>
+          <IconChip color="primary">
+            <path d="M3 21V9M10 21V3M17 21v-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </IconChip>
         </div>
         <div>
           <div class="text-xl font-black text-white text-data">
@@ -110,7 +141,9 @@ export default function StatsBar(props) {
       <div class="glass p-4.5 rounded-2xl flex flex-col justify-between hover:border-white/10 transition-all duration-300">
         <div class="flex items-center justify-between mb-2">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Active Strategies</span>
-          <span class="text-[14px]">🤖</span>
+          <IconChip color="violet">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </IconChip>
         </div>
         <div>
           <div class="text-xl font-black text-white text-data">
@@ -132,7 +165,10 @@ export default function StatsBar(props) {
       <div class="glass p-4.5 rounded-2xl flex flex-col justify-between hover:border-white/10 transition-all duration-300">
         <div class="flex items-center justify-between mb-2">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Available Balance</span>
-          <span class="text-[14px]">🏛️</span>
+          <IconChip color="emerald">
+            <rect width="18" height="14" x="3" y="5" rx="2" stroke-width="2"/>
+            <path d="M3 10h18M7 15h4" stroke-width="2" stroke-linecap="round"/>
+          </IconChip>
         </div>
         <div>
           <div class="text-xl font-black text-white text-data">

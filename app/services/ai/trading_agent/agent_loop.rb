@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# rubocop:disable Style/ArgumentsForwarding, Performance/RedundantBlockCall
+# rubocop:disable-next Style/ArgumentsForwarding, Performance/RedundantBlockCall
 module Ai
   module TradingAgent
     # Core orchestration loop for the trading agent.
@@ -714,4 +714,3 @@ module Ai
     end
   end
 end
-# rubocop:enable Style/ArgumentsForwarding, Performance/RedundantBlockCall

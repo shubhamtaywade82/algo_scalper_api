@@ -17,7 +17,7 @@ module Research
       # 1. Compression Phase: Pre-open to market open
       comp_start = start_of_day
       comp_end = start_of_day # standard start
-      
+
       # 2. Auction Phase: Market open (09:15) to breakout entry
       auction_start = start_of_day
       auction_end = entry_time
@@ -36,7 +36,7 @@ module Research
       # 5. Momentum Decay Phase: Peak price to when velocity turns negative/reverses
       mom_decay_start = expansion_end
       mom_decay_end = mom_decay_start
-      
+
       # Find when the close price breaks below the low of the last 2 candles
       opt_idx = option_candles.index { |c| c[:timestamp] >= mom_decay_start } || 0
       option_candles[opt_idx..].each_with_index do |c, offset|
@@ -53,7 +53,7 @@ module Research
       # 6. Exhaustion Phase: End of momentum decay to when PES is maximum or >= 75
       exhaustion_start = mom_decay_end
       exhaustion_end = exhaustion_start
-      
+
       # Find when PES first crosses 75 or reaches peak
       opt_idx_ex = option_candles.index { |c| c[:timestamp] >= exhaustion_start } || 0
       option_candles[opt_idx_ex..].each_with_index do |c, offset|

@@ -35,9 +35,8 @@ RSpec.configure do |config|
         else
           # Generic fallback for other singletons
           instance.instance_variables.each do |ivar|
-            next if %i[@lock @mutex @index].include?(ivar)
-
             val = instance.instance_variable_get(ivar)
+            next if %i[@lock @mutex @index].include?(ivar) || ivar.to_s.end_with?('mutex', 'lock') || val.is_a?(Mutex)
             if val.is_a?(Concurrent::Map)
               val.clear
             elsif val.is_a?(Concurrent::Array) || val.is_a?(Array)
@@ -56,6 +55,23 @@ RSpec.configure do |config|
       rescue StandardError => e
         Rails.logger.debug("Failed to reset singleton #{singleton_class}: #{e.message}")
       end
+    end
+
+    # These are plain classes (not Singleton) that memoize their own class-level
+    # `@redis ||= Redis.new(...)` client. A spec that stubs `Redis.new` globally
+    # (e.g. via `allow(Redis).to receive(:new).and_return(mock)`) can accidentally
+    # memoize that mock onto one of these on first touch; without a reset here the
+    # stale double outlives its own example and breaks unrelated specs later in the run.
+    [
+      Portfolio::PnlTracker,
+      Portfolio::PaperPeakTracker,
+      Portfolio::DrawdownGuard
+    ].each do |klass|
+      next unless defined?(klass)
+
+      klass.instance_variable_set(:@redis, nil)
+    rescue StandardError => e
+      Rails.logger.debug("Failed to reset #{klass} @redis: #{e.message}")
     end
   end
 end

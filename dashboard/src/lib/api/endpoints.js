@@ -64,6 +64,10 @@ export const endpoints = {
   logs: '/logs',
   equityCurve: '/equity_curve',
 
+  strategies: {
+    list: '/strategies',
+    one: (id) => `/strategies/${id}`
+  },
   tradingStrategies: {
     list: '/trading_strategies',
     one: (id) => `/trading_strategies/${id}`,
@@ -71,3 +75,4 @@ export const endpoints = {
     deploy: (id) => `/trading_strategies/${id}/deploy`
   }
 }
+

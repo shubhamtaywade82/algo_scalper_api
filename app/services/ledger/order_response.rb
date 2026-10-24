@@ -17,5 +17,12 @@ module Ledger
 
       false
     end
+
+    def success?(response)
+      return response[:success] == true || response['success'] == true if response.is_a?(Hash)
+      return response.success == true if response.respond_to?(:success)
+
+      extract_order_id(response).present?
+    end
   end
 end

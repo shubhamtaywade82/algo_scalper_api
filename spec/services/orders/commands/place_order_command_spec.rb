@@ -3,21 +3,21 @@
 require 'rails_helper'
 
 RSpec.describe Orders::Commands::PlaceOrderCommand do
-  let(:gateway) { instance_double('Orders::GatewayPaper') }
+  subject(:command) { described_class.new(**default_params) }
+
+  let(:gateway) { instance_double(Orders::GatewayPaper) }
 
   # tracker is intentionally absent — it doesn't exist at placement time
   let(:default_params) do
     {
-      gateway:     gateway,
-      side:        :buy,
-      segment:     'NSE_FNO',
+      gateway: gateway,
+      side: :buy,
+      segment: 'NSE_FNO',
       security_id: '12345',
-      qty:         50,
-      meta:        { index_key: 'NIFTY' }
+      qty: 50,
+      meta: { index_key: 'NIFTY' }
     }
   end
-
-  subject(:command) { described_class.new(**default_params) }
 
   # ── Successful execution ────────────────────────────────────────────────────
 
@@ -43,16 +43,16 @@ RSpec.describe Orders::Commands::PlaceOrderCommand do
     end
   end
 
-  # ── Paper gateway (paper: true without explicit success) ────────────────────
+  # ── Paper gateway (paper: true with explicit success) ────────────────────
 
   describe '#call — paper gateway response' do
     before do
       allow(gateway).to receive(:place_market).and_return(
-        { paper: true, order_id: 'PAPER-abc123' }
+        { success: true, paper: true, order_id: 'PAPER-abc123' }
       )
     end
 
-    it 'treats paper response as success' do
+    it 'treats a successful paper response as success' do
       result = command.call
       expect(result).to be_success
       expect(result.payload[:order_id]).to eq('PAPER-abc123')
@@ -74,10 +74,41 @@ RSpec.describe Orders::Commands::PlaceOrderCommand do
     end
   end
 
+  # ── Paper gateway failure must not masquerade as success (regression) ───────
+  # GatewayPaper's rescue path returns {success: false, error: ..., paper: true}.
+  # A tracker must never be created off a placement that actually failed.
+  describe '#call — paper gateway failure' do
+    before do
+      allow(gateway).to receive(:place_market).and_return(
+        { success: false, error: 'insufficient funds', paper: true }
+      )
+    end
+
+    it 'returns failure even though paper: true is present' do
+      result = command.call
+      expect(result).to be_failure
+      expect(result.reason).to eq('broker_rejected')
+    end
+  end
+
+  describe '#call — paper gateway response missing success key entirely' do
+    before do
+      allow(gateway).to receive(:place_market).and_return(
+        { paper: true, order_id: 'PAPER-abc123' }
+      )
+    end
+
+    it 'does not treat an ambiguous response as success' do
+      result = command.call
+      expect(result).to be_failure
+      expect(result.reason).to eq('broker_rejected')
+    end
+  end
+
   # ── Validation failures ─────────────────────────────────────────────────────
 
   context 'when gateway is nil' do
-    subject(:command) { described_class.new(**default_params.merge(gateway: nil)) }
+    subject(:command) { described_class.new(**default_params, gateway: nil) }
 
     it 'fails with missing_gateway' do
       result = command.call
@@ -87,7 +118,7 @@ RSpec.describe Orders::Commands::PlaceOrderCommand do
   end
 
   context 'when qty is zero' do
-    subject(:command) { described_class.new(**default_params.merge(qty: 0)) }
+    subject(:command) { described_class.new(**default_params, qty: 0) }
 
     it 'fails with invalid_quantity' do
       result = command.call
@@ -97,7 +128,7 @@ RSpec.describe Orders::Commands::PlaceOrderCommand do
   end
 
   context 'when qty is NaN' do
-    subject(:command) { described_class.new(**default_params.merge(qty: Float::NAN)) }
+    subject(:command) { described_class.new(**default_params, qty: Float::NAN) }
 
     it 'does not raise during initialization' do
       expect { command }.not_to raise_error
@@ -111,7 +142,7 @@ RSpec.describe Orders::Commands::PlaceOrderCommand do
   end
 
   context 'when side is invalid' do
-    subject(:command) { described_class.new(**default_params.merge(side: :sideways)) }
+    subject(:command) { described_class.new(**default_params, side: :sideways) }
 
     it 'fails with invalid_side' do
       result = command.call
@@ -121,7 +152,7 @@ RSpec.describe Orders::Commands::PlaceOrderCommand do
   end
 
   context 'when segment is blank' do
-    subject(:command) { described_class.new(**default_params.merge(segment: '')) }
+    subject(:command) { described_class.new(**default_params, segment: '') }
 
     it 'fails with missing_segment' do
       result = command.call

@@ -130,7 +130,6 @@ namespace :research do
       end
     end
   end
-
   desc "Grid-search dynamic hold/exit thresholds (theta barrier, hard SL, IV crush) over scored candidates"
   task :sweep_hold_exit, %i[status] => :environment do |_t, args|
     status = args[:status].presence || "scored"

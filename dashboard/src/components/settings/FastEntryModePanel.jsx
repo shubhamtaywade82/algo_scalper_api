@@ -1,4 +1,5 @@
 import { createSignal, onMount, Show } from 'solid-js'
+import { dashboardApiHeaders } from '../../lib/dashboardApi'
 
 export default function FastEntryModePanel() {
   const [status, setStatus] = createSignal(null)
@@ -10,7 +11,7 @@ export default function FastEntryModePanel() {
     setLoading(true)
     setError('')
     try {
-      const response = await fetch('/api/settings/fast_entry_mode')
+      const response = await fetch('/api/settings/fast_entry_mode', { headers: dashboardApiHeaders() })
       const data = await response.json()
       if (!response.ok || !data.success) {
         throw new Error(data.error || 'Failed to load fast entry mode')

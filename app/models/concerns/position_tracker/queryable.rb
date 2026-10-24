@@ -10,6 +10,7 @@ class PositionTracker < ApplicationRecord
       scope :exited_paper, -> { where(paper: true, status: :exited) }
       scope :today, -> { where(created_at: Time.zone.today.all_day) }
       scope :active_with_exit_requested, -> { active.where.not(exit_requested_at: nil) }
+      scope :by_index_key, ->(key) { where(index_key: key).or(where("(meta->>'index_key') = ?", key.to_s)) }
     end
 
     class_methods do
@@ -23,10 +24,6 @@ class PositionTracker < ApplicationRecord
 
       def paper_trading_stats_with_pct(date: nil)
         Positions::PaperStatsQuery.call(date: date)
-      end
-
-      def trading_stats_with_pct(date: nil)
-        paper_trading_stats_with_pct(date: date)
       end
 
       def paper_positions_details(limit: Positions::PaperPositionsQuery::DEFAULT_LIMIT, offset: 0)
@@ -80,9 +77,7 @@ class PositionTracker < ApplicationRecord
         }
       end
 
-      def clear_orphaned_redis_pnl!
-        Positions::IndexSync.clear_orphaned_redis_pnl!
-      end
+      delegate :clear_orphaned_redis_pnl!, to: :'Positions::IndexSync'
 
       def should_clear_orphaned?
         @last_clear ||= 5.minutes.ago

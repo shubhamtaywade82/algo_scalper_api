@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# frozen_string_literal: true
+
+# Post-commit hook: update Woods codebase index incrementally.
+# Keeps AI coding tools' index in sync with committed changes.
+
+set -euo pipefail
+
+echo "⟳ Updating Woods codebase index..."
+
+if ! bundle exec rake woods:incremental 2>/dev/null; then
+  echo "⚠ Woods incremental update failed (non-blocking)"
+fi
+
+echo "✓ Woods index updated"

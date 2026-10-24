@@ -5,7 +5,7 @@ require 'time'
 
 module ArchitectureGate
   class Report
-    Finding = Struct.new(:check, :file, :line, :message, :severity, keyword_init: true)
+    Finding = Struct.new(:check, :file, :line, :message, :severity)
 
     attr_reader :findings
 
@@ -37,9 +37,9 @@ module ArchitectureGate
 
     def to_s
       output = []
-      output << "=" * 60
+      output << ("=" * 60)
       output << "ARCHITECTURE GATE REPORT"
-      output << "=" * 60
+      output << ("=" * 60)
       output << ""
 
       if findings.empty?
@@ -50,7 +50,7 @@ module ArchitectureGate
       findings.group_by(&:check).each do |check, check_findings|
         output << "── #{check.upcase} #{'─' * (50 - check.length)}"
         check_findings.each do |f|
-          location = f.file ? "#{f.file}#{f.line ? ":#{f.line}" : ""}" : "(global)"
+          location = f.file ? "#{f.file}#{":#{f.line}" if f.line}" : "(global)"
           icon = f.severity == :error ? "❌" : "⚠️"
           output << "  #{icon} #{location}"
           output << "     #{f.message}"
@@ -58,9 +58,9 @@ module ArchitectureGate
         output << ""
       end
 
-      output << "─" * 60
+      output << ("─" * 60)
       output << "Errors: #{failures.size}  Warnings: #{warnings.size}"
-      output << "─" * 60
+      output << ("─" * 60)
 
       output.join("\n")
     end

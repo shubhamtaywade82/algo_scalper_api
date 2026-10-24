@@ -5,20 +5,39 @@ require 'csv'
 require 'net/http'
 require 'uri'
 
+# Imports the Dhan scrip master into the SINGLE canonical `instruments` table.
+#
+# Architecture (review 2026-09): one tradable-security master. The legacy
+# `derivatives` table is a frozen archive — nothing writes to it anymore.
+#
+#   * Canonical broker identity: (exchange, segment, security_id), enforced by
+#     a DB unique index and used as the upsert conflict target.
+#   * FNO rows are linked to their underlying via underlying_instrument_id.
+#   * Expired contracts are kept forever (history/backtesting) but flagged
+#     tradable = false.
 class InstrumentsImporter
   CSV_URL         = 'https://images.dhan.co/api-data/api-scrip-master-detailed.csv'
-  CACHE_PATH      = Rails.root.join('tmp/dhan_scrip_master.csv') # ← NEW
-  CACHE_MAX_AGE   = 24.hours # ← NEW
+  CACHE_PATH      = Rails.root.join('tmp/dhan_scrip_master.csv')
+  CACHE_MAX_AGE   = 24.hours
   VALID_EXCHANGES = %w[NSE BSE].freeze
   BATCH_SIZE      = 1_000
+  FNO_SEGMENT     = 'D'
+  UNDERLYING_SEGMENTS = %w[I E].freeze
+
+  # Master attributes refreshed on every import (current-state semantics).
+  REFRESHED_COLUMNS = %i[
+    symbol_name display_name isin instrument_code instrument_type
+    underlying_security_id underlying_symbol series lot_size expiry_date
+    strike_price option_type tick_size expiry_flag updated_at
+  ].freeze
 
   class << self
     # ------------------------------------------------------------
-    # Public entry point
+    # Public entry points
     # ------------------------------------------------------------
     def import_from_url
       started_at = Time.current
-      csv_text   = fetch_csv_with_cache # ← NEW (was: URI.open(CSV_URL).read)
+      csv_text   = fetch_csv_with_cache
       summary    = import_from_csv(csv_text)
 
       finished_at = Time.current
@@ -30,10 +49,6 @@ class InstrumentsImporter
       summary
     end
 
-    # ------------------------------------------------------------
-    # Fetch CSV with 24-hour cache
-    # ------------------------------------------------------------
-    # ← NEW helper
     def fetch_csv_with_cache
       if CACHE_PATH.exist? && Time.current - CACHE_PATH.mtime < CACHE_MAX_AGE
         # Rails.logger.info "Using cached CSV (#{CACHE_PATH})"
@@ -55,7 +70,6 @@ class InstrumentsImporter
       # Rails.logger.warn 'Falling back to cached CSV (may be stale)'
       CACHE_PATH.read
     end
-    private :fetch_csv_with_cache # keep helper private
 
     def download_csv(url_string)
       uri = URI.parse(url_string)
@@ -70,51 +84,86 @@ class InstrumentsImporter
 
       response.body
     end
-    private :download_csv
 
     def import_from_csv(csv_content)
-      instruments_rows, derivatives_rows = build_batches(csv_content)
-      # Rails.logger.debug do
-      #   "instrument rows: #{instruments_rows.size}; derivative rows: #{derivatives_rows.size}"
-      # end
-      # instruments_rows.uniq!  { |r| r.values_at(:security_id, :symbol_name, :exchange, :segment) }
-      # derivatives_rows.uniq!  { |r| r.values_at(:security_id, :symbol_name, :exchange, :segment) }
+      rows = build_rows(csv_content)
+      import = rows.empty? ? nil : import_instruments!(rows)
+      linked = link_underlying_instruments!
+      expired_flagged = mark_expired_contracts_untradable!
 
-      instrument_import = instruments_rows.empty? ? nil : import_instruments!(instruments_rows)
-      derivative_import = derivatives_rows.empty? ? nil : import_derivatives!(derivatives_rows)
-
+      fno_rows = rows.count { |r| r[:segment] == FNO_SEGMENT }
       {
-        instrument_rows: instruments_rows.size,
-        derivative_rows: derivatives_rows.size,
-        instrument_upserts: instrument_import&.ids&.size.to_i,
-        derivative_upserts: derivative_import&.ids&.size.to_i,
+        instrument_rows: rows.size,
+        derivative_rows: fno_rows,
+        instruments_count: rows.size,
+        derivatives_count: fno_rows,
+        instrument_upserts: import&.ids&.size.to_i,
+        derivative_upserts: fno_rows,
+        underlying_links: linked,
+        expired_flagged: expired_flagged,
         instrument_total: Instrument.count,
-        derivative_total: Derivative.count
+        derivative_total: Instrument.fno.count
       }
+    end
+
+    # ------------------------------------------------------------
+    # Post-import housekeeping — public so Instruments::SegmentImporter
+    # can reuse the exact same semantics.
+    # ------------------------------------------------------------
+
+    # FNO contract -> its underlying index/equity row.
+    # Primary match: underlying_security_id (exchange-local).
+    # Fallback:     underlying_symbol against index rows.
+    # @return [Integer] number of links created/refreshed
+    def link_underlying_instruments!
+      by_sid = {}
+      by_symbol = {}
+
+      Instrument.where(segment: UNDERLYING_SEGMENTS).pluck(:security_id, :symbol_name, :id).each do |sid, sym, id|
+        by_sid[sid] = id if sid.present?
+        by_symbol[sym.to_s.upcase] = id if sym.present? && !by_symbol.key?(sym.to_s.upcase)
+      end
+
+      pairs = []
+
+      Instrument.where(segment: FNO_SEGMENT).find_each do |contract|
+        parent_id = by_sid[contract.underlying_security_id] ||
+                    by_symbol[contract.underlying_symbol.to_s.upcase]
+        next unless parent_id
+        next if contract.underlying_instrument_id == parent_id
+
+        pairs << [contract.id, parent_id]
+      end
+
+      bulk_link!(pairs)
+      pairs.size
+    end
+
+    # Expired contracts remain in the master for historical trades and
+    # backtesting but must never be selected for new orders.
+    # @return [Integer] number of rows flagged
+    def mark_expired_contracts_untradable!
+      Instrument
+        .where(expiry_date: ...Date.current)
+        .where.not(tradable: false)
+        .update_all(tradable: false, updated_at: Time.current)
     end
 
     private
 
     # ------------------------------------------------------------
-    # 1. Split CSV rows
+    # Build attribute rows for every tradable security (all segments)
     # ------------------------------------------------------------
-    def build_batches(csv_content)
+    def build_rows(csv_content)
       instruments = []
-      derivatives = []
 
       CSV.parse(csv_content, headers: true).each do |row|
         next unless VALID_EXCHANGES.include?(row['EXCH_ID'])
 
-        attrs = build_attrs(row)
-
-        if row['SEGMENT'] == 'D'   # Derivative
-          derivatives << attrs.slice(*Derivative.column_names.map(&:to_sym))
-        else                       # Cash / Index
-          instruments << attrs.slice(*Instrument.column_names.map(&:to_sym))
-        end
+        instruments << build_attrs(row).slice(*Instrument.column_names.map(&:to_sym))
       end
 
-      [instruments, derivatives]
+      instruments
     end
 
     def build_attrs(row)
@@ -165,100 +214,29 @@ class InstrumentsImporter
     end
 
     # ------------------------------------------------------------
-    # 3. Upsert instruments
+    # Upsert into the single master on the canonical identity
     # ------------------------------------------------------------
     def import_instruments!(rows)
       Instrument.import(
         rows,
         batch_size: BATCH_SIZE,
         on_duplicate_key_update: {
-          conflict_target: %i[security_id symbol_name exchange segment],
-          columns: %i[
-            display_name isin instrument_code instrument_type
-            underlying_symbol lot_size tick_size updated_at
-          ]
+          conflict_target: %i[exchange segment security_id],
+          columns: REFRESHED_COLUMNS
         }
       ).tap do |res|
         # Rails.logger.info "Upserted Instruments: #{res.ids.size}"
       end
     end
 
-    # ------------------------------------------------------------
-    # 4. Upsert derivatives
-    # ------------------------------------------------------------
-    def import_derivatives!(rows)
-      with_parent, = attach_instrument_ids(rows)
-
-      # Rails.logger.info "Derivatives w/ parent: #{with_parent.size}"
-      # Rails.logger.info "Derivatives w/o parent: #{without_parent.size}"
-
-      return if with_parent.empty?
-
-      # Validate instrument_ids exist before importing
-      parent_instrument_ids = with_parent.filter_map { |r| r[:instrument_id] }.uniq
-      valid_instrument_ids = Instrument.where(id: parent_instrument_ids).pluck(:id).to_set
-      validated_rows = with_parent.select { |r| r[:instrument_id] && valid_instrument_ids.include?(r[:instrument_id]) }
-
-      if validated_rows.size < with_parent.size
-        with_parent.size - validated_rows.size
-        # Rails.logger.warn "Skipping #{skipped} derivatives with invalid instrument_id references"
+    def bulk_link!(pairs)
+      pairs.each_slice(500) do |slice|
+        values = slice.map { |id, parent_id| "WHEN #{id} THEN #{parent_id}" }.join(' ')
+        ids = slice.map(&:first).join(',')
+        ActiveRecord::Base.connection.execute(
+          "UPDATE instruments SET underlying_instrument_id = CASE id #{values} END WHERE id IN (#{ids})"
+        )
       end
-
-      return if validated_rows.empty?
-
-      Derivative.import(
-        validated_rows,
-        batch_size: BATCH_SIZE,
-        on_duplicate_key_update: {
-          conflict_target: %i[security_id symbol_name exchange segment],
-          columns: %i[
-            symbol_name display_name isin instrument_code instrument_type
-            underlying_symbol series lot_size tick_size updated_at
-          ]
-        }
-      ).tap do |res|
-        # Rails.logger.info "Upserted Derivatives: #{res.ids.size}"
-      end
-    end
-
-    # ------------------------------------------------------------
-    # 4a. Attach instrument_id to each derivative row
-    # ------------------------------------------------------------
-    def attach_instrument_ids(rows)
-      enum_to_csv = Instrument.instrument_codes
-
-      # 🔑 lookup key = [csv_code, UNDERLYING_SYMBOL]
-      lookup = Instrument.pluck(
-        :id, :instrument_code, :underlying_symbol, :exchange, :segment
-      ).each_with_object({}) do |(id, enum_code, sym, _exch, _seg), h|
-        next if sym.blank?
-
-        csv_code = enum_to_csv[enum_code] || enum_code # keep CSV code itself
-        key      = [csv_code, sym.upcase]
-        h[key]   = id
-      end
-
-      # Rails.logger.debug { "lookup size: #{lookup.size}" }
-
-      with_parent    = []
-      without_parent = []
-      count = 0
-      rows.each do |h|
-        count += 1 if h[:underlying_symbol]
-        next without_parent << h if h[:underlying_symbol].blank?
-
-        parent_code = InstrumentTypeMapping.underlying_for(h[:instrument_code]) # FUTIDX ➜ INDEX
-        key         = [parent_code, h[:underlying_symbol].upcase]
-
-        if (pid = lookup[key])
-          h[:instrument_id] = pid
-          with_parent << h
-        else
-          without_parent << h
-        end
-      end
-
-      [with_parent, without_parent]
     end
 
     # ------------------------------------------------------------
@@ -268,11 +246,6 @@ class InstrumentsImporter
       Date.parse(str)
     rescue StandardError
       nil
-    end
-
-    def map_segment(char)
-      { 'I' => 'index', 'E' => 'equity', 'C' => 'currency',
-        'D' => 'derivatives', 'M' => 'commodity' }[char] || char.downcase
     end
 
     def record_success!(summary)

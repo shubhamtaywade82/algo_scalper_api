@@ -5,6 +5,7 @@ import Button from '../ui/Button'
 import Select from '../ui/Select'
 import Input from '../ui/Input'
 import PremiumChart from './PremiumChart'
+import { dashboardApiHeaders } from '../../lib/dashboardApi'
 
 const SYMBOLS = [
   { value: 'NIFTY', label: 'NIFTY' },
@@ -82,7 +83,7 @@ export default function LifecycleBoardPanel() {
 
   async function fetchHistory() {
     try {
-      const res = await fetch('/api/research/lifecycles?per_page=10')
+      const res = await fetch('/api/research/lifecycles?per_page=10', { headers: dashboardApiHeaders() })
       const data = await res.json()
       setHistory(data.lifecycles || [])
     } catch {
@@ -100,7 +101,7 @@ export default function LifecycleBoardPanel() {
     try {
       const res = await fetch('/api/research/lifecycles/run', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...dashboardApiHeaders() },
         body: JSON.stringify({
           underlying_symbol: symbol(),
           date: date(),
@@ -125,7 +126,7 @@ export default function LifecycleBoardPanel() {
     setDetailLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/research/lifecycles/${id}`)
+      const res = await fetch(`/api/research/lifecycles/${id}`, { headers: dashboardApiHeaders() })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
       setDetail(data.lifecycle)

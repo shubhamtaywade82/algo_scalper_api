@@ -46,34 +46,34 @@ module Strategies
 
     private
 
-  def write_file(line)
+    def write_file(line)
     path = LOG_DIR.join("#{@slug}.log")
     @mutex.synchronize do
       File.open(path, "a") { |f| f.puts(line) }
     end
-  end
+    end
 
-  def push_ring(ts, level, message)
+    def push_ring(ts, level, message)
     entry = JSON.generate([ts, level, message])
     self.class.redis.with do |conn|
       conn.lpush("#{RING_KEY_PREFIX}#{@slug}", entry)
       conn.ltrim("#{RING_KEY_PREFIX}#{@slug}", 0, RING_MAXLEN - 1)
     end
-  rescue StandardError => e
+    rescue StandardError => e
     Rails.logger.warn("[LogStream] Redis push failed for #{@slug}: #{e.message}")
-  end
+    end
 
-  def broadcast(ts, level, message)
+    def broadcast(ts, level, message)
     ActionCable.server.broadcast("strategy_logs_#{@slug}", {
       ts: ts, level: level, line: message
     })
-  rescue StandardError => e
+    rescue StandardError => e
     Rails.logger.warn("[LogStream] Broadcast failed for #{@slug}: #{e.message}")
-  end
+    end
 
-  def ensure_log_dir
+    def ensure_log_dir
     LOG_DIR.mkpath unless LOG_DIR.directory?
-  end
+    end
 
   class << self
     def redis

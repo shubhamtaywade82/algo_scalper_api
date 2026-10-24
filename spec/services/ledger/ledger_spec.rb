@@ -64,13 +64,62 @@ RSpec.describe Ledger do
       )
     end
 
-    it 'posts entry fill journals' do
+    it 'returns a deterministic Result, never nil' do
+      result = described_class.post!(tracker: tracker, fill_price: 100, quantity: 10, order_no: tracker.order_no)
+
+      expect(result).to be_a(Ledger::EntryPoster::Result)
+      expect(result).to be_posted
+      expect(result.success?).to be(true)
+    end
+
+    it 'stamps the ledger outcome onto the tracker meta' do
       described_class.post!(tracker: tracker, fill_price: 100, quantity: 10, order_no: tracker.order_no)
 
+      expect(tracker.reload.meta['ledger_status']).to eq('posted')
+    end
+
+    context 'when the paper account cannot afford the entry' do
+      it 'returns a rejected result with the reason persisted on the tracker' do
+        result = described_class.post!(tracker: tracker, fill_price: 1_000_000, quantity: 10,
+                                       order_no: tracker.order_no)
+
+        expect(result).to be_rejected
+        expect(result.success?).to be(false)
+        expect(tracker.reload.meta['ledger_status']).to eq('rejected')
+        expect(tracker.reload.meta['ledger_error']).to be_present
+      end
+    end
+
+    it 'posts entry fill journals' do
+      result = described_class.post!(tracker: tracker, fill_price: 100, quantity: 10, order_no: tracker.order_no)
+
+      expect(result).to be_posted
       cash = LedgerAccount.fetch!('cash')
       deployed = LedgerAccount.fetch!('premium_deployed')
       expect(deployed.balance_cache.to_d).to eq(1000)
       expect(cash.balance_cache.to_d).to eq(100_000 - 1000 - 20)
+    end
+
+    context 'with a short position' do
+      let(:tracker) do
+        create(:position_tracker, :paper, segment: 'NSE_FNO', quantity: 10, entry_price: 100.0, avg_price: 100.0,
+                                          position_side: 'short', margin_required: 8000.0)
+      end
+
+      it 'credits cash for premium received and blocks margin out of free cash' do
+        result = described_class.post!(tracker: tracker, fill_price: 100, quantity: 10, order_no: tracker.order_no)
+
+        expect(result).to be_posted
+        expect(result.journal.ledger_postings.sum(:debit)).to eq(result.journal.ledger_postings.sum(:credit))
+
+        cash = LedgerAccount.fetch!('cash')
+        margin_blocked = LedgerAccount.fetch!('margin_blocked')
+        premium_written = LedgerAccount.fetch!('premium_written')
+        expect(margin_blocked.balance_cache.to_d).to eq(8000)
+        expect(premium_written.balance_cache.to_d).to eq(1000)
+        # +1000 premium received, -8000 margin locked, -20 fee
+        expect(cash.balance_cache.to_d).to eq(100_000 + 1000 - 8000 - 20)
+      end
     end
   end
 
@@ -96,6 +145,42 @@ RSpec.describe Ledger do
       cash = LedgerAccount.fetch!('cash')
       expect(realized.balance_cache.to_d).to eq(100)
       expect(cash.balance_cache.to_d).to be > 98_000
+    end
+
+    context 'with a short position that closes at a profit' do
+      let(:tracker) do
+        create(:position_tracker, :paper, :exited, segment: 'NSE_FNO', quantity: 10, entry_price: 100.0,
+                                                   avg_price: 100.0, exit_price: 40.0,
+                                                   position_side: 'short', margin_required: 8000.0)
+      end
+
+      before do
+        Ledger::EntryPoster.post!(tracker: tracker, fill_price: 100, quantity: 10, order_no: tracker.order_no)
+      end
+
+      it 'releases margin, clears the written premium, and posts the correct gain' do
+        result = described_class.post!(tracker: tracker, exit_price: 40)
+
+        expect(result).to be_posted
+        expect(result.journal.ledger_postings.sum(:debit)).to eq(result.journal.ledger_postings.sum(:credit))
+
+        realized = LedgerAccount.fetch!('realized_pnl')
+        margin_blocked = LedgerAccount.fetch!('margin_blocked')
+        premium_written = LedgerAccount.fetch!('premium_written')
+        # gain = premium_received(1000) - buyback_cost(400) = 600
+        expect(realized.balance_cache.to_d).to eq(600)
+        expect(margin_blocked.balance_cache.to_d).to eq(0)
+        expect(premium_written.balance_cache.to_d).to eq(0)
+      end
+
+      it 'reconciles cash back to opening balance plus the round trip P&L' do
+        described_class.post!(tracker: tracker, exit_price: 40)
+
+        cash = LedgerAccount.fetch!('cash')
+        brokerage = LedgerAccount.fetch!('brokerage_expense')
+        realized = LedgerAccount.fetch!('realized_pnl')
+        expect(cash.balance_cache.to_d).to eq(100_000 + realized.balance_cache.to_d - brokerage.balance_cache.to_d)
+      end
     end
   end
 end

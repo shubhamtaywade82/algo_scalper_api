@@ -1,22 +1,17 @@
 # frozen_string_literal: true
 
-# --------------------------------------------------------------------
-# REGISTER-ONLY INITIALIZER (no auto-start)
-# --------------------------------------------------------------------
-#
-# Trading services are started by a separate process:
-#   ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
-#
-# The web server should not auto-start long-running threads.
-if Rails.env.test? ||
-   defined?(Rails::Console) ||
-   (defined?(Rails::Generators) && Rails::Generators.const_defined?(:Base)) ||
-   ENV['BACKTEST_MODE'] == '1' ||
-   ENV['SCRIPT_MODE'] == '1' ||
-   ENV['DISABLE_TRADING_SERVICES'] == '1'
+# disable completely?
+if ENV["DISABLE_TRADING_SUPERVISOR"].to_s == "true"
+  Rails.logger.info("[Supervisor] Disabled in this container")
   return
 end
 
-Rails.application.config.to_prepare do
-  Rails.application.config.x.trading_supervisor = TradingSystem::Bootstrap.build_supervisor
-end
+# --------------------------------------------------------------------
+# Supervisor construction lives in TradingSystem::Bootstrap.build_supervisor,
+# wired up by TradingSystem::Daemon#setup_supervisor! when the daemon process
+# starts (ENABLE_TRADING_SERVICES=true). This initializer used to redefine
+# TradingSystem::Supervisor and build a second, stale supervisor here, which
+# raced Bootstrap's via Rails.application.config.x.trading_supervisor ||= ...
+# and always won — leaving the daemon running an outdated, incomplete
+# supervisor missing health_check/restart_service. Do not reintroduce that.
+# --------------------------------------------------------------------

@@ -5,7 +5,6 @@ module Api
     include Api::TokenAuthenticatable
 
     before_action :authenticate_dashboard_token!
-    before_action :assign_filter_date!, only: :index
 
     ALLOWED_SORT_COLS = %w[exited_at last_pnl_rupees entry_price symbol side quantity].freeze
 
@@ -45,13 +44,12 @@ module Api
       # Date filter (defaults to today)
       scope = scope.where(exited_at: filter_date.all_day)
 
-      if params[:index_key].present?
-        scope = scope.by_index_key(params[:index_key].upcase)
-      end
+      # Index key filter (stored in meta JSONB)
+      scope = scope.where("meta->>'index_key' = ?", params.expect(:index_key).upcase) if params[:index_key].present?
 
       # Option type: CE or PE suffix on symbol
       if params[:option_type].present?
-        type = params[:option_type].upcase
+        type = params.expect(:option_type).upcase
         scope = scope.where("symbol ILIKE ?", "%#{type}") if %w[CE PE].include?(type)
       end
 
@@ -66,7 +64,7 @@ module Api
       end
 
       # Side filter (BUY/SELL)
-      scope = scope.where(side: params[:side].upcase) if params[:side].present?
+      scope = scope.where(side: params.expect(:side).upcase) if params[:side].present?
 
       # Sorting
       col = ALLOWED_SORT_COLS.include?(params[:sort_by]) ? params[:sort_by] : "exited_at"
@@ -103,22 +101,11 @@ module Api
     end
 
     def filter_date
-      @filter_date ||= Positions::IstScope.today_start.to_date
-    end
-
-    def assign_filter_date!
-      if params[:date].blank?
-        @filter_date = Positions::IstScope.today_start.to_date
-        return
+      @filter_date ||= begin
+        Date.parse(params[:date].to_s)
+      rescue ArgumentError, TypeError
+        Positions::IstScope.today_start.to_date
       end
-
-      @filter_date = Date.parse(params[:date].to_s)
-    rescue ArgumentError, TypeError => e
-      Rails.logger.warn(
-        "[PositionsController] invalid date param=#{params[:date].inspect}: #{e.class} - #{e.message}"
-      )
-      render json: { error: 'invalid_date', message: 'Use an ISO date (YYYY-MM-DD)' },
-             status: :unprocessable_content
     end
   end
 end

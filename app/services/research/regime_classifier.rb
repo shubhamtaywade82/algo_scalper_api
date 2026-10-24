@@ -11,7 +11,7 @@ module Research
       atr = day_data[:atr]
       open_price = day_data[:underlying_candles]&.first&.[](:open) || 25_000.0
 
-      if atr && open_price > 0
+      if atr && open_price.positive?
         atr_pct = (atr / open_price) * 100.0
         if atr_pct > 1.0
           vol_regime = :high_volatility
@@ -35,7 +35,7 @@ module Research
       prev_high = day_data[:prev_day_high]
       prev_low = day_data[:prev_day_low]
 
-      if prev_close && prev_high && prev_low && (prev_high - prev_low) > 0
+      if prev_close && prev_high && prev_low && (prev_high - prev_low).positive?
         # If prev close was near the extremes, yesterday was trending
         close_pct_range = (prev_close - prev_low) / (prev_high - prev_low)
         if close_pct_range > 0.8 || close_pct_range < 0.2

@@ -109,31 +109,6 @@ paths:
                   circuit_breaker:
                     type: object
                     additionalProperties: true
-  "/api/dhan_access_token":
-    get:
-      summary: Dhan Access Token
-      tags:
-      - Authentication
-      description: Requires Bearer or X-Api-Key when API_DASHBOARD_TOKEN is set. Returns
-        the active Dhan access token.
-      responses:
-        '200':
-          description: access token JSON
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  dhanaccesstoken:
-                    type: string
-                  dhan_access_token:
-                    type: string
-                  expiry_time:
-                    type: string
-                    format: date-time
-                required:
-                - dhanaccesstoken
-                - dhan_access_token
   "/api/positions":
     get:
       summary: Positions index
@@ -247,6 +222,65 @@ paths:
                   flag:
                     type: string
                     nullable: true
+  "/api/calibration_runs":
+    get:
+      summary: List calibration runs
+      tags:
+      - Calibration
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: runs with snapshot
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  "/api/calibration_runs/{id}":
+    get:
+      summary: Single calibration run
+      tags:
+      - Calibration
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: run
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  "/api/calibration_runs/{id}/apply":
+    post:
+      summary: Apply proposed patch to settings
+      tags:
+      - Calibration
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: applied
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
   "/api/circuit_breaker":
     get:
       summary: Circuit breaker status
@@ -462,7 +496,7 @@ paths:
                 required:
                 - error
 servers:
-- url: http://localhost:3011
+- url: http://localhost:3001
   description: Local web (see Procfile.dev / bin/rails server)
 - url: "/"
   description: Same origin

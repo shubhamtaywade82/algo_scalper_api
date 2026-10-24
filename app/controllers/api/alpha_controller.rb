@@ -42,7 +42,7 @@ module Api
     # GET /api/alpha/history
     def history
       signals = ::Strategies::Signal.includes(:strategy_record, position_tracker: :instrument)
-        .order(emitted_at: :desc).limit(100)
+                                    .order(emitted_at: :desc).limit(100)
 
       render json: signals.map { |s| serialize_signal(s) }
     rescue StandardError => e
@@ -53,7 +53,7 @@ module Api
     # GET /api/alpha/performance
     def performance
       signals = ::Strategies::Signal.includes(:strategy_record, :position_tracker)
-        .where(outcome: "executed")
+                                    .where(outcome: "executed")
 
       by_slug = signals.group_by { |s| s.strategy_record&.slug || "unknown" }
       pnl_stats = by_slug.transform_values { |sigs| pnl_stats_for(sigs) }

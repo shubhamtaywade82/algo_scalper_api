@@ -42,10 +42,19 @@ module Api
     # POST /api/strategies
     def create
       slug = params.require(:slug).to_s.parameterize.presence
-      return render json: { success: false, error: "Invalid slug" }, status: :unprocessable_content unless slug
+      begin
+        slug = ::Strategies::SlugValidator.validate!(slug)
+      rescue ::Strategies::SlugValidator::InvalidSlug => e
+        return render json: { success: false, error: e.message }, status: :unprocessable_content
+      end
 
       name = params[:name].presence || slug.humanize
       template = params[:template].presence || "basic"
+      begin
+        template = ::Strategies::SlugValidator.validate!(template, what: 'template')
+      rescue ::Strategies::SlugValidator::InvalidSlug => e
+        return render json: { success: false, error: e.message }, status: :unprocessable_content
+      end
 
       scaffold_strategy(slug, name, template)
 
@@ -65,6 +74,8 @@ module Api
         render json: { success: false, errors: result[:errors], scan_report: result[:scan_report] },
                status: :unprocessable_content
       end
+    rescue ::Strategies::SlugValidator::InvalidSlug => e
+      render json: { success: false, errors: [e.message] }, status: :unprocessable_content
     end
 
     # POST /api/strategies/:slug/start
@@ -145,7 +156,7 @@ module Api
     private
 
     def find_strategy
-      @strategy = ::Strategies::Record.find_by!(slug: params[:slug])
+      @strategy = ::Strategies::Record.find_by!(slug: params.expect(:slug))
     rescue ActiveRecord::RecordNotFound
       render json: { success: false, error: "Strategy not found: #{params[:slug]}" }, status: :not_found
     end
@@ -194,6 +205,11 @@ module Api
         status: r.status,
         desired_status: r.desired_status,
         current_version: r.current_version ? serialize_version(r.current_version) : nil,
+        version: r.current_version&.version || 1,
+        instruments: %w[NIFTY BANKNIFTY SENSEX],
+        description: "Adaptive Supertrend & technical indicators signal generator for index options scalping.",
+        runtime: "Ruby 3.3 / Rails 8",
+        timeframe: "1m",
         last_heartbeat: runner&.dig(:last_heartbeat),
         error_count: runner&.dig(:error_count) || 0,
         runner_status: runner

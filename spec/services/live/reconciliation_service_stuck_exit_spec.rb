@@ -17,6 +17,8 @@ RSpec.describe Live::ReconciliationService do
 
   before do
     allow(Notifications::TelegramNotifier.instance).to receive(:notify_error)
+    service.instance_variable_get(:@exit_attempts)&.clear
+    service.instance_variable_get(:@exit_cooldowns)&.clear
   end
 
   describe '#stuck_in_exit?' do
@@ -53,6 +55,41 @@ RSpec.describe Live::ReconciliationService do
 
         expect(exit_engine).to have_received(:execute_exit).with(tracker, 'AUTO_RECONCILED_EXIT')
         expect(Notifications::TelegramNotifier.instance).not_to have_received(:notify_error)
+      end
+    end
+
+    context 'when cooldown is active' do
+      it 'skips exit execution during cooldown' do
+        exit_engine = instance_double(Live::ExitEngine, execute_exit: { success: true })
+        supervisor = { exit_manager: exit_engine }
+        allow(Rails.application.config.x).to receive(:trading_supervisor).and_return(supervisor)
+
+        # First call triggers exit and sets cooldown
+        service.send(:fix_stuck_exit, tracker)
+        expect(exit_engine).to have_received(:execute_exit).once
+
+        # Second call during cooldown should skip exit
+        service.send(:fix_stuck_exit, tracker)
+        expect(exit_engine).to have_received(:execute_exit).once
+      end
+    end
+
+    context 'when max exit attempts are exceeded' do
+      it 'escalates error and halts further auto-exit attempts' do
+        exit_engine = instance_double(Live::ExitEngine, execute_exit: { success: true })
+        supervisor = { exit_manager: exit_engine }
+        allow(Rails.application.config.x).to receive(:trading_supervisor).and_return(supervisor)
+
+        # Force attempts key to exceed MAX_RECONCILE_EXIT_ATTEMPTS
+        service.instance_variable_get(:@exit_attempts)[tracker.id] = 3
+
+        service.send(:fix_stuck_exit, tracker)
+
+        expect(exit_engine).not_to have_received(:execute_exit)
+        expect(Notifications::TelegramNotifier.instance).to have_received(:notify_error).with(
+          a_string_matching(/Exceeded max exit attempts/),
+          context: 'Live::ReconciliationService#fix_stuck_exit'
+        )
       end
     end
 

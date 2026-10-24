@@ -5,6 +5,8 @@ module Ledger
     ACCOUNTS = [
       { code: 'cash', name: 'Cash', account_type: 'asset' },
       { code: 'premium_deployed', name: 'Premium Deployed', account_type: 'asset' },
+      { code: 'margin_blocked', name: 'Margin Blocked', account_type: 'asset' },
+      { code: 'premium_written', name: 'Premium Written', account_type: 'equity' },
       { code: 'brokerage_expense', name: 'Brokerage Expense', account_type: 'expense' },
       { code: 'realized_pnl', name: 'Realized PnL', account_type: 'income' },
       { code: 'opening_equity', name: 'Opening Equity', account_type: 'equity' }

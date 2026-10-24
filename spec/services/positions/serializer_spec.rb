@@ -35,7 +35,7 @@ RSpec.describe Positions::Serializer do
         create(:position_tracker,
                segment: 'NSE_FNO',
                iv_at_entry: 18.5, vix_at_entry: 13.2, dte_at_entry: 2,
-               atm_strike: 25000, entry_underlying_price: 24980.5,
+               atm_strike: 25_000, entry_underlying_price: 24_980.5,
                entry_tf: '1m', alpha_source: 'supertrend_v1', entry_path: 'strategy_platform',
                signal_confidence: 0.7)
       end
@@ -45,10 +45,12 @@ RSpec.describe Positions::Serializer do
 
         expect(result[:id]).to eq(tracker.id)
         expect(result[:ltp]).to be_present # from base `open` serializer
+        # expiry_date is derived from the consolidated instrument linked as
+        # the tracker's watchable when neither meta nor the tracker carries it.
         expect(result[:entry_context]).to eq(
           iv_at_entry: 18.5, vix_at_entry: 13.2, dte_at_entry: 2,
-          atm_strike: 25000.0, expiry_date: nil,
-          entry_underlying_price: 24980.5, entry_tf: '1m',
+          atm_strike: 25_000.0, expiry_date: tracker.instrument.expiry_date.to_s,
+          entry_underlying_price: 24_980.5, entry_tf: '1m',
           alpha_source: 'supertrend_v1', entry_path: 'strategy_platform',
           signal_confidence: 0.7
         )
@@ -57,13 +59,13 @@ RSpec.describe Positions::Serializer do
 
       it 'includes trailing/HWM state' do
         tracker.update!(hwm_pnl_pct: 0.18, secured_sl_price: BigDecimal('25100.0'),
-                         breakeven_locked: true, profit_zone_state: 'tier_2')
+                        breakeven_locked: true, profit_zone_state: 'tier_2')
 
         result = described_class.detail(tracker)
         expect(result[:trailing_state]).to eq(
           high_water_mark_pnl: tracker.high_water_mark_pnl.to_f,
           hwm_pnl_pct: 0.18,
-          secured_sl_price: 25100.0,
+          secured_sl_price: 25_100.0,
           breakeven_locked: true,
           profit_zone_state: 'tier_2'
         )
@@ -85,15 +87,15 @@ RSpec.describe Positions::Serializer do
 
       it 'includes the linked strategy signal and guard trail when present' do
         signal = create(:strategy_signal,
-                         position_tracker: tracker,
-                         action: 'buy_call',
-                         confidence: 0.7,
-                         outcome: 'executed',
-                         reason: 'supertrend_bullish_adx_confirmed',
-                         metadata: {
-                           'entry_result_reason' => nil,
-                           'guard_results' => [{ 'guard' => 'Entries::Guards::CooldownGuard', 'result' => 'pass' }]
-                         })
+                        position_tracker: tracker,
+                        action: 'buy_call',
+                        confidence: 0.7,
+                        outcome: 'executed',
+                        reason: 'supertrend_bullish_adx_confirmed',
+                        metadata: {
+                          'entry_result_reason' => nil,
+                          'guard_results' => [{ 'guard' => 'Entries::Guards::CooldownGuard', 'result' => 'pass' }]
+                        })
 
         result = described_class.detail(tracker)
         expect(result[:strategy_signal]).to eq(
@@ -127,7 +129,7 @@ RSpec.describe Positions::Serializer do
       it 'includes base closed fields plus the exit block' do
         result = described_class.detail(tracker)
 
-        expect(result[:exit_price]).to eq(27500.0) # from base `closed` serializer
+        expect(result[:exit_price]).to eq(27_500.0) # from base `closed` serializer
         expect(result[:exit_block]).to eq(
           exit_reason: 'profit_target_hit',
           exit_path: 'unified_exit_checker',

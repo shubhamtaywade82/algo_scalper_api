@@ -24,8 +24,10 @@ class SmcScannerJob < ApplicationJob
     log_market_closed_status if TradingSession::Service.market_closed?
 
     indices = IndexConfigLoader.load_indices
-    indices_with_instruments = build_indices_with_instruments(indices)
-    Rails.logger.info("[SmcScannerJob] Scanning #{indices_with_instruments.size} indices...")
+    filtered_indices = filter_indices_by_expiry(indices)
+    Rails.logger.info("[SmcScannerJob] Scanning #{filtered_indices.size} indices...")
+
+    indices_with_instruments = fetch_instruments(filtered_indices)
 
     success_count = 0
     error_count = 0
@@ -52,44 +54,17 @@ class SmcScannerJob < ApplicationJob
     end
   end
 
-  # One DB lookup per index: load instrument once, then apply expiry filter.
-  def build_indices_with_instruments(indices)
-    return [] if indices.empty?
-
-    max_days = max_expiry_days
+  def fetch_instruments(indices)
     indices.filter_map do |idx_cfg|
-      instrument = find_index_instrument(idx_cfg)
-      next unless instrument
+      instrument = Instrument.find_by_sid_and_segment(security_id: idx_cfg[:sid].to_s, segment_code: idx_cfg[:segment])
 
-      days = calculate_days_to_expiry(instrument)
-      if days > max_days
-        Rails.logger.info("[SmcScannerJob] Skipping #{idx_cfg[:key]}: expiry in #{days} days (> #{max_days})")
-        next
+      if instrument
+        [idx_cfg, instrument]
+      else
+        Rails.logger.warn("[SmcScannerJob] Instrument not found for #{idx_cfg[:key]}")
+        nil
       end
-
-      [idx_cfg, instrument]
     end
-  rescue StandardError => e
-    Rails.logger.error("[SmcScannerJob] Error building index list: #{e.message}")
-    indices_without_expiry_filter(indices)
-  end
-
-  def indices_without_expiry_filter(indices)
-    indices.filter_map do |idx_cfg|
-      instrument = find_index_instrument(idx_cfg)
-      next unless instrument
-
-      [idx_cfg, instrument]
-    end
-  end
-
-  def find_index_instrument(idx_cfg)
-    instrument = Instrument.find_by_sid_and_segment(
-      security_id: idx_cfg[:sid].to_s,
-      segment_code: idx_cfg[:segment]
-    )
-    Rails.logger.warn("[SmcScannerJob] Instrument not found for #{idx_cfg[:key]}") unless instrument
-    instrument
   end
 
   def wait_between_instruments(index)
@@ -124,6 +99,30 @@ class SmcScannerJob < ApplicationJob
     end
   end
 
+  def filter_indices_by_expiry(indices)
+    return indices if indices.empty?
+
+    max_days = max_expiry_days
+    indices.select do |idx_cfg|
+      instrument = Instrument.find_by_sid_and_segment(security_id: idx_cfg[:sid].to_s, segment_code: idx_cfg[:segment])
+      next true unless instrument
+
+      days = calculate_days_to_expiry(instrument)
+      if days > max_days
+        Rails.logger.info("[SmcScannerJob] Skipping #{idx_cfg[:key]}: expiry in #{days} days (> #{max_days})")
+        false
+      else
+        true
+      end
+    end
+  rescue StandardError => e
+    Rails.logger.error("[SmcScannerJob] Error filtering: #{e.message}")
+    indices
+  end
+
+  # Days-to-expiry estimate. 999 = "expiry unknown" sentinel -> the index
+  # is skipped by the caller (fail-closed for scanning). Logged, never
+  # silent (wave 3).
   def calculate_days_to_expiry(instrument)
     expiry_list = instrument.expiry_list
     return 999 unless expiry_list&.any?
@@ -136,7 +135,7 @@ class SmcScannerJob < ApplicationJob
       when String
         begin
           Date.parse(raw)
-        rescue ArgumentError, TypeError
+        rescue StandardError
           nil
         end
       end
@@ -146,15 +145,21 @@ class SmcScannerJob < ApplicationJob
     return 999 unless nearest_expiry
 
     (nearest_expiry - today).to_i
-  rescue StandardError
+  rescue StandardError => e
+    Rails.logger.warn("[SmcScannerJob] days-to-expiry resolution failed for #{instrument&.symbol_name}: #{e.class} - #{e.message}")
     999
   end
 
+  # Absent -> documented default 7. Present-but-garbage raises (wave 3):
+  # a corrupt signals section used to silently widen/narrow the scan window.
   def max_expiry_days
-    config = AlgoConfig.fetch[:signals] || {}
-    (config[:max_expiry_days] || 7).to_i
-  rescue StandardError
-    7
+    raw = (AlgoConfig.fetch[:signals] || {})[:max_expiry_days]
+    return 7 if raw.nil?
+
+    Integer(raw)
+  rescue ArgumentError, TypeError => e
+    raise Errors::ConfigurationError,
+          "signals.max_expiry_days is not an integer (#{raw.inspect}): #{e.message}"
   end
 
   def send_ai_analysis_telegram_notification(index_key, decision, ai_analysis)

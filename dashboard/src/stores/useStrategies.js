@@ -10,8 +10,9 @@ export function useStrategies() {
   async function fetchAll() {
     setLoading(true)
     try {
-      const res = await apiClient.get(endpoints.tradingStrategies.list)
-      setStrategies(res.data)
+      const res = await apiClient.get(endpoints.strategies?.list || '/strategies')
+      const list = Array.isArray(res.data) ? res.data : (res.data?.strategies || [])
+      setStrategies(list)
       setError(null)
     } catch (e) {
       setError(e.message)
@@ -23,11 +24,14 @@ export function useStrategies() {
   async function fetchOne(id) {
     setLoading(true)
     try {
-      const res = await apiClient.get(endpoints.tradingStrategies.one(id))
-      setCurrentStrategy(res.data)
+      const res = await apiClient.get(endpoints.strategies?.one?.(id) || `/strategies/${id}`)
+      const strat = res.data?.strategy || res.data
+      setCurrentStrategy(strat)
       setError(null)
-      return res.data
+      return strat
     } catch (e) {
+
+
       setError(e.message)
     } finally {
       setLoading(false)

@@ -41,9 +41,9 @@ class TradingSignal < ApplicationRecord
                                 confidence_score: nil, metadata: {})
     full_metadata = (metadata || {}).deep_stringify_keys
     slim = Signal::LiveMetadataCache.slim_metadata(full_metadata)
-           .merge('index_key' => index_key, 'config_version' => AlgoConfig.version.stringify_keys)
+                                    .merge('index_key' => index_key, 'config_version' => AlgoConfig.version.stringify_keys)
 
-    signal = create!(
+    create!(
       index_key: index_key,
       direction: direction,
       timeframe: timeframe,
@@ -54,9 +54,6 @@ class TradingSignal < ApplicationRecord
       confidence_score: confidence_score,
       metadata: slim
     )
-
-    Signal::LiveMetadataCache.instance.store(signal.id, full_metadata) if full_metadata.any?
-    signal
   rescue ActiveRecord::RecordInvalid
     # Rails.logger.error("Failed to persist trading signal: #{e.record.errors.full_messages.to_sentence}")
     nil
@@ -108,6 +105,10 @@ class TradingSignal < ApplicationRecord
     direction == DIRECTIONS[:avoid]
   end
 
+  # Persisted metadata merged with any live fragments cached since the last
+  # write (see Signal::LiveMetadataCache). This method was dropped in a merge
+  # resolution and Research::SignalSnapshotBuilder.from_trading_signal depends
+  # on it - restored 2026-09.
   def effective_metadata
     live = Signal::LiveMetadataCache.instance.fetch(id)
     (metadata || {}).merge(live)
@@ -121,20 +122,6 @@ class TradingSignal < ApplicationRecord
     if extra_metadata.is_a?(Hash) && extra_metadata.any?
       fragment.merge!(extra_metadata.stringify_keys)
     end
-    fragment.compact!
-
-    Signal::LiveMetadataCache.instance.merge(id, fragment) if id
-
-    slim_patch = fragment.slice(
-      'entry_outcome', 'entry_blocked_reason', 'entry_skip_stage', 'entry_skip_code'
-    )
-    slim_patch.delete('entry_blocked_reason') if outcome == 'entered'
-    return if slim_patch.empty?
-
-    new_metadata = (metadata || {}).merge(slim_patch)
-    new_metadata.delete('entry_blocked_reason') if outcome == 'entered'
-    return if new_metadata == metadata
-
-    update_columns(metadata: new_metadata, updated_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
+    update!(metadata: (metadata || {}).merge(fragment).compact)
   end
 end

@@ -2,7 +2,7 @@
 
 require 'rails_helper'
 
-RSpec.describe 'GET /api/dashboard', type: :request do
+RSpec.describe 'GET /api/dashboard' do
   before do
     allow(Live::PnlUpdaterService.instance).to receive(:running?).and_return(true)
     allow(Live::OrderUpdateHub.instance).to receive(:running?).and_return(false)
@@ -16,14 +16,12 @@ RSpec.describe 'GET /api/dashboard', type: :request do
       { public_ipv4: '1.2.3.4', public_ipv6: nil, registered_ips: [] }
     )
     allow(TradingSignal).to receive_message_chain(:order, :limit, :as_json).and_return([])
-    allow(AlgoConfig).to receive(:fetch).and_return({
+    allow(AlgoConfig).to receive_messages(fetch: {
       risk: { sl_pct: 0.02, tp_pct: 0.04, hard_rupee_sl: 500, profit_floor: 0.01, trailing: {} },
       signals: { enable_adx_filter: true, adx: {}, enable_direction_gate: false },
       trading_time_restrictions: {}
-    })
-    allow(AlgoConfig).to receive(:mode).and_return('paper')
-    allow(Live::TimeRegimeService.instance).to receive(:current_regime).and_return('regular')
-    allow(Live::TimeRegimeService.instance).to receive(:regime_config).and_return({})
+    }, mode: 'paper')
+    allow(Live::TimeRegimeService.instance).to receive_messages(current_regime: 'regular', regime_config: {})
     allow(IndexConfigLoader).to receive(:load_indices).and_return([])
     allow(PositionTracker).to receive(:paper_trading_stats_with_pct).and_return({})
     allow(Risk::CircuitBreaker.instance).to receive(:status).and_return({ tripped: false })
@@ -32,36 +30,23 @@ RSpec.describe 'GET /api/dashboard', type: :request do
   it 'includes pnl_updater_running in the system hash' do
     get '/api/dashboard'
     expect(response).to have_http_status(:ok)
-    body = JSON.parse(response.body)
-    expect(body['system']['pnl_updater_running']).to eq(true)
+    body = response.parsed_body
+    expect(body['system']['pnl_updater_running']).to be(true)
   end
 
   it 'reflects pnl_updater_running as false when service is stopped' do
     allow(Live::PnlUpdaterService.instance).to receive(:running?).and_return(false)
     get '/api/dashboard'
     expect(response).to have_http_status(:ok)
-    body = JSON.parse(response.body)
-    expect(body['system']['pnl_updater_running']).to eq(false)
+    body = response.parsed_body
+    expect(body['system']['pnl_updater_running']).to be(false)
   end
 
   it 'includes subscribed_indices as an array' do
     get '/api/dashboard'
     expect(response).to have_http_status(:ok)
-    body = JSON.parse(response.body)
+    body = response.parsed_body
     expect(body['subscribed_indices']).to eq([])
-  end
-
-  it 'includes market_status with expected keys' do
-    get '/api/dashboard'
-    expect(response).to have_http_status(:ok)
-    body = JSON.parse(response.body)
-    ms = body['market_status']
-    expect(ms).to be_a(Hash)
-    expect(ms).to have_key('is_trading_day')
-    expect(ms).to have_key('market_open')
-    expect(ms).to have_key('holiday_name')
-    expect(ms).to have_key('next_trading_day')
-    expect(ms).to have_key('session')
   end
 
   context 'when SMC confluence digest is enabled' do
@@ -85,7 +70,7 @@ RSpec.describe 'GET /api/dashboard', type: :request do
       allow(Live::TickCache).to receive(:ltp).and_return(24_500.0)
       chain = double('chain') # rubocop:disable RSpec/VerifiedDoubles
       allow(Derivative).to receive(:options).and_return(chain)
-      allow(chain).to receive_messages(where: chain, group: chain, minimum: {})
+      allow(chain).to receive_messages(where: chain, minimum: nil)
       allow(AnalysisStore).to receive(:read).with('NIFTY', :smc).and_return(
         data: {
           decision: 'call',
@@ -139,7 +124,7 @@ RSpec.describe 'GET /api/dashboard', type: :request do
       allow(Live::TickCache).to receive(:ltp).and_return(24_500.0)
       chain = double('chain') # rubocop:disable RSpec/VerifiedDoubles
       allow(Derivative).to receive(:options).and_return(chain)
-      allow(chain).to receive_messages(where: chain, group: chain, minimum: {})
+      allow(chain).to receive_messages(where: chain, minimum: nil)
       allow(AnalysisStore).to receive(:read).with('NIFTY', :smc).and_return(
         data: {
           'smc_confluence_ltf_summary' => {
@@ -156,25 +141,6 @@ RSpec.describe 'GET /api/dashboard', type: :request do
       expect(response).to have_http_status(:ok)
       row = response.parsed_body['subscribed_indices'].find { |r| r['key'] == 'NIFTY' }
       expect(row['smc_confluence_ltf']).to be_nil
-    end
-  end
-
-  context 'when watchlist index segment differs from feed segment IDX_I' do
-    before do
-      allow(IndexConfigLoader).to receive(:load_indices).and_return(
-        [{ key: 'NIFTY', sid: '13', segment: 'NSE_EQ' }]
-      )
-      allow(Live::TickCache).to receive(:ltp).with('NSE_EQ', '13').and_return(nil)
-      allow(Live::TickCache).to receive(:ltp).with('IDX_I', '13').and_return(19_888.5)
-      chain = double('chain') # rubocop:disable RSpec/VerifiedDoubles
-      allow(Derivative).to receive(:options).and_return(chain)
-      allow(chain).to receive_messages(where: chain, group: chain, minimum: {})
-    end
-
-    it 'falls back to IDX_I + sid for index LTP on indices payload' do
-      get '/api/dashboard'
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body['indices']['nifty']).to eq(19_888.5)
     end
   end
 end

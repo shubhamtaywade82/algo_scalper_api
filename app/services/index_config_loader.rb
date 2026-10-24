@@ -98,10 +98,9 @@ class IndexConfigLoader
     matching_config = find_matching_config(key, item.segment, item.security_id, config_indices)
 
     # Build base config from WatchlistItem
-    exchange_segment = index_exchange_segment_for(item, instrument)
     base_config = {
       key: key.to_s.upcase,
-      segment: exchange_segment,
+      segment: item.segment,
       sid: item.security_id.to_s
     }
 
@@ -117,26 +116,6 @@ class IndexConfigLoader
              end
 
     IndiaIndexRegistry.merge_into(merged)
-  end
-
-  # Dhan index spot segment is always IDX_I (NSE and BSE). Watchlist rows may carry a
-  # derivative segment by mistake; normalize before propagating to tick/SMC/breakout paths.
-  def index_exchange_segment_for(item, instrument = nil)
-    instrument ||= item.instrument
-    normalized = if instrument&.exchange_segment.present?
-                   instrument.exchange_segment
-                 else
-                   'IDX_I'
-                 end
-
-    if item.segment.present? && item.segment != normalized
-      Rails.logger.warn(
-        "[IndexConfigLoader] Normalized index segment for #{item.label || item.security_id}: " \
-        "#{item.segment} -> #{normalized}"
-      )
-    end
-
-    normalized
   end
 
   # Find matching config from algo.yml by key, segment, or sid

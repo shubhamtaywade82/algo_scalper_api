@@ -38,7 +38,7 @@ RSpec.describe Research::ContextClassifier do
     it 'buckets time_context from the last candle timestamp (IST)' do
       opening = series_with([flat_candle(5, price: 100)]) # 09:20 -> opening_range
       midday = series_with([{ timestamp: Time.zone.parse('2026-07-10 12:00:00'), open: 100, high: 100, low: 100,
-                               close: 100, volume: 1000 }])
+                              close: 100, volume: 1000 }])
 
       expect(described_class.classify(series: opening)['time_context']).to eq('opening_range')
       expect(described_class.classify(series: midday)['time_context']).to eq('midday')
@@ -75,11 +75,11 @@ RSpec.describe Research::ContextClassifier do
       series = series_with([flat_candle(0, price: 200)])
 
       up = described_class.classify(series: series, opening_range_bars: opening_range_bars,
-                                     previous_session_close: 190.0)
+                                    previous_session_close: 190.0)
       down = described_class.classify(series: series, opening_range_bars: opening_range_bars,
-                                       previous_session_close: 210.0)
+                                      previous_session_close: 210.0)
       none = described_class.classify(series: series, opening_range_bars: opening_range_bars,
-                                       previous_session_close: 200.1)
+                                      previous_session_close: 200.1)
 
       expect(up['gap']).to eq('gap_up')
       expect(down['gap']).to eq('gap_down')

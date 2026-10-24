@@ -26,7 +26,6 @@ module Strategies
       @running = false
       @mutex = Mutex.new
       @bus = Core::EventBus.instance
-      @bus_subscription_id = nil
       @log_streams = {} # slug => LogStream
     end
 
@@ -41,7 +40,7 @@ module Strategies
 
     def stop
       @running = false
-      @bus.unsubscribe(@bus_subscription_id) if @bus_subscription_id
+      @bus.unsubscribe_all(self) if defined?(@bus)
       @control_thread&.kill
       @mutex.synchronize { @runners.each_key { |slug| stop_runner(slug, "shutdown") } }
       Rails.logger.info("[Strategies::Manager] stopped")
@@ -69,7 +68,7 @@ module Strategies
 
     def all_statuses
       @mutex.synchronize do
-        @runners.keys.index_with { |slug| runner_status(slug) }
+        @runners.transform_keys { |slug| runner_status(slug) }.keys.index_with { |s| runner_status(s) }
       end
     end
 
@@ -86,7 +85,7 @@ module Strategies
     end
 
     def subscribe_to_events
-      @bus_subscription_id = @bus.subscribe(:candle_closed) { |event| on_candle_closed(event) }
+      @bus.subscribe(:candle_closed, self, method_name: :on_candle_closed)
     end
 
     private
@@ -97,8 +96,12 @@ module Strategies
 
     def control_loop
       while @running
-        reconcile
-        heartbeat_runners
+        begin
+          reconcile
+          heartbeat_runners
+        rescue StandardError => e
+          Rails.logger.error("[Strategies::Manager] control loop iteration error: #{e.class} - #{e.message}")
+        end
         sleep CONTROL_LOOP_PERIOD
       end
     rescue StandardError => e
@@ -108,7 +111,7 @@ module Strategies
 
     def reconcile
       refresh_strategy_registry
-      Strategies::Record.where(status: %w[running deployed]).find_each do |strategy_record|
+      Strategies::Record.where.not(status: "draft").find_each do |strategy_record|
         desired = strategy_record.desired_status || strategy_record.status
         actual = @mutex.synchronize { @runners.key?(strategy_record.slug) }
 
@@ -176,6 +179,9 @@ module Strategies
         status: "starting",
         thread: nil,
         version_id: version.id,
+        # Registry key the Loader registered this class under (manifest
+        # class_name — e.g. "OrbBreakoutStrategy", NOT slug.camelize).
+        class_name: version.manifest["class_name"],
         strategy: strategy_instance,
         run: run_record,
         log_stream: log_stream,
@@ -199,6 +205,8 @@ module Strategies
                    run_id: run_record.id)
       broadcast_heartbeat(strategy_record.slug, "running")
       log_stream.info("Runner started (v#{version.version})")
+    rescue StandardError => e
+      Rails.logger.error("[Strategies::Manager] Failed to start runner for #{strategy_record.slug}: #{e.class} - #{e.message}")
     end
 
     def stop_runner(slug, reason)
@@ -218,7 +226,12 @@ module Strategies
         )
       )
 
-      Runtime.remove(slug.camelize)
+      # Remove by the manifest class_name the Loader registered under —
+      # slug.camelize misses the 6/8 strategies whose class name carries a
+      # "Strategy" suffix, leaking registry entries (and their anonymous
+      # modules) on every stop.
+      registered_name = state[:class_name] || slug.camelize
+      Runtime.remove(registered_name)
 
       @runners.delete(slug)
       @log_streams.delete(slug)

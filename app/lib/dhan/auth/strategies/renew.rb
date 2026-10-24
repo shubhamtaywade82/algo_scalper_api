@@ -34,7 +34,7 @@ module Dhan
           raise "Renew response missing accessToken" if token.blank?
           raise "Renew response missing expiryTime" if expiry.blank?
 
-          normalize_response(token: token, expiry: Time.zone.parse(expiry))
+          normalize_response(token: token, expiry: Time.parse(expiry))
         end
       end
     end

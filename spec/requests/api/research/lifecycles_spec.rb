@@ -6,11 +6,11 @@ RSpec.describe Api::Research::LifecyclesController do
   describe "GET /api/research/lifecycles" do
     it "lists lifecycles newest first, filterable by symbol/expiry_flag/option_type/date" do
       Research::PremiumLifecycle.create!(underlying_symbol: "NIFTY", expiry_flag: "WEEK", option_type: "CE",
-                                          strike_label: "ATM", interval: "5", entry_ts: 2.days.ago, status: "computed",
-                                          peak_return_pct: 40.0)
+                                         strike_label: "ATM", interval: "5", entry_ts: 2.days.ago, status: "computed",
+                                         peak_return_pct: 40.0)
       newest = Research::PremiumLifecycle.create!(underlying_symbol: "NIFTY", expiry_flag: "WEEK", option_type: "PE",
-                                                    strike_label: "ATM", interval: "5", entry_ts: 1.day.ago,
-                                                    status: "computed", peak_return_pct: 10.0)
+                                                  strike_label: "ATM", interval: "5", entry_ts: 1.day.ago,
+                                                  status: "computed", peak_return_pct: 10.0)
 
       get "/api/research/lifecycles", params: { underlying_symbol: "nifty", option_type: "PE" }
 
@@ -29,9 +29,9 @@ RSpec.describe Api::Research::LifecyclesController do
         status: "computed", peak_return_pct: 40.0
       )
       Research::OptionBar.create!(underlying_symbol: "NIFTY", exchange_segment: "NSE_FNO", expiry_flag: "WEEK",
-                                   option_type: "CE", strike_label: "ATM", interval: "5",
-                                   ts: Time.zone.parse("2026-07-10 09:15:00"), open: 100, high: 105, low: 98,
-                                   close: 101)
+                                  option_type: "CE", strike_label: "ATM", interval: "5",
+                                  ts: Time.zone.parse("2026-07-10 09:15:00"), open: 100, high: 105, low: 98,
+                                  close: 101)
 
       get "/api/research/lifecycles/#{lifecycle.id}"
 
@@ -47,8 +47,8 @@ RSpec.describe Api::Research::LifecyclesController do
     it "runs the lifecycle board and returns ranked results" do
       allow(Research::LifecycleRunner).to receive(:run).and_return(
         [Research::PremiumLifecycle.create!(underlying_symbol: "NIFTY", expiry_flag: "WEEK", option_type: "CE",
-                                             strike_label: "ATM", interval: "5", entry_ts: Time.current,
-                                             status: "computed", peak_return_pct: 55.0)]
+                                            strike_label: "ATM", interval: "5", entry_ts: Time.current,
+                                            status: "computed", peak_return_pct: 55.0)]
       )
 
       post "/api/research/lifecycles/run", params: {
@@ -63,9 +63,9 @@ RSpec.describe Api::Research::LifecyclesController do
 
     it "returns 422 for an invalid date" do
       post "/api/research/lifecycles/run", params: { underlying_symbol: "NIFTY", date: "not-a-date",
-                                                       spot_price: 24_800 }
+                                                     spot_price: 24_800 }
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
   end
 
@@ -75,13 +75,13 @@ RSpec.describe Api::Research::LifecyclesController do
         underlying_symbol: "NIFTY", expiry_flag: "WEEK", option_type: "CE", strike_label: "ATM", interval: "5",
         entry_ts: Time.current, status: "computed", peak_return_pct: 140.0,
         underlying_context: { "entry" => { "regime" => { "trend" => "strong_bullish",
-                                                           "opening_range_breakout" => "breakout_up" } } }
+                                                         "opening_range_breakout" => "breakout_up" } } }
       )
       Research::PremiumLifecycle.create!(
         underlying_symbol: "NIFTY", expiry_flag: "WEEK", option_type: "PE", strike_label: "ATM", interval: "5",
         entry_ts: Time.current, status: "computed", peak_return_pct: 10.0,
         underlying_context: { "entry" => { "regime" => { "trend" => "neutral",
-                                                           "opening_range_breakout" => "inside_range" } } }
+                                                         "opening_range_breakout" => "inside_range" } } }
       )
 
       get "/api/research/lifecycles/expectancy", params: { dimensions: "trend,opening_range_breakout" }
@@ -90,14 +90,14 @@ RSpec.describe Api::Research::LifecyclesController do
       body = response.parsed_body
       expect(body["buckets"].size).to eq(2)
       expect(body["buckets"].first["context"]).to eq("trend" => "strong_bullish",
-                                                       "opening_range_breakout" => "breakout_up")
+                                                     "opening_range_breakout" => "breakout_up")
       expect(body["total_lifecycles"]).to eq(2)
     end
 
     it "returns 422 for an unknown dimension" do
       get "/api/research/lifecycles/expectancy", params: { dimensions: "not_a_real_dimension" }
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
   end
 end

@@ -1,0 +1,127 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Log monitor: scans dev logs for new errors since the last run (15-min cron).
+# Appends findings (deduplicated by signature) to log/issue_tracker.log.
+# Run with: bin/log_monitor
+
+require "json"
+require "set"
+
+class LogMonitor
+  LOG_DIR = File.expand_path("../log", __dir__)
+  LOG_FILES = %w[development.log puma.stderr.log puma.stdout.log].freeze
+  STATE_FILE = File.join(LOG_DIR, ".log_monitor_state")
+  ISSUE_LOG = File.join(LOG_DIR, "issue_tracker.log")
+
+  ERROR_PATTERNS = [
+    /terminated with exception/,
+    /(?:[A-Z][A-Za-z]+::)*[A-Z][A-Za-z]+Error/,
+    /ERROR --/,
+    /\bFAILED\b|\bfailed\b/i,
+    /\bFATAL\b/i,
+    /exception/i,
+  ].freeze
+
+  NOISE_PATTERNS = [
+    /error_count\s*=>\s*0/,
+    /:error_count\s*=>\s*0/,
+    /Completed 200/,
+    /Completed 404/,
+    /Completed 422/,
+    /DhanhqErrorHandler/,
+    /\.rb:\d+:in `/, # backtrace frames, not error headers
+    /gems\//,
+    /app\/services\/|app\/models\/|app\/controllers\//,
+    /^ /, # indented continuation lines
+  ].freeze
+
+  def run
+    new_errors = scan_files
+    return puts "No new errors." if new_errors.empty?
+
+    append_issues(new_errors)
+    puts "#{new_errors.length} new error signature(s). See #{ISSUE_LOG}"
+  end
+
+  private
+
+  def scan_files
+    issues = []
+    LOG_FILES.each do |name|
+      path = File.join(LOG_DIR, name)
+      next unless File.exist?(path)
+
+      window = new_bytes(path)
+      issues.concat(extract_errors(window, name))
+      save_offset(path, File.size(path))
+    end
+    Dir.glob(File.join(LOG_DIR, "strategies", "*.log")).each do |path|
+      issues.concat(extract_errors(new_bytes(path), File.basename(path)))
+      save_offset(path, File.size(path))
+    end
+    dedupe(issues)
+  end
+
+  def extract_errors(content, source)
+    matches = []
+    content.split("\n").each do |line|
+      next if NOISE_PATTERNS.any? { |pattern| line =~ pattern }
+      next unless ERROR_PATTERNS.any? { |pattern| line =~ pattern }
+
+      matches << { source: source, line: line.strip }
+    end
+    matches
+  end
+
+  def dedupe(matches)
+    matches.group_by { |match| signature(match[:line]) }.map do |_sig, group|
+      { source: group.first[:source], count: group.size, line: group.first[:line] }
+    end
+  end
+
+  def signature(line)
+    line
+      .gsub(/\[[0-9]{4}-[0-9]{2}-[0-9]{2}[^\]]*\]/, "")
+      .gsub(/\d+/, "N")
+      .gsub(/0x[0-9a-f]+/, "0xN")
+      .strip
+  end
+
+  def new_bytes(path)
+    size = File.size(path)
+    offset = previous_offset(path)
+    offset = 0 if offset > size
+
+    File.open(path, "rb") do |file|
+      file.seek(offset)
+      file.read(size - offset) || ""
+    end
+  end
+
+  def state
+    @state ||= File.exist?(STATE_FILE) ? JSON.parse(File.read(STATE_FILE)) : {}
+  rescue JSON::ParserError
+    {}
+  end
+
+  def previous_offset(path)
+    state[path].to_i
+  end
+
+  def save_offset(path, size)
+    state[path] = size
+    File.write(STATE_FILE, JSON.generate(state))
+  end
+
+  def append_issues(issues)
+    File.open(ISSUE_LOG, "a") do |file|
+      file.puts "\n=== #{Time.now.strftime("%Y-%m-%d %H:%M:%S")} ==="
+      issues.sort_by { |issue| issue[:count] }.reverse.each do |issue|
+        file.puts "[#{issue[:source]}] (x#{issue[:count]}) #{issue[:line]}"
+      end
+    end
+  end
+end
+
+LogMonitor.new.run

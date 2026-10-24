@@ -1,16 +1,3 @@
-# == Schema Information
-#
-# Table name: public_ip_logs
-#
-#  id            :integer          not null, primary key
-#  ip_address    :string
-#  ip_version    :string
-#  first_seen_at :datetime
-#  last_seen_at  :datetime
-#  created_at    :datetime         not null
-#  updated_at    :datetime         not null
-#
-
 # frozen_string_literal: true
 
 require 'rails_helper'

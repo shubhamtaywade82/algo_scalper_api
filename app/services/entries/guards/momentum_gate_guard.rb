@@ -39,15 +39,11 @@ module Entries
       def self.bb_breakout?(series)
         detector = MarketRegimeDetector.new(series)
         detector.bollinger_band_breakout?
-      rescue StandardError
-        false
       end
 
       def self.adx_strong?(series)
         adx = series.adx(14)
         adx && adx.to_f >= adx_threshold
-      rescue StandardError
-        false
       end
 
       def self.adx_threshold

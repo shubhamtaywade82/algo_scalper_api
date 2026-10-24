@@ -2,6 +2,16 @@
 
 module Backtest
   # Option premium simulation (CE/PE) extracted for reuse by {BacktestService} and {Backtest::SmcReplayRunner}.
+  #
+  # ## Same-strike filter
+  # DhanHQ's expired-options 'ATM' endpoint returns a *rolling composite* — the ATM strike
+  # re-resolves per bar as spot drifts, so a single day's series can flip between adjacent
+  # strikes multiple times.  A real position holds ONE strike from entry to exit, so exit
+  # simulation must only look at bars that still quote the entry_strike.
+  #
+  # This was a silent bug: without the filter, the simulator would splice across strikes,
+  # producing unrealistically smooth premium paths.  Fixed to mirror the approach in
+  # {OptionsBuyingBacktester#same_strike_bars}.
   class OptionTradeSimulator
     def initialize(instrument:)
       @instrument = instrument
@@ -11,26 +21,21 @@ module Backtest
     # @return [Hash, nil] position hash or nil if no option data
     def enter_position(signal, candle, index)
       signal_type = signal[:type]
-      raw_option_data = fetch_option_series(signal_type, candle.timestamp)
-      return if raw_option_data.blank?
+      option_data = fetch_option_series(signal_type, candle.timestamp)
+      return if option_data.blank?
 
-      # DhanHQ's expired-options "ATM" series re-resolves the strike per bar as spot drifts —
-      # it's a rolling composite of whichever strike was nearest at each instant, not one
-      # contract's continuous price (flips between adjacent strikes multiple times an hour on
-      # real data). Pin to the strike at entry and only track that strike going forward, or
-      # SL/target/trailing checks below are reading a spliced series, not the held position.
-      entry_bar = raw_option_data.min_by { |b| (b[:timestamp] - candle.timestamp).abs }
-      return if entry_bar.nil?
+      entry_bar = nearest_bar(option_data, candle.timestamp)
+      return if entry_bar.nil? || entry_bar[:close].to_f <= 0
 
-      entry_strike = entry_bar[:strike]
-      option_data = entry_strike.nil? ? raw_option_data : raw_option_data.select { |b| b[:strike].to_i == entry_strike.to_i }
       entry_premium = entry_bar[:close].to_f
+      entry_strike  = entry_bar[:strike]
 
       {
         signal_type: signal_type,
         entry_index: index,
         entry_time: candle.timestamp,
         entry_price: entry_premium,
+        entry_strike: entry_strike,
         option_data: option_data,
         stop_loss: calculate_stop_loss(entry_premium, signal_type),
         target: calculate_target(entry_premium, signal_type)
@@ -38,53 +43,94 @@ module Backtest
     end
 
     def check_exit(position, candle, index, _series)
-      current_price = fetch_premium_price(position[:option_data], candle.timestamp)
+      # Filter to only same-strike bars to avoid following the rolling ATM splice
+      same_strike = same_strike_bars(position)
+      current_price = fetch_premium_price(same_strike, candle.timestamp)
+      # If no same-strike bar is available near this timestamp, skip bar
+      return nil if current_price.nil?
+
       entry_price = position[:entry_price]
+      signal_type = position[:signal_type]
 
-      pnl_percent = ((current_price - entry_price) / entry_price * 100)
+      pnl_percent = if signal_type == :ce
+                      ((current_price - entry_price) / entry_price * 100)
+                    else
+                      ((entry_price - current_price) / entry_price * 100)
+                    end
 
-      target_hit = current_price >= position[:target]
-      return build_exit_result(position, candle, index, pnl_percent, 'target') if target_hit
+      target_hit =
+        (signal_type == :ce && current_price >= position[:target]) ||
+        (signal_type == :pe && current_price <= position[:target])
+      return build_exit_result(position, candle, index, pnl_percent, current_price, 'target') if target_hit
 
-      stop_loss_hit = current_price <= position[:stop_loss]
-      return build_exit_result(position, candle, index, pnl_percent, 'stop_loss') if stop_loss_hit
+      stop_loss_hit =
+        (signal_type == :ce && current_price <= position[:stop_loss]) ||
+        (signal_type == :pe && current_price >= position[:stop_loss])
+      return build_exit_result(position, candle, index, pnl_percent, current_price, 'stop_loss') if stop_loss_hit
 
       if pnl_percent >= 40 && !position[:trailing_activated]
         position[:trailing_activated] = true
-        position[:trailing_stop] = current_price * 0.90
+        position[:trailing_stop] = current_price * (signal_type == :ce ? 0.90 : 1.10)
       end
 
       if position[:trailing_activated]
-        new_trailing = current_price * 0.90
-        position[:trailing_stop] = [position[:trailing_stop], new_trailing].max
-        if current_price <= position[:trailing_stop]
-          return build_exit_result(position, candle, index, pnl_percent, 'trailing_stop')
+        if signal_type == :ce
+          new_trailing = current_price * 0.90
+          position[:trailing_stop] = [position[:trailing_stop], new_trailing].max
+          if current_price <= position[:trailing_stop]
+            return build_exit_result(position, candle, index, pnl_percent, current_price, 'trailing_stop')
+          end
+        else
+          new_trailing = current_price * 1.10
+          position[:trailing_stop] = [position[:trailing_stop], new_trailing].min
+          if current_price >= position[:trailing_stop]
+            return build_exit_result(position, candle, index, pnl_percent, current_price, 'trailing_stop')
+          end
         end
       end
 
-      if candle.timestamp.hour >= 15 && candle.timestamp.min >= 20
-        return build_exit_result(position, candle, index, pnl_percent, 'time_exit')
+      # EOD time exit: at/after 15:20 IST. The old `hour >= 15 && min >= 20`
+      # form let 16:00-16:19 bars slip through (hour passes, min fails).
+      t = candle.timestamp.in_time_zone('Asia/Kolkata')
+      if t.hour > 15 || (t.hour == 15 && t.min >= 20)
+        return build_exit_result(position, candle, index, pnl_percent, current_price, 'time_exit')
       end
 
       nil
     end
 
     def force_exit(position, candle, index, reason)
-      current_price = fetch_premium_price(position[:option_data], candle.timestamp)
+      same_strike = same_strike_bars(position)
+      current_price = fetch_premium_price(same_strike, candle.timestamp)
+      # Forced exits still need SOME price to book the trade against: fall back
+      # to a documented 50% haircut of entry rather than fabricating a zero.
+      current_price = position[:entry_price] * 0.5 if current_price.nil?
       entry_price = position[:entry_price]
-      pnl_percent = ((current_price - entry_price) / entry_price * 100)
+      signal_type = position[:signal_type]
 
-      build_exit_result(position, candle, index, pnl_percent, reason)
+      pnl_percent = if signal_type == :ce
+                      ((current_price - entry_price) / entry_price * 100)
+                    else
+                      ((entry_price - current_price) / entry_price * 100)
+                    end
+
+      build_exit_result(position, candle, index, pnl_percent, current_price, reason)
     end
 
-    # One trade from entry bar to exit (same semantics as {BacktestService} loop).
+    # One trade from entry to exit. +entry_index+ is the SIGNAL bar: the entry is
+    # booked against the NEXT bar (the first bar the signal could actually be
+    # traded on) — booking on the signal bar itself was a one-bar lookahead.
+    # Exit scanning starts strictly after the booking bar.
     def simulate_trade(series:, entry_index:, signal_type:)
       signal = { type: signal_type }
-      candle = series.candles[entry_index]
-      position = enter_position(signal, candle, entry_index)
+      booking_index = entry_index + 1
+      booking_candle = series.candles[booking_index]
+      return nil if booking_candle.nil? # signal on the final bar — nothing left to trade
+
+      position = enter_position(signal, booking_candle, booking_index)
       return nil if position.blank?
 
-      ((entry_index + 1)...series.candles.size).each do |j|
+      ((booking_index + 1)...series.candles.size).each do |j|
         c = series.candles[j]
         hit = check_exit(position, c, j, series)
         return hit.merge(exit_bar_index: j) if hit
@@ -97,6 +143,15 @@ module Backtest
 
     private
 
+    # DhanHQ's expired-options 'ATM' series re-resolves the strike per bar as spot drifts —
+    # it's a rolling composite, not one contract's continuous price. A real position holds
+    # ONE strike from entry to exit, so we must filter to only bars quoting entry_strike.
+    def same_strike_bars(position)
+      return [] if position[:option_data].blank? || position[:entry_strike].blank?
+
+      position[:option_data].select { |b| b[:strike].to_i == position[:entry_strike].to_i }
+    end
+
     def fetch_option_series(type, date)
       fetcher = Options::ExpiredFetcher.call(symbol: @instrument.symbol_name, expiry_flag: 'WEEK', date: date)
       fetcher[type]
@@ -105,28 +160,48 @@ module Backtest
       []
     end
 
-    def fetch_premium_price(option_data, ts)
-      return 0.0 if option_data.blank?
+    def nearest_bar(option_data, ts, tolerance: 45.seconds)
+      return nil if option_data.blank?
 
       bar = option_data.min_by { |b| (b[:timestamp] - ts).abs }
-      bar[:close].to_f
+      return nil if bar.nil? || (bar[:timestamp] - ts).abs > tolerance
+
+      bar
     end
 
-    def calculate_stop_loss(entry_price, _signal_type)
-      entry_price * 0.70
+    # Returns the near-timestamp premium, or nil when no same-strike bar exists
+    # within tolerance — nil is the honest "no data" signal; 0.0 fabricated a
+    # price and forced every caller to re-test for it (review P3).
+    def fetch_premium_price(option_data, ts, tolerance: 45.seconds)
+      return nil if option_data.blank?
+
+      bar = nearest_bar(option_data, ts, tolerance: tolerance)
+      bar&.dig(:close)&.to_f
     end
 
-    def calculate_target(entry_price, _signal_type)
-      entry_price * 1.50
+    def calculate_stop_loss(entry_price, signal_type)
+      if signal_type == :ce
+        entry_price * 0.70
+      else
+        entry_price * 1.30
+      end
     end
 
-    def build_exit_result(position, candle, index, pnl_percent, exit_reason)
+    def calculate_target(entry_price, signal_type)
+      if signal_type == :ce
+        entry_price * 1.50
+      else
+        entry_price * 0.50
+      end
+    end
+
+    def build_exit_result(position, candle, index, pnl_percent, exit_price, exit_reason)
       {
         signal_type: position[:signal_type],
         entry_time: position[:entry_time],
         entry_price: position[:entry_price],
         exit_time: candle.timestamp,
-        exit_price: candle.close,
+        exit_price: exit_price,
         pnl_percent: pnl_percent.round(2),
         exit_reason: exit_reason,
         bars_held: index - position[:entry_index],

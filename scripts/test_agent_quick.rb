@@ -2,11 +2,12 @@
 # frozen_string_literal: true
 
 # Quick test script for Technical Analysis Agent (without background services)
-# Run with: rails runner scripts/test_agent_quick.rb
+# Run with: DISABLE_TRADING_SERVICES=1 rails runner scripts/test_agent_quick.rb
 
 require_relative '../config/environment' if defined?(Rails)
 
 # Disable background services for faster testing
+ENV['DISABLE_TRADING_SERVICES'] = '1'
 ENV['DHANHQ_ENABLED'] = 'false' unless ENV['DHANHQ_ENABLED'] == 'true'
 
 # Color output helpers

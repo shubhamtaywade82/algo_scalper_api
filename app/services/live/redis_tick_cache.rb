@@ -3,6 +3,20 @@
 require 'singleton'
 
 module Live
+  # Redis-backed tick cache (hot path for LTP reads).
+  #
+  # Error contract (error-handling review wave 4):
+  #   * Redis outage on store/fetch/clear .............. logged + empty/false.
+  #     Deliberate blast-radius boundary: a Redis outage must not crash the
+  #     tick ingestion loop, and downstream consumers (TickQuery -> entry
+  #     guards) already treat "no tick" as fail-closed (entries blocked),
+  #     so the degrade direction is safe.
+  #   * protected_keys_set sub-rescues ................. logged (they used to
+  #     be SILENT — an unreadable config or DB outage quietly shrank the
+  #     protection set, letting prune_stale delete watchlist/active-position
+  #     ticks as "stale").
+  #   * numeric_to_f on garbage LTP ..................... 0.0 = "invalid incoming
+  #     value"; merge keeps the previous valid LTP (ingestion filter).
   class RedisTickCache
     include Singleton
 
@@ -180,8 +194,10 @@ module Live
           sid = item && (item[:security_id] || item['security_id'])
           set << normalize_composite_key(seg, sid) if seg && sid
         end
-      rescue StandardError
-        # ignore config errors
+      rescue StandardError => e
+        # Logged (wave 4): a config failure shrinking the protection set means
+        # prune_stale may delete watchlist ticks as stale — that must be visible.
+        Rails.logger.error("[RedisTickCache] watchlist protection unavailable: #{e.class} - #{e.message}")
       end
 
       # 3. Active positions (PositionIndex returns "SEG:SID" strings)
@@ -190,8 +206,8 @@ module Live
           seg, sid = k.to_s.split(':', 2)
           set << normalize_composite_key(seg, sid)
         end
-      rescue StandardError
-        # if PositionIndex not available, ignore
+      rescue StandardError => e
+        Rails.logger.error("[RedisTickCache] PositionIndex protection unavailable: #{e.class} - #{e.message}")
       end
 
       # 4. Active positions from DB (cross-process safety when PositionIndex is empty)
@@ -203,8 +219,8 @@ module Live
             set << normalize_composite_key(segment, security_id)
           end
         end
-      rescue StandardError
-        # if DB/model unavailable in this context, ignore
+      rescue StandardError => e
+        Rails.logger.error("[RedisTickCache] active-position DB protection unavailable: #{e.class} - #{e.message}")
       end
 
       set
@@ -247,7 +263,10 @@ module Live
       return Set.new unless defined?(PositionTracker)
 
       PositionTracker.active.pluck(:security_id).compact.to_set { |sid| sid.to_s.strip }
-    rescue StandardError
+    rescue StandardError => e
+      # Logged (wave 4): an empty set on DB failure means prune_stale may
+      # delete the ticks of live positions — that must be visible.
+      Rails.logger.error("[RedisTickCache] active_position_security_ids unavailable: #{e.class} - #{e.message}")
       Set.new
     end
 

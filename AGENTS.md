@@ -12,7 +12,7 @@
   - `app/domain/` for value objects (`MarketTick`)
 - Library and infrastructure code in `lib/`:
   - `lib/trading_system/` — daemon, bootstrap, supervisor (trading process lifecycle)
-  - `lib/services/ai/` — Ollama client (`ollama-client`) and technical analysis agent
+  - `lib/services/ai/` — OpenAI client and technical analysis agent
   - `lib/notifications/` — Telegram notifier
   - `lib/tasks/` — rake tasks (`trading:daemon`, `solid_queue:load_recurring`, `ai:technical_analysis`)
 - Tests in `spec/` (models, services, integration, smoke, support, VCR cassettes).
@@ -34,7 +34,7 @@
 
 ## Process Architecture
 - `bin/dev` starts 4 processes via `Procfile.dev`:
-  - `web` — Rails API server on port 3011
+  - `web` — Rails API server on port 3001
   - `trading` — Trading daemon (11 services in Ruby threads, managed by `TradingSystem::Supervisor`)
   - `jobs` — Solid Queue worker (recurring tasks: instrument sync, SMC scanner, AI analysis)
   - `dashboard` — Next.js frontend
@@ -42,11 +42,12 @@
 - The trading daemon only starts services when `ENABLE_TRADING_SERVICES=true` and market is open. If market is closed at boot, only the WebSocket feed starts.
 
 ## Paper vs Live Trading
-- **Effective** `paper_trading.enabled` comes from `AlgoConfig.fetch`: `config/algo.yml` → DB `algo_config_overrides` → `config/signal_tier_presets.yml` (tier from `SIGNAL_TIER` or `signals.signal_tier`) → **`LIVE_TRADING` env** forces paper when unset/false, live when true
+- Controlled by `config/algo.yml`: `paper_trading.enabled: true/false`
 - Both modes use real DhanHQ WebSocket data for market ticks
 - Paper mode: simulated fills via `Orders::GatewayPaper`
-- Live gateway path: `Orders::GatewayLive`; broker orders require `dhanhq.enable_orders: true` and `PLACE_ORDER=true`
-- Gateway selected at boot time; switching `LIVE_TRADING` or YAML paper flag requires **daemon restart**
+- Live mode: real DhanHQ execution via `Orders::GatewayLive`
+- Additional safety gate for live: `dhanhq.enable_orders: true` in `algo.yml` (or `ENABLE_ORDER=true` env)
+- Gateway selected at boot time; switching requires restart
 
 ## Coding Style & Naming Conventions
 - Ruby files start with `# frozen_string_literal: true`.
@@ -58,28 +59,6 @@
 
 ## Testing Guidelines
 - Framework: RSpec (`rspec-rails`) with FactoryBot, VCR, WebMock, Shoulda Matchers.
-
----
-
-## Rule Precedence Hierarchy (Must Follow for AI Agents & Tools)
-
-1. **User Explicit Instructions**: Directly overrides generic defaults.
-2. **Repository Project Rules (`AGENTS.md`, `CLAUDE.md`, `CODING_CONVENTIONS.md`)**: Project invariants (e.g. Solid Queue, RSpec, `AlgoConfig`, `Orders::GatewayLive`/`GatewayPaper`) supersede external domain skills.
-3. **Detected Repository Profile**: Existing architecture (PostgreSQL, Solid Queue, RSpec) overrides generic defaults.
-4. **Team Conventions**: Defined architectural patterns.
-5. **External Domain Skills (Rails-AI / GoF Patterns)**: Knowledge reference.
-
----
-
-## Architecture & Refactoring Tools
-
-Available executable analysis scripts in `bin/` or `.agents/skills/scripts/`:
-- **Context Compiler**: `ruby .agents/skills/scripts/rails_context_compiler.rb <file_path>`
-- **Prism AST Parser**: `ruby .agents/skills/scripts/ruby_prism_ast_analyzer.rb <file_path>`
-- **Smell Detector**: `ruby .agents/skills/scripts/ruby_reek_smell_detector.rb <file_or_dir>`
-- **Pattern Advisor**: `ruby .agents/skills/scripts/ruby_pattern_advisor.rb <file_or_dir>`
-- **Project Profiler**: `ruby .agents/skills/scripts/rails_project_profiler.rb`
-
 - Test files as `*_spec.rb` mirroring code paths (`app/services/foo/bar.rb` → `spec/services/foo/bar_spec.rb`).
 - Sequential execution; no parallel assumptions.
 - Coverage via SimpleCov (`coverage/`).

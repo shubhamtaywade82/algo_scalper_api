@@ -4,8 +4,33 @@ require 'rails_helper'
 
 RSpec.describe SupertrendTrend do
   describe '.direction' do
+    # Trend at i: close >= line[i] ? :bullish : :bearish
+    # Current-bar contract (the flip logic was removed from the app):
+    # current bar bullish => :long
+    # current bar bearish => :short
+    # missing/invalid data => :none
+
     context 'when series has closes and supertrend line aligned by index' do
-      it 'returns :long when the current bar is bullish' do
+      it 'returns :long on flip_up (bearish to bullish)' do
+        # prev: close < line => bearish; current: close >= line => bullish
+        closes = [100.0, 98.0, 102.0] # last two: 98 < 105 bearish, 102 >= 101 bullish
+        line = [99.0, 105.0, 101.0]
+        series = double('series', closes: closes)
+        result = described_class.direction(series: series, supertrend_result: { line: line })
+        expect(result).to eq(:long)
+      end
+
+      it 'returns :short on flip_down (bullish to bearish)' do
+        # prev: close >= line => bullish; current: close < line => bearish
+        closes = [100.0, 105.0, 97.0] # last two: 105 >= 104 bullish, 97 < 100 bearish
+        line = [99.0, 104.0, 100.0]
+        series = double('series', closes: closes)
+        result = described_class.direction(series: series, supertrend_result: { line: line })
+        expect(result).to eq(:short)
+      end
+
+      it 'returns :long when the current bar is bullish (no flip required)' do
+        # both bullish: close >= line
         closes = [100.0, 102.0, 104.0]
         line = [99.0, 101.0, 103.0]
         series = double('series', closes: closes)
@@ -15,7 +40,7 @@ RSpec.describe SupertrendTrend do
 
       it 'returns :short when the current bar is bearish' do
         closes = [100.0, 98.0, 96.0]
-        line = [101.0, 99.0, 97.0]
+        line = [101.0, 99.0, 97.0] # close < line at each
         series = double('series', closes: closes)
         result = described_class.direction(series: series, supertrend_result: { line: line })
         expect(result).to eq(:short)
@@ -23,14 +48,16 @@ RSpec.describe SupertrendTrend do
     end
 
     context 'when series exposes closes via candles' do
-      it 'returns :long from candle closes' do
+      it 'reads closes from candles when the series has no #closes' do
         candles = [
           double('c', close: 100.0),
           double('c', close: 98.0),
           double('c', close: 102.0)
         ]
         line = [99.0, 105.0, 101.0]
-        series = Struct.new(:candles).new(candles)
+        # A series that responds to #closes (even with nil) short-circuits to
+        # :none, so the double must not stub #closes at all.
+        series = double('series', candles: candles)
         result = described_class.direction(series: series, supertrend_result: { line: line })
         expect(result).to eq(:long)
       end
@@ -54,12 +81,12 @@ RSpec.describe SupertrendTrend do
         expect(result).to eq(:none)
       end
 
-      it 'returns :long when only one valid bar exists' do
+      it 'returns :none when the only line value is nil' do
         closes = [100.0]
-        line = [99.0]
+        line = [nil]
         series = double('series', closes: closes)
         result = described_class.direction(series: series, supertrend_result: { line: line })
-        expect(result).to eq(:long)
+        expect(result).to eq(:none)
       end
 
       it 'returns :none when closes length != line length' do

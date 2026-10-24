@@ -2,7 +2,6 @@
 
 require 'singleton'
 require 'concurrent/map'
-require_relative '../concerns/broker_fee_calculator'
 
 module Positions
   # Position data structure - defined outside ActiveCache to avoid re-definition issues
@@ -11,7 +10,7 @@ module Positions
                   :sl_price, :tp_price, :high_water_mark, :current_ltp, :pnl,
                   :pnl_pct, :peak_profit_pct, :min_profit_pct, :trend,
                   :time_in_position, :breakeven_locked, :trailing_stop_price,
-                  :sl_offset_pct, :position_direction, :index_key,
+                  :sl_offset_pct, :position_direction, :position_side, :index_key,
                   :underlying_segment, :underlying_security_id, :underlying_symbol,
                   :underlying_trend_score, :underlying_ltp, :price_history,
                   :last_updated_at
@@ -35,38 +34,33 @@ module Positions
       entry_price * quantity
     end
 
+    def short_position?
+      position_side.to_s.downcase == 'short'
+    end
+
     def sl_hit?
       return false unless sl_price && current_ltp&.positive?
 
-      # Determine position type from position_direction or tracker side
-      # position_direction can be :bullish/:bearish or 'long_ce'/'long_pe'
-      is_ce = ce_position?
-
-      # For CE (long_ce): SL is below entry, price going down hits SL
-      # For PE (long_pe): SL is above entry, price going up hits SL
-      is_ce ? (current_ltp <= sl_price) : (current_ltp >= sl_price)
+      # For long positions (CE or PE option buyers), LTP dropping to/below SL triggers exit.
+      # For short positions (option sellers/writers), LTP rising to/above SL triggers exit.
+      short_position? ? (current_ltp >= sl_price) : (current_ltp <= sl_price)
     end
 
     def tp_hit?
       return false unless tp_price && current_ltp&.positive?
 
-      # Determine position type
-      is_ce = ce_position?
-
-      # For CE (long_ce): TP is above entry, price going up hits TP
-      # For PE (long_pe): TP is below entry, price going down hits TP
-      is_ce ? (current_ltp >= tp_price) : (current_ltp <= tp_price)
+      # For long positions (CE or PE option buyers), LTP rising to/above TP triggers exit.
+      # For short positions (option sellers/writers), LTP dropping to/below TP triggers exit.
+      short_position? ? (current_ltp <= tp_price) : (current_ltp >= tp_price)
     end
 
     # Determine if this is a CE (Call) position
     def ce_position?
-      # Check position_direction (can be :bullish/:bearish or 'long_ce'/'long_pe')
       dir = position_direction.to_s.downcase
-      return true if %w[long_ce bullish].include?(dir)
-      return false if %w[long_pe bearish].include?(dir)
+      return true if %w[long_ce bullish ce].include?(dir)
+      return false if %w[long_pe bearish pe].include?(dir)
 
-      # Fallback: default to CE if unknown (safer default for long positions)
-      true
+      false
     end
 
     def update_ltp(ltp, timestamp: Time.current)
@@ -75,34 +69,29 @@ module Positions
 
       # Maintain price history (last 10 ticks) for velocity/acceleration
       self.price_history ||= []
-      self.price_history << ltp.to_f
-      self.price_history.shift if self.price_history.size > 10
+      price_history << ltp.to_f
+      price_history.shift if price_history.size > 10
 
       recalculate_pnl
     end
 
-    # rubocop:disable Metrics/AbcSize
+    # rubocop:disable-next Metrics/AbcSize
     def recalculate_pnl
       return unless entry_price&.positive? && current_ltp&.positive? && quantity&.positive?
 
-      gross_pnl = (current_ltp - entry_price) * quantity
-      # Deduct broker fees (₹20 per order)
-      self.pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: false)
-
-      # Calculate Net pnl_pct as decimal (0.0573 for 5.73%)
-      invested_capital = entry_price * quantity
-      self.pnl_pct = invested_capital.positive? ? (pnl / invested_capital) : 0.0
+      self.pnl = (current_ltp - entry_price) * quantity
+      # Calculate pnl_pct as decimal (0.0573 for 5.73%) for consistent storage (matches Redis format)
+      self.pnl_pct = entry_price.positive? ? ((current_ltp - entry_price) / entry_price) : 0.0
 
       # Update HWM
       self.high_water_mark = pnl if high_water_mark.nil? || pnl > high_water_mark
 
-      # Update peak profit percentage
+      # Update peak profit percentage (highest profit % achieved)
       self.peak_profit_pct = pnl_pct if peak_profit_pct.nil? || pnl_pct > peak_profit_pct
 
-      # Update min profit percentage (MAE)
+      # Update min profit percentage (lowest profit % achieved - MAE)
       self.min_profit_pct = pnl_pct if min_profit_pct.nil? || pnl_pct < min_profit_pct
     end
-    # rubocop:enable Metrics/AbcSize
 
     def [](key)
       public_send(key)
@@ -116,11 +105,9 @@ module Positions
   # Ultra-fast in-memory position cache for NEMESIS V3
   # Mirrors Redis PnL + RedisTickCache for sub-millisecond lookups
   # Subscribes directly to MarketFeedHub callbacks for real-time updates
-  # rubocop:disable Metrics/ClassLength
+  # rubocop:disable-next Metrics/ClassLength
   class ActiveCache
     include Singleton
-
-    PositionData = Positions::PositionData
 
     def initialize
       @cache = Concurrent::Map.new # composite_key => PositionData
@@ -185,7 +172,7 @@ module Positions
     # @param sl_price [Float, nil] Stop loss price
     # @param tp_price [Float, nil] Take profit price
     # @return [PositionData] The cached position data
-    # rubocop:disable Metrics/AbcSize
+    # rubocop:disable-next Metrics/AbcSize
     def add_position(tracker:, sl_price: nil, tp_price: nil)
       return nil unless tracker.active?
       return nil unless tracker.entry_price&.positive?
@@ -214,6 +201,7 @@ module Positions
         trailing_stop_price: tracker.trailing_stop_price&.to_f,
         sl_offset_pct: nil,
         position_direction: position_direction,
+        position_side: tracker.position_side.to_s.downcase.presence || 'long',
         index_key: index_key,
         underlying_segment: nil,
         underlying_security_id: nil,
@@ -250,7 +238,6 @@ module Positions
       Rails.logger.error("[Positions::ActiveCache] Failed to add position #{tracker.id}: #{e.class} - #{e.message}")
       nil
     end
-    # rubocop:enable Metrics/AbcSize
 
     # Remove a position from the cache
     # @param tracker_id [Integer] PositionTracker ID
@@ -315,7 +302,7 @@ module Positions
     # @param tracker_id [Integer] PositionTracker ID
     # @param updates [Hash] Hash of updates (sl_price, tp_price, breakeven_locked, etc.)
     # @return [Boolean] True if updated
-    # rubocop:disable Metrics/AbcSize
+    # rubocop:disable-next Metrics/AbcSize
     def update_position(tracker_id, **updates)
       position = get_by_tracker_id(tracker_id)
       return false unless position
@@ -341,11 +328,58 @@ module Positions
       Rails.logger.error("[Positions::ActiveCache] Failed to update position #{tracker_id}: #{e.class} - #{e.message}")
       false
     end
-    # rubocop:enable Metrics/AbcSize
+
+    # Build or refresh the cached PositionData for a tracker.
+    #
+    # ExitEnforcement calls this when it needs PositionData for a tracker
+    # (kwargs are its tracker-derived fallback: latest LTP, peak profit and
+    # PnL percentage). Semantics:
+    #   * cached row that has seen a live tick -> returned untouched (its
+    #     LTP/peak/PnL state is tick-driven and always fresher than the
+    #     caller's fallback — a cold-start fallback must never clobber it);
+    #   * missing row -> built from the tracker record;
+    #   * cold row (never saw a tick) -> seeded with the caller's values so
+    #     the enforcement pass can still evaluate the position (peaks stay
+    #     monotonic — never lowered).
+    #
+    # NOTE: this method was referenced by ExitEnforcement since 81eabbbd
+    # (2026-08-28) but never implemented — the NoMethodError was silently
+    # rescued, so the institutional trailing path never executed. The
+    # specs surfaced the gap; do not remove the method again.
+    #
+    # @param tracker [PositionTracker] live tracker record
+    # @param current_ltp [Float, nil] latest LTP when known
+    # @param peak_profit_pct [Float, nil] peak profit percentage (decimal)
+    # @param pnl_pct [Float, nil] current PnL percentage (decimal)
+    # @return [PositionData, nil] the cached row, or nil when the tracker
+    #   cannot be cached (inactive / missing entry price)
+    def upsert_from_tracker(tracker, current_ltp: nil, peak_profit_pct: nil, pnl_pct: nil)
+      position = get_by_tracker_id(tracker.id)
+      if position
+        return position if position.current_ltp.to_f.positive?
+      else
+        position = add_position(tracker: tracker)
+        return nil unless position
+      end
+
+      updates = {}
+      updates[:current_ltp] = current_ltp.to_f if current_ltp.to_f.positive?
+      updates[:pnl_pct] = pnl_pct.to_f if pnl_pct
+      if peak_profit_pct && peak_profit_pct.to_f > position.peak_profit_pct.to_f
+        updates[:peak_profit_pct] = peak_profit_pct.to_f
+      end
+      update_position(tracker.id, **updates) unless updates.empty?
+
+      position
+    rescue StandardError => e
+      @stats[:errors] += 1
+      Rails.logger.error("[Positions::ActiveCache] Failed to upsert position #{tracker.id}: #{e.class} - #{e.message}")
+      nil
+    end
 
     # Bulk load positions from database
     # @return [Integer] Number of positions loaded
-    # rubocop:disable Metrics/AbcSize
+    # rubocop:disable-next Metrics/AbcSize
     def bulk_load!
       count = 0
       # Use cached active positions to avoid redundant query
@@ -370,11 +404,10 @@ module Positions
       Rails.logger.error("[Positions::ActiveCache] Bulk load failed: #{e.class} - #{e.message}")
       0
     end
-    # rubocop:enable Metrics/AbcSize
 
     # Clear all positions
     # @return [Boolean]
-    # rubocop:disable Naming/PredicateMethod
+    # rubocop:disable-next Naming/PredicateMethod
     def clear
       @cache.clear
       @tracker_index.clear
@@ -383,7 +416,6 @@ module Positions
       Rails.logger.info('[Positions::ActiveCache] Cleared all positions')
       true
     end
-    # rubocop:enable Naming/PredicateMethod
 
     # Get statistics
     # @return [Hash]
@@ -399,7 +431,7 @@ module Positions
 
     # Handle tick from MarketFeedHub (replaces EventBus LTP event handling)
     # @param tick [Hash] Raw tick data from MarketFeedHub
-    # rubocop:disable Metrics/AbcSize
+    # rubocop:disable-next Metrics/AbcSize
     def handle_tick(tick)
       return unless tick.is_a?(Hash)
       return unless tick[:ltp].to_f.positive?
@@ -423,7 +455,6 @@ module Positions
       Rails.logger.error("[Positions::ActiveCache] Error handling tick: #{e.class} - #{e.message}")
       Rails.logger.debug { e.backtrace.first(5).join("\n") }
     end
-    # rubocop:enable Metrics/AbcSize
 
     # Check for SL/TP hits and emit events
     # @param position [PositionData] Position data
@@ -495,7 +526,7 @@ module Positions
     # NEW (Step 12): Reload peak profit percentages from Redis for all active positions
     # Called on startup to restore peak values after restart
     # @return [Integer] Number of peaks reloaded
-    # rubocop:disable Metrics/AbcSize
+    # rubocop:disable-next Metrics/AbcSize
     def reload_peaks
       return 0 unless @redis
 
@@ -532,7 +563,6 @@ module Positions
       Rails.logger.error("[ActiveCache] Failed to reload peaks: #{e.class} - #{e.message}")
       0
     end
-    # rubocop:enable Metrics/AbcSize
 
     def auto_subscribe_enabled?
       feature_flags[:enable_auto_subscribe_unsubscribe] == true
@@ -558,7 +588,7 @@ module Positions
       Live::MarketFeedHub.instance
     end
 
-    # rubocop:disable Metrics/AbcSize
+    # rubocop:disable-next Metrics/AbcSize
     def attach_underlying_metadata(position_data, tracker)
       meta = Positions::MetadataResolver.underlying_meta(tracker, index_key: position_data.index_key)
       return unless meta
@@ -576,7 +606,5 @@ module Positions
     rescue StandardError => e
       Rails.logger.error("[Positions::ActiveCache] Failed to attach underlying metadata for tracker #{tracker.id}: #{e.class} - #{e.message}")
     end
-    # rubocop:enable Metrics/AbcSize
   end
-  # rubocop:enable Metrics/ClassLength
 end

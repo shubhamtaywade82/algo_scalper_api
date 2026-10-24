@@ -12,14 +12,14 @@ module Research
 
       # Slice candles up to entry_idx so we have zero future knowledge
       known_candles = candles.first(entry_idx + 1)
-      
+
       mock_day = day_data.merge(underlying_candles: known_candles)
-      
+
       # If we are under 30 minutes of data, we classify with what is available
       if known_candles.size < 30
         open_price = known_candles.first[:open]
         close_now = known_candles.last[:close]
-        
+
         # Simple predictive heuristics for early drive detection
         consecutive_direction = known_candles.last(3).all? { |c| c[:close] > c[:open] }
         if consecutive_direction && close_now > open_price + 20
@@ -45,8 +45,8 @@ module Research
       next_15m = first_30m.drop(15)
 
       open_price = first_30m.first[:open]
-      high_30m = first_30m.map { |c| c[:high] }.max
-      low_30m = first_30m.map { |c| c[:low] }.min
+      high_30m = first_30m.pluck(:high).max
+      low_30m = first_30m.pluck(:low).min
       close_30m = first_30m.last[:close]
 
       # Gap Context
@@ -62,10 +62,10 @@ module Research
       first_15m_red = first_15m.count { |c| c[:close] < c[:open] }
 
       # 1. Gap and Go vs Gap Fill
-      if gap_pct.abs > 0.4 && prev_close > 0
+      if gap_pct.abs > 0.4 && prev_close.positive?
         # Check if gap was filled in first 30m
         gap_filled = first_30m.any? do |c|
-          gap_pct > 0 ? (c[:low] <= prev_close) : (c[:high] >= prev_close)
+          gap_pct.positive? ? (c[:low] <= prev_close) : (c[:high] >= prev_close)
         end
         return gap_filled ? :gap_fill : :gap_and_go
       end
@@ -93,8 +93,8 @@ module Research
       return :open_rejection_reverse if breached_high_then_reversed || breached_low_then_reversed
 
       # 6. Failed Auction (Fakeout breakout outside 15m range)
-      or_high_15m = first_15m.map { |c| c[:high] }.max
-      or_low_15m = first_15m.map { |c| c[:low] }.min
+      or_high_15m = first_15m.pluck(:high).max
+      or_low_15m = first_15m.pluck(:low).min
       breached_high_then_failed = next_15m.any? { |c| c[:close] > or_high_15m } && close_30m < or_high_15m
       breached_low_then_failed = next_15m.any? { |c| c[:close] < or_low_15m } && close_30m > or_low_15m
       return :failed_auction if breached_high_then_failed || breached_low_then_failed

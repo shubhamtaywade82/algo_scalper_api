@@ -13,19 +13,20 @@ class ClearCarriedOvernightPositionsJob < ApplicationJob
   def perform
     exit_engine = nil
     today_start = Time.zone.today.beginning_of_day
-    stale = PositionTracker.active.where(created_at: ...today_start).reject { |t| held_carry?(t) }
-    if stale.empty?
+    trackers = PositionTracker.active.where(created_at: ...today_start).to_a
+
+    if trackers.empty?
       Rails.logger.info('[ClearCarriedOvernightPositionsJob] No carried-overnight positions to clear')
       return
     end
 
-    Rails.logger.info("[ClearCarriedOvernightPositionsJob] Clearing #{stale.size} carried-overnight position(s)")
+    Rails.logger.info("[ClearCarriedOvernightPositionsJob] Clearing #{trackers.size} carried-overnight position(s)")
 
     router = TradingSystem::OrderRouter.new
     exit_engine = Live::ExitEngine.new(order_router: router)
     exit_engine.start
 
-    stale.each do |tracker|
+    trackers.each do |tracker|
       execute_exit_with_retry(exit_engine, tracker)
     end
   ensure
@@ -34,29 +35,19 @@ class ClearCarriedOvernightPositionsJob < ApplicationJob
 
   private
 
-  # Positional carries with carry still allowed (e.g. not yet expiry day) are
-  # intentionally held overnight — skip them. Once carry lapses they fall back in.
-  def held_carry?(tracker)
-    OptionsBuying::CarryPolicy.carry_still_valid?(tracker)
-  rescue StandardError => e
-    Rails.logger.warn("[ClearCarriedOvernightPositionsJob] carry check #{e.class} - #{e.message}")
-    false
-  end
-
   def execute_exit_with_retry(exit_engine, tracker)
     result = exit_engine.execute_exit(tracker, REASON)
 
     if result[:reason] == 'exit_already_requested'
-      tracker.with_lock do
-        tracker.reload
-        unless tracker.active? && tracker.exit_requested_at.present?
-          return
-        end
+      tracker.reload
+      return unless tracker.active? && tracker.exit_requested_at.present?
 
-        Rails.logger.info("[ClearCarriedOvernightPositionsJob] #{tracker.order_no} stuck; clearing intent and retrying")
-        # Intentional: bypass validations/callbacks for a narrow BTST clear retry path.
-        tracker.update_columns(exit_requested_at: nil, exit_sent_at: nil, exit_coid: nil, updated_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
-      end
+      Rails.logger.info("[ClearCarriedOvernightPositionsJob] #{tracker.order_no} stuck; clearing intent and retrying")
+      # update_columns on purpose: recovery path for a wedged exit intent —
+      # must not run validations/callbacks (an update! here could re-trigger
+      # the very exit machinery being reset) and must not bump updated_at
+      # through the normal touch pipeline mid-retry.
+      tracker.update_columns(exit_requested_at: nil, exit_sent_at: nil, exit_coid: nil, updated_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
       tracker.reload
       result = exit_engine.execute_exit(tracker, REASON)
     end

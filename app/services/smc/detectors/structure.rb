@@ -85,14 +85,17 @@ module Smc
       private
 
       def detect_swings
+        candles = @series.respond_to?(:candles) ? @series.candles : []
+        return [] if candles.blank?
+
         # Use a 100-candle lookback for swing detection
-        lookback_window = [0, @series.candles.size - 100].max
-        @series.candles[lookback_window..].each_with_index.filter_map do |_candle, i|
+        lookback_window = [0, candles.size - 100].max
+        candles[lookback_window..].each_with_index.filter_map do |_candle, i|
           absolute_index = lookback_window + i
           if @series.swing_high?(absolute_index, @lookback)
-            { type: :high, price: @series.candles[absolute_index].high, index: absolute_index }
+            { type: :high, price: candles[absolute_index].high, index: absolute_index }
           elsif @series.swing_low?(absolute_index, @lookback)
-            { type: :low, price: @series.candles[absolute_index].low, index: absolute_index }
+            { type: :low, price: candles[absolute_index].low, index: absolute_index }
           end
         end
       end
@@ -108,11 +111,10 @@ module Smc
         max_i = arr.size - 1
 
         if max_i >= min_i
-          reversed_swings = swings.reverse
           (min_i..max_i).each do |i|
             close = arr[i].close
-            last_high = reversed_swings.find { |s| s[:type] == :high && s[:index] + @lookback <= i }
-            last_low = reversed_swings.find { |s| s[:type] == :low && s[:index] + @lookback <= i }
+            last_high = swings.reverse.find { |s| s[:type] == :high && s[:index] + @lookback <= i }
+            last_low = swings.reverse.find { |s| s[:type] == :low && s[:index] + @lookback <= i }
             next unless last_high && last_low
 
             if close > last_high[:price]

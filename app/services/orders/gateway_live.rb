@@ -1,13 +1,14 @@
 # frozen_string_literal: true
 
-require "timeout"
-require "net/http"
+require 'timeout'
+require 'net/http'
+require 'digest'
 
 module Orders
   class GatewayLive < Orders::Gateway
-    RETRY_COUNT = 3
+    RETRY_COUNT   = 3
     RETRY_BACKOFF = 0.25
-    API_TIMEOUT = 8
+    API_TIMEOUT   = 8
 
     # ------------ EXIT -----------------
     # Places an exit market order for the tracker.
@@ -15,7 +16,12 @@ module Orders
     # @param client_order_id [String, nil] deterministic idempotency key for retries
     # @return [Hash] normalized result with :success and optional :order_id/:status
     def exit_market(tracker, client_order_id: nil)
-      coid = client_order_id.presence || generate_client_order_id("EXIT", tracker.security_id)
+      # Prefer a deterministic id over a fresh random one: Live::ExitEngine (the canonical
+      # exit path) always supplies tracker.exit_coid before reaching here, but a caller
+      # that retries this method directly (bypassing ExitEngine) must not mint a new
+      # random id each attempt — that defeats the broker's own correlation-id dedup and
+      # risks a duplicate exit order if an earlier attempt actually reached the broker.
+      coid = client_order_id.presence || tracker.exit_coid.presence || deterministic_exit_coid(tracker)
 
       order = Orders::Placer.exit_position!(
         seg: tracker.segment,
@@ -29,53 +35,10 @@ module Orders
     # ------------ ENTRY (BUY/SELL) -----
     def place_market(side:, segment:, security_id:, qty:, meta: {})
       validate_side!(side)
-      if side.to_s.downcase == "buy"
-        Orders::LimitChaser.place_and_chase(
-          side: side,
-          segment: segment,
-          security_id: security_id,
-          qty: qty,
-          meta: meta,
-          gateway: self
-        )
-      else
-        place_market_direct(side: side, segment: segment, security_id: security_id, qty: qty, meta: meta)
-      end
-    end
-
-    # IOC limit order — fills immediately or cancels (thin-book fallback)
-    def place_ioc_limit(side:, segment:, security_id:, qty:, price:, meta: {})
-      validate_side!(side)
-      coid = meta[:client_order_id] || generate_client_order_id("IOC", security_id)
-
-      with_retries do
-        if side.to_s.downcase == "buy"
-          Orders::Placer.buy_ioc_limit!(
-            seg: segment,
-            sid: security_id,
-            qty: qty,
-            price: price,
-            client_order_id: coid,
-            product_type: meta[:product_type]
-          )
-        else
-          Orders::Placer.sell_ioc_limit!(
-            seg: segment,
-            sid: security_id,
-            qty: qty,
-            price: price,
-            client_order_id: coid,
-            product_type: meta[:product_type]
-          )
-        end
-      end
-    end
-
-    def place_market_direct(side:, segment:, security_id:, qty:, meta: {})
       coid = meta[:client_order_id] || generate_client_order_id(side, security_id)
 
       with_retries do
-        if side.to_s.downcase == "buy"
+        if side.to_s.downcase == 'buy'
           Orders::Placer.buy_market!(
             seg: segment,
             sid: security_id,
@@ -122,10 +85,19 @@ module Orders
     def cancel_order(order_id)
       with_retries do
         order = DhanHQ::Models::Order.find(order_id)
-        order.cancel
+        order.cancel!
       end
     rescue StandardError => e
       Rails.logger.error("[GatewayLive] cancel_order failed for #{order_id}: #{e.class} - #{e.message}")
+      raise
+    end
+
+    # PRD §32: Modify outstanding order. No blind retry per §42.
+    def modify_order(order_id, params = {})
+      order = DhanHQ::Models::Order.find(order_id)
+      order.modify!(params)
+    rescue StandardError => e
+      Rails.logger.error("[GatewayLive] modify_order failed for #{order_id}: #{e.class} - #{e.message}")
       raise
     end
 
@@ -135,7 +107,7 @@ module Orders
       Orders::Placer.exit_position!(
         seg: segment,
         sid: security_id,
-        client_order_id: generate_client_order_id("EXIT", security_id)
+        client_order_id: deterministic_flat_coid(segment: segment, security_id: security_id)
       )
     end
 
@@ -153,13 +125,13 @@ module Orders
       ltp = tick&.ltp
 
       upnl = if entry_price && ltp && qty != 0
-        (BigDecimal(ltp.to_s) - entry_price) * qty
+               (BigDecimal(ltp.to_s) - entry_price) * qty
              else
-        BigDecimal(0)
+               BigDecimal(0)
              end
 
       product_type = pos.respond_to?(:product_type) ? pos.product_type : nil
-      position_type = pos.respond_to?(:position_type) ? pos.position_type : "LONG"
+      position_type = pos.respond_to?(:position_type) ? pos.position_type : 'LONG'
       trading_symbol = pos.respond_to?(:trading_symbol) ? pos.trading_symbol : nil
 
       {
@@ -172,7 +144,7 @@ module Orders
         exchange_segment: segment.to_s,
         position_type: position_type,
         trading_symbol: trading_symbol,
-        status: "active"
+        status: 'active'
       }
     rescue StandardError => e
       Rails.logger.error("[GatewayLive] position failed: #{e.message}")
@@ -182,7 +154,7 @@ module Orders
     private
 
     def validate_side!(side)
-      raise "invalid side" unless %w[buy sell].include?(side.to_s)
+      raise 'invalid side' unless %w[buy sell].include?(side.to_s)
     end
 
     def with_retries
@@ -213,8 +185,24 @@ module Orders
 
     def generate_client_order_id(prefix, sid)
       # Generate unique client order ID with random component to prevent collisions
-      # Format: SCALPER_{prefix}_{random} (DhanHQ 2.7.0 convention, max 30 chars)
-      "SCALPER_#{prefix}_#{sid}_#{SecureRandom.hex(4)}"
+      # Format: AS-{prefix}-{security_id}-{timestamp}-{random}
+      "AS-#{prefix}-#{sid}-#{Time.current.to_i}-#{SecureRandom.hex(2)}"
+    end
+
+    # Same scheme as Live::ExitEngine#deterministic_exit_coid — kept identical so a
+    # retry of this method (whether by this same call or a separate one for the same
+    # tracker) reuses the same id instead of minting a new one the broker can't dedupe.
+    def deterministic_exit_coid(tracker)
+      seed = "exit-#{tracker.id}-#{tracker.order_no}-#{tracker.security_id}"
+      "AS-EXIT-#{Digest::SHA256.hexdigest(seed)[0, 20]}"
+    end
+
+    # flat_position has no tracker to key off, so this ties the id to (segment,
+    # security_id, day) instead — deterministic within a day (retries dedupe) without
+    # permanently colliding across separate days' positions in the same instrument.
+    def deterministic_flat_coid(segment:, security_id:)
+      seed = "flat-#{segment}-#{security_id}-#{Time.current.to_date}"
+      "AS-FLAT-#{Digest::SHA256.hexdigest(seed)[0, 20]}"
     end
 
     def normalize_exit_response(order, client_order_id:)
@@ -229,7 +217,7 @@ module Orders
 
       return { success: true, status: :accepted, order_id: extract_order_id(order), client_order_id: client_order_id } if order.present?
 
-      { success: false, status: :failed, error: "exit failed", client_order_id: client_order_id }
+      { success: false, status: :failed, error: 'exit failed', client_order_id: client_order_id }
     end
 
     def already_closed_or_duplicate?(order)
@@ -237,18 +225,18 @@ module Orders
       # 'position not found' and 'duplicate'; re-verify these tokens on broker API changes.
       return false unless order.is_a?(Hash)
 
-      code = (order[:error_code] || order["error_code"]).to_s.downcase
-      message = (order[:message] || order["message"] || order[:error] || order["error"]).to_s.downcase
+      code = (order[:error_code] || order['error_code']).to_s.downcase
+      message = (order[:message] || order['message'] || order[:error] || order['error']).to_s.downcase
 
       [code, message].any? do |value|
-        value.include?("already") || value.include?("closed") ||
-          value.include?("position not found") || value.include?("duplicate")
+        value.include?('already') || value.include?('closed') ||
+          value.include?('position not found') || value.include?('duplicate')
       end
     end
 
     def extract_order_id(order)
       return order.order_id if order.respond_to?(:order_id)
-      return order[:order_id] || order["order_id"] if order.is_a?(Hash)
+      return order[:order_id] || order['order_id'] if order.is_a?(Hash)
 
       nil
     end

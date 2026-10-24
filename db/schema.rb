@@ -10,9 +10,25 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_13_000004) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "agent_decision_logs", force: :cascade do |t|
+    t.string "agent_name", null: false
+    t.string "authority_level", default: "advisor", null: false
+    t.decimal "confidence", precision: 5, scale: 4
+    t.datetime "created_at", null: false
+    t.string "decision_type", null: false
+    t.text "error"
+    t.jsonb "input_context", default: {}
+    t.jsonb "output", default: {}
+    t.string "published_event"
+    t.datetime "updated_at", null: false
+    t.index ["agent_name", "created_at"], name: "index_agent_decision_logs_on_agent_name_and_created_at"
+    t.index ["agent_name"], name: "index_agent_decision_logs_on_agent_name"
+    t.index ["created_at"], name: "index_agent_decision_logs_on_created_at"
+  end
 
   create_table "algo_config_change_logs", force: :cascade do |t|
     t.string "actor"
@@ -42,6 +58,39 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.datetime "updated_at", null: false
     t.index ["index_key", "alpha_source", "created_at"], name: "idx_on_index_key_alpha_source_created_at_2aa039ddff"
     t.index ["status", "created_at"], name: "index_alpha_signals_on_status_and_created_at"
+  end
+
+  create_table "audit_logs", force: :cascade do |t|
+    t.string "actor"
+    t.datetime "created_at", null: false
+    t.string "event_type", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_at"], name: "index_audit_logs_on_created_at"
+    t.index ["event_type"], name: "index_audit_logs_on_event_type"
+  end
+
+  create_table "backtest_runs", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "days_back", default: 90, null: false
+    t.string "entry_interval", default: "5", null: false
+    t.text "error_message"
+    t.datetime "finished_at"
+    t.decimal "max_drawdown", precision: 12, scale: 4
+    t.jsonb "params", default: {}, null: false
+    t.jsonb "results", default: {}, null: false
+    t.datetime "started_at"
+    t.string "status", default: "pending", null: false
+    t.bigint "strategy_version_id"
+    t.string "symbol", null: false
+    t.decimal "total_pnl", precision: 12, scale: 4
+    t.integer "total_trades"
+    t.string "trading_type", default: "options", null: false
+    t.datetime "updated_at", null: false
+    t.decimal "win_rate", precision: 8, scale: 4
+    t.index ["created_at"], name: "index_backtest_runs_on_created_at"
+    t.index ["status"], name: "index_backtest_runs_on_status"
+    t.index ["strategy_version_id"], name: "index_backtest_runs_on_strategy_version_id"
   end
 
   create_table "best_indicator_params", force: :cascade do |t|
@@ -94,6 +143,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.bigint "volume", default: 0
     t.index ["instrument_key", "timeframe", "ts"], name: "index_candles_on_key_timeframe_ts", unique: true
     t.index ["security_id", "timeframe", "ts"], name: "index_candles_on_security_timeframe_ts"
+  end
+
+  create_table "data_quality_daily_metrics", force: :cascade do |t|
+    t.decimal "candle_alignment_accuracy_pct", precision: 8, scale: 4
+    t.datetime "created_at", null: false
+    t.integer "expired_instrument_count", default: 0, null: false
+    t.integer "fill_reconciliation_checked_count", default: 0, null: false
+    t.integer "fill_reconciliation_mismatch_count", default: 0, null: false
+    t.decimal "instrument_mapping_accuracy_pct", precision: 8, scale: 4
+    t.jsonb "meta", default: {}, null: false
+    t.integer "missing_candle_count", default: 0, null: false
+    t.decimal "tick_staleness_rate_pct", precision: 8, scale: 4
+    t.date "trading_date", null: false
+    t.datetime "updated_at", null: false
+    t.index ["trading_date"], name: "index_data_quality_daily_metrics_on_trading_date", unique: true
   end
 
   create_table "derivatives", force: :cascade do |t|
@@ -156,7 +220,36 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.index ["expiry_time"], name: "index_dhan_access_tokens_on_expiry_time"
   end
 
+  create_table "executions", force: :cascade do |t|
+    t.decimal "ask", precision: 12, scale: 4
+    t.decimal "bid", precision: 12, scale: 4
+    t.string "client_order_id"
+    t.datetime "created_at", null: false
+    t.decimal "fees", precision: 12, scale: 4, default: "0.0"
+    t.decimal "fill_price", precision: 12, scale: 4
+    t.datetime "filled_at"
+    t.bigint "instrument_id", null: false
+    t.jsonb "meta", default: {}
+    t.string "order_no", null: false
+    t.bigint "position_tracker_id"
+    t.string "purpose", default: "entry", null: false
+    t.integer "quantity", null: false
+    t.decimal "requested_price", precision: 12, scale: 4
+    t.string "side", null: false
+    t.decimal "slippage", precision: 12, scale: 4
+    t.string "source", default: "paper", null: false
+    t.string "status", default: "filled", null: false
+    t.datetime "updated_at", null: false
+    t.index ["instrument_id", "filled_at"], name: "index_executions_on_instrument_id_and_filled_at"
+    t.index ["instrument_id"], name: "index_executions_on_instrument_id"
+    t.index ["order_no"], name: "index_executions_on_order_no"
+    t.index ["position_tracker_id", "purpose"], name: "index_executions_on_position_tracker_id_and_purpose"
+    t.index ["position_tracker_id"], name: "index_executions_on_position_tracker_id"
+    t.index ["source", "status"], name: "index_executions_on_source_and_status"
+  end
+
   create_table "instruments", force: :cascade do |t|
+    t.boolean "active"
     t.string "asm_gsm_category"
     t.string "asm_gsm_flag"
     t.string "bracket_flag"
@@ -169,8 +262,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.decimal "buy_co_sl_range_max_perc", precision: 8, scale: 2
     t.decimal "buy_co_sl_range_min_perc", precision: 8, scale: 2
     t.string "buy_sell_indicator"
+    t.decimal "contract_multiplier"
     t.string "cover_flag"
     t.datetime "created_at", null: false
+    t.string "custom_symbol"
     t.string "display_name"
     t.string "exchange", null: false
     t.date "expiry_date"
@@ -192,16 +287,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.decimal "sell_co_sl_range_max_perc", precision: 8, scale: 2
     t.decimal "sell_co_sl_range_min_perc", precision: 8, scale: 2
     t.string "series"
+    t.string "settlement_type", default: "cash", null: false
     t.decimal "strike_price", precision: 15, scale: 5
     t.string "symbol_name"
     t.decimal "tick_size"
+    t.boolean "tradable"
+    t.bigint "underlying_instrument_id"
     t.string "underlying_security_id"
     t.string "underlying_symbol"
     t.datetime "updated_at", null: false
+    t.index ["exchange", "segment", "security_id"], name: "index_instruments_on_exchange_segment_security_id_unique", unique: true
+    t.index ["exchange", "segment", "underlying_security_id", "expiry_date", "strike_price", "option_type"], name: "index_instruments_on_option_contract_identity", unique: true, where: "((option_type IS NOT NULL) AND (underlying_security_id IS NOT NULL) AND (expiry_date IS NOT NULL))"
+    t.index ["exchange", "segment", "underlying_security_id", "expiry_date"], name: "index_instruments_on_future_contract_identity", unique: true, where: "((option_type IS NULL) AND (expiry_date IS NOT NULL) AND (underlying_security_id IS NOT NULL) AND ((instrument_type)::text ~~ 'FUT%'::text))"
     t.index ["instrument_code"], name: "index_instruments_on_instrument_code"
     t.index ["security_id", "segment"], name: "index_instruments_on_security_id_and_segment"
-    t.index ["security_id", "symbol_name", "exchange", "segment"], name: "index_instruments_unique", unique: true
+    t.index ["settlement_type"], name: "index_instruments_on_settlement_type"
     t.index ["symbol_name"], name: "index_instruments_on_symbol_name"
+    t.index ["underlying_instrument_id"], name: "index_instruments_on_underlying_instrument_id"
     t.index ["underlying_symbol", "expiry_date"], name: "index_instruments_on_underlying_symbol_and_expiry_date", where: "(underlying_symbol IS NOT NULL)"
   end
 
@@ -257,6 +359,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.index ["ledger_journal_entry_id"], name: "index_ledger_postings_on_ledger_journal_entry_id"
   end
 
+  create_table "leg_groups", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.date "expiry", null: false
+    t.string "group_id", null: false
+    t.bigint "instrument_id"
+    t.jsonb "meta", default: {}
+    t.integer "quantity", default: 0, null: false
+    t.string "status", default: "pending", null: false
+    t.string "strategy_type", null: false
+    t.string "underlying_symbol", null: false
+    t.datetime "updated_at", null: false
+    t.index ["group_id"], name: "index_leg_groups_on_group_id", unique: true
+    t.index ["instrument_id"], name: "index_leg_groups_on_instrument_id"
+    t.index ["status", "strategy_type"], name: "index_leg_groups_on_status_and_strategy_type"
+    t.index ["underlying_symbol"], name: "index_leg_groups_on_underlying_symbol"
+  end
+
   create_table "market_holidays", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "exchange", limit: 8, null: false
@@ -281,6 +400,36 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.index ["occurred_at"], name: "index_options_buying_signal_events_on_occurred_at"
   end
 
+  create_table "order_intents", force: :cascade do |t|
+    t.string "aasm_state", default: "created", null: false
+    t.string "correlation_id"
+    t.datetime "created_at", null: false
+    t.bigint "instrument_id", null: false
+    t.decimal "limit_price", precision: 12, scale: 4
+    t.integer "lock_version", default: 0, null: false
+    t.boolean "margin_approved", default: false, null: false
+    t.jsonb "meta", default: {}, null: false
+    t.string "order_type", default: "MARKET", null: false
+    t.string "product_type", default: "INTRADAY", null: false
+    t.integer "quantity", null: false
+    t.string "rejection_reason"
+    t.boolean "risk_approved", default: false, null: false
+    t.string "side", null: false
+    t.string "status", default: "created", null: false
+    t.decimal "stop_loss", precision: 12, scale: 4
+    t.string "strategy_name", null: false
+    t.decimal "target", precision: 12, scale: 4
+    t.decimal "trigger_price", precision: 12, scale: 4
+    t.datetime "updated_at", null: false
+    t.string "validity", default: "DAY", null: false
+    t.index ["aasm_state"], name: "index_order_intents_on_aasm_state"
+    t.index ["correlation_id"], name: "index_order_intents_on_correlation_id", unique: true, where: "(correlation_id IS NOT NULL)"
+    t.index ["instrument_id", "status"], name: "index_order_intents_on_instrument_id_and_status"
+    t.index ["instrument_id"], name: "index_order_intents_on_instrument_id"
+    t.index ["status"], name: "index_order_intents_on_status"
+    t.index ["strategy_name"], name: "index_order_intents_on_strategy_name"
+  end
+
   create_table "paper_daily_wallets", force: :cascade do |t|
     t.decimal "closing_cash", precision: 18, scale: 2, default: "0.0", null: false
     t.datetime "created_at", null: false
@@ -290,12 +439,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.decimal "max_equity", precision: 18, scale: 2, default: "0.0", null: false
     t.jsonb "meta", default: {}, null: false
     t.decimal "min_equity", precision: 18, scale: 2, default: "0.0", null: false
+    t.string "mode", default: "paper", null: false
     t.decimal "net_pnl", precision: 18, scale: 2, default: "0.0", null: false
     t.decimal "opening_cash", precision: 18, scale: 2, default: "0.0", null: false
     t.integer "trades_count", default: 0, null: false
     t.date "trading_date", null: false
     t.datetime "updated_at", null: false
-    t.index ["trading_date"], name: "index_paper_daily_wallets_on_trading_date", unique: true
+    t.index ["trading_date", "mode"], name: "index_paper_daily_wallets_on_trading_date_and_mode", unique: true
   end
 
   create_table "paper_fills_logs", force: :cascade do |t|
@@ -321,6 +471,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.text "error_message"
     t.decimal "executed_price", precision: 15, scale: 2
     t.bigint "instrument_id", null: false
+    t.integer "lock_version", default: 0, null: false
     t.jsonb "meta", default: {}
     t.string "order_no", null: false
     t.string "order_type", default: "MARKET"
@@ -430,6 +581,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.datetime "carry_marked_at"
     t.string "carry_mode"
     t.decimal "carry_roi_pct", precision: 8, scale: 4
+    t.decimal "charges_rupees", precision: 12, scale: 4
     t.string "client_order_id"
     t.string "continuation_body_position"
     t.datetime "created_at", null: false
@@ -467,11 +619,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.decimal "iv_percentile", precision: 8, scale: 4
     t.decimal "last_pnl_pct", precision: 8, scale: 4
     t.decimal "last_pnl_rupees", precision: 12, scale: 4
+    t.integer "leg_group_id"
+    t.integer "leg_index", default: 0
+    t.string "leg_role"
+    t.integer "lock_version", default: 0, null: false
     t.decimal "lowest_price", precision: 12, scale: 4
+    t.decimal "margin_required", precision: 12, scale: 2, default: "0.0"
     t.jsonb "meta", default: {}
     t.string "order_no", null: false
     t.boolean "paper", default: false, null: false
     t.datetime "peak_premium_at"
+    t.string "position_side", default: "long", null: false
+    t.decimal "premium_received", precision: 10, scale: 2, default: "0.0"
     t.decimal "premium_stop_price", precision: 12, scale: 4
     t.decimal "profit_floor_rupees", precision: 12, scale: 4
     t.datetime "profit_floor_set_at"
@@ -493,6 +652,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.string "symbol"
     t.string "time_from_bos_to_entry"
     t.string "trade_state"
+    t.string "trading_mode", default: "live", null: false
     t.decimal "trailing_stop_price", precision: 12, scale: 4
     t.datetime "updated_at", null: false
     t.datetime "validated_at"
@@ -511,8 +671,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.index ["exited_at", "status"], name: "index_position_trackers_on_exited_at_and_status"
     t.index ["index_key"], name: "index_position_trackers_on_index_key"
     t.index ["instrument_id"], name: "index_position_trackers_on_instrument_id"
+    t.index ["leg_group_id", "leg_index"], name: "index_position_trackers_on_leg_group_id_and_leg_index"
+    t.index ["leg_group_id"], name: "index_position_trackers_on_leg_group_id"
     t.index ["order_no"], name: "index_position_trackers_on_order_no", unique: true
     t.index ["paper"], name: "index_position_trackers_on_paper"
+    t.index ["position_side", "status"], name: "index_position_trackers_on_position_side_and_status"
     t.index ["security_id", "segment", "status"], name: "idx_trackers_on_sid_seg_status"
     t.index ["security_id", "segment"], name: "index_position_trackers_on_security_id_and_segment"
     t.index ["security_id", "status"], name: "index_position_trackers_on_security_id_and_status"
@@ -529,6 +692,40 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.string "ip_version"
     t.datetime "last_seen_at"
     t.datetime "updated_at", null: false
+  end
+
+  create_table "reconciliation_discrepancies", force: :cascade do |t|
+    t.string "broker_value"
+    t.datetime "created_at", null: false
+    t.string "entity_id"
+    t.string "entity_type", null: false
+    t.string "field_name", null: false
+    t.string "local_value"
+    t.text "notes"
+    t.bigint "reconciliation_run_id", null: false
+    t.string "resolution"
+    t.string "severity", default: "warning", null: false
+    t.datetime "updated_at", null: false
+    t.index ["entity_type"], name: "index_reconciliation_discrepancies_on_entity_type"
+    t.index ["reconciliation_run_id"], name: "index_reconciliation_discrepancies_on_reconciliation_run_id"
+    t.index ["severity"], name: "index_reconciliation_discrepancies_on_severity"
+  end
+
+  create_table "reconciliation_runs", force: :cascade do |t|
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.integer "discrepancies_found", default: 0, null: false
+    t.integer "funds_checked", default: 0, null: false
+    t.boolean "halted_trading", default: false, null: false
+    t.string "mode", default: "paper", null: false
+    t.integer "orders_checked", default: 0, null: false
+    t.integer "positions_checked", default: 0, null: false
+    t.datetime "started_at"
+    t.string "status", default: "running", null: false
+    t.jsonb "summary", default: {}, null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_at"], name: "index_reconciliation_runs_on_created_at"
+    t.index ["status"], name: "index_reconciliation_runs_on_status"
   end
 
   create_table "research_data_quality_audits", force: :cascade do |t|
@@ -828,6 +1025,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.index ["underlying_symbol", "signal_timestamp"], name: "index_research_signals_on_symbol_and_ts"
   end
 
+  create_table "risk_events", force: :cascade do |t|
+    t.string "action_taken"
+    t.jsonb "context", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.string "event_type", null: false
+    t.bigint "instrument_id"
+    t.bigint "position_tracker_id"
+    t.string "severity", default: "warning", null: false
+    t.string "source", null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_at"], name: "index_risk_events_on_created_at"
+    t.index ["event_type"], name: "index_risk_events_on_event_type"
+    t.index ["instrument_id"], name: "index_risk_events_on_instrument_id"
+    t.index ["position_tracker_id"], name: "index_risk_events_on_position_tracker_id"
+    t.index ["severity"], name: "index_risk_events_on_severity"
+  end
+
   create_table "ruby_llm_agents_execution_details", force: :cascade do |t|
     t.text "assistant_prompt"
     t.json "attempts", default: [], null: false
@@ -926,6 +1141,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.index ["correlation_id"], name: "index_smc_events_on_correlation_id"
     t.index ["payload"], name: "index_smc_events_on_payload", using: :gin
     t.index ["stream", "created_at"], name: "index_smc_events_on_stream_and_created_at"
+  end
+
+  create_table "solid_cable_messages", force: :cascade do |t|
+    t.binary "channel", null: false
+    t.bigint "channel_hash", null: false
+    t.datetime "created_at", null: false
+    t.binary "payload", null: false
+    t.index ["channel"], name: "index_solid_cable_messages_on_channel"
+    t.index ["channel_hash"], name: "index_solid_cable_messages_on_channel_hash"
+    t.index ["created_at"], name: "index_solid_cable_messages_on_created_at"
   end
 
   create_table "solid_queue_blocked_executions", force: :cascade do |t|
@@ -1053,6 +1278,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.datetime "created_at", null: false
     t.bigint "current_version_id"
     t.string "desired_status"
+    t.integer "lock_version", default: 0, null: false
     t.string "name", null: false
     t.string "slug", null: false
     t.string "status", default: "draft", null: false
@@ -1127,6 +1353,64 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.index ["position_tracker_id"], name: "index_trade_analytics_on_position_tracker_id"
   end
 
+  create_table "trade_journals", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.jsonb "entry_context", default: {}
+    t.decimal "entry_price", precision: 12, scale: 4, null: false
+    t.datetime "entry_time", null: false
+    t.jsonb "exit_context", default: {}
+    t.decimal "exit_price", precision: 12, scale: 4
+    t.string "exit_reason"
+    t.datetime "exit_time"
+    t.decimal "fees", precision: 12, scale: 4
+    t.decimal "gross_pnl", precision: 12, scale: 4
+    t.integer "hold_duration_seconds"
+    t.bigint "instrument_id", null: false
+    t.string "market_regime"
+    t.decimal "max_adverse_excursion", precision: 12, scale: 4
+    t.decimal "max_favorable_excursion", precision: 12, scale: 4
+    t.jsonb "meta", default: {}
+    t.decimal "net_pnl", precision: 12, scale: 4
+    t.text "notes"
+    t.boolean "paper", default: false, null: false
+    t.decimal "pnl_percent", precision: 8, scale: 4
+    t.bigint "position_tracker_id", null: false
+    t.integer "quantity", null: false
+    t.string "side", null: false
+    t.string "strategy_name"
+    t.datetime "updated_at", null: false
+    t.index ["created_at"], name: "index_trade_journals_on_created_at"
+    t.index ["instrument_id"], name: "index_trade_journals_on_instrument_id"
+    t.index ["paper", "created_at"], name: "index_trade_journals_on_paper_and_created_at"
+    t.index ["paper"], name: "index_trade_journals_on_paper"
+    t.index ["position_tracker_id"], name: "index_trade_journals_on_position_tracker_id"
+    t.index ["strategy_name"], name: "index_trade_journals_on_strategy_name"
+  end
+
+  create_table "trade_memories", force: :cascade do |t|
+    t.string "category", default: "general", null: false
+    t.decimal "confidence", precision: 3, scale: 2, default: "0.5"
+    t.datetime "created_at", null: false
+    t.decimal "entry_quality_score", precision: 5, scale: 2
+    t.decimal "exit_efficiency_pct", precision: 6, scale: 2
+    t.string "exit_reason"
+    t.text "lesson", null: false
+    t.decimal "pnl_rupees", precision: 12, scale: 4
+    t.bigint "position_tracker_id", null: false
+    t.string "regime_at_entry"
+    t.string "regime_at_exit"
+    t.string "strategy_name"
+    t.string "symbol"
+    t.bigint "trade_analytic_id"
+    t.datetime "updated_at", null: false
+    t.index ["category"], name: "index_trade_memories_on_category"
+    t.index ["position_tracker_id"], name: "index_trade_memories_on_position_tracker_id"
+    t.index ["position_tracker_id"], name: "index_trade_memories_on_tracker_uniq", unique: true
+    t.index ["strategy_name"], name: "index_trade_memories_on_strategy_name"
+    t.index ["symbol"], name: "index_trade_memories_on_symbol"
+    t.index ["trade_analytic_id"], name: "index_trade_memories_on_trade_analytic_id"
+  end
+
   create_table "trade_telemetry", force: :cascade do |t|
     t.integer "bos_age_at_entry"
     t.decimal "continuation_body_position", precision: 6, scale: 4
@@ -1173,7 +1457,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
   create_table "trading_strategies", force: :cascade do |t|
     t.string "author", default: "System"
     t.jsonb "backtest_results", default: {}
-    t.jsonb "checks", default: {"risk"=>"not_run", "logic"=>"not_run", "syntax"=>"not_run", "backtest"=>"not_run"}
+    t.jsonb "checks", default: {"risk" => "not_run", "logic" => "not_run", "syntax" => "not_run", "backtest" => "not_run"}
     t.text "code", default: ""
     t.datetime "created_at", null: false
     t.text "description"
@@ -1252,10 +1536,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
     t.index ["unit_type"], name: "index_woods_units_on_unit_type"
   end
 
+  add_foreign_key "backtest_runs", "strategy_versions"
   add_foreign_key "best_indicator_params", "instruments"
   add_foreign_key "derivatives", "instruments"
+  add_foreign_key "executions", "instruments"
+  add_foreign_key "executions", "position_trackers"
+  add_foreign_key "instruments", "instruments", column: "underlying_instrument_id", on_delete: :nullify
   add_foreign_key "ledger_postings", "ledger_accounts"
   add_foreign_key "ledger_postings", "ledger_journal_entries"
+  add_foreign_key "leg_groups", "instruments"
+  add_foreign_key "order_intents", "instruments"
   add_foreign_key "paper_orders", "instruments"
   add_foreign_key "paper_positions", "instruments"
   add_foreign_key "paper_positions", "paper_orders"
@@ -1263,8 +1553,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
   add_foreign_key "paper_trades", "paper_positions"
   add_foreign_key "position_meta_snapshots", "position_trackers"
   add_foreign_key "position_trackers", "instruments"
+  add_foreign_key "reconciliation_discrepancies", "reconciliation_runs"
   add_foreign_key "research_option_bars", "research_raw_fetches"
   add_foreign_key "research_option_candidates", "research_signals"
+  add_foreign_key "risk_events", "instruments"
+  add_foreign_key "risk_events", "position_trackers"
   add_foreign_key "ruby_llm_agents_execution_details", "ruby_llm_agents_executions", column: "execution_id", on_delete: :cascade
   add_foreign_key "ruby_llm_agents_executions", "ruby_llm_agents_executions", column: "parent_execution_id", on_delete: :nullify
   add_foreign_key "ruby_llm_agents_executions", "ruby_llm_agents_executions", column: "root_execution_id", on_delete: :nullify
@@ -1275,6 +1568,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
   add_foreign_key "solid_queue_recurring_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "trade_analytics", "position_trackers"
+  add_foreign_key "trade_journals", "instruments"
+  add_foreign_key "trade_journals", "position_trackers"
+  add_foreign_key "trade_memories", "position_trackers"
+  add_foreign_key "trade_memories", "trade_analytics"
   add_foreign_key "trade_telemetry", "position_trackers", column: "tracker_id"
   add_foreign_key "woods_edges", "woods_units", column: "source_id"
   add_foreign_key "woods_edges", "woods_units", column: "target_id"

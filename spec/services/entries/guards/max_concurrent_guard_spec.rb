@@ -12,7 +12,7 @@ RSpec.describe Entries::Guards::MaxConcurrentGuard do
 
     context 'when fewer than max concurrent positions exist' do
       before do
-        allow(PositionTracker).to receive_message_chain(:active, :by_index_key, :count).and_return(1)
+        allow(PositionTracker).to receive_message_chain(:active, :where, :count).and_return(1)
       end
 
       it 'allows entry' do
@@ -23,7 +23,7 @@ RSpec.describe Entries::Guards::MaxConcurrentGuard do
 
     context 'when max concurrent positions reached' do
       before do
-        allow(PositionTracker).to receive_message_chain(:active, :by_index_key, :count).and_return(2)
+        allow(PositionTracker).to receive_message_chain(:active, :where, :count).and_return(2)
       end
 
       it 'blocks entry' do

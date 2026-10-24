@@ -2,13 +2,52 @@
 
 class AlgoConfig
   CACHE_TTL = 30 # seconds
-  ALLOWED_SIGNAL_TIERS = %i[exploratory standard selective].freeze
-  SIGNAL_TIER_PRESETS_PATH = 'config/signal_tier_presets.yml'
+  PROFILES_DIR = 'config/profiles'
   TIER_PRESETS_SETTING_KEY = 'signal_tier_presets'
   REGISTRY_SETTING_KEY = 'india_index_registry'
-  CREDENTIAL_SECTIONS = %i[dhanhq telegram ai].freeze
   # Credential-bearing sections excluded from the per-position snapshot persisted on trades.
   SENSITIVE_SECTIONS = %i[dhanhq telegram ai].freeze
+
+  # Utility module for deep merging hashes with array handling
+  module MergeUtil
+    # Deep merge two hashes, handling arrays of hashes by matching on :key
+    def self.deep_merge_hashes_with_arrays(base, overrides)
+      merged = base.dup
+
+      overrides.each do |key, val|
+        if base[key].is_a?(Hash) && val.is_a?(Hash)
+          merged[key] = deep_merge_hashes_with_arrays(base[key], val)
+        elsif base[key].is_a?(Array) && val.is_a?(Array)
+          merged[key] = merge_arrays(base[key], val)
+        else
+          merged[key] = val
+        end
+      end
+
+      merged
+    end
+
+    # Merge two arrays of hashes by matching on :key or :name attribute
+    def self.merge_arrays(base_arr, override_arr)
+      return override_arr unless base_arr.is_a?(Array) && override_arr.is_a?(Array)
+      return override_arr unless override_arr.all? { |item| item.is_a?(Hash) && (item[:key] || item[:name]) }
+
+      merged = base_arr.dup
+      override_arr.each do |override_item|
+        match_key = override_item[:key] || override_item[:name]
+
+        base_idx = merged.find_index do |item|
+          item.is_a?(Hash) && (item[:key] || item[:name]) == match_key
+        end
+        if base_idx
+          merged[base_idx] = deep_merge_hashes_with_arrays(merged[base_idx], override_item)
+        else
+          merged << override_item
+        end
+      end
+      merged
+    end
+  end
 
   class << self
     def fetch
@@ -16,13 +55,15 @@ class AlgoConfig
         return @cached_config
       end
 
-      # 1. Canonical document from DB (seeded from config/algo.yml + legacy overrides on first use)
-      base_config = AlgoConfig::DocumentStore.current_mutable_document
+      # 1. Load base configuration from YAML
+      base_config = YAML.load_file(Rails.root.join('config/algo.yml')).deep_symbolize_keys
 
-      apply_signal_tier_preset!(base_config)
-      apply_live_trading_env_override!(base_config)
-      apply_paper_research_overrides!(base_config)
-      apply_india_index_registry!(base_config)
+      # 2. Merge run-mode profile if present (exit_testing, entry_testing, production)
+      base_config = apply_profile(base_config)
+
+      # 3. Merge the DB-canonical document (seeded from algo.yml + legacy overrides,
+      #    patched via /api/settings/bulk, calibration runs, profitability slices).
+      base_config = deep_merge_hashes_with_arrays(base_config, DocumentStore.current_mutable_document)
 
       @cached_config = base_config
       @cache_expires_at = Time.current + CACHE_TTL
@@ -30,7 +71,33 @@ class AlgoConfig
     end
 
     def mode
-      fetch[:mode]
+      if ENV.key?('LIVE_TRADING')
+        ENV['LIVE_TRADING'].to_s == 'true' ? :live : :paper
+      else
+        paper_trading_enabled? ? :paper : :live
+      end
+    end
+
+    # Run mode resolution. ENV wins when set; otherwise the config document
+    # must define it — a missing run_mode used to silently mean "production"
+    # (error-handling review 2026-09: never assume the riskiest mode).
+    #
+    # Test-env carve-out: the spec suite stubs AlgoConfig.fetch with partial
+    # hashes everywhere; test keeps the legacy 'production' default so those
+    # stubs stay valid. development/production refuse to guess.
+    #
+    # @return [String]
+    # @raise [Errors::ConfigurationError]
+    def run_mode
+      mode = ENV['RUN_MODE'].presence || fetch[:run_mode].presence
+      if mode.blank?
+        return 'production' if Rails.env.test?
+
+        raise Errors::ConfigurationError,
+              "run_mode is not configured — set RUN_MODE or run_mode: in algo.yml/profiles"
+      end
+
+      mode.to_s.strip
     end
 
     # Identity of the effective config at this moment — stamped on signals/positions so a
@@ -48,35 +115,38 @@ class AlgoConfig
       fetch.except(*SENSITIVE_SECTIONS)
     end
 
+    # Paper trading is a SAFETY-CRITICAL switch: "unknown" must never be
+    # read as either "on" or "off". The config document must state it
+    # explicitly (algo.yml ships with paper_trading.enabled: true).
+    # Previously `!= false` treated a missing/corrupt section as ENABLED.
+    #
+    # Test-env carve-out (see #run_mode): partial fetch stubs keep the legacy
+    # default of enabled; development/production refuse to guess.
+    #
+    # @return [Boolean]
+    # @raise [Errors::ConfigurationError] when the flag is absent or not a boolean
     def paper_trading_enabled?
-      fetch.dig(:paper_trading, :enabled) != false
-    end
+      enabled = fetch.dig(:paper_trading, :enabled)
+      if enabled != true && enabled != false
+        return true if Rails.env.test?
 
-    def reset!
-      @cached_config = nil
-      @cache_expires_at = nil
-      IndiaIndexRegistry.reset!
-    end
+        raise Errors::ConfigurationError,
+              "paper_trading.enabled must be explicitly true or false " \
+              "(algo.yml / profiles) — got #{enabled.inspect}; refusing to guess"
+      end
 
-    # Top-level keys allowed for API settings writes (excludes credential sections).
-    def permitted_settings_keys
-      yaml_keys = yaml_seed_top_level_keys
-      doc_keys = document_top_level_keys
-      (yaml_keys | doc_keys).uniq - CREDENTIAL_SECTIONS
-    end
-
-    def permitted_settings_structure
-      permitted_settings_keys.index_with { {} }
+      enabled
     end
 
     # Tick-triggered AI (+Smc::TickAi::AnalysisService+) or explicit event-driven mode.
     # DB JSON overrides may store booleans as strings — treat "true" like true.
+    # An absent :signals section means the feature is simply not configured
+    # (documented default: off). A broken config document now RAISES instead
+    # of masquerading as "disabled".
     def event_driven_intraday_ai?
       s = fetch[:signals] || {}
       truthy_signal_flag?(s[:tick_ai_analysis_enabled]) ||
         truthy_signal_flag?(s[:event_driven_ai_alerts])
-    rescue StandardError
-      false
     end
 
     # When true during open session, Solid Queue should not run 15m AI/SMC jobs; daemon tick path owns alerts.
@@ -84,8 +154,6 @@ class AlgoConfig
       return false if market_closed_for_scheduling?
 
       event_driven_intraday_ai?
-    rescue StandardError
-      false
     end
 
     def scheduled_ai_technical_analysis_job_deferred?
@@ -105,10 +173,16 @@ class AlgoConfig
       defer_scheduled_intraday_ai_jobs?
     end
 
+    # Scheduling gate. A TradingSession failure used to read as "market open"
+    # (rescue -> false) — i.e. jobs kept running on an unknown session state.
+    # Now the failure propagates: the job logs loudly and retries.
     def market_closed_for_scheduling?
       TradingSession::Service.market_closed?
-    rescue StandardError
-      false
+    end
+
+    def reset!
+      @cached_config = nil
+      @cache_expires_at = nil
     end
 
     private
@@ -123,135 +197,59 @@ class AlgoConfig
       val == true || val.to_s.strip.casecmp('true').zero?
     end
 
+    # Profile overlay. Contract (error-handling review 2026-09):
+    #   * profile FILE absent ....... fine — the profile is an optional overlay,
+    #     base config stands on its own
+    #   * profile UNREADABLE/CORRUPT  Errors::ConfigurationError — a production
+    #     run must never quietly continue on the wrong configuration
+    def apply_profile(config)
+      # Resolve locally from ENV or the PASSED base config — this method runs
+      # inside #fetch, so calling the public #run_mode here would recurse.
+      mode = ENV['RUN_MODE'].presence || config[:run_mode].presence
+      if mode.blank?
+        raise Errors::ConfigurationError,
+              "run_mode is not configured — set RUN_MODE or run_mode: in algo.yml/profiles"
+      end
+
+      mode = mode.to_s.strip
+      path = Rails.root.join(PROFILES_DIR, "#{mode}.yml")
+      unless path.file?
+        config[:run_mode] = mode
+        return config
+      end
+
+      begin
+        profile = YAML.load_file(path)
+      rescue Psych::SyntaxError, Errno::ENOENT, Errno::EACCES => e
+        raise Errors::ConfigurationError,
+              "profile config/#{mode}.yml is unreadable (#{e.class}: #{e.message}) — refusing to run on base config"
+      end
+
+      # An EMPTY document (comments-only / zero-content profile) means "no
+      # overrides" — the same semantics as an absent file. production.yml
+      # legitimately ships comments-only. Raw psych parses it to nil; bootsnap's
+      # YAML compile cache (active in app boot) to false — both are handled.
+      # Genuinely corrupt documents (arrays, scalars, strings) still fail loud
+      # per the error-handling contract.
+      profile = {} if profile.nil? || profile.equal?(false)
+
+      profile = profile.deep_symbolize_keys if profile.is_a?(Hash)
+      unless profile.is_a?(Hash)
+        raise Errors::ConfigurationError,
+              "profile config/#{mode}.yml did not parse to a Hash (got #{profile.class}) — refusing to run on base config"
+      end
+
+      merged = MergeUtil.deep_merge_hashes_with_arrays(config, profile)
+      merged[:run_mode] = mode
+      merged
+    end
+
     def deep_merge_hashes_with_arrays(base, overrides)
       MergeUtil.deep_merge_hashes_with_arrays(base, overrides)
     end
 
     def merge_arrays(base_arr, override_arr)
       MergeUtil.merge_arrays(base_arr, override_arr)
-    end
-
-    # Merges config/signal_tier_presets.yml overlay for exploratory | standard | selective.
-    # Tier resolution: ENV['SIGNAL_TIER'] (if valid) else signals.signal_tier else standard.
-    def apply_signal_tier_preset!(config)
-      tier = resolve_signal_tier(config)
-      preset = load_signal_tier_presets[tier.to_sym]
-      if preset.nil?
-        Rails.logger.warn("[AlgoConfig] Missing preset for signal_tier #{tier} in #{SIGNAL_TIER_PRESETS_PATH}")
-        return
-      end
-
-      return if preset.blank?
-
-      merged = deep_merge_hashes_with_arrays(preset, config)
-      config.replace(merged)
-      Rails.logger.debug { "[AlgoConfig] signal_tier=#{tier}" }
-    end
-
-    # Single source of truth: the config document's signals.signal_tier.
-    # ENV['SIGNAL_TIER'] is honored only as an explicit emergency override (SIGNAL_TIER_FORCE=true);
-    # otherwise a divergent env value is logged and ignored.
-    def resolve_signal_tier(config)
-      doc_tier = normalize_signal_tier(config.dig(:signals, :signal_tier))
-      env_tier = normalize_signal_tier(ENV.fetch('SIGNAL_TIER', nil))
-      return env_tier if env_tier && signal_tier_env_forced?
-
-      effective = doc_tier || 'standard'
-      warn_ignored_signal_tier_env(env_tier, effective) if env_tier && env_tier != effective
-      effective
-    end
-
-    def normalize_signal_tier(raw)
-      return nil if raw.blank?
-
-      tier = raw.to_s.strip.downcase
-      return tier if ALLOWED_SIGNAL_TIERS.include?(tier.to_sym)
-
-      Rails.logger.warn("[AlgoConfig] Invalid signal_tier #{raw.inspect}; ignoring")
-      nil
-    end
-
-    def signal_tier_env_forced?
-      ActiveModel::Type::Boolean.new.cast(ENV.fetch('SIGNAL_TIER_FORCE', 'false'))
-    end
-
-    def warn_ignored_signal_tier_env(env_tier, effective)
-      Rails.logger.warn(
-        "[AlgoConfig] SIGNAL_TIER=#{env_tier} ignored (effective signal_tier=#{effective}); " \
-        'set SIGNAL_TIER_FORCE=true to override'
-      )
-    end
-
-    def load_signal_tier_presets
-      db_raw = Setting.fetch(TIER_PRESETS_SETTING_KEY, nil, ttl: CACHE_TTL)
-      if db_raw.present?
-        parsed = JSON.parse(db_raw, symbolize_names: true)
-        return parsed if parsed.is_a?(Hash)
-      end
-
-      path = Rails.root.join(SIGNAL_TIER_PRESETS_PATH)
-      return {} unless File.exist?(path)
-
-      YAML.load_file(path).deep_symbolize_keys
-    rescue StandardError => e
-      Rails.logger.error("[AlgoConfig] Failed to load tier presets: #{e.message}")
-      {}
-    end
-
-    def document_top_level_keys
-      raw = Setting.fetch(AlgoConfig::DocumentStore::DOCUMENT_KEY, nil, ttl: CACHE_TTL)
-      return [] if raw.blank?
-
-      parsed = JSON.parse(raw, symbolize_names: true)
-      parsed.is_a?(Hash) ? parsed.keys : []
-    rescue StandardError
-      []
-    end
-
-    def yaml_seed_top_level_keys
-      YAML.load_file(Rails.root.join('config/algo.yml')).keys.map(&:to_sym)
-    rescue StandardError
-      []
-    end
-
-    # LIVE_TRADING env is the single switch for real broker execution (see .env.example).
-    # When unset or false: paper_trading.enabled is forced true (simulated fills, GatewayPaper).
-    # When true: paper_trading.enabled is forced false (GatewayLive — still subject to dhanhq.enable_orders).
-    def apply_live_trading_env_override!(config)
-      paper = !live_trading_env_truthy?
-      config[:paper_trading] = (config[:paper_trading] || {}).merge(enabled: paper)
-    end
-
-    # Paper mode: relax direction gate so ranging/choppy sessions still generate candidates.
-    # Opt back into live-like behavior with PAPER_STRICT_DIRECTION_GATE=true.
-    def apply_paper_research_overrides!(config)
-      return if paper_strict_direction_gate?
-      return unless config.dig(:paper_trading, :enabled)
-
-      signals = (config[:signals] || {}).dup
-      signals[:enable_direction_gate] = false
-      config[:signals] = signals
-    end
-
-    def apply_india_index_registry!(config)
-      indices = Array(config[:indices])
-      return if indices.empty?
-
-      config[:indices] = IndiaIndexRegistry.merge_indices!(indices)
-    rescue StandardError => e
-      Rails.logger.error("[AlgoConfig] Failed to apply india_index_registry: #{e.class} - #{e.message}")
-    end
-
-    def paper_strict_direction_gate?
-      ActiveModel::Type::Boolean.new.cast(ENV.fetch('PAPER_STRICT_DIRECTION_GATE', 'false'))
-    end
-
-    def live_trading_env_truthy?
-      v = ENV.fetch('LIVE_TRADING', nil)
-      return false if v.nil?
-      return false if v.to_s.strip.empty?
-
-      ActiveModel::Type::Boolean.new.cast(v)
     end
   end
 end

@@ -14,7 +14,10 @@ class PositionTracker < ApplicationRecord
 
       cache_live_pnl(cache[:pnl], pnl_pct: cache[:pnl_pct]) if cache[:pnl]
       self.high_water_mark_pnl = BigDecimal(cache[:hwm_pnl].to_s) if cache[:hwm_pnl]
-    rescue StandardError
+    rescue StandardError => e
+      # Hydration is best-effort (DB row stays authoritative), but the failure
+      # is logged — it used to be a silent nil (wave 3).
+      log_pnl_cache_error(e)
       nil
     end
 
@@ -67,8 +70,6 @@ class PositionTracker < ApplicationRecord
     end
 
     def update_pnl!(pnl, pnl_pct: nil)
-      return if exited?
-
       pnl_value = BigDecimal(pnl.to_s)
       current_hwm = high_water_mark_pnl ? BigDecimal(high_water_mark_pnl.to_s) : BigDecimal(0)
       hwm = [current_hwm, pnl_value].max
@@ -78,8 +79,6 @@ class PositionTracker < ApplicationRecord
     end
 
     def cache_live_pnl(pnl, pnl_pct: nil)
-      return if exited?
-
       pnl_value = BigDecimal(pnl.to_s)
       self.last_pnl_rupees = pnl_value
       self.last_pnl_pct = pnl_pct.nil? ? nil : BigDecimal(pnl_pct.to_s)

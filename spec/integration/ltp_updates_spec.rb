@@ -116,7 +116,7 @@ RSpec.describe 'Real-time LTP Updates Integration', :vcr, type: :integration do
         cached_tick = tick_cache.fetch('NSE_FNO', '12345')
         expect(cached_tick[:ltp]).to eq(101.5)
         expect(cached_tick[:segment]).to eq('NSE_FNO')
-        expect(cached_tick[:security_id]).to eq(12_345.0)
+        expect(cached_tick[:security_id]).to eq('12345')
       end
 
       it 'retrieves LTP from cache' do
@@ -145,8 +145,9 @@ RSpec.describe 'Real-time LTP Updates Integration', :vcr, type: :integration do
         tick_cache.put(tick2)
 
         all_ticks = tick_cache.all
-        expect(all_ticks).to include('NSE_FNO:12345' => tick1)
-        expect(all_ticks).to include('NSE_FNO:67890' => tick2)
+        # cached entries carry an extra :cached_at stamp, so match as a subset
+        expect(all_ticks['NSE_FNO:12345']).to include(tick1)
+        expect(all_ticks['NSE_FNO:67890']).to include(tick2)
       end
 
       it 'clears all cached ticks' do
@@ -172,7 +173,7 @@ RSpec.describe 'Real-time LTP Updates Integration', :vcr, type: :integration do
         tick_cache.put(ticker_tick)
 
         cached_tick = tick_cache.fetch('NSE_FNO', '12345')
-        expect(cached_tick[:kind]).to eq('ticker')
+        expect(cached_tick[:kind]).to eq(:ticker)
         expect(cached_tick[:ltp]).to eq(101.5)
       end
 
@@ -188,7 +189,7 @@ RSpec.describe 'Real-time LTP Updates Integration', :vcr, type: :integration do
         tick_cache.put(quote_tick)
 
         cached_tick = tick_cache.fetch('NSE_FNO', '12345')
-        expect(cached_tick[:kind]).to eq('quote')
+        expect(cached_tick[:kind]).to eq(:quote)
         expect(cached_tick[:ltp]).to eq(101.5)
       end
     end

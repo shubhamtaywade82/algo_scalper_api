@@ -116,7 +116,6 @@ class AgentMonitor
 end
 
 # Color helpers
-# rubocop:disable Style/OneClassPerFile
 class String
   def green = "\e[32m#{self}\e[0m"
   def red = "\e[31m#{self}\e[0m"
@@ -125,7 +124,6 @@ class String
   def cyan = "\e[36m#{self}\e[0m"
   def bold = "\e[1m#{self}\e[0m"
 end
-# rubocop:enable Style/OneClassPerFile
 
 # Interactive mode
 if __FILE__ == $PROGRAM_NAME

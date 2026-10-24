@@ -3,7 +3,7 @@
 require_relative "../config/environment"
 
 def test_llm
-  client = Services::Ai::OllamaClient.instance
+  client = Services::Ai::OpenaiClient.instance
   model = ENV["OLLAMA_MODEL"] || "qwen3-vl:latest"
   puts "Testing Ollama connection with model: #{model}..."
 

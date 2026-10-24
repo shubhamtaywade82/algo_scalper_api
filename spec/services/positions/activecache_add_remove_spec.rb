@@ -2,7 +2,6 @@
 
 require 'rails_helper'
 
-# rubocop:disable RSpec/SpecFilePathFormat
 RSpec.describe Positions::ActiveCache do
   subject(:cache) { described_class.instance }
 
@@ -18,14 +17,15 @@ RSpec.describe Positions::ActiveCache do
       high_water_mark_pnl: 0,
       breakeven_locked?: false,
       trailing_stop_price: nil,
-      created_at: Time.current,
       watchable: nil,
       instrument: nil,
-      symbol: nil,
-      side: 'BUY',
-      index_key: 'NIFTY',
-      direction: 'long',
-      order_no: 'ORD123'
+      index_key: nil,
+      symbol: 'NIFTY',
+      side: 'LONG',
+      direction: 'bullish',
+      position_side: 'long',
+      meta: {},
+      created_at: Time.current
     )
   end
 
@@ -74,4 +74,3 @@ RSpec.describe Positions::ActiveCache do
     ActiveSupport::Notifications.unsubscribe(subscriber)
   end
 end
-# rubocop:enable RSpec/SpecFilePathFormat

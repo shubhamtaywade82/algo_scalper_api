@@ -12,7 +12,7 @@ module OptionsBuying
       end
 
       def shutdown
-        @instance&.shutdown { |conn| conn.quit }
+        @instance&.shutdown(&:quit)
         @instance = nil
       end
 
@@ -40,9 +40,9 @@ module OptionsBuying
       @pool = pool
     end
 
-    def method_missing(method_name, *args, **kwargs, &block)
+    def method_missing(method_name, ...)
       @pool.with do |conn|
-        conn.public_send(method_name, *args, **kwargs, &block)
+        conn.public_send(method_name, ...)
       end
     end
 

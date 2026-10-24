@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class SetupValidator
-  Result = Struct.new(:valid, :reason, :metadata, keyword_init: true)
+  Result = Struct.new(:valid, :reason, :metadata)
 
   def initialize(underlying:, direction:, series:, supertrend_result:, index_cfg:)
     @underlying = underlying

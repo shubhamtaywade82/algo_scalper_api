@@ -1,20 +1,87 @@
 ---
 http_interactions:
 - request:
+    method: get
+    uri: <SENSITIVE_SERVICE_URL>/auth/dhan/token
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Faraday v1.10.5
+      Authorization:
+      - Bearer <AUTHORIZATION>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Mon, 09 Mar 2026 13:23:24 GMT
+      Content-Type:
+      - application/json; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      Etag:
+      - W/"0ba1737c04909e596b5082c9a334d973"
+      Referrer-Policy:
+      - strict-origin-when-cross-origin
+      Rndr-Id:
+      - 97717888-7ee4-48f9
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains
+      Vary:
+      - Accept, Origin
+      - Accept-Encoding
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Permitted-Cross-Domain-Policies:
+      - none
+      X-Render-Origin-Server:
+      - Render
+      X-Request-Id:
+      - c88111cc-c735-46fc-b999-74034dd65f98
+      X-Runtime:
+      - '3.328265'
+      X-Xss-Protection:
+      - '0'
+      Cf-Cache-Status:
+      - DYNAMIC
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 9d9a64c9eab0c18d-BLR
+      Alt-Svc:
+      - h3=":443"; ma=86400
+    body:
+      encoding: ASCII-8BIT
+      string: '{"access_token":"<ACCESS_TOKEN>","client_id":"<CLIENT_ID>","expires_at":"2026-03-10T13:51:43+05:30"}'
+  recorded_at: Mon, 09 Mar 2026 13:23:24 GMT
+- request:
     method: post
     uri: https://api.dhan.co/v2/marketfeed/ohlc
     body:
       encoding: UTF-8
-      string: "<REQUEST_BODY>"
+      string: '{"IDX_I":[13],"dhanClientId":"<CLIENT_ID>"}'
     headers:
       User-Agent:
-      - Faraday v1.10.4
+      - Faraday v1.10.5
       Content-Type:
       - application/json
       Accept:
       - application/json
       Access-Token:
-      - "<ACCESS_TOKEN>"
+      - <ACCESS_TOKEN>
       Client-Id:
       - "<CLIENT_ID>"
       Accept-Encoding:
@@ -25,15 +92,19 @@ http_interactions:
       message: OK
     headers:
       Date:
-      - Sun, 26 Oct 2025 11:06:46 GMT
+      - Mon, 09 Mar 2026 13:23:24 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '139'
+      - '140'
       Connection:
       - keep-alive
+      Content-Security-Policy:
+      - frame-ancestors 'none'
+      X-Frame-Options:
+      - SAMEORIGIN
     body:
       encoding: UTF-8
-      string: '{"data":{"IDX_I":{"13":{"last_price":25795.15,"ohlc":{"open":25935.1,"close":25795.15,"high":25944.15,"low":25718.2}}}},"status":"success"}'
-  recorded_at: Sun, 26 Oct 2025 11:06:44 GMT
+      string: '{"data":{"IDX_I":{"13":{"last_price":24028.05,"ohlc":{"open":23868.05,"close":24028.05,"high":24078.15,"low":23697.8}}}},"status":"success"}'
+  recorded_at: Mon, 09 Mar 2026 13:23:24 GMT
 recorded_with: VCR 6.3.1

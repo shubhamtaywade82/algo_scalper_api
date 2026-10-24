@@ -21,7 +21,7 @@ module Risk
     class << self
       def check_all!
         limits = AlgoConfig.fetch[:risk_limits] || {}
-        
+
         # 1. Max trades per day
         if max_trades_reached?(limits[:daily_max_trades] || 10)
           return { blocked: 'daily_max_trades_reached' }
@@ -41,25 +41,39 @@ module Risk
       end
 
       def record_trade!
-        redis&.incr(trades_count_key)
-        redis&.expire(trades_count_key, TTL)
+        return if redis.nil?
+
+        redis.incr(trades_count_key)
+        redis.expire(trades_count_key, TTL)
       end
 
       def record_win!
-        redis&.set(consecutive_losses_key, 0)
-        redis&.expire(consecutive_losses_key, TTL)
+        return if redis.nil?
+
+        redis.set(consecutive_losses_key, 0)
+        redis.expire(consecutive_losses_key, TTL)
       end
 
       def record_loss!
-        redis&.incr(consecutive_losses_key)
-        redis&.expire(consecutive_losses_key, TTL)
+        return if redis.nil?
+
+        redis.incr(consecutive_losses_key)
+        redis.expire(consecutive_losses_key, TTL)
       end
 
       def current_stats
+        available = !redis.nil?
         {
           trades_count: redis&.get(trades_count_key).to_i,
           consecutive_losses: redis&.get(consecutive_losses_key).to_i,
-          active_positions: PositionTracker.active.count
+          active_positions: PositionTracker.active.count,
+          # When false, the trades_count / consecutive_losses values above are
+          # meaningless zeros (Redis was unreachable). Dashboards should surface
+          # "data unavailable" rather than report 0/0. The risk gates themselves
+          # already fail CLOSED on Redis outage — see max_trades_reached? and
+          # consecutive_losses_breached?, which return `true` (block) when
+          # redis.nil?.
+          redis_available: available
         }
       end
 
@@ -73,7 +87,9 @@ module Risk
       end
 
       def max_trades_reached?(limit)
-        (redis&.get(trades_count_key).to_i) >= limit
+        return true if redis.nil?
+
+        redis.get(trades_count_key).to_i >= limit
       end
 
       def max_open_positions_reached?(limit)
@@ -81,7 +97,9 @@ module Risk
       end
 
       def consecutive_losses_breached?(limit)
-        (redis&.get(consecutive_losses_key).to_i) >= limit
+        return true if redis.nil?
+
+        redis.get(consecutive_losses_key).to_i >= limit
       end
     end
   end

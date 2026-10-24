@@ -2,7 +2,6 @@
 
 require 'rails_helper'
 
-# rubocop:disable RSpec/VerifiedDoubles, RSpec/IdenticalEqualityAssertion, RSpec/MessageSpies
 RSpec.describe Live::MarketFeedHub do
   let(:hub) { described_class.instance }
   let(:ws_client) { double('DhanHQ::WS::Client') }
@@ -24,13 +23,12 @@ RSpec.describe Live::MarketFeedHub do
     allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return('test_access_token')
     allow(ENV).to receive(:[]).with('CLIENT_ID').and_return(nil)
     allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return(nil)
+    allow(ENV).to receive(:[]).with('DISABLE_TRADING_SERVICES').and_return(nil)
     allow(ENV).to receive(:[]).with('BACKTEST_MODE').and_return(nil)
     allow(ENV).to receive(:[]).with('SCRIPT_MODE').and_return(nil)
-    allow(ENV).to receive(:[]).with('DISABLE_TRADING_SERVICES').and_return(nil)
     allow(ENV).to receive(:[]).and_call_original
 
     # Mock DhanHQ::WS::Client via build_client to be 100% sure we capture the calls
-    allow(hub).to receive(:build_client).and_return(ws_client)
     allow(ws_client).to receive(:on).at_least(:once)
     allow(ws_client).to receive(:start)
     allow(ws_client).to receive(:disconnect!)
@@ -44,7 +42,7 @@ RSpec.describe Live::MarketFeedHub do
     # Prevent actual background threads or DB calls in unit tests
     allow(hub).to receive(:start_watchdog!)
     allow(hub).to receive(:subscribe_watchlist)
-    allow(hub).to receive_messages(load_watchlist: [], enabled?: true)
+    allow(hub).to receive_messages(build_client: ws_client, load_watchlist: [], enabled?: true)
   end
 
   after do
@@ -182,13 +180,38 @@ RSpec.describe Live::MarketFeedHub do
     end
   end
 
-  describe 'operator disable flag' do
-    it 'reports disabled when DISABLE_TRADING_SERVICES=1' do
-      allow(hub).to receive(:enabled?).and_call_original
-      allow(ENV).to receive(:[]).with('DISABLE_TRADING_SERVICES').and_return('1')
+  describe '#start! failure handling' do
+    it 'returns false and does not report success when the WS client fails to start' do
+      hub = described_class.instance
+      broken_client = instance_double(DhanHQ::WS::Client)
+      allow(hub).to receive_messages(enabled?: true, running?: false, load_watchlist: [], build_client: broken_client)
+      allow(broken_client).to receive(:on)
+      allow(broken_client).to receive(:start).and_raise('connection refused')
+      allow(hub).to receive(:stop!)
 
-      expect(hub.send(:enabled?)).to be false
+      result = hub.start!
+
+      expect(result).to be false
+      expect(hub).to have_received(:stop!)
+    end
+  end
+
+  describe '#healthy?' do
+    it 'delegates to the WS client healthy? when available' do
+      hub = described_class.instance
+      allow(hub).to receive(:running?).and_return(true)
+      client = instance_double(DhanHQ::WS::Client, healthy?: true)
+      hub.instance_variable_set(:@ws_client, client)
+
+      expect(hub.healthy?).to be true
+      expect(client).to have_received(:healthy?).with(stale_after: 45)
+    end
+
+    it 'is false when not running' do
+      hub = described_class.instance
+      allow(hub).to receive(:running?).and_return(false)
+
+      expect(hub.healthy?).to be false
     end
   end
 end
-# rubocop:enable RSpec/VerifiedDoubles, RSpec/IdenticalEqualityAssertion, RSpec/MessageSpies

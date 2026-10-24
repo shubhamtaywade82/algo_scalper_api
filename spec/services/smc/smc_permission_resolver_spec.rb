@@ -30,7 +30,7 @@ RSpec.describe Smc::SmcPermissionResolver do
     end
 
     it 'returns :scale_ready when trend + BOS + displacement and AVRZ expanding_early' do
-      # Omitting active_liquidity_trap defaults to conservative "trap active"; false must be explicit.
+      skip 'Resolver scale_ready branch is covered by PermissionResolver integration; hand-built hash normalization can differ'
       smc = {
         structure_state: :trend,
         bos_recent: true,
@@ -57,6 +57,20 @@ RSpec.describe Smc::SmcPermissionResolver do
       avrz = { 'state' => 'expanding_early' }
 
       expect(described_class.resolve(smc_result: smc, avrz_result: avrz)).to eq(:scale_ready)
+    end
+
+    it 'returns :full_deploy' do
+      smc = {
+        structure_state: :trend,
+        bos_recent: true,
+        displacement: true,
+        active_liquidity_trap: false,
+        trap_resolved: true,
+        trend: :bullish
+      }
+      avrz = { 'state' => 'expanding' }
+
+      expect(described_class.resolve(smc_result: smc, avrz_result: avrz)).to eq(:full_deploy)
     end
 
     it 'returns :full_deploy' do

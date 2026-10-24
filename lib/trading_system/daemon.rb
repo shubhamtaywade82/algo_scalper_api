@@ -10,6 +10,7 @@ module TradingSystem
   # opens; a background thread then starts the remaining services automatically.
   class Daemon
     MARKET_OPEN_POLL_INTERVAL = 60 # seconds
+    HEALTH_CHECK_INTERVAL = 30 # seconds (keep_process_alive! loop runs at 1s cadence)
 
     def self.start(...)
       new.start(...)
@@ -26,7 +27,7 @@ module TradingSystem
       setup_supervisor!
       trap_signals!
 
-      start_services!
+      start_services!(keep_alive: keep_alive)
 
       Rails.logger.info('[TradingDaemon] Started')
 
@@ -50,13 +51,15 @@ module TradingSystem
     end
 
     def setup_supervisor!
-      @supervisor ||= Rails.application.config.x.trading_supervisor
-      @supervisor ||= TradingSystem::Bootstrap.build_supervisor
+      existing = Rails.application.config.x.trading_supervisor
+      existing = nil unless existing.is_a?(TradingSystem::Supervisor)
+
+      @supervisor ||= existing || TradingSystem::Bootstrap.build_supervisor
 
       Rails.application.config.x.trading_supervisor = @supervisor
     end
 
-    def start_services!
+    def start_services!(keep_alive: true)
       market_closed = TradingSession::Service.market_closed?
 
       TradingSystem::Bootstrap.boot_reconciliation!(strict: strict_boot_reconciliation?(market_closed: market_closed))
@@ -65,7 +68,7 @@ module TradingSystem
         Rails.logger.info('[TradingDaemon] Market closed - starting WebSocket only; will start full services when market opens')
         @supervisor[:market_feed]&.start
         Rails.logger.info('[Supervisor] started market_feed (WebSocket only)')
-        start_market_open_poller!
+        start_market_open_poller! if keep_alive
         return
       end
 
@@ -91,14 +94,6 @@ module TradingSystem
       @supervisor.start_all
       subscribe_active_positions!
       TradingSystem::Bootstrap.boot_market_gates!
-
-      # Warm up index candles asynchronously so indicator and structural exit rules have continuous series
-      Thread.new do
-        Thread.current.name = 'daemon-index-warmup'
-        warmup_index_candles!
-      rescue StandardError => e
-        Rails.logger.error("[TradingDaemon] warmup_index_candles! failed: #{e.class} - #{e.message}")
-      end
     end
 
     def subscribe_active_positions!
@@ -110,18 +105,6 @@ module TradingSystem
       @supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
     rescue StandardError => e
       Rails.logger.error("[TradingDaemon] subscribe_active_positions failed: #{e.class} - #{e.message}")
-    end
-
-    def warmup_index_candles!
-      Rails.logger.info('[TradingDaemon] Warming up index candles for exit/trailing engines...')
-      IndexConfigLoader.load_indices.each do |cfg|
-        inst = IndexInstrumentCache.instance.get_or_fetch(cfg)
-        next unless inst
-
-        Live::HistoricalBackfillService.new.backfill(instrument: inst, interval: 1, reason: :warmup)
-        Live::HistoricalBackfillService.new.backfill(instrument: inst, interval: 5, reason: :warmup)
-      end
-      Rails.logger.info('[TradingDaemon] Index candles warmup complete')
     end
 
     def strict_boot_reconciliation?(market_closed:)
@@ -145,51 +128,63 @@ module TradingSystem
     end
 
     def safe_stop!
-      # Guard against multiple calls
-      return if @stopping
-      @stopping = true
-
-      alert_shutdown_with_open_positions!
+      alert_open_positions!
 
       if @market_open_thread&.alive?
         @market_open_thread.kill
         @market_open_thread = nil
       end
-
-      if @supervisor
-        begin
-          @supervisor.stop_all
-        rescue StandardError => e
-          warn "[TradingDaemon] stop_all failed: #{e.class} - #{e.message}"
-        end
-      end
+      @supervisor&.stop_all
     rescue StandardError => e
       warn "[TradingDaemon] safe_stop! failed: #{e.class} - #{e.message}"
     end
 
-    # Positions are NOT force-flattened on shutdown — they remain open at the broker.
-    # This only alerts so an operator knows to watch them until the process restarts
-    # and Live::ReconciliationService picks the exit/risk monitoring back up.
-    def alert_shutdown_with_open_positions!
+    def alert_open_positions!
       count = PositionTracker.active.count
       return if count.zero?
 
-      message = "TradingDaemon shutting down with #{count} open position(s) — " \
-                'they remain live at the broker UNMONITORED until the process restarts and reconciliation resumes'
-      warn "[TradingDaemon] #{message}"
-      Notifications::TelegramNotifier.instance.notify_error(message, context: 'TradingSystem::Daemon#safe_stop!')
+      Notifications::TelegramNotifier.instance.notify_error(
+        "Daemon shutting down with #{count} open position(s) - they will be UNMONITORED until restart",
+        context: 'TradingSystem::Daemon#safe_stop!'
+      )
     rescue StandardError => e
-      warn "[TradingDaemon] alert_shutdown_with_open_positions! failed: #{e.class} - #{e.message}"
+      warn "[TradingDaemon] alert_open_positions! failed: #{e.class} - #{e.message}"
     end
 
     def keep_process_alive!
+      ticks_since_health_check = 0
+
       loop do
         if @shutdown_requested
           Rails.logger.info("[TradingDaemon] Received #{@shutdown_requested}, shutting down...")
           safe_stop!
           break
         end
+
+        ticks_since_health_check += 1
+        if ticks_since_health_check >= HEALTH_CHECK_INTERVAL
+          ticks_since_health_check = 0
+          check_service_health!
+        end
+
         sleep 1
+      end
+    end
+
+    def check_service_health!
+      return unless @supervisor
+
+      @supervisor.health_check.each do |name, healthy|
+        next if healthy
+
+        Rails.logger.error("[TradingDaemon] Service #{name} reported unhealthy - restarting")
+        Notifications::TelegramNotifier.instance.notify_error(
+          "Service #{name} unhealthy, restarting",
+          context: 'TradingSystem::Daemon#check_service_health!'
+        )
+        @supervisor.restart_service(name)
+      rescue StandardError => e
+        Rails.logger.error("[TradingDaemon] Failed to restart #{name}: #{e.class} - #{e.message}")
       end
     end
   end

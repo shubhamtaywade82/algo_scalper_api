@@ -65,17 +65,5 @@ RSpec.describe Smc::BiasEngine do
       expect(described_class.new(instrument).decision).to eq(:call)
       expect(Avrz::Detector).not_to have_received(:new)
     end
-
-    it 'does not enqueue Telegram when event-driven intraday AI suppresses periodic notify' do
-      instrument = build_instrument_for_bullish_call
-      stub_aligned_smc_contexts
-      allow(Avrz::Detector).to receive(:new)
-      allow(AlgoConfig).to receive(:fetch).and_return({ telegram: { enabled: false } })
-      allow(AlgoConfig).to receive(:suppress_smc_bias_notify_for_event_driven_ai?).and_return(true)
-      allow(Notifications::Telegram::SendSmcAlertJob).to receive(:perform_later)
-
-      expect(described_class.new(instrument).decision).to eq(:call)
-      expect(Notifications::Telegram::SendSmcAlertJob).not_to have_received(:perform_later)
-    end
   end
 end

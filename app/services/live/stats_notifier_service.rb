@@ -12,7 +12,6 @@ module Live
       @lock = Mutex.new
       @stats_sent_today = false
       @last_check_date = nil
-      @last_regime = nil
     end
 
     def start
@@ -53,15 +52,7 @@ module Live
           if @last_check_date != today
             @stats_sent_today = false
             @last_check_date = today
-            @last_regime = nil
           end
-
-          # Check if regime changed
-          current_regime = Live::TimeRegimeService.instance.current_regime
-          if @last_regime && @last_regime != current_regime
-            handle_regime_transition(@last_regime, current_regime)
-          end
-          @last_regime = current_regime
 
           # Check if market close stats notifications are enabled
           config = AlgoConfig.fetch[:telegram] || {}
@@ -94,75 +85,51 @@ module Live
       Rails.logger.error("[StatsNotifier] Failed to send stats: #{e.class} - #{e.message}")
     end
 
-    def handle_regime_transition(old_regime, new_regime)
+    def handle_regime_transition(from_regime, _to_regime)
       config = AlgoConfig.fetch[:telegram] || {}
-      return unless config[:notify_no_trade_sessions] != false
+      return unless config[:enabled] != false && config[:notify_no_trade_sessions] != false
+      return unless Notifications::TelegramNotifier.instance.enabled?
 
-      active_regimes = %i[open_expansion trend_continuation chop_decay close_gamma]
-      return unless active_regimes.include?(old_regime.to_sym)
-      return if new_regime.to_sym == :pre_market || (new_regime.to_sym == :post_market && Time.zone.now.hour < 9)
+      regime_cfg = Live::TimeRegimeService.instance.regime_config(from_regime)
+      return unless regime_cfg.is_a?(Hash) && regime_cfg[:start] && regime_cfg[:end]
 
-      cfg = Live::TimeRegimeService.instance.regime_config(old_regime)
-      start_time_str = cfg[:start]
-      end_time_str = cfg[:end]
-      return unless start_time_str && end_time_str
+      start_time = Time.zone.parse(regime_cfg[:start])
+      end_time = Time.zone.parse(regime_cfg[:end])
+      return if PositionTracker.where(created_at: start_time..end_time).any?
 
-      start_time = Time.zone.parse(start_time_str)
-      end_time = Time.zone.parse(end_time_str)
+      signals = Strategies::Signal.where(created_at: start_time..end_time)
+      regime_label = from_regime.to_s.tr('_', ' ').upcase
 
-      # Check if any trades were executed in this window
-      trades_count = PositionTracker.where(created_at: start_time..end_time).count
-      if trades_count.zero?
-        send_no_trade_session_report(old_regime, start_time, end_time)
+      if signals.none?
+        Notifications::TelegramNotifier.instance.send_message("<b>No Trades in Session: #{regime_label}</b>\n\nNo strategy signals were generated.")
+        return
       end
+
+      msg = build_session_summary_message(regime_label, signals)
+      Notifications::TelegramNotifier.instance.send_message(msg)
     rescue StandardError => e
       Rails.logger.error("[StatsNotifier] handle_regime_transition error: #{e.class} - #{e.message}")
     end
 
-    def send_no_trade_session_report(regime, start_time, end_time)
-      # Fetch signals during the session
-      signals = Strategies::Signal.where(created_at: start_time..end_time)
+    def build_session_summary_message(regime_label, signals)
+      total = signals.count
+      holds = signals.where(outcome: 'ignored_hold').or(signals.where(action: 'hold')).count
+      blocked = signals.where(outcome: 'blocked_by_guard').count
 
-      total_signals = signals.count
-      ignored_holds = signals.where(outcome: 'ignored_hold').count
-      blocked_signals = signals.where(outcome: 'blocked_by_guard')
-
-      # Group blocked reasons
-      block_reasons = Hash.new(0)
-      blocked_signals.each do |s|
-        reason = s.metadata['entry_result_reason'] || s.reason || 'unknown reason'
-        block_reasons[reason] += 1
+      reasons = Hash.new(0)
+      signals.where(outcome: 'blocked_by_guard').find_each do |sig|
+        r = sig.metadata&.dig('entry_result_reason').presence || sig.reason
+        reasons[r] += 1 if r.present?
       end
 
-      # Sort reasons by frequency
-      sorted_reasons = block_reasons.sort_by { |_, count| -count }.first(3)
-
-      # Build the Telegram message
-      regime_label = regime.to_s.upcase.tr('_', ' ')
-      message = "ℹ️ <b>No Trades in Session: #{regime_label}</b>\n"
-      message += "⏰ <b>Time:</b> #{start_time.strftime('%H:%M')} - #{end_time.strftime('%H:%M')} IST\n\n"
-
-      if total_signals.zero?
-        message += "• No strategy signals were generated during this session.\n"
-      else
-        message += "• <b>Total Signals:</b> #{total_signals}\n"
-        message += "• <b>Filtered (Holds):</b> #{ignored_holds}\n"
-        message += "• <b>Blocked by Guards:</b> #{blocked_signals.count}\n"
-
-        if sorted_reasons.any?
-          message += "\n<b>Top Block Reasons:</b>\n"
-          sorted_reasons.each do |reason, count|
-            message += "  - #{reason}: #{count} times\n"
-          end
-        end
-      end
-
-      message += "\n⏰ Sent at: #{Time.current.strftime('%H:%M:%S')}"
-
-      Notifications::TelegramNotifier.instance.send_message(message)
-      Rails.logger.info("[StatsNotifier] Sent no-trade session report for #{regime_label} to Telegram")
-    rescue StandardError => e
-      Rails.logger.error("[StatsNotifier] Failed to send no-trade session report: #{e.class} - #{e.message}")
+      lines = [
+        "<b>No Trades in Session: #{regime_label}</b>",
+        "<b>Total Signals:</b> #{total}",
+        "<b>Filtered (Holds):</b> #{holds}",
+        "<b>Blocked by Guards:</b> #{blocked}"
+      ]
+      reasons.each { |r, c| lines << "#{r}: #{c} times" }
+      lines.join("\n")
     end
   end
 end

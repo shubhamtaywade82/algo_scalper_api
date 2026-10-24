@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# rubocop:disable Rails/Output
+# rubocop:disable-next Rails/Output
 module Ai
   module TradingBot
     # Trade execution layer.
@@ -208,4 +208,3 @@ module Ai
     end
   end
 end
-# rubocop:enable Rails/Output

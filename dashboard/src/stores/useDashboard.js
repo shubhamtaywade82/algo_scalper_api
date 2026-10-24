@@ -1,15 +1,13 @@
 import { createSignal, onMount, onCleanup } from 'solid-js'
 import toast from 'solid-toast'
 import cable from '../cable'
+import { dashboardApiHeaders } from '../lib/dashboardApi'
 
-const POLL_STALE_MS   = 2000   // when WS is stale or not yet delivering
-const POLL_LIVE_MS    = 15000  // when WS heartbeats are arriving
-const WS_STALE_AFTER_MS = 5000
+const POLL_INTERVAL_MS = 30000
 
 export function useDashboard(onPositionChange) {
   const [mode, setMode] = createSignal('paper')
   const [connected, setConnected] = createSignal(false)
-  const [isStale, setIsStale] = createSignal(true)
   const [stats, setStats] = createSignal({
     total_trades: 0,
     active_positions: 0,
@@ -31,6 +29,7 @@ export function useDashboard(onPositionChange) {
   })
   const [subscribedIndices, setSubscribedIndices] = createSignal([])
   const [optionsBuying, setOptionsBuying] = createSignal({ nifty: {}, banknifty: {}, sensex: {} })
+  const [isStale, setIsStale] = createSignal(false)
   const [system, setSystem] = createSignal({ ws_market_feed: false, ws_order_update: false, scheduler: 'unknown' })
   const [publicIpv4, setPublicIpv4] = createSignal('Unknown')
   const [publicIpv6, setPublicIpv6] = createSignal('Unknown')
@@ -38,48 +37,14 @@ export function useDashboard(onPositionChange) {
   const [circuitBreaker, setCircuitBreaker] = createSignal({})
   const [lastUpdated, setLastUpdated] = createSignal(null)
   const [recentSignals, setRecentSignals] = createSignal([])
+  const [strategiesSummary, setStrategiesSummary] = createSignal([])
   const [config, setConfig] = createSignal({ risk: {}, signals: {}, time_restrictions: {} })
-  const [marketStatus, setMarketStatus] = createSignal(null)
 
   let subscription = null
   let pollTimer = null
-  let staleTimer = null
-
-  async function fetchInitial() {
-    try {
-      const res = await fetch('/api/dashboard')
-      if (!res.ok) return
-      applyData(await res.json())
-    } catch (e) {
-      console.error('[Dashboard] fetch failed:', e)
-    }
-  }
-
-  function markFresh() {
-    setIsStale(false)
-    clearTimeout(staleTimer)
-    staleTimer = setTimeout(() => {
-      setIsStale(true)
-      schedulePoll() // WS went stale — switch to fast poll immediately
-    }, WS_STALE_AFTER_MS)
-    schedulePoll() // WS is live — reschedule at slow interval
-  }
-
-  function schedulePoll() {
-    clearTimeout(pollTimer)
-    const delay = isStale() ? POLL_STALE_MS : POLL_LIVE_MS
-    pollTimer = setTimeout(() => {
-      fetchInitial()
-      schedulePoll()
-    }, delay)
-  }
 
   function applyData(data) {
-    if (!data) return
-    console.debug('📊 [Dashboard:applyData] Processing:', data)
-    
-    // Core stats
-    if (data.mode !== undefined) setMode(data.mode)
+    if (data.mode != null) setMode(data.mode)
     if (data.balance) setBalance(data.balance)
     if (data.today) setStats(data.today)
     else if (data.stats) setStats(data.stats)
@@ -126,27 +91,39 @@ export function useDashboard(onPositionChange) {
     if (data.registered_ips !== undefined) setRegisteredIps(data.registered_ips)
     if (data.circuit_breaker) setCircuitBreaker(data.circuit_breaker)
     if (data.recent_signals) setRecentSignals(data.recent_signals)
+    if (data.strategies_summary) setStrategiesSummary(data.strategies_summary)
     if (data.config) setConfig(data.config)
     if (data.subscribed_indices) setSubscribedIndices(data.subscribed_indices)
-    if (data.options_buying) setOptionsBuying(data.options_buying)
-    if (data.market_status) setMarketStatus(data.market_status)
 
     setLastUpdated(data.timestamp || new Date().toISOString())
   }
 
+  const fetchInitial = async () => {
+    try {
+      const res = await fetch('/api/dashboard', { headers: { 'Accept': 'application/json', ...dashboardApiHeaders() } })
+      if (res.ok) {
+        const data = await res.json()
+        applyData(data)
+      }
+    } catch (e) {
+      console.error('[useDashboard] fetchInitial error:', e)
+    }
+  }
+
   onMount(() => {
     fetchInitial()
-    schedulePoll()
+    pollTimer = setInterval(fetchInitial, POLL_INTERVAL_MS)
 
     subscription = cable.subscriptions.create('DashboardChannel', {
       connected() {
-        console.log('✅ [WS:Dashboard] Connected')
         setConnected(true)
-        markFresh()
+      },
+      disconnected() {
+        setConnected(false)
       },
       received(data) {
         console.debug('⚡ [WS:Dashboard] Update:', data)
-        markFresh()
+        setIsStale(false)
         applyData(data)
         
         if (data.type === 'position_activated') {
@@ -176,14 +153,22 @@ export function useDashboard(onPositionChange) {
 
   onCleanup(() => {
     subscription?.unsubscribe()
-    clearTimeout(pollTimer)
-    clearTimeout(staleTimer)
+    clearInterval(pollTimer)
   })
 
   return {
-    mode, connected, isStale, stats, balance, indices, subscribedIndices, optionsBuying, system,
-    publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, config,
-    marketStatus,
-    refresh: fetchInitial
+    mode, connected, isStale, stats, balance, indices, subscribedIndices, system,
+    optionsBuying,
+    publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, strategiesSummary, config,
+    marketStatus: () => {
+      const sys = system()
+      if (sys?.market_status) return sys.market_status
+      const now = new Date()
+      const hour = now.getHours()
+      const minute = now.getMinutes()
+      const currentTime = hour * 60 + minute
+      // Market hours: 9:15 - 15:30 IST
+      return (currentTime >= 9 * 60 + 15 && currentTime <= 15 * 60 + 30) ? 'open' : 'closed'
+    }
   }
 }

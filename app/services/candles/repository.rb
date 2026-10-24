@@ -32,6 +32,21 @@ module Candles
         to_candle_series(instrument_key, timeframe, rows)
       end
 
+      # Resample an in-memory Array<Candle> not backed by the `Record` table (e.g. a
+      # backtester's own already-fetched historical candles) using the same bucketing
+      # rules as the durable-data path.
+      # @param candles [Array<Candle>] ascending by timestamp
+      # @param symbol [String]
+      # @param timeframe [String] e.g. "1m", "3m", "5m"
+      # @return [CandleSeries]
+      def rollup_candles(candles:, symbol:, timeframe:)
+        rows = candles.map do |c|
+          { ts: c.timestamp, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, oi: 0 }
+        end
+        rows = rollup(rows, timeframe) unless timeframe.to_s == BASE_TIMEFRAME
+        to_candle_series(symbol, timeframe, rows)
+      end
+
       private
 
       def base_series(instrument_key:, from:, to:)
@@ -47,16 +62,15 @@ module Candles
 
         # Fall back to Redis candle cache when Solid Queue worker hasn't
         # persisted today's candles yet (the WS-tick → Redis → DB pipeline
-        # requires a separate jobs process). Auto-backfill when fewer than 60 candles are present (needed for 5m MTF Supertrend).
-        if rows.size < 60 && (instrument = find_instrument(instrument_key))
-          cached = Live::CandleSeriesCache.fetch(instrument: instrument, interval: 1, backfill: true)
+        # requires a separate jobs process).
+        if rows.empty? && (instrument = find_instrument(instrument_key))
+          cached = Live::CandleSeriesCache.fetch(instrument: instrument, interval: 1, backfill: false)
           if cached&.candles
-            cached_rows = cached.candles.reject { |c| c.timestamp.nil? || c.timestamp < from || c.timestamp > to }
-                                         .map do |c|
-              { ts: c.timestamp, open: c.open.to_f, high: c.high.to_f,
-                low: c.low.to_f, close: c.close.to_f, volume: c.volume.to_i, oi: 0 }
+            rows = cached.candles.reject { |c| c.timestamp.nil? || c.timestamp < from || c.timestamp > to }
+                         .map do |c|
+      { ts: c.timestamp, open: c.open.to_f, high: c.high.to_f,
+        low: c.low.to_f, close: c.close.to_f, volume: c.volume.to_i, oi: 0 }
             end
-            rows = cached_rows if cached_rows.size > rows.size
           end
         end
 
@@ -91,7 +105,11 @@ module Candles
       end
 
       def to_candle_series(instrument_key, timeframe, rows)
-        series = CandleSeries.new(symbol: instrument_key, interval: minutes_for(timeframe).to_s)
+        series = CandleSeries.new(
+          symbol: instrument_key,
+          interval: minutes_for(timeframe).to_s,
+          max_candles: [rows.size, CandleSeries::MAX_CANDLES].max
+        )
         rows.each do |r|
           series.add_candle(
             Candle.new(

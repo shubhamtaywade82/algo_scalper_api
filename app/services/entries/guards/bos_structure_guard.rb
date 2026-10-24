@@ -16,6 +16,17 @@ module Entries
         new(context).call
       end
 
+      def self.enforce_structure_gate(index_cfg:, instrument:, direction:, entry_price:, entry_metadata:)
+        context = {
+          index_cfg: index_cfg,
+          instrument: instrument,
+          direction: direction,
+          ltp: entry_price,
+          entry_metadata: entry_metadata
+        }
+        new(context).send(:enforce_structure_gate)
+      end
+
       def initialize(context)
         @context = context
         @index_cfg = context[:index_cfg]
@@ -68,7 +79,7 @@ module Entries
         entry_underlying_price = series.candles.last&.close
         return nil unless entry_underlying_price
 
-        entry_distance_r = (entry_underlying_price.to_f - origin_price).abs / risk_points
+        entry_distance_r = (entry_underlying_price.to_f - broken_price).abs / risk_points
         return nil if entry_distance_r > BOS_MAX_ENTRY_DISTANCE_R
 
         bos_id = Entries::BosExtractor.bos_id(timeframe: timeframe, confirmed_at: bos[:confirmed_at], direction: bos[:direction])

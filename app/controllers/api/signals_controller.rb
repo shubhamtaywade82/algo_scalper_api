@@ -22,7 +22,7 @@ module Api
     # (strategy_signals table) — the legacy Signal::Engine → TradingSignal
     # pipeline was removed in b3a8f30 and no longer writes new rows.
     def index
-      scope = ::Strategies::Signal.includes(:strategy_record, :strategy_version).order(emitted_at: :desc)
+      scope = ::Strategies::Signal.order(emitted_at: :desc).limit(100)
       scope = apply_filters(scope)
       total = scope.count
       scope = apply_sort(scope)
@@ -34,9 +34,7 @@ module Api
           total: total,
           page: current_page,
           per_page: per_page_value,
-          pages: (total.to_f / per_page_value).ceil,
-          trading_mode: AlgoConfig.mode,
-          fast_entry_mode: Signal::FastEntryMode.status
+          pages: (total.to_f / per_page_value).ceil
         }
       }
     end
@@ -44,7 +42,7 @@ module Api
     private
 
     def apply_filters(scope)
-      scope = scope.where(instrument_key: params[:index_key].upcase) if params[:index_key].present?
+      scope = scope.where(instrument_key: params.expect(:index_key).upcase) if params[:index_key].present?
 
       if params[:direction].present?
         actions = DIRECTION_BY_ACTION.select { |_, dir| dir == params[:direction] }.keys

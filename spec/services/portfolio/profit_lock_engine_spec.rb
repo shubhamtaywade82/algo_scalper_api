@@ -7,7 +7,7 @@ RSpec.describe Portfolio::ProfitLockEngine do
   before do
     described_class.reset_levels_cache!
     allow(Portfolio::DrawdownGuard).to receive(:triggered?).and_return(false)
-    allow(Portfolio::PnlTracker).to  receive(:update_lock)
+    allow(Portfolio::PnlTracker).to receive(:update_lock)
     allow(AlgoConfig).to receive(:fetch).and_return(config)
   end
 
@@ -83,10 +83,7 @@ RSpec.describe Portfolio::ProfitLockEngine do
 
     context 'when net PnL is below all thresholds' do
       before do
-        allow(Portfolio::PnlTracker).to receive(:net_pnl).and_return(5_000.0)
-        allow(Portfolio::PnlTracker).to receive(:peak_pnl).and_return(5_000.0)
-        allow(Portfolio::PnlTracker).to receive(:current_level).and_return(0)
-        allow(Portfolio::PnlTracker).to receive(:locked_floor).and_return(0.0)
+        allow(Portfolio::PnlTracker).to receive_messages(net_pnl: 5_000.0, peak_pnl: 5_000.0, current_level: 0, locked_floor: 0.0)
       end
 
       it 'returns false and does not trigger guard' do
@@ -97,10 +94,7 @@ RSpec.describe Portfolio::ProfitLockEngine do
 
     context 'when net PnL crosses ₹20k for the first time' do
       before do
-        allow(Portfolio::PnlTracker).to receive(:net_pnl).and_return(22_000.0)
-        allow(Portfolio::PnlTracker).to receive(:peak_pnl).and_return(0.0)
-        allow(Portfolio::PnlTracker).to receive(:current_level).and_return(0)
-        allow(Portfolio::PnlTracker).to receive(:locked_floor).and_return(13_200.0) # 22k × 0.60
+        allow(Portfolio::PnlTracker).to receive_messages(net_pnl: 22_000.0, peak_pnl: 0.0, current_level: 0, locked_floor: 13_200.0) # 22k × 0.60
       end
 
       it 'calls update_lock with level 1 and 60% floor' do
@@ -120,10 +114,7 @@ RSpec.describe Portfolio::ProfitLockEngine do
 
     context 'when net PnL drops below the locked floor' do
       before do
-        allow(Portfolio::PnlTracker).to receive(:net_pnl).and_return(5_500.0)
-        allow(Portfolio::PnlTracker).to receive(:peak_pnl).and_return(15_000.0)
-        allow(Portfolio::PnlTracker).to receive(:current_level).and_return(1)
-        allow(Portfolio::PnlTracker).to receive(:locked_floor).and_return(6_000.0)
+        allow(Portfolio::PnlTracker).to receive_messages(net_pnl: 5_500.0, peak_pnl: 15_000.0, current_level: 1, locked_floor: 6_000.0)
         allow(Portfolio::DrawdownGuard).to receive(:trigger_global_exit!)
       end
 
@@ -140,11 +131,8 @@ RSpec.describe Portfolio::ProfitLockEngine do
     context 'when peak ratchets above a higher level trigger' do
       before do
         # PnL peaked at ₹40k (Level 2), net ₹30k still above floor
-        allow(Portfolio::PnlTracker).to receive(:net_pnl).and_return(30_000.0)
-        allow(Portfolio::PnlTracker).to receive(:peak_pnl).and_return(40_000.0)
-        allow(Portfolio::PnlTracker).to receive(:current_level).and_return(2)
         # floor = 40k × 0.70 = 28k (stored from previous ratchet)
-        allow(Portfolio::PnlTracker).to receive(:locked_floor).and_return(28_000.0)
+        allow(Portfolio::PnlTracker).to receive_messages(net_pnl: 30_000.0, peak_pnl: 40_000.0, current_level: 2, locked_floor: 28_000.0)
       end
 
       it 'does not downgrade the level or breach the guard' do

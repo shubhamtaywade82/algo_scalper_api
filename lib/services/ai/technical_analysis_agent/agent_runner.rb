@@ -161,8 +161,12 @@ module Services
           facts_prompt = build_facts_prompt(context)
           synthesis_timeout = ENV.fetch('AI_AGENT_SYNTHESIS_TIMEOUT', '25').to_i
 
-          model = if @client.respond_to?(:preferred_text_model)
-                    @client.preferred_text_model(default: 'llama3.1:8b')
+          model = if @client.provider == :ollama
+                    if @client.respond_to?(:preferred_text_model)
+                      @client.preferred_text_model(default: 'llama3.1:8b')
+                    else
+                      ENV['OLLAMA_MODEL'] || @client.selected_model || 'llama3.1:8b'
+                    end
                   else
                     ENV['OLLAMA_MODEL'] || @client.selected_model || 'llama3.1:8b'
                   end
@@ -263,11 +267,11 @@ module Services
 
           lines = []
           lines << "Indicator Analysis (#{instrument_name})"
-          lines << "- LTP: #{ltp ? ltp.round(2) : 'N/A'}"
-          lines << "- 15m RSI: #{rsi ? rsi.to_f.round(2) : 'N/A'}" if %w[RSI TREND indicators].include?(requested)
-          lines << "- 15m ADX: #{adx ? adx.to_f.round(2) : 'N/A'} (trend #{strength})"
+          lines << "- LTP: #{ltp ? format('%.2f', ltp) : 'N/A'}"
+          lines << "- 15m RSI: #{rsi ? format('%.2f', rsi.to_f) : 'N/A'}" if %w[RSI TREND indicators].include?(requested)
+          lines << "- 15m ADX: #{adx ? format('%.2f', adx.to_f) : 'N/A'} (trend #{strength})"
           lines << "- 15m Supertrend: #{supertrend || 'N/A'}"
-          lines << "- 15m MACD hist: #{macd_hist ? macd_hist.to_f.round(2) : 'N/A'}"
+          lines << "- 15m MACD hist: #{macd_hist ? format('%.2f', macd_hist.to_f) : 'N/A'}"
           lines << "- Bias: #{bias}"
           lines << "- Action: use this as directional filter only; options strike planning requires an explicit options query."
           lines.join("\n")
@@ -376,33 +380,14 @@ module Services
             Provide OPTIONS TRADING analysis and recommendation based on these facts.
 
             CRITICAL - OPTIONS TRADING FOCUS:
-            - You are analyzing for OPTIONS BUYING ONLY (CALL or PUT options), NOT buying the underlying index (NIFTY/SENSEX/BANKNIFTY)
-            - CRITICAL: We ONLY BUY options (never write/sell options). This is an OPTIONS BUYING strategy only.
+            - You are analyzing for OPTIONS BUYING (CALL or PUT options), NOT buying the underlying index (NIFTY/SENSEX/BANKNIFTY)
             - NEVER recommend "BUY NIFTY" or "SELL SENSEX" - always recommend "BUY CALL options" or "BUY PUT options"
-            - NEVER recommend writing/selling options - we only buy options and exit by closing the long position
             - MANDATORY: You MUST provide specific strike recommendations with exact strike prices
             - If option strikes are provided in the data, use them to recommend specific strikes (e.g., "Buy CALL at strike ₹26,300 (ATM) and ₹26,350 (ATM+1)")
             - If strikes are not provided, calculate ATM strike from LTP and recommend strikes around it (ATM, ATM+1, ATM-1)
             - Consider time decay (theta) and volatility (IV) for intraday options trading
             - Provide entry levels, target strikes, and stop-loss levels for the OPTIONS positions
             - Mention expiry date considerations for intraday trading
-            - TERMINOLOGY: Use "EXIT" or "exit the position" when describing exits - NEVER use "sell options" (which implies options selling/writing)
-            - Exit levels should reference either premium prices or index spot levels (the underlying index price)
-            - Use SL for stop loss, TP1/TP2 for take profit levels
-
-            CRITICAL — LONG OPTION PREMIUM DIRECTION (we are BUYING options, not selling):
-            For LONG options, TP and SL are based on OPTION PREMIUM:
-            - TP (take profit) = HIGHER premium than entry (we profit when premium rises)
-            - SL (stop loss) = LOWER premium than entry (we lose when premium falls)
-
-            For BUY CE (long call): underlying UP → premium UP → TP > entry, SL < entry
-            For BUY PE (long put): underlying DOWN → premium UP → TP > entry, SL < entry
-
-            NEVER output TP lower than entry — that would be a loss, not a profit.
-            NEVER output SL higher than entry — that would be a profit, not a loss.
-
-            Example for BUY PE at entry ₹36:
-              TP1 ₹50 (+38%), TP2 ₹63 (+75%), SL ₹25 (-31%)
 
             RECOMMENDATION FORMAT (MANDATORY):
             - "Buy CALL options at strike ₹26,300 (ATM) and ₹26,350 (ATM+1) for bullish move"
@@ -421,14 +406,10 @@ module Services
           <<~PROMPT
             You are a technical analysis expert specializing in OPTIONS TRADING for Indian index derivatives (NIFTY, BANKNIFTY, SENSEX).
 
-            CRITICAL: You are analyzing for OPTIONS BUYING ONLY, not buying the underlying index.
-            - We ONLY BUY options (CALL or PUT) - we NEVER write/sell options
-            - This is an OPTIONS BUYING strategy exclusively - no options selling/writing
-            Focus on:
-            - BUYING CALL options for bullish moves
-            - BUYING PUT options for bearish moves
+            CRITICAL: You are analyzing for OPTIONS BUYING, not buying the underlying index. Focus on:
+            - CALL options for bullish moves
+            - PUT options for bearish moves
             - Strike selection based on technical levels and risk/reward
-            - Exiting by closing the long position (NOT by selling/writing options)
 
             MANDATORY REQUIREMENTS:
             1. **MUST provide specific strike recommendations** - Never give vague recommendations like "buy options"
@@ -465,31 +446,9 @@ module Services
                - How to enter (market order, limit order, specific price level)
 
             6. **Exit Strategy** (MANDATORY if trading):
-
-               CRITICAL — LONG OPTION PREMIUM DIRECTION (we are BUYING options, not selling):
-               For LONG options, TP and SL are based on OPTION PREMIUM, not the underlying:
-               - TP (take profit) = HIGHER premium than entry (we profit when premium rises)
-               - SL (stop loss) = LOWER premium than entry (we lose when premium falls)
-
-               For BUY CE (long call): underlying UP → premium UP → TP > entry, SL < entry
-               For BUY PE (long put): underlying DOWN → premium UP → TP > entry, SL < entry
-
-               NEVER output TP lower than entry — that would be a loss, not a profit.
-               NEVER output SL higher than entry — that would be a profit, not a loss.
-
-               Example for BUY PE at entry ₹36:
-                 TP1 ₹50 (+38%), TP2 ₹63 (+75%), SL ₹25 (-31%)
-
-               - Stop Loss (SL): Specific premium level BELOW entry to EXIT the position
-                 * Format: "SL at premium ₹X" (must be LOWER than entry premium)
-               - Take Profit (TP): Use TP1, TP2 format — premiums ABOVE entry
-                 * Format: "TP1 at premium ₹X" (must be HIGHER than entry premium)
-                 * Format: "TP2 at premium ₹X" (higher than TP1)
-                 * Always provide at least TP1, optionally TP2 for partial exits
-               - Index Spot Levels to Watch: Provide key index levels to monitor for exit decisions
-                 * Format: "Watch index spot ₹Y for SL" (underlying level that invalidates the trade)
+               - Take Profit (TP): Specific target price or strike level
+               - Stop Loss (SL): Specific stop loss price or strike level
                - Exit timing: When to exit (time-based, price-based, or signal-based)
-               - TERMINOLOGY: Always use "EXIT" or "exit the position" - NEVER use "sell options" (we only buy options, never write/sell them)
 
             7. **Risk Management** (MANDATORY if trading):
                - Position sizing: How much capital to allocate
@@ -502,12 +461,7 @@ module Services
             - Include strike prices: "Buy CALL at strike ₹26,300 (ATM) and ₹26,350 (ATM+1)"
             - Use specific numbers, not ranges: "₹26,300" not "around ₹26,300"
 
-            Be concise, actionable, and focused on OPTIONS BUYING ONLY.
-            - Do not recommend buying the index itself
-            - NEVER recommend options selling/writing - we ONLY buy options
-            - TERMINOLOGY: Use "EXIT" or "exit the position" - NEVER "sell options"
-            - Exit strategy must include: SL (stop loss), TP1 (take profit 1), optionally TP2 (take profit 2)
-            - Reference index spot levels (underlying index price) to watch for exit decisions
+            Be concise, actionable, and focused on OPTIONS TRADING. Do not recommend buying the index itself.
             NEVER give vague recommendations - always specify exact strikes.
           PROMPT
         end

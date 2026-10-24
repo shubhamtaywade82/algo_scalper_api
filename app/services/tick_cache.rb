@@ -6,6 +6,8 @@ require 'singleton'
 class TickCache
   include Singleton
 
+  MEMORY_TTL = 1.5 # seconds
+
   def initialize
     @map = Concurrent::Map.new
   end
@@ -45,6 +47,7 @@ class TickCache
 
       # Restore previous LTP if missing
       new_hash[:ltp] = previous_ltp if new_hash[:ltp].nil? && previous_ltp
+      new_hash[:cached_at] = Time.current
 
       new_hash
     end
@@ -65,16 +68,19 @@ class TickCache
   def fetch(segment, security_id)
     key = cache_key(segment, security_id)
 
-    # Try memory first
-    # mem = @map[key]
-    # return mem if mem.present?
+    mem = @map[key]
+    return mem if mem && mem[:cached_at] && (Time.current - mem[:cached_at]) < MEMORY_TTL
 
     # Then fallback to Redis
     redis_tick = Live::RedisTickCache.instance.fetch_tick(segment, security_id)
 
     return nil if redis_tick.empty?
 
-    # Hydrate memory so next calls are fast
+    # Preserve the real last-update time carried in Redis (stored as a Time#to_s string on
+    # every genuine tick write) instead of stamping "now" — stamping now would make a residual
+    # tick from hours ago (Redis TTL is 24h) look freshly arrived to callers that check
+    # staleness, such as EntryGuard's entry-LTP resolution.
+    redis_tick[:cached_at] = parse_cached_at(redis_tick[:cached_at]) || Time.current
     @map[key] = redis_tick
 
     redis_tick
@@ -153,5 +159,13 @@ class TickCache
 
   def cache_key(seg, sid)
     "#{seg}:#{sid}"
+  end
+
+  def parse_cached_at(value)
+    return value if value.is_a?(Time)
+
+    Time.zone.parse(value.to_s)
+  rescue StandardError
+    nil
   end
 end

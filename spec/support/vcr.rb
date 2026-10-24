@@ -9,9 +9,30 @@ VCR.configure do |config|
   config.configure_rspec_metadata!
 
   # Filter secrets from environment variables
-  %w[CLIENT_ID DHAN_ACCESS_TOKEN RAILS_MASTER_KEY CLIENT_ID ACCESS_TOKEN].each do |key|
+  sensitive_env_vars = %w[
+    CLIENT_ID
+    DHAN_CLIENT_ID
+    ACCESS_TOKEN
+    DHAN_ACCESS_TOKEN
+    DHAN_TOKEN_ACCESS_TOKEN
+    RAILS_MASTER_KEY
+    DHANHQ_PARTNER_ID
+    DHANHQ_PARTNER_SECRET
+    TELEGRAM_BOT_TOKEN
+    TELEGRAM_CHAT_ID
+    ALGO_SCALPER_API_DATABASE_PASSWORD
+    KAMAL_REGISTRY_PASSWORD
+    TRADER_API_BASE_URL
+  ]
+
+  sensitive_env_vars.each do |key|
     val = ENV.fetch(key, nil)
-    config.filter_sensitive_data("<#{key}>") { val } if val
+    config.filter_sensitive_data("<#{key}>") { val } if val.present?
+  end
+
+  # Mask the Trader API base URL specifically if it's set
+  if ENV['TRADER_API_BASE_URL'].present?
+    config.filter_sensitive_data('<TRADER_API_BASE_URL>') { ENV['TRADER_API_BASE_URL'] }
   end
 
   # Filter SENSITIVE_SERVICE_URL (onrender.com)
@@ -20,6 +41,9 @@ VCR.configure do |config|
   end
 
   # Filter sensitive headers - more comprehensive approach
+  # We use blocks that return the value to be replaced.
+  # VCR will replace all occurrences of these values in the cassette.
+
   config.filter_sensitive_data('<ACCESS_TOKEN>') do |interaction|
     # Check various header formats for access-token
     (interaction.request.headers['Access-Token'] ||
@@ -63,34 +87,22 @@ VCR.configure do |config|
   config.before_record do |interaction|
     body = interaction.request.body
 
-    # Only filter if body contains sensitive data, otherwise preserve as-is
-    if body.is_a?(String)
-      # Only filter if access_token or client_id are present in the body
-      if body.include?('access_token') || body.include?('client_id')
-        filtered_body = body.dup
-        # Replace access_token value while preserving the JSON structure
-        if body.include?('access_token')
-          filtered_body = filtered_body.gsub(/"access_token"\s*:\s*"[^"]*"/,
-                                             '"access_token":"<ACCESS_TOKEN>"')
-        end
-        if body.include?('client_id')
-          filtered_body = filtered_body.gsub(/"client_id"\s*:\s*"[^"]*"/,
-                                             '"client_id":"<CLIENT_ID>"')
-        end
-        interaction.request.body = filtered_body
+    if body.is_a?(String) && (body.include?('access_token') || body.include?('client_id'))
+      filtered_body = body.dup
+      # Replace access_token value while preserving the JSON structure
+      filtered_body = filtered_body.gsub(/"access_token"\s*:\s*"[^"]*"/,
+                                         '"access_token":"<ACCESS_TOKEN>"') if body.include?('access_token')
+      if body.include?('client_id')
+        filtered_body = filtered_body.gsub(/"client_id"\s*:\s*"[^"]*"/,
+                                           '"client_id":"<CLIENT_ID>"')
       end
-    elsif body.is_a?(Hash)
-      # Filter hash body only if it contains sensitive keys
-      if body.key?('access_token') || body.key?(:access_token) || body.key?('client_id') || body.key?(:client_id)
-        filtered_body = body.dup
-        if filtered_body['access_token'] || filtered_body[:access_token]
-          filtered_body['access_token'] = '<ACCESS_TOKEN>'
-        end
-        filtered_body[:access_token] = '<ACCESS_TOKEN>' if filtered_body[:access_token]
-        filtered_body['client_id'] = '<CLIENT_ID>' if filtered_body['client_id'] || filtered_body[:client_id]
-        filtered_body[:client_id] = '<CLIENT_ID>' if filtered_body[:client_id]
-        interaction.request.body = filtered_body.to_json if filtered_body.respond_to?(:to_json)
-      end
+      interaction.request.body = filtered_body
+    elsif body.is_a?(Hash) && (body.key?('access_token') || body.key?(:access_token) ||
+      body.key?('client_id') || body.key?(:client_id))
+      filtered_body = body.to_h.transform_keys(&:to_s)
+      filtered_body['access_token'] = '<ACCESS_TOKEN>' if filtered_body['access_token']
+      filtered_body['client_id'] = '<CLIENT_ID>' if filtered_body['client_id']
+      interaction.request.body = filtered_body
     end
   end
 
@@ -106,7 +118,6 @@ VCR.configure do |config|
 
   # Add delay when recording to prevent rate limits
   config.before_record do |_interaction|
-    # Small delay to prevent rapid API calls when recording
     sleep(ENV['VCR_RECORDING_DELAY'].to_f) if ENV['VCR_RECORDING_DELAY']
   end
 end

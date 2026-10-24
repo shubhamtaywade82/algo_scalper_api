@@ -40,7 +40,7 @@ RSpec.describe Strategies::Manager do
       create(:strategy_record, slug: 'lifecycle_test', status: 'deployed', desired_status: 'running')
     end
     let(:version) do
-      path = Rails.root.join('tmp', 'lifecycle_test_strategy.rb')
+      path = Rails.root.join("tmp/lifecycle_test_strategy.rb")
       content = <<~RUBY
         class LifecycleTestStrategy < Strategies::Base
           def call(context) = nil
@@ -55,7 +55,7 @@ RSpec.describe Strategies::Manager do
              manifest: { 'class_name' => 'LifecycleTestStrategy', 'params' => {} })
     end
 
-    let(:path) { Rails.root.join('tmp', 'lifecycle_test_strategy.rb') }
+    let(:path) { Rails.root.join("tmp/lifecycle_test_strategy.rb") }
 
     before do
       strategy_record.update!(current_version: version)
@@ -79,10 +79,23 @@ RSpec.describe Strategies::Manager do
       manager.send(:reconcile)
       expect(manager.runner_status('lifecycle_test')).not_to be_nil
 
-      strategy_record.update!(desired_status: 'stopped')
+      strategy_record.reload.update!(desired_status: 'stopped')
       manager.send(:reconcile)
 
       expect(manager.runner_status('lifecycle_test')).to be_nil
+    end
+
+    it 'removes the Runtime registry entry under the manifest class_name on stop' do
+      # The registry key is the manifest class_name ("LifecycleTestStrategy"),
+      # not slug.camelize ("LifecycleTest") — the old remove missed by that
+      # mismatch for 6 of 8 shipped strategies and leaked the anonymous module
+      # on every stop (review P2).
+      manager.send(:start_runner, strategy_record)
+      expect(Strategies::Runtime.lookup('LifecycleTestStrategy')).not_to be_nil
+
+      manager.send(:stop_runner, 'lifecycle_test', 'manual')
+
+      expect(Strategies::Runtime.lookup('LifecycleTestStrategy')).to be_nil
     end
   end
 end

@@ -27,6 +27,19 @@ RSpec.describe Entries::Guards::MiddayQualityGuard do
       allow(AlgoConfig).to receive(:fetch).and_return(config)
     end
 
+    context 'when run_mode is exit_testing' do
+      before { allow(AlgoConfig).to receive(:run_mode).and_return('exit_testing') }
+
+      it 'passes without evaluating quality thresholds' do
+        allow(Time).to receive(:current).and_return(Time.zone.parse('2026-03-24 11:30:00 IST'))
+        context[:entry_metadata][:regime_confidence] = 0.2
+
+        result = described_class.call(context)
+
+        expect(result).to eq(Entries::EntryGuardPipeline::PASS)
+      end
+    end
+
     context 'when config is disabled' do
       it 'passes entry' do
         allow(AlgoConfig).to receive(:fetch).and_return(midday_guard: { enabled: false })

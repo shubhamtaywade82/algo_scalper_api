@@ -9,7 +9,7 @@ module Ai
       MIN_RR_RATIO = 1.5
       MAX_DATA_AGE_SECONDS = 300 # 5 minutes
 
-      Result = Struct.new(:approved, :action, :risk_checks, keyword_init: true)
+      Result = Struct.new(:approved, :action, :risk_checks)
 
       class << self
         # Validates a trade signal against risk rules.

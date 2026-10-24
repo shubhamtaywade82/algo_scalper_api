@@ -68,10 +68,9 @@ The system integrates exclusively with DhanHQ via their v2 API for order executi
 | BANKNIFTY | IDX_I | 25 | Weekly (last week of month) |
 | SENSEX | IDX_I | 51 | Weekly |
 
-**WebSocket:** No `DHANHQ_WS_ENABLED` env flag. The market tick WebSocket is
-started by `Live::MarketFeedHub` when credentials exist and script/backtest
-guards in `enabled?` are off. Order update WebSocket runs in live mode only
-(`Live::OrderUpdateHub`).
+**ENV control:**
+- `DHANHQ_WS_ENABLED=true` — enable WebSocket
+- WebSocket also disabled in: `Rails.env.test?`, `BACKTEST_MODE=1`, `SCRIPT_MODE=1`, `MOCK_DATA_ENABLED=true`
 
 ### Order Update WebSocket
 
@@ -83,11 +82,9 @@ guards in `enabled?` are off. Order update WebSocket runs in live mode only
 
 ### Gateway Selection
 
-At boot, `Orders::GatewayFactory.build` uses **effective** `paper_trading.enabled` from
-`AlgoConfig.fetch` (YAML + DB overrides + signal tier preset + **`LIVE_TRADING` env**):
-
-- `Orders::GatewayPaper` — when effective `paper_trading.enabled: true` (default when `LIVE_TRADING` is unset/false)
-- `Orders::GatewayLive` — when effective `paper_trading.enabled: false` (`LIVE_TRADING=true`)
+At boot, `Orders::GatewayFactory.build` selects:
+- `Orders::GatewayPaper` — if `config/algo.yml` → `paper_trading.enabled: true`
+- `Orders::GatewayLive` — if `paper_trading.enabled: false`
 
 ### Live Order Safety Gates
 

@@ -62,13 +62,17 @@ module AlphaExecutionService
       }
 
       # Existing logic: resolve_ltp -> sizing -> order_placer -> tracker
+      # Sizing policy (error-handling review 2026-09): the alpha strategy
+      # sizes via Capital::Allocator — now an explicit auto_size opt-in
+      # instead of an inferred fallback.
       order = derivative.buy_option!(
+        auto_size: true,
         product_type: "NORMAL",
         index_cfg: index_cfg,
         meta: meta
       )
 
-      if order&.respond_to?(:order_id) && order.order_id.present?
+      if order.respond_to?(:order_id) && order.order_id.present?
         # Update Audit Trail
         record_signal_audit!(signal, order.order_id, "executed")
         # Record trade in Risk Limits
@@ -91,7 +95,7 @@ module AlphaExecutionService
     end
 
     def find_derivative(signal)
-      Derivative.find_by_params(
+      Instrument.find_derivative_by_params(
         underlying_symbol: signal[:index_key].to_s.upcase,
         strike_price: signal[:strike],
         expiry_date: signal[:expiry],
@@ -128,7 +132,7 @@ module AlphaExecutionService
     def conflicting_position?(signal)
       # Check if an active position exists in the OPPOSITE direction for the same index
       opposite_direction = signal[:direction].to_s.downcase == "ce" ? "pe" : "ce"
-      PositionTracker.active.where("(index_key = ? OR meta->>'index_key' = ?) AND (direction = ? OR meta->>'direction' = ?)", signal[:index_key].to_s, signal[:index_key].to_s, opposite_direction, opposite_direction).exists?
+      PositionTracker.active.where("meta->>'index_key' = ? AND meta->>'direction' = ?", signal[:index_key].to_s, opposite_direction).exists?
     end
 
     def existing_tracker?(derivative)

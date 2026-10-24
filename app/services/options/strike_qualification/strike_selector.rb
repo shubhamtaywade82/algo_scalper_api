@@ -30,7 +30,7 @@ module Options
         return blocked('invalid_trend') if trend_sym && VALID_TRENDS.exclude?(trend_sym)
 
         # Check for institutional strike selection based on momentum (if provided)
-        if momentum_score.present? && !Signal::FastEntryMode.enabled?
+        if momentum_score.present?
           institutional_type = Options::StrikeSelector.strike_type_for_momentum(momentum_score)
           if institutional_type == :skip
             return blocked('weak_momentum_skip')
@@ -46,13 +46,11 @@ module Options
 
         # Get available strikes from the filtered chain (only strikes that exist)
         # Handle different key formats in option chain
-        # rubocop:disable Style/MultilineBlockChain
         available_strikes = option_chain.keys.filter_map do |k|
           k.to_f
         rescue StandardError
           nil
         end.to_set
-        # rubocop:enable Style/MultilineBlockChain
 
         desired = desired_strike(
           index: index,
@@ -67,28 +65,20 @@ module Options
         # Check if desired strike exists in chain before checking liquidity
         desired_strike_float = desired[:strike].to_f
         if available_strikes.include?(desired_strike_float) && liquid_in_chain?(option_chain: option_chain, strike: desired[:strike], side: side_sym)
-          return ok(desired.merge(atm_strike: atm_strike))
+            return ok(desired.merge(atm_strike: atm_strike))
         end
 
         # Fallback to ATM if it exists in chain
         atm_strike_float = atm_strike.to_f
-        atm_data = option_data_for(option_chain: option_chain, strike: atm_strike, side: side_sym)
-        if available_strikes.include?(atm_strike_float) && liquid_in_chain?(option_chain: option_chain, strike: atm_strike, side: side_sym, data: atm_data)
+        if available_strikes.include?(atm_strike_float) && liquid_in_chain?(option_chain: option_chain, strike: atm_strike, side: side_sym)
+            return ok(strike: atm_strike, strike_type: :ATM, atm_strike: atm_strike)
+        end
+
+        # Fallback to ATM.
+        if liquid_in_chain?(option_chain: option_chain, strike: atm_strike, side: side_sym)
           return ok(strike: atm_strike, strike_type: :ATM, atm_strike: atm_strike)
         end
 
-        # Enhanced error reporting
-        if atm_data.nil?
-          Rails.logger.warn("[StrikeSelector] ATM strike #{atm_strike} #{side_sym} not found in option chain for #{index}")
-          return blocked('atm_strike_not_in_chain')
-        end
-
-        ltp = atm_data['last_price']&.to_f
-        oi = atm_data['oi']&.to_i
-        Rails.logger.warn(
-          "[StrikeSelector] ATM strike #{atm_strike} #{side_sym} failed liquidity check " \
-          "(LTP: #{ltp.inspect}, OI: #{oi.inspect}) for #{index}"
-        )
         blocked('no_liquid_atm')
       rescue StandardError => e
         Rails.logger.error("[Options::StrikeQualification::StrikeSelector] #{e.class} - #{e.message}")
@@ -101,7 +91,6 @@ module Options
         case index
         when 'NIFTY' then 50
         when 'SENSEX' then 100
-        when 'BANKNIFTY' then 100
         else 50
         end
       end
@@ -127,13 +116,11 @@ module Options
 
         if trend == :bearish
           return { strike: atm_strike, strike_type: :ATM } if side == :CE
-
           return { strike: atm_strike - step, strike_type: :ATM_MINUS_1 }
         end
 
         if trend == :bullish
           return { strike: atm_strike, strike_type: :ATM } if side == :PE
-
           return { strike: atm_strike + step, strike_type: :ATM_PLUS_1 }
         end
 
@@ -141,12 +128,9 @@ module Options
         { strike: atm_strike, strike_type: :ATM }
       end
 
-      def liquid_in_chain?(option_chain:, strike:, side:, data: nil)
-        data ||= option_data_for(option_chain: option_chain, strike: strike, side: side)
-        unless data.is_a?(Hash)
-          Rails.logger.debug { "[StrikeSelector] No option data found for strike #{strike} #{side}" }
-          return false
-        end
+      def liquid_in_chain?(option_chain:, strike:, side:)
+        data = option_data_for(option_chain: option_chain, strike: strike, side: side)
+        return false unless data.is_a?(Hash)
 
         ltp = data['last_price']&.to_f
         oi = data['oi']&.to_i
@@ -167,19 +151,12 @@ module Options
         # Basic spread sanity check (hard reject only for obviously broken books).
         if bid&.positive? && ask&.positive?
           spread = ask - bid
-          if spread.negative?
-            Rails.logger.debug { "[StrikeSelector] Strike #{strike} #{side} has negative spread: #{spread}" }
-            return false
-          end
-          if spread > (ltp * 0.15) # 15% hard reject
-            Rails.logger.debug { "[StrikeSelector] Strike #{strike} #{side} has wide spread: #{spread} (> #{ltp * 0.15})" }
-            return false
-          end
+          return false if spread.negative?
+          return false if spread > (ltp * 0.15) # 15% hard reject
         end
 
         true
-      rescue StandardError => e
-        Rails.logger.debug { "[StrikeSelector] Error checking liquidity for strike #{strike} #{side}: #{e.class} - #{e.message}" }
+      rescue StandardError
         false
       end
 
@@ -234,16 +211,7 @@ module Options
         end
 
         side_key = side == :CE ? 'ce' : 'pe'
-        option_data = strike_data[side_key] || strike_data[side_key.to_sym]
-
-        unless option_data
-          Rails.logger.debug do
-            "[StrikeSelector] #{side} option not found for strike #{strike} (key: #{found_key}). " \
-              "Available keys in strike_data: #{strike_data.keys.inspect}"
-          end
-        end
-
-        option_data
+        strike_data[side_key]
       end
 
       def ok(payload)
@@ -256,3 +224,4 @@ module Options
     end
   end
 end
+

@@ -1,0 +1,12 @@
+name: "Adaptive Supertrend + KNN"
+slug: "adaptive_supertrend_knn"
+class_name: "AdaptiveSupertrendKnn"
+timeframes: ["1m"]
+instruments: ["NIFTY", "BANKNIFTY", "SENSEX"]
+params:
+  k_neighbors:
+    type: integer
+    default: 5
+  min_confidence:
+    type: integer
+    default: 60

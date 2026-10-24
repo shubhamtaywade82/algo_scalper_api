@@ -3,11 +3,15 @@
 # app/services/options/expired_fetcher.rb
 module Options
   class ExpiredFetcher < ApplicationService
-    def initialize(symbol:, expiry_flag: 'WEEK', date: Time.zone.today, interval: '5')
+    # @param strike [String] 'ATM', 'ATM+N', or 'ATM-N' — DhanHQ's expired-options endpoint
+    #   resolves this per-candle against spot; it is not a literal strike price. See
+    #   Backtest::OptionsBuyingBacktester#same_strike_bars for why callers must not treat the
+    #   returned series as one contract's continuous price regardless of which offset is used.
+    def initialize(symbol:, expiry_flag: 'WEEK', date: Time.zone.today, strike: 'ATM')
       @symbol = symbol
       @expiry_flag = normalize_expiry_flag(symbol, expiry_flag)
       @date = date
-      @interval = interval.to_s
+      @strike = strike.presence || 'ATM'
     end
 
     # Fetches CE and PE OHLC arrays
@@ -36,7 +40,7 @@ module Options
     # end
 
     def call
-      cache_key = "expired_option_data:#{@symbol}:#{@date}:#{@expiry_flag}:#{@interval}"
+      cache_key = "expired_option_data:#{@symbol}:#{@date}:#{@expiry_flag}:#{@strike}"
 
       cached_data = Rails.cache.read(cache_key)
       return cached_data if cached_data.present?
@@ -49,12 +53,12 @@ module Options
       result = { ce: 'CALL', pe: 'PUT' }.to_h do |side_key, opt_type|
         data = DhanHQ::Models::ExpiredOptionsData.fetch(
           exchange_segment: segment_for(@symbol),
-          interval: @interval,
+          interval: '5',
           security_id: security_id_for(@symbol),
           instrument: 'OPTIDX',
           expiry_flag: @expiry_flag,
           expiry_code: 1,
-          strike: 'ATM',
+          strike: @strike,
           drv_option_type: opt_type,
           required_data: %w[open high low close volume oi spot strike],
           from_date: date_str,

@@ -2,7 +2,7 @@
 
 require 'swagger_helper'
 
-# rubocop:disable RSpec/DescribeClass, RSpec/EmptyExampleGroup, RSpec/ScatteredSetup -- RSwag OpenAPI specs
+# rubocop:disable-next RSpec/DescribeClass, RSpec/EmptyExampleGroup, RSpec/ScatteredSetup -- RSwag OpenAPI specs
 RSpec.describe 'OpenAPI v1 — infrastructure & dashboard reads', openapi_spec: 'v1/swagger.yaml' do
   path '/up' do
     get 'Rails process liveness' do
@@ -59,28 +59,6 @@ RSpec.describe 'OpenAPI v1 — infrastructure & dashboard reads', openapi_spec: 
     end
   end
 
-  path '/api/dhan_access_token' do
-    get 'Dhan Access Token' do
-      tags 'Authentication'
-      produces 'application/json'
-      description 'Requires Bearer or X-Api-Key when API_DASHBOARD_TOKEN is set. Returns the active Dhan access token.'
-
-      response '200', 'access token JSON' do
-        before { stub_dhan_access_token! }
-
-        schema type: :object,
-               properties: {
-                 dhanaccesstoken: { type: :string },
-                 dhan_access_token: { type: :string },
-                 expiry_time: { type: :string, format: 'date-time' }
-               },
-               required: %w[dhanaccesstoken dhan_access_token]
-
-        run_test!
-      end
-    end
-  end
-
   path '/api/positions' do
     get 'Positions index' do
       tags 'Positions'
@@ -123,4 +101,3 @@ RSpec.describe 'OpenAPI v1 — infrastructure & dashboard reads', openapi_spec: 
     end
   end
 end
-# rubocop:enable RSpec/DescribeClass, RSpec/EmptyExampleGroup, RSpec/ScatteredSetup

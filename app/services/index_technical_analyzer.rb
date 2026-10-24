@@ -361,10 +361,9 @@ class IndexTechnicalAnalyzer < ApplicationService
     # Fetch OHLC data for each timeframe
     indicators_data = {}
     timeframes.each do |tf|
-      # Use CandleSeriesCache (Redis-backed) in live trading to avoid redundant
-      # DhanHQ REST calls on every analysis cycle.
-      # Falls back transparently to backfill when the cache is cold (< 20 candles).
-      series = Live::CandleSeriesCache.fetch(instrument: instrument, interval: tf.to_i, backfill: true)
+      # Use instrument.candles() method which returns CandleSeries
+      # This may internally call intraday_ohlc() which uses DhanhqErrorHandler
+      series = instrument.candles(interval: tf.to_s)
       next unless series&.candles&.any?
 
       # Compute indicators using CandleSeries methods with configured periods
@@ -461,6 +460,14 @@ class IndexTechnicalAnalyzer < ApplicationService
     defined?(TA) && TA.const_defined?(:TechnicalAnalysis)
   end
 
+  def ensure_dhanhq_ta_loaded
+    return if defined?(TA) && TA.const_defined?(:TechnicalAnalysis)
+
+    require 'dhan_hq/ta'
+  rescue LoadError => e
+    log_warn("Failed to load dhan_hq/ta: #{e.message}")
+  end
+
   def dhanhq_analysis_available?
     defined?(DhanHQ) && DhanHQ.const_defined?(:Analysis) &&
       DhanHQ::Analysis.const_defined?(:MultiTimeframeAnalyzer)
@@ -475,25 +482,13 @@ class IndexTechnicalAnalyzer < ApplicationService
   def normalize_timeframe_keys(indicators)
     return indicators unless indicators.is_a?(Hash)
 
-    indicators.deep_symbolize_keys
+    indicators.each_with_object({}) do |(key, value), normalized|
+      normalized[key.to_s] = value
+    end
   end
 
   def valid_analysis_payload?(payload)
-    return false unless payload.is_a?(Hash)
-
-    meta = payload[:meta] || payload['meta']
-    indicators = payload[:indicators] || payload['indicators']
-    meta.present? && indicators.present?
-  end
-
-  def ensure_dhanhq_ta_loaded
-    return if defined?(@ta_load_attempted) && @ta_load_attempted
-
-    require 'ta/technical_analysis'
-  rescue LoadError => e
-    log_warn("DhanHQ TA load failed: #{e.message}")
-  ensure
-    @ta_load_attempted = true
+    payload.is_a?(Hash) && payload[:meta].present? && payload[:indicators].present?
   end
 
   def sanitize_timeframes(timeframes)

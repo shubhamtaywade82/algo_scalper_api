@@ -1,6 +1,25 @@
-import { onMount, onCleanup, createEffect, createSignal, For } from 'solid-js'
+import { onMount, onCleanup, createEffect, createSignal, Show, For } from 'solid-js'
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers, ColorType } from 'lightweight-charts'
 import { istTickMarkFormatter, istTimeFormatter } from '../../lib/chartTime'
+import {
+  detectFVGs,
+  detectOrderBlocks,
+  detectMarketStructure,
+  detectLiquidityPools,
+  detectPremiumDiscount,
+  detectSupplyDemandZones,
+  detectTrendlineLiquidity,
+  detectCandlestickPatterns
+} from '../../lib/smc/smcEngine'
+import {
+  detectICTSessions,
+  detectSilverBulletWindows,
+  detectICTOTEZone,
+  detectJudasSwings,
+  detectAMDCycles
+} from '../../lib/smc/ictEngine'
+import { scanSetups, resampleCandles, strikeIntervalForSymbol } from '../../lib/smc/setupScanner'
+import { drawSmcOverlays } from '../../lib/smc/canvasOverlay'
 
 // Overlay indicators are just LineSeries fed derived {time, value} arrays.
 // Add a new type by: (1) writing a compute fn here, (2) registering it in
@@ -78,18 +97,149 @@ export default function PriceChart(props) {
   let supportLine = null
   let resistanceLine = null
   const radarLines = new Map()
-  let obBullHighLine = null
-  let obBullLowLine = null
-  let obBearHighLine = null
-  let obBearLowLine = null
-  const fvgLines = new Map()
-  let eqLine = null
-  let eqHighLine = null
-  let eqLowLine = null
-  let swingHighLine = null
-  let swingLowLine = null
-  let swingBosLine = null
   const [capsules, setCapsules] = createSignal([]) // floating detail cards anchored to entry-price Y
+
+  // Local SMC/ICT/PA detection — runs from the candle array (see lib/smc/*),
+  // cached by candle "version" so the 60fps lerp loop and pan/zoom redraws
+  // re-project cached results instead of re-running the detectors every frame.
+  let smcCanvasEl = null
+  let drawPending = false
+  let detectCache = { version: '', results: null }
+  let scanCache = { version: '', signal: null }
+  let lastScanAt = 0
+  const [scanSignal, setScanSignal] = createSignal(null)
+  const scanEnabled = () => (props.indicators ? props.indicators() : []).some(i => i.id === 'setup_scan' && i.enabled)
+
+  function candlesVersion() {
+    const last = lastCandles[lastCandles.length - 1]
+    return last ? `${lastCandles.length}:${last.time}:${last.close}:${last.high}:${last.low}` : `${lastCandles.length}:`
+  }
+
+  function overlayToggles() {
+    const inds = props.indicators ? props.indicators() : []
+    const isOn = (id) => inds.find(i => i.id === id)?.enabled === true
+    return {
+      ob: inds.find(i => i.id === 'smc_ob')?.enabled !== false, // default ON — matches the old chart
+      fvg: isOn('smc_fvg'),
+      structure: isOn('smc_swing'),
+      equilibrium: isOn('smc_eq'),
+      liquidity: isOn('smc_liquidity'),
+      sessions: isOn('ict_sessions'),
+      sb: isOn('ict_sb'),
+      ote: isOn('ict_ote'),
+      judas: isOn('ict_judas'),
+      amd: isOn('ict_amd'),
+      sd: isOn('pa_sd'),
+      tl: isOn('pa_tl'),
+      cp: isOn('pa_cp')
+    }
+  }
+
+  function detectionResults() {
+    const version = candlesVersion()
+    if (detectCache.version === version && detectCache.results) return detectCache.results
+    const window = lastCandles.slice(-1000)
+    const results = {
+      fvg: detectFVGs(lastCandles),
+      ob: detectOrderBlocks(lastCandles),
+      structure: detectMarketStructure(window),
+      liquidity: detectLiquidityPools(window),
+      pd: detectPremiumDiscount(lastCandles),
+      sessions: detectICTSessions(lastCandles),
+      sb: detectSilverBulletWindows(lastCandles),
+      ote: detectICTOTEZone(lastCandles),
+      judas: detectJudasSwings(lastCandles),
+      amd: detectAMDCycles(window),
+      sd: detectSupplyDemandZones(window),
+      tl: detectTrendlineLiquidity(window),
+      cp: detectCandlestickPatterns(window)
+    }
+    detectCache = { version, results }
+    return results
+  }
+
+  function scheduleDraw() {
+    if (drawPending) return
+    drawPending = true
+    requestAnimationFrame(() => {
+      drawPending = false
+      drawOverlays()
+    })
+  }
+
+  function drawOverlays() {
+    const canvas = smcCanvasEl
+    if (!canvas || !chart || !candleSeries) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const width = containerEl.clientWidth || canvas.width
+    const height = containerEl.clientHeight || canvas.height
+    const dpr = window.devicePixelRatio || 1
+    const renderWidth = Math.round(width * dpr)
+    const renderHeight = Math.round(height * dpr)
+    if (canvas.width !== renderWidth || canvas.height !== renderHeight) {
+      canvas.width = renderWidth
+      canvas.height = renderHeight
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.clearRect(0, 0, width, height)
+    if (!lastCandles.length) return
+    drawSmcOverlays(ctx, {
+      chart,
+      series: candleSeries,
+      width,
+      height,
+      candles: lastCandles,
+      detections: detectionResults(),
+      toggles: overlayToggles()
+    })
+  }
+
+  // Scanner HUD — MTF bias + CE/PE strike recommendation. Recomputed at most
+  // once per second (cheap version+price guard) so live ticks don't hog the
+  // main thread; drawing results are cached per candle version anyway.
+  function refreshScan() {
+    if (!scanEnabled() || !lastCandles.length) return
+    if (Date.now() - lastScanAt < 1000) return
+    lastScanAt = Date.now()
+    const price = targetBar?.close ?? lastCandles[lastCandles.length - 1].close
+    const version = `${candlesVersion()}|${price}`
+    if (scanCache.version === version) return
+    scanCache.version = version
+    const baseMin = parseInt(props.interval, 10) || 5
+    const htfMult = ({ 1: 5, 5: 3, 15: 4, 30: 2, 60: 4 })[baseMin] ?? 4
+    const htfMin = htfMult * baseMin
+    const htfCandles = resampleCandles(lastCandles, htfMin * 60)
+    const htfWindow = htfCandles.slice(-1000)
+    const det = detectionResults()
+    const signal = scanSetups({
+      lastPrice: price,
+      fvg: det.fvg,
+      ob: det.ob,
+      structure: det.structure,
+      liquidity: det.liquidity,
+      pd: det.pd,
+      sessions: det.sessions,
+      sb: det.sb,
+      ote: det.ote,
+      judas: det.judas,
+      amd: det.amd,
+      sd: det.sd,
+      tl: det.tl,
+      cp: det.cp,
+      htf: {
+        tfLabel: htfMin >= 60 ? `${htfMin / 60}h` : `${htfMin}m`,
+        structure: detectMarketStructure(htfWindow),
+        amd: detectAMDCycles(htfWindow),
+        liquidity: detectLiquidityPools(htfWindow),
+        judas: detectJudasSwings(htfWindow)
+      },
+      symbol: props.symbol,
+      strikeInterval: strikeIntervalForSymbol(props.symbol)
+    })
+    scanCache.signal = signal
+    setScanSignal(signal)
+  }
 
   // Animation state for the live (last) candle + LTP line
   let rafId = null
@@ -432,15 +582,23 @@ export default function PriceChart(props) {
         const entry = entries[0]
         if (entry && chart) chart.applyOptions({ width: entry.contentRect.width })
         recomputeCapsules()
+        scheduleDraw()
       })
       ro.observe(containerEl)
     } else {
-      ro = new ResizeObserver(() => recomputeCapsules())
+      ro = new ResizeObserver(() => {
+        recomputeCapsules()
+        scheduleDraw()
+      })
       ro.observe(containerEl)
     }
 
-    // Same price → different pixel as the user pans/zooms — reposition capsules.
-    chart.timeScale().subscribeVisibleLogicalRangeChange(() => recomputeCapsules())
+    // Same price → different pixel as the user pans/zooms — reposition capsules
+    // and re-project canvas overlays against the new visible range.
+    chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+      recomputeCapsules()
+      scheduleDraw()
+    })
     chart.priceScale('right').subscribeSizeChange?.(() => recomputeCapsules())
 
     onCleanup(() => {
@@ -458,50 +616,6 @@ export default function PriceChart(props) {
         if (candleSeries) candleSeries.removePriceLine(line)
       }
       radarLines.clear()
-      if (obBullHighLine && candleSeries) {
-        candleSeries.removePriceLine(obBullHighLine)
-        obBullHighLine = null
-      }
-      if (obBullLowLine && candleSeries) {
-        candleSeries.removePriceLine(obBullLowLine)
-        obBullLowLine = null
-      }
-      if (obBearHighLine && candleSeries) {
-        candleSeries.removePriceLine(obBearHighLine)
-        obBearHighLine = null
-      }
-      if (obBearLowLine && candleSeries) {
-        candleSeries.removePriceLine(obBearLowLine)
-        obBearLowLine = null
-      }
-      for (const line of fvgLines.values()) {
-        if (candleSeries) candleSeries.removePriceLine(line)
-      }
-      fvgLines.clear()
-      if (eqLine && candleSeries) {
-        candleSeries.removePriceLine(eqLine)
-        eqLine = null
-      }
-      if (eqHighLine && candleSeries) {
-        candleSeries.removePriceLine(eqHighLine)
-        eqHighLine = null
-      }
-      if (eqLowLine && candleSeries) {
-        candleSeries.removePriceLine(eqLowLine)
-        eqLowLine = null
-      }
-      if (swingHighLine && candleSeries) {
-        candleSeries.removePriceLine(swingHighLine)
-        swingHighLine = null
-      }
-      if (swingLowLine && candleSeries) {
-        candleSeries.removePriceLine(swingLowLine)
-        swingLowLine = null
-      }
-      if (swingBosLine && candleSeries) {
-        candleSeries.removePriceLine(swingBosLine)
-        swingBosLine = null
-      }
       chart?.remove()
       chart = null
     })
@@ -548,6 +662,7 @@ export default function PriceChart(props) {
       volumeSeries.setData([])
       ltpSeries?.setData([])
       ltpTailAnchor = null
+      scheduleDraw()
       return
     }
 
@@ -559,6 +674,8 @@ export default function PriceChart(props) {
     lastCandles = candles
     syncIndicators()
     syncPositions()
+    scheduleDraw()
+    refreshScan()
 
     // New live bar's open becomes the lerp start so each fresh refresh
     // re-animates from where the bar began rather than snapping to the latest close
@@ -589,10 +706,13 @@ export default function PriceChart(props) {
 
   // Indicator config changes (toggle on/off, edit period/color) — independent of
   // the candles effect so flipping a switch updates immediately, no refetch needed.
+  // Also re-projects the overlay canvas since overlay visibility lives in here.
   createEffect(() => {
     props.indicators ? props.indicators() : null
     if (!chart || !lastCandles.length) return
     syncIndicators()
+    scheduleDraw()
+    refreshScan()
   })
 
   // Active-position overlay changes (open/close/PnL flip) — independent of the
@@ -618,6 +738,7 @@ export default function PriceChart(props) {
     targetBar.high = Math.max(targetBar.high, ltp)
     targetBar.low = Math.min(targetBar.low, ltp)
     kickAnimation()
+    refreshScan()
   })
 
   // Render support & resistance lines, styling them dynamically when a breakout is armed.
@@ -708,187 +829,45 @@ export default function PriceChart(props) {
     }
   })
 
-  // Render SMC structural elements (Order Blocks & Fair Value Gaps)
-  createEffect(() => {
-    if (!chart || !candleSeries) return
-    const ctx = props.smcContext ? props.smcContext() : null
-    
-    // Check if these indicators are enabled in props.indicators
-    const inds = props.indicators ? props.indicators() : []
-    const obEnabled = inds.find(i => i.id === 'smc_ob')?.enabled !== false
-    const fvgEnabled = inds.find(i => i.id === 'smc_fvg')?.enabled === true
-    const eqEnabled = inds.find(i => i.id === 'smc_eq')?.enabled === true
-    const swingEnabled = inds.find(i => i.id === 'smc_swing')?.enabled === true
-
-    // Clean up previous OB lines
-    if (obBullHighLine) { candleSeries.removePriceLine(obBullHighLine); obBullHighLine = null }
-    if (obBullLowLine) { candleSeries.removePriceLine(obBullLowLine); obBullLowLine = null }
-    if (obBearHighLine) { candleSeries.removePriceLine(obBearHighLine); obBearHighLine = null }
-    if (obBearLowLine) { candleSeries.removePriceLine(obBearLowLine); obBearLowLine = null }
-
-    if (ctx && obEnabled) {
-      // 1. Draw Bullish Order Block (latest unmitigated)
-      const bullOb = ctx.order_blocks?.bullish
-      if (bullOb && Number.isFinite(bullOb.high) && Number.isFinite(bullOb.low)) {
-        obBullHighLine = candleSeries.createPriceLine({
-          price: Number(bullOb.high),
-          color: 'rgba(52, 211, 153, 0.7)', // emerald-400
-          lineWidth: 1,
-          lineStyle: 1, // dotted
-          axisLabelVisible: true,
-          title: 'Bull OB (High)'
-        })
-        obBullLowLine = candleSeries.createPriceLine({
-          price: Number(bullOb.low),
-          color: 'rgba(52, 211, 153, 0.35)',
-          lineWidth: 1,
-          lineStyle: 2, // dashed
-          axisLabelVisible: true,
-          title: 'Bull OB (Low)'
-        })
-      }
-
-      // 2. Draw Bearish Order Block (latest unmitigated)
-      const bearOb = ctx.order_blocks?.bearish
-      if (bearOb && Number.isFinite(bearOb.high) && Number.isFinite(bearOb.low)) {
-        obBearHighLine = candleSeries.createPriceLine({
-          price: Number(bearOb.high),
-          color: 'rgba(251, 113, 133, 0.35)', // rose-400
-          lineWidth: 1,
-          lineStyle: 2, // dashed
-          axisLabelVisible: true,
-          title: 'Bear OB (High)'
-        })
-        obBearLowLine = candleSeries.createPriceLine({
-          price: Number(bearOb.low),
-          color: 'rgba(251, 113, 133, 0.7)',
-          lineWidth: 1,
-          lineStyle: 1, // dotted
-          axisLabelVisible: true,
-          title: 'Bear OB (Low)'
-        })
-      }
-    }
-
-    // 3. Draw active Fair Value Gaps (FVGs)
-    const activeFvgs = fvgEnabled && ctx?.fvg?.active ? ctx.fvg.active : []
-    const seenFvgKeys = new Set()
-
-    for (const fvg of activeFvgs) {
-      if (!fvg || !Number.isFinite(fvg.from) || !Number.isFinite(fvg.to)) continue
-      
-      // Create a unique key for this FVG based on type, bounds and timestamp
-      const fvgKey = `${fvg.type}-${fvg.from}-${fvg.to}-${fvg.timestamp}`
-      seenFvgKeys.add(fvgKey)
-
-      const isBull = fvg.type === 'bullish'
-      const fvgColor = isBull ? 'rgba(45, 212, 191, 0.45)' : 'rgba(244, 63, 94, 0.45)' // teal vs rose
-      
-      // Draw middle line representing the FVG gap center
-      const midPrice = (Number(fvg.from) + Number(fvg.to)) / 2
-      let line = fvgLines.get(fvgKey)
-      if (!line) {
-        line = candleSeries.createPriceLine({
-          price: midPrice,
-          color: fvgColor,
-          lineWidth: 1,
-          lineStyle: 2, // dashed
-          axisLabelVisible: true,
-          title: `${isBull ? 'Bull' : 'Bear'} FVG`
-        })
-        fvgLines.set(fvgKey, line)
-      }
-    }
-
-    // Clean up resolved/mitigated FVGs
-    for (const [key, line] of fvgLines) {
-      if (!seenFvgKeys.has(key)) {
-        candleSeries.removePriceLine(line)
-        fvgLines.delete(key)
-      }
-    }
-
-    // 4. Draw SMC Equilibrium & Premium/Discount boundaries
-    if (eqLine) { candleSeries.removePriceLine(eqLine); eqLine = null }
-    if (eqHighLine) { candleSeries.removePriceLine(eqHighLine); eqHighLine = null }
-    if (eqLowLine) { candleSeries.removePriceLine(eqLowLine); eqLowLine = null }
-
-    if (ctx && eqEnabled) {
-      const pd = ctx.premium_discount
-      if (pd && Number.isFinite(pd.equilibrium) && Number.isFinite(pd.high) && Number.isFinite(pd.low)) {
-        eqLine = candleSeries.createPriceLine({
-          price: Number(pd.equilibrium),
-          color: '#eab308', // yellow-500
-          lineWidth: 1.5,
-          lineStyle: 0, // Solid
-          axisLabelVisible: true,
-          title: 'Equilibrium (50%)'
-        })
-        eqHighLine = candleSeries.createPriceLine({
-          price: Number(pd.high),
-          color: 'rgba(239, 68, 68, 0.4)', // red-500
-          lineWidth: 1,
-          lineStyle: 2, // dashed
-          axisLabelVisible: true,
-          title: 'Premium Range High'
-        })
-        eqLowLine = candleSeries.createPriceLine({
-          price: Number(pd.low),
-          color: 'rgba(34, 197, 94, 0.4)', // green-500
-          lineWidth: 1,
-          lineStyle: 2, // dashed
-          axisLabelVisible: true,
-          title: 'Discount Range Low'
-        })
-      }
-    }
-
-    // 5. Draw SMC Swing Structure & BOS lines
-    if (swingHighLine) { candleSeries.removePriceLine(swingHighLine); swingHighLine = null }
-    if (swingLowLine) { candleSeries.removePriceLine(swingLowLine); swingLowLine = null }
-    if (swingBosLine) { candleSeries.removePriceLine(swingBosLine); swingBosLine = null }
-
-    if (ctx && swingEnabled) {
-      const ss = ctx.swing_structure
-      if (ss) {
-        if (ss.last_swing_high?.price && Number.isFinite(ss.last_swing_high.price)) {
-          swingHighLine = candleSeries.createPriceLine({
-            price: Number(ss.last_swing_high.price),
-            color: '#a855f7', // purple-500
-            lineWidth: 1,
-            lineStyle: 2, // dashed
-            axisLabelVisible: true,
-            title: 'Swing High'
-          })
-        }
-        if (ss.last_swing_low?.price && Number.isFinite(ss.last_swing_low.price)) {
-          swingLowLine = candleSeries.createPriceLine({
-            price: Number(ss.last_swing_low.price),
-            color: '#3b82f6', // blue-500
-            lineWidth: 1,
-            lineStyle: 2, // dashed
-            axisLabelVisible: true,
-            title: 'Swing Low'
-          })
-        }
-        if (ss.last_bos?.price && Number.isFinite(ss.last_bos.price)) {
-          const isBull = ss.last_bos.type === 'bullish'
-          swingBosLine = candleSeries.createPriceLine({
-            price: Number(ss.last_bos.price),
-            color: isBull ? '#10b981' : '#ef4444', // green vs red
-            lineWidth: 1.5,
-            lineStyle: 1, // dotted
-            axisLabelVisible: true,
-            title: `Last BOS (${isBull ? 'Bullish' : 'Bearish'})`
-          })
-        }
-      }
-    }
-  })
-
   return (
     <div class={`relative w-full ${props.fullHeight ? 'h-full' : ''}`}>
-      <div ref={containerEl} class={`w-full rounded-2xl overflow-hidden ${props.fullHeight ? 'h-full' : ''}`} />
+      <div ref={containerEl} class={`relative w-full rounded-2xl overflow-hidden ${props.fullHeight ? 'h-full' : ''}`}>
+        <canvas
+          ref={smcCanvasEl}
+          class="absolute inset-0 w-full h-full pointer-events-none z-10"
+        />
+      </div>
+
+      {/* Setup scanner HUD — MTF bias + recommended CE/PE strike ladder */}
+      <Show when={scanEnabled() && scanSignal()}>
+        {signal => {
+          const dir = signal().direction
+          const rec = signal().recommendedStrikes
+          return (
+            <div class="absolute top-2 right-2 z-20 px-3 py-2 rounded-xl bg-gray-900/85 backdrop-blur-md border border-white/10 shadow-2xl pointer-events-none text-[10px] select-none">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-[9px] font-bold uppercase tracking-widest text-gray-500">Setup Scan</span>
+                <span class={`font-mono font-bold ${dir === 'CE_LONG' ? 'text-emerald-400' : dir === 'PE_LONG' ? 'text-rose-400' : 'text-gray-400'}`}>
+                  {dir}
+                </span>
+                <span class="font-mono text-gray-400">{signal().bias.toUpperCase()}{signal().biasTf ? ` @ ${signal().biasTf}` : ''}</span>
+              </div>
+              <Show when={rec}>
+                <div class="font-mono font-bold text-gray-200">
+                  {rec.optionType} {rec.primary.strike}
+                  <span class="text-gray-500 font-normal"> ({rec.primary.label}) · alt {rec.alternates.map(a => a.strike).join('/')}</span>
+                </div>
+              </Show>
+              <div class="flex items-center justify-between mt-1 text-gray-400">
+                <span>Confluence {signal().alignedCount}/6</span>
+                <Show when={signal().notes[0]}>
+                  <span class="truncate max-w-[180px] pl-2" title={signal().notes[0]}>{signal().notes[0]}</span>
+                </Show>
+              </div>
+            </div>
+          )
+        }}
+      </Show>
 
       {/* Floating capsules — anchored to each position's entry-price Y coordinate.
           pointer-events-none on the layer so chart pan/zoom/crosshair pass through;

@@ -151,7 +151,8 @@ RSpec.describe Risk::LimitsGuard do
       expect(stats).to eq({
                             trades_count: 7,
                             consecutive_losses: 2,
-                            active_positions: 1
+                            active_positions: 1,
+                            redis_available: true
                           })
     end
 
@@ -169,6 +170,11 @@ RSpec.describe Risk::LimitsGuard do
       it 'still returns active_positions from the database' do
         stats = described_class.current_stats
         expect(stats[:active_positions]).to eq(1)
+      end
+
+      it 'flags redis_available as false so dashboards surface data-unavailable' do
+        stats = described_class.current_stats
+        expect(stats[:redis_available]).to be false
       end
     end
 
@@ -190,9 +196,9 @@ RSpec.describe Risk::LimitsGuard do
       allow(Redis).to receive(:new).and_raise(Redis::CannotConnectError, 'connection refused')
     end
 
-    it 'returns { blocked: false } for trades/positions check (Redis nil returns 0)' do
+    it 'returns { blocked: true } for trades/positions check (fail-closed on Redis failure)' do
       result = described_class.check_all!
-      expect(result).to eq({ blocked: false })
+      expect(result).to eq({ blocked: 'daily_max_trades_reached' })
     end
   end
 
@@ -203,11 +209,11 @@ RSpec.describe Risk::LimitsGuard do
       allow(Rails.logger).to receive(:error)
     end
 
-    it 'logs the error at least once and returns nil' do
+    it 'logs the error at least once and returns blocked (fail-closed)' do
       result = described_class.check_all!
 
       expect(Rails.logger).to have_received(:error).with(/Redis error/).at_least(:once)
-      expect(result).to eq({ blocked: false })
+      expect(result).to eq({ blocked: 'daily_max_trades_reached' })
     end
   end
 

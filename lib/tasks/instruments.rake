@@ -59,14 +59,14 @@ namespace :instruments do
 
       pp ''
       if args[:force] == 'true'
-        pp "FORCE mode enabled: Marking active position trackers as 'exited'..."
+        pp "FORCE mode enabled: Marking active position trackers as 'closed'..."
         active_trackers.update_all(
           status: :exited,
           updated_at: Time.current
         )
         pp "Marked #{active_trackers.count} active tracker(s) as exited."
       else
-        pp 'To force clear (will mark active positions as exited), run:'
+        pp 'To force clear (will mark active positions as closed), run:'
         pp '  bin/rails instruments:clear[true]'
         pp 'Or manually close/exit positions first.'
         pp ''

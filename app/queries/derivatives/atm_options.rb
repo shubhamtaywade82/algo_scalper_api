@@ -5,7 +5,7 @@ module Derivatives
     LIMIT = 5
 
     def self.call(symbol:, atm:, range: 100)
-      Derivative
+      Instrument
         .options
         .where(underlying_symbol: symbol.to_s.upcase)
         .current_expiry

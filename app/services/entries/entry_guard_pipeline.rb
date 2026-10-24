@@ -2,6 +2,7 @@
 
 module Entries
   # Runs entry request through a chain of guards. First guard that blocks wins.
+  # Used by EntryGuard.try_enter to make guard order explicit and each step testable.
   class EntryGuardPipeline
     PASS = :pass
 
@@ -9,64 +10,73 @@ module Entries
       @handlers = handlers
     end
 
-    # @param context [Hash] Mutable context (index_cfg, pick, direction, etc.)
+    # @param context [Hash] Mutable context (index_cfg, pick, direction, etc.). Handlers may set :instrument, :ltp, :side, :is_supertrend.
     # @return [Symbol] :pass if all handlers passed
-    # @return [Hash] { blocked: String, evaluated: Array<Hash> } if a handler blocked.
-    #   `evaluated` lists every guard run before the block, in order, so callers can
-    #   report the full decision trail rather than only the guard that finally blocked.
+    # @return [Hash] { blocked: String } if a handler blocked
     def run(context)
-      evaluated = []
       @handlers.each do |handler|
         result = handler.call(context)
-        if result == PASS
-          evaluated << { guard: handler.name, result: :pass }
-          next
-        end
+        next if result == PASS
 
-        reason = result.is_a?(Hash) ? result[:blocked] : result.to_s
-        evaluated << { guard: handler.name, result: :blocked, reason: reason }
-        return { blocked: reason, evaluated: evaluated }
+        return normalize_rejection(result)
       end
       PASS
     end
 
     private
 
+    def normalize_rejection(result)
+      return result if result.is_a?(DecisionRejection)
+
+      if result.is_a?(Hash) && result[:blocked]
+        code = result[:blocked].to_s.parameterize.underscore.to_sym
+        DecisionRejection.new(code: code, category: :risk, message: result[:blocked].to_s, details: result)
+      else
+        DecisionRejection.new(code: :guard_blocked, category: :risk, details: { raw: result })
+      end
+    end
+
     def default_handlers
       [
         Guards::DrawdownGuard,
         Guards::EntryPolicyGuard,
         Guards::CircuitBreakerGuard,
-        Guards::VixGateGuard,
-        Guards::MomentumGateGuard,
-        Guards::IvVolGateGuard,
-        Guards::OptionVolumeVelocityGuard,
-        Guards::ChainConfirmationGuard,
-        Guards::EarliestEntryGuard,
-        Guards::TradingTimeRestrictionGuard,
+        Guards::FeedHealthGuard, # blocks on stale/never-synced ticks, positions, or funds feed
         Guards::EdgeFailureGuard,
         Guards::LossStreakGuard,
         Guards::DailyLimitsGuard,
-        Guards::IndexTradeLimitGuard,
+        Guards::IndexTradeLimitGuard, # per-index max_trades_per_day from index config (see config/algo.yml)
         Guards::MaxConcurrentGuard,
-        Guards::GlobalMaxConcurrentGuard,
-        Guards::InstrumentLookupGuard,
+        Guards::GlobalMaxConcurrentGuard, # portfolio-wide cap across all indices, cheap so runs early
+        Guards::EarliestEntryGuard,    # blocks entries before configured earliest_entry_time (default 09:30, volatile open)
+        Guards::VixGateGuard,          # India VIX ceiling gate — no-op until market.vix_gate is configured
+        Guards::StrikeCooldownGuard, # blocks re-entry of the same contract within its cooldown window
+        Guards::InstrumentLookupGuard, # sets context[:instrument] — required by EPT guard
+        Guards::DynamicRegimeDirectionGuard, # blocks counter-trend entries against 15m price structure regime
+        Guards::ChopScoreGuard, # blocks noisy entries when ADX/Supertrend/BB say chop
+        Guards::RegimeGuard,           # blocks entries during a detected choppy regime — no-op until risk.regime_guard is configured
+        Guards::MomentumGateGuard,     # requires BB breakout or strong ADX — no-op until risk.momentum_gate is configured
+        Guards::BreakoutReadyGuard,     # OptionsBuying: requires an armed breakout level (no-op until ChainRadar is scheduled)
+        Guards::CompressionSetupGuard,  # OptionsBuying: requires ATR compression setup (currently no-op — gated on positional mode)
+        Guards::ChainConfirmationGuard, # OI/IV/delta band check via live chain watch — no-op until ChainWatchService is started
+        Guards::IvVolGateGuard,         # IV rank gate — no-op until IvSnapshotJob is scheduled (insufficient history)
+        Guards::OptionVolumeVelocityGuard, # option contract volume velocity — no-op until OptionsBuying stream is live
+        Guards::DteEntryWindowGuard,    # DTE-specific max entry time — no-op until risk.dte_parameters.by_dte is configured
+        Guards::PremiumBandGuard,       # blocks entries outside the configured per-index premium band
+        Guards::SegmentExpectancyGuard, # blocks entries into historically negative-edge (index, regime) segments — no-op until risk.segment_expectancy is configured
+        Guards::DirectionConflictGuard, # runs only after regime is chop-cleared; kills a losing opposite-side position, leaves a green one alone
+        Guards::SellingIvRankGuard, # selling-only: don't sell premium when IV is cheap
+        Guards::MarginLimitGuard,   # selling-only: fail fast if even 1 lot won't fit the margin budget
         Guards::LtpResolutionGuard,
-        Guards::ExpiryWeekPowerTrendGuard,
-        Guards::TimeRegimeGuard,
-        Guards::SegmentExpectancyGuard,
-        Guards::MiddayQualityGuard,
-        Guards::RegimeGuard,
-        Guards::ChopScoreGuard,
-        Guards::CompressionSetupGuard,
-        Guards::DteEntryWindowGuard,
+        Guards::ExpiryWeekPowerTrendGuard,   # enriches context[:expiry_power_trend] when pattern detected
+        Guards::TimeRegimeGuard,             # reads context[:expiry_power_trend] to bypass S3/S4 block
+        Guards::MiddayQualityGuard,          # ADX >= 28 bypass covers all power-trend cases
+        Guards::BankniftyLastWeekGuard,
         Guards::WeeklyExpiryGuard,
         Guards::BosStructureGuard,
-        Guards::SizingGuard,
-        Guards::PremiumBandGuard,
         Guards::ExposureGuard,
         Guards::CooldownGuard,
-        Guards::BreakoutReadyGuard,
+        Guards::SizingGuard,
         Guards::RiskPolicyGuard,
         Guards::SmcNavigatorGuard
       ]

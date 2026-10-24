@@ -138,7 +138,7 @@ module Live
                           []
       end
       active_trackers.each do |tracker|
-        inst = tracker.instrument || Instrument.find_by_sid_and_segment(security_id: tracker.security_id, segment_code: tracker.segment)
+        inst = tracker.instrument || Instrument.find_by(security_id: tracker.security_id)
         instruments << inst if inst
       end
 
@@ -162,10 +162,6 @@ module Live
     # Derive the earliest timestamp missing from the Redis tick store.
     # Falls back to 30 minutes ago when no bucket data exists at all.
     def detect_gap_from(instrument, interval)
-      if %w[index i].include?(instrument.segment.to_s.downcase)
-        return (Time.current - (60 * interval * 60)).strftime("%Y-%m-%d %H:%M:%S")
-      end
-
       security_id = instrument.security_id.to_s
       now_bucket  = bucket_for(Time.current, interval)
 
@@ -181,17 +177,6 @@ module Live
     end
 
     def gap_large_enough?(instrument, interval, threshold_minutes)
-      if %w[index i].include?(instrument.segment.to_s.downcase)
-        raw = redis.get("live:candles:#{instrument.security_id}:#{interval}")
-        return true unless raw
-        begin
-          parsed = JSON.parse(raw)
-          return (parsed&.dig("candles") || []).size < MIN_CANDLES
-        rescue StandardError
-          return true
-        end
-      end
-
       security_id = instrument.security_id.to_s
       now_bucket  = bucket_for(Time.current, interval)
       threshold_buckets = threshold_minutes / interval
@@ -266,8 +251,6 @@ module Live
 
         buckets << bucket
       end
-
-      Live::CandleSeriesCache.store_candles(security_id: security_id, interval: interval, candles: candles)
 
       { count: candles.size, min_bucket: buckets.min, max_bucket: buckets.max }
     end

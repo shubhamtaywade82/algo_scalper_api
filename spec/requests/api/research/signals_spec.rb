@@ -6,9 +6,9 @@ RSpec.describe Api::Research::SignalsController do
   describe "GET /api/research/signals" do
     it "lists signals newest first with pagination meta" do
       Research::Signal.create!(underlying_symbol: "NIFTY", signal_timestamp: 2.hours.ago, direction: "bullish",
-                                spot_price: 24_800)
+                               spot_price: 24_800)
       newest = Research::Signal.create!(underlying_symbol: "NIFTY", signal_timestamp: 1.hour.ago,
-                                         direction: "bearish", spot_price: 24_900)
+                                        direction: "bearish", spot_price: 24_900)
 
       get "/api/research/signals"
 
@@ -20,9 +20,9 @@ RSpec.describe Api::Research::SignalsController do
 
     it "filters by underlying_symbol" do
       Research::Signal.create!(underlying_symbol: "NIFTY", signal_timestamp: 1.hour.ago, direction: "bullish",
-                                spot_price: 24_800)
+                               spot_price: 24_800)
       Research::Signal.create!(underlying_symbol: "SENSEX", signal_timestamp: 1.hour.ago, direction: "bullish",
-                                spot_price: 81_000)
+                               spot_price: 81_000)
 
       get "/api/research/signals", params: { underlying_symbol: "sensex" }
 
@@ -35,7 +35,7 @@ RSpec.describe Api::Research::SignalsController do
   describe "GET /api/research/signals/:id" do
     it "returns the signal with its candidates" do
       signal = Research::Signal.create!(underlying_symbol: "NIFTY", signal_timestamp: 1.hour.ago,
-                                         direction: "bullish", spot_price: 24_800)
+                                        direction: "bullish", spot_price: 24_800)
       Research::OptionCandidate.create!(research_signal: signal, underlying_symbol: "NIFTY", expiry_flag: "WEEK",
                                         option_type: "CE", strike_label: "ATM", strike_distance: 0,
                                         actual_strike: 24_800, entry_model: "next_candle_open", status: "scored",
@@ -61,9 +61,9 @@ RSpec.describe Api::Research::SignalsController do
     it "builds a signal and runs the pipeline, returning ranked candidates" do
       allow(Research::Pipeline).to receive(:run) do |signal:, **|
         [Research::OptionCandidate.create!(research_signal: signal, underlying_symbol: signal.underlying_symbol,
-                                            expiry_flag: "WEEK", option_type: "CE", strike_label: "ATM",
-                                            strike_distance: 0, actual_strike: 24_800, status: "scored",
-                                            return_pct: 30.0)]
+                                           expiry_flag: "WEEK", option_type: "CE", strike_label: "ATM",
+                                           strike_distance: 0, actual_strike: 24_800, status: "scored",
+                                           return_pct: 30.0)]
       end
 
       post "/api/research/signals", params: {
@@ -81,7 +81,7 @@ RSpec.describe Api::Research::SignalsController do
     it "returns 422 when a required param is missing" do
       post "/api/research/signals", params: { underlying_symbol: "NIFTY" }
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
   end
 end

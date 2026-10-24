@@ -40,6 +40,8 @@ module Orders
 
         # 5. Place initial limit order
         client_order_id = meta[:client_order_id] || "CHASE_#{SecureRandom.hex(4).upcase}"
+        Orders::Fsm.transition!(:created, :submitting, metadata: { client_order_id: client_order_id, price: midpoint })
+
         order = Orders::Placer.buy_limit!(
           seg: segment,
           sid: security_id,
@@ -53,6 +55,8 @@ module Orders
 
         order_id = order.respond_to?(:order_id) ? order.order_id : (order[:order_id] || order["order_id"])
         return order unless order_id # If no order_id (mock), return order
+
+        Orders::Fsm.transition!(:submitting, :submitted, metadata: { order_id: order_id })
 
         # 6. Chase loop
         max_chase_seconds = (config[:max_chase_seconds] || 15).to_f
@@ -73,9 +77,11 @@ module Orders
 
             if FILLED_STATUSES.include?(status)
               Rails.logger.info("[LimitChaser] Order #{current_order_id} filled successfully!")
+              Orders::Fsm.transition!(:submitted, :filled, metadata: { order_id: current_order_id })
               return order_status_obj
             elsif CANCELLED_STATUSES.include?(status)
               Rails.logger.warn("[LimitChaser] Order #{current_order_id} was #{status}. Exiting chase.")
+              Orders::Fsm.transition!(:submitted, :cancelled, metadata: { order_id: current_order_id })
               return order_status_obj
             end
           rescue StandardError => e

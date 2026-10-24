@@ -44,6 +44,9 @@ module Strategies
     end
 
     def write_files(slug, class_name, superclass_name)
+      # Path-traversal guard: slug derives from user-authored strategy records.
+      SlugValidator.validate!(slug)
+
       dir = STRATEGIES_ROOT.join(slug)
       dir.mkpath
 

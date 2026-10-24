@@ -3,8 +3,6 @@
 module Smc
   module Detectors
     class Liquidity
-      # Threshold for equal levels (percentage of price range)
-      # User suggested tick_size * 3 for NIFTY/SENSEX, which is roughly 0.15-0.3 points
       DEFAULT_TOLERANCE = 0.5
 
       def initialize(series, tolerance: DEFAULT_TOLERANCE)
@@ -13,61 +11,77 @@ module Smc
       end
 
       def buy_side_taken?
-        return false if @series.nil?
-        if @series.respond_to?(:liquidity_grab_up?)
-          return @series.liquidity_grab_up?
-        end
+        return false unless @series
 
-        sweep?(:high)
+        if @series.respond_to?(:liquidity_grab_up?)
+          @series.liquidity_grab_up?
+        else
+          sweep_type?(:high)
+        end
       end
 
       def sell_side_taken?
-        return false if @series.nil?
-        if @series.respond_to?(:liquidity_grab_down?)
-          return @series.liquidity_grab_down?
-        end
+        return false unless @series
 
-        sweep?(:low)
+        if @series.respond_to?(:liquidity_grab_down?)
+          @series.liquidity_grab_down?
+        else
+          sweep_type?(:low)
+        end
       end
 
       def sweep_direction
-        return nil if @series.nil?
-
         return :buy_side if buy_side_taken?
         return :sell_side if sell_side_taken?
 
         nil
       end
 
-      def sweep?(type)
+      def sweep?
+        buy_side_taken? || sell_side_taken?
+      end
+
+      def sweep_type?(type)
         return false if swings.empty?
 
         last_c = candles.last
         return false unless last_c
 
         if type == :high
-          level = recent_swing_highs.first # Most recent high
+          level = recent_swing_highs.first
           return false unless level
+
           last_c.high > level[:price] && last_c.close < level[:price]
         else
           level = recent_swing_lows.first
           return false unless level
+
           last_c.low < level[:price] && last_c.close > level[:price]
         end
       end
 
-      # Equal Highs (EQH) - multiple swing highs at similar levels
       def equal_highs?
-        highs = recent_swing_highs.pluck(:price).uniq
-        return false if highs.size < 2
+        return false unless @series
+
+        highs = if @series.respond_to?(:recent_highs)
+                  @series.recent_highs(5)
+                else
+                  recent_swing_highs.pluck(:price).uniq
+                end
+        return false if highs.blank? || highs.size < 2
 
         (highs.max - highs.min) <= @tolerance
       end
 
-      # Equal Lows (EQL) - multiple swing lows at similar levels
       def equal_lows?
-        lows = recent_swing_lows.pluck(:price).uniq
-        return false if lows.size < 2
+        return false unless @series
+
+        lows = if @series.respond_to?(:recent_lows)
+                 @series.recent_lows(5)
+               else
+                 recent_swing_lows.pluck(:price).uniq
+               end
+        return false if lows.blank? || lows.size < 2
 
         (lows.max - lows.min) <= @tolerance
       end
@@ -79,14 +93,14 @@ module Smc
           sweep_direction: sweep_direction,
           equal_highs: equal_highs?,
           equal_lows: equal_lows?,
-          sweep: buy_side_taken? || sell_side_taken?
+          sweep: sweep?
         }
       end
 
       private
 
       def swings
-        return [] if @series.nil?
+        return [] unless @series.respond_to?(:candles) && @series.candles&.any?
 
         @swings ||= Structure.new(@series).swings
       end
@@ -100,7 +114,7 @@ module Smc
       end
 
       def candles
-        @series&.candles || []
+        @series.respond_to?(:candles) ? (@series.candles || []) : []
       end
     end
   end

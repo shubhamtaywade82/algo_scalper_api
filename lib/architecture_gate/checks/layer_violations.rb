@@ -39,7 +39,7 @@ module ArchitectureGate
 
       def matches_pattern?(require_path, pattern)
         regex = Regexp.new(Regexp.escape(pattern).gsub("\\*\\*", ".*").gsub("\\*", "[^/]*"))
-        require_path.match?(regex) || require_path.include?(pattern.gsub("/**", "").gsub("*", ""))
+        require_path.match?(regex) || require_path.include?(pattern.gsub("/**", "").delete("*"))
       end
     end
   end

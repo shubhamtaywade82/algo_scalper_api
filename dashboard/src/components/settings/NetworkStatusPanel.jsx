@@ -35,10 +35,26 @@ export default function NetworkStatusPanel() {
 
   async function triggerIpUpdate() {
     if (!confirm(`This will attempt to whitelist your current IPv4 (${publicIpv4()}) on Dhan. Continue?`)) return
+
+    let token = localStorage.getItem('algo_settings_token')
+    if (!token) {
+      token = window.prompt('Enter Settings Update Token (from your .env file):')
+      if (!token) return
+      localStorage.setItem('algo_settings_token', token)
+    }
+
     setUpdating(true)
     try {
-      const res = await fetch('/api/settings/update_ip', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      const res = await fetch('/api/settings/update_ip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Settings-Update-Token': token }
+      })
       const data = await res.json()
+      if (res.status === 401) {
+        localStorage.removeItem('algo_settings_token')
+        alert('Invalid token. Try again.')
+        return
+      }
       if (data.success) {
         alert(`Success! Updated ${data.flag} slot to ${publicIpv4()}`)
         location.reload()

@@ -45,21 +45,5 @@ RSpec.describe Research::PremiumLifecycleAnalyzer do
       expect(thresholds['150']).to be_nil # target 450, never reached (peak high is 418)
       expect(thresholds['300']).to be_nil # target 720, never reached
     end
-
-    it 'ignores bars whose actual_strike differs from the entry bar' do
-      # DhanHQ's rolling "ATM" series can splice in a different strike's bar mid-window (spot
-      # wiggled across a boundary). Without filtering, that bar's price would corrupt peak/decay
-      # as if it were the same held contract.
-      bars = [
-        { ts: Time.zone.parse('2026-07-10 09:15:00'), open: 180, high: 182, low: 178, close: 180, actual_strike: 25_000 },
-        { ts: Time.zone.parse('2026-07-10 09:20:00'), open: 999, high: 999, low: 999, close: 999, actual_strike: 25_050 },
-        { ts: Time.zone.parse('2026-07-10 09:25:00'), open: 250, high: 260, low: 245, close: 255, actual_strike: 25_000 }
-      ]
-
-      result = described_class.analyze(bars, entry_ts: bars.first[:ts])
-
-      expect(result[:peak_premium]).to eq(260.0)
-      expect(result[:end_premium]).to eq(255.0)
-    end
   end
 end

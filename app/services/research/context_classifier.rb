@@ -47,8 +47,8 @@ module Research
 
         {
           "market_structure" => structure.trend.to_s,
-          "recent_bos" => structure.bos? ? true : false,
-          "recent_choch" => structure.choch? ? true : false,
+          "recent_bos" => structure.bos?,
+          "recent_choch" => structure.choch?,
           "trend" => trend_bucket(series, structure),
           "volatility_regime" => volatility_regime(series),
           "momentum" => momentum_bucket(series),
@@ -141,7 +141,7 @@ module Research
       end
 
       def vwap_relation(series)
-        vwap = series.current_vwap
+        vwap = series.vwap_or_twap.last
         return "unknown" if vwap.nil? || vwap.zero?
 
         close = series.candles.last.close

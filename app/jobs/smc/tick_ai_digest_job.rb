@@ -14,11 +14,10 @@ module Smc
         return
       end
 
-      return unless AlgoConfig.event_driven_intraday_ai?
+      signals_cfg = AlgoConfig.fetch[:signals] || {}
+      return unless signals_cfg[:tick_ai_analysis_enabled] == true
       return unless ai_enabled?
       return if Ai::GenerativeAiMarketGate.skip?(force: false)
-
-      signals_cfg = AlgoConfig.fetch[:signals] || {}
 
       intervals = signals_cfg[:smc_confluence_intervals] || {}
       htf = (intervals[:htf] || intervals['htf'] || BiasEngine::HTF_INTERVAL).to_s
@@ -65,11 +64,12 @@ module Smc
 
     private
 
+    # Flag absent -> feature off (documented). A corrupt config document
+    # propagates — perform's rescue logs and re-raises so the job retries,
+    # instead of the AI gate silently reading as disabled (wave 3).
     def ai_enabled?
       AlgoConfig.fetch.dig(:ai, :enabled) == true &&
         Services::Ai::OllamaClient.instance.enabled?
-    rescue StandardError
-      false
     end
 
     def run_ai_and_notify(instrument, signals_cfg, ltp, fired_keys, tick_at)

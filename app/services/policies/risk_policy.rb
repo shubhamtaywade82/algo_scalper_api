@@ -16,19 +16,24 @@ module Policies
   #   )
   #   policy.permitted?  # => false
   #   policy.reasons     # => ["max_active_positions_exceeded", "max_exposure_exceeded"]
+  #
+  # Quantity contract (error-handling review 2026-09): a garbage sizing
+  # value used to coerce to 0 — which TRIVIALLY PASSED every exposure check.
+  # proposed_qty and lot_size are now strictly validated; the policy refuses
+  # to evaluate a trade it cannot size.
+  #
+  # @raise [Errors::InvalidQuantity]
   class RiskPolicy < BasePolicy
     def initialize(index_key:, proposed_qty:, entry_price:, lot_size: 1)
       @index_key    = index_key.to_s
-      @proposed_qty = SafeNumeric.to_non_negative_integer(proposed_qty)
+      @proposed_qty = Orders::Quantity.resolve!(proposed_qty, context: "RiskPolicy##{index_key}")
       @entry_price  = entry_price.to_f
-      @lot_size     = [SafeNumeric.to_non_negative_integer(lot_size), 1].max
+      @lot_size     = lot_size.nil? ? 1 : Orders::Quantity.resolve!(lot_size, context: "RiskPolicy##{index_key} lot_size")
       @violations   = nil
     end
 
     def permitted?
-      allowed = violations.empty?
-      log_blocked_reasons unless allowed
-      allowed
+      violations.empty?
     end
 
     def reasons
@@ -45,7 +50,6 @@ module Policies
       checks = %i[
         circuit_breaker_tripped?
         max_active_positions_exceeded?
-        per_trade_risk_exceeded?
         max_exposure_exceeded?
         portfolio_drawdown_limit_reached?
       ]
@@ -62,19 +66,7 @@ module Policies
 
     def max_active_positions_exceeded?
       max = risk_cfg[:max_active_positions] || 3
-      Positions::ActiveForExit.call.count >= max
-    rescue StandardError
-      false
-    end
-
-    def per_trade_risk_exceeded?
-      max_pct = per_trade_risk_limit
-      return false unless max_pct.positive?
-
-      equity = wallet_snapshot[:equity].to_f
-      return false unless equity.positive?
-
-      proposed_notional > (equity * max_pct)
+      PositionTracker.active.count >= max
     rescue StandardError
       false
     end
@@ -83,10 +75,12 @@ module Policies
       max_pct = risk_cfg[:max_exposure_pct].to_f
       return false unless max_pct.positive?
 
-      equity = wallet_snapshot[:equity].to_f
+      wallet = Orders.config.gateway.wallet_snapshot
+      equity = wallet[:equity].to_f
       return false unless equity.positive?
 
-      current_exposure = wallet_snapshot[:exposure].to_f
+      proposed_notional  = @entry_price * @proposed_qty
+      current_exposure   = wallet[:exposure].to_f
       (current_exposure + proposed_notional) / equity > max_pct
     rescue StandardError
       false
@@ -105,34 +99,6 @@ module Policies
       AlgoConfig.fetch[:risk] || {}
     rescue StandardError
       {}
-    end
-
-    def per_trade_risk_limit
-      risk_cfg[:max_risk_per_trade_pct].to_f.nonzero? ||
-        risk_cfg[:per_trade_risk_pct].to_f
-    end
-
-    def proposed_notional
-      @entry_price * @proposed_qty
-    end
-
-    def wallet_snapshot
-      @wallet_snapshot ||= Orders.config.gateway.wallet_snapshot || {}
-    rescue StandardError
-      {}
-    end
-
-    def log_blocked_reasons
-      Observability::StructuredLog.warn(
-        event: 'risk_policy_blocked',
-        payload: {
-          service: 'Policies::RiskPolicy',
-          index_key: @index_key,
-          proposed_qty: @proposed_qty,
-          entry_price: @entry_price,
-          reasons: reasons
-        }
-      )
     end
   end
 end

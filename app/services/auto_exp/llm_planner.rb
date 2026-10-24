@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 module AutoExp
-  class LlmPlanner
+  class LLMPlanner
     def model
-      ENV['OLLAMA_MODEL'] || "qwen3.5:4b"
+      ENV['OLLAMA_MODEL'] || "llama3.2:3b"
     end
 
     SCHEMA = {
@@ -27,7 +27,7 @@ module AutoExp
     }.freeze
 
     def initialize
-      @client = Services::Ai::OllamaClient.instance
+      @client = Services::Ai::OpenaiClient.instance
     end
 
     def propose(results:, config:)
@@ -43,9 +43,9 @@ module AutoExp
     private
 
     def build_prompt(results, config)
-      history = (results || []).last(10)
-                              .map { |r| "pf=#{r[:profit_factor]} dd=#{r[:drawdown]} win_rate=#{r[:win_rate]}" }
-                              .join("\n")
+      history = (results || []).last(10).map do |r|
+        "pf=#{r[:profit_factor]} dd=#{r[:drawdown]} win_rate=#{r[:win_rate]}"
+      end.join("\n")
 
       <<~PROMPT
         You are optimizing a trading strategy.

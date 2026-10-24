@@ -12,37 +12,39 @@ Signal::Scheduler (30s loop)
   Step 2: Instrument resolution (IndexInstrumentCache)
   │
   Step 3: Analysis context initialization
-  │   entry_primary, primary_tf, optional confirmation from merged signals config
+  │   exit_testing_mode → supertrend_adx on 1m, no confirmation
+  │   otherwise → entry_strategy from signals config
   │
-  Step 4: Supertrend-only OR standard analysis flow
-  │   Regime-based effective_validation_mode on supertrend path
+  Step 4: Primary + confirmation analysis
+  │   Supertrend + ADX on primary_tf (default 5m)
+  │   Optional confirmation timeframe alignment
   │
-  Step 5: Optional halt — halt_on_validation_failure + failed comprehensive_validation
+  Step 5: Trading context gate
+  │   MarketRegimeDetector, EntryFilterEngine, PermissionResolver
   │
-  Step 6: Trading context gate
-  │   EntryFilterEngine, PermissionResolver, trading_context_strictness
+  Step 6: Entry quality filter
+  │   ADX strength, validation mode (balanced/conservative)
   │
-  Step 7: Entry quality filter
-  │   ADX / IV proxy / theta / validation_modes presets
+  Step 7: Institutional and permission gates
+  │   SMC decision alignment, momentum scoring
   │
-  Step 8: No-trade gate (when enable_no_trade_engine) + entry_dte_guard
+  Step 8: State snapshot (Signal::StateTracker dedup)
   │
-  Step 9: Execution gates — SMC, momentum, direction gate, etc.
-  │
-  Step 10: State snapshot (Signal::StateTracker dedup)
-  │
-  Step 11: Options analysis
+  Step 9: Options analysis
   │   Options::ChainAnalyzer.pick_strikes_with_qualification
-  │   Optional options_analysis_gate on IV/theta failure
+  │   Strike scoring: liquidity, OI, spread, IV
+  │   Expected move validation
   │
-  Step 12: Diagnostic metadata build
+  Step 10: Diagnostic metadata build
   │
-  Step 13: TradingSignal.create
+  Step 11: TradingSignal.create
   │
-  Step 14: execute_entry_gate — pick validation, optional market context
-  │   Only if market_context.enabled: true for composer / permission gate
+  Step 12: Optional market context gate
+  │   Only if market_context.enabled: true
+  │   MarketContext::RegimeComposer + ChainSignalExtractor
+  │   Trading::MarketPermissionGate (if gate.enabled: true)
   │
-  Step 15: Entry trigger → Entries::EntryGuard.try_enter
+  Step 13: Entry trigger → Entries::EntryGuard.try_enter
 ```
 
 ## 1. Signal Generation — `Signal::Engine`
@@ -50,12 +52,13 @@ Signal::Scheduler (30s loop)
 - **Service**: `Signal::Scheduler` → `Signal::Engine`
 - **Cadence**: Every 30 seconds per configured index
 - **What happens**:
-  - Loads merged `signals` from `AlgoConfig.fetch` (YAML + DB + tier preset + `LIVE_TRADING` paper flag)
-  - Fetches candle series for primary (and optional confirmation) timeframe when used
-  - Computes Supertrend direction + ADX strength on the active path
-  - Detects market regime (TRENDING / RANGING / CHOPPY) where the flow runs regime logic
-  - Sets **`effective_validation_mode`** (e.g. conservative in RANGING/CHOPPY on supertrend path)
-  - Runs no-trade / DTE gates, then execution gates, then options analysis
+  - Fetches candle series for primary (and optional confirmation) timeframe
+  - Computes Supertrend direction + ADX strength
+  - Detects market regime (TRENDING / RANGING / CHOPPY)
+  - Selects validation mode: `balanced` in trending, `conservative` in choppy
+  - Runs `EntryFilterEngine` for structure/liquidity/volatility alignment
+  - Checks `Trading::PermissionResolver` for SMC + AVRZ gating
+  - Checks SMC decision alignment (if `signals.enable_smc_decision_alignment: true`)
   - Persists `TradingSignal` with full diagnostic metadata
 - **Result**: `direction` (bullish/bearish) + `picks` from `ChainAnalyzer`, or nil (no trade)
 
@@ -118,7 +121,6 @@ After the pipeline passes:
 
 ## 5. Order Placement
 
-- **Effective mode**: `LIVE_TRADING` unset/false forces paper gateway; `LIVE_TRADING=true` selects live gateway at boot (see `AlgoConfig`).
 - **Paper mode**: `Orders::GatewayPaper` — synthetic fill at current LTP; creates `PositionTracker` in `active` state immediately
 - **Live mode**: `Orders::GatewayLive` → `Orders::Placer` → DhanHQ API
   - Requires `PLACE_ORDER=true` env var (safety gate)

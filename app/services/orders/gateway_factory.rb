@@ -12,6 +12,10 @@ module Orders
         use_paper ? Orders::GatewayPaper.new : Orders::GatewayLive.new
       end
 
+      def selected_gateway
+        Orders.config&.gateway || build
+      end
+
       private
 
       def paper_mode_from_config

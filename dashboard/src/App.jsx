@@ -1,4 +1,4 @@
-import { Router, Route } from '@solidjs/router'
+import { Router, Route, Navigate } from '@solidjs/router'
 import { Show, lazy } from 'solid-js'
 import { DashboardContext } from './context/DashboardContext'
 import { Toaster } from 'solid-toast'
@@ -13,10 +13,7 @@ const Dashboard = lazy(() => import('./views/Dashboard'))
 const Strategies = lazy(() => import('./views/Strategies'))
 const StrategyCreator = lazy(() => import('./views/StrategyCreator'))
 const Signals = lazy(() => import('./views/Signals'))
-const Research = lazy(() => import('./views/Research'))
-const Alpha = lazy(() => import('./views/Alpha'))
 const Analysis = lazy(() => import('./views/Analysis'))
-const Charts = lazy(() => import('./views/Charts'))
 const Settings = lazy(() => import('./views/Settings'))
 const Ledger = lazy(() => import('./views/Ledger'))
 const TrailEngine = lazy(() => import('./views/TrailEngine.jsx'))
@@ -24,6 +21,8 @@ const OptionScalper = lazy(() => import('./views/OptionScalper'))
 const OptionChain = lazy(() => import('./views/OptionChain'))
 const Backtester = lazy(() => import('./views/Backtester'))
 const Replay = lazy(() => import('./views/Replay'))
+const Alpha = lazy(() => import('./views/Alpha'))
+const Charts = lazy(() => import('./views/Charts'))
 
 // New TDD routes — all backends implemented
 const MarketWatch = lazy(() => import('./views/MarketWatch'))
@@ -34,15 +33,6 @@ const Reports = lazy(() => import('./views/Reports'))
 const Alerts = lazy(() => import('./views/Alerts'))
 const Scheduler = lazy(() => import('./views/Scheduler'))
 const Logs = lazy(() => import('./views/Logs'))
-
-// Auth routes
-const Login = lazy(() => import('./views/Login'))
-const Register = lazy(() => import('./views/Register'))
-import AuthGuard from './components/auth/AuthGuard'
-
-function Protected(props) {
-  return <AuthGuard>{props.children}</AuthGuard>
-}
 
 function AppShell(props) {
   const {
@@ -56,47 +46,45 @@ function AppShell(props) {
   } = usePositions()
 
   const {
-    mode, connected, isStale: dashboardStale, stats, balance, indices, subscribedIndices, optionsBuying, system,
+    mode, connected, isStale: dashboardStale, stats, balance, indices, subscribedIndices, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker,
-    lastUpdated, recentSignals, config, marketStatus, refresh: refreshDashboard
+    lastUpdated, recentSignals, strategiesSummary, config,
+    marketStatus
   } = useDashboard(() => fetchPositions())
 
   const { sidebarCollapsed, toggleSidebar } = useUIStore()
 
-  async function closePositionAndRefresh(positionId) {
-    const result = await closeOpenPosition(positionId)
-    if (result?.ok) refreshDashboard()
-    return result
-  }
-
   const ctx = {
-    mode, connected, dashboardStale, stats, balance, indices, subscribedIndices, optionsBuying, system,
+    mode, connected, dashboardStale, stats, balance, indices, subscribedIndices, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker,
-    lastUpdated, recentSignals, config, marketStatus,
+    lastUpdated, recentSignals, strategiesSummary, config,
     open, closed,
     positionsConnected, positionsStale, positionsLastMessageAt,
-    fetchPositions, closeOpenPosition: closePositionAndRefresh, closingPositionId
+    fetchPositions,
+    closeOpenPosition,
+    closingPositionId,
+    marketStatus
   }
+
 
   return (
     <DashboardContext.Provider value={ctx}>
-      <div class="min-h-screen bg-transparent text-gray-100 font-sans selection:bg-primary-500/30">
+      <div class="min-h-screen bg-transparent text-gray-100 font-sans selection:bg-primary-500/30 flex">
         <Toaster position="bottom-right" gutter={8} toastOptions={{ className: '!bg-gray-800 !text-gray-100 !border !border-white/10 !rounded-xl !shadow-2xl' }} />
-        <Header
-          mode={mode()}
-          indices={indices()}
-          subscribedIndices={subscribedIndices()}
-          optionsBuying={optionsBuying()}
-          system={system()}
-          connected={connected()}
-          isStale={dashboardStale()}
-          marketStatus={marketStatus()}
-          onToggleSidebar={toggleSidebar}
-          sidebarCollapsed={sidebarCollapsed()}
-        />
-        <div class="flex">
-          <Sidebar collapsed={sidebarCollapsed()} />
-          <main class={`flex-1 transition-all duration-300 pt-1 pb-20 ${sidebarCollapsed() ? 'ml-16' : 'ml-56'}`}>
+        <Sidebar collapsed={sidebarCollapsed()} />
+        <div class="flex-1 flex flex-col min-w-0">
+          <Header
+            mode={mode()}
+            indices={indices()}
+            subscribedIndices={subscribedIndices()}
+            system={system()}
+            connected={connected()}
+            isStale={dashboardStale()}
+            marketStatus={marketStatus()}
+            onToggleSidebar={toggleSidebar}
+            sidebarCollapsed={sidebarCollapsed()}
+          />
+          <main class="flex-1 pt-1 pb-20">
             <div class="px-8 pt-3 pb-6 w-full">
               {props.children}
 
@@ -122,37 +110,32 @@ function AppShell(props) {
 export default function App() {
   return (
     <Router>
-      {/* Auth pages — own layout, no header chrome */}
-      <Route path="/login" component={Login} />
-      <Route path="/register" component={Register} />
-
-      {/* Protected app shell */}
-      <Route component={Protected}>
-        <Route component={AppShell}>
-          <Route path="/" component={Dashboard} />
-          <Route path="/strategies/creator" component={StrategyCreator} />
-          <Route path="/strategies/:id" component={StrategyCreator} />
-          <Route path="/strategies" component={Strategies} />
-          <Route path="/alpha" component={Alpha} />
-          <Route path="/signals" component={Signals} />
-          <Route path="/research" component={Research} />
-          <Route path="/option-scalper" component={OptionScalper} />
-          <Route path="/option-chain" component={OptionChain} />
-          <Route path="/analysis" component={Analysis} />
-          <Route path="/ledger" component={Ledger} />
-          <Route path="/settings" component={Settings} />
-          <Route path="/backtester" component={Backtester} />
-          <Route path="/replay" component={Replay} />
-          {/* New routes from TDD layout */}
-          <Route path="/market-watch" component={MarketWatch} />
-          <Route path="/positions" component={Positions} />
-          <Route path="/holdings" component={Holdings} />
-          <Route path="/funds" component={Funds} />
-          <Route path="/reports" component={Reports} />
-          <Route path="/alerts" component={Alerts} />
-          <Route path="/scheduler" component={Scheduler} />
-          <Route path="/logs" component={Logs} />
-        </Route>
+      {/* App shell */}
+      <Route component={AppShell}>
+        <Route path="/" component={Dashboard} />
+        <Route path="/strategies/creator" component={StrategyCreator} />
+        <Route path="/strategies/:id" component={StrategyCreator} />
+        <Route path="/strategies" component={Strategies} />
+        <Route path="/alpha" component={Alpha} />
+        <Route path="/signals" component={Signals} />
+        <Route path="/option-scalper" component={OptionScalper} />
+        <Route path="/option-chain" component={OptionChain} />
+        <Route path="/analysis" component={Analysis} />
+        <Route path="/ledger" component={Ledger} />
+        <Route path="/orders" component={Ledger} />
+        <Route path="/settings" component={Settings} />
+        <Route path="/backtester" component={Backtester} />
+        <Route path="/replay" component={Replay} />
+        {/* New routes from TDD layout */}
+        <Route path="/market-watch" component={MarketWatch} />
+        <Route path="/positions" component={Positions} />
+        <Route path="/holdings" component={Holdings} />
+        <Route path="/funds" component={Funds} />
+        <Route path="/reports" component={Reports} />
+        <Route path="/alerts" component={Alerts} />
+        <Route path="/scheduler" component={Scheduler} />
+        <Route path="/logs" component={Logs} />
+        <Route path="*" component={() => <Navigate href="/" />} />
       </Route>
 
       {/* Fullscreen — own layout, no Header/footer chrome */}

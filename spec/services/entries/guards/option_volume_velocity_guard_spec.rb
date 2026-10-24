@@ -4,7 +4,7 @@ require 'rails_helper'
 
 RSpec.describe Entries::Guards::OptionVolumeVelocityGuard do
   let(:index_cfg) { { key: 'NIFTY' } }
-  let(:pick) { { symbol: 'NIFTY26APR22000CE', security_id: '55112', strike: 22000.0, expiry_date: Date.current } }
+  let(:pick) { { symbol: 'NIFTY26APR22000CE', security_id: '55112', strike: 22_000.0, expiry_date: Date.current } }
   let(:context) do
     {
       index_cfg: index_cfg,
@@ -52,6 +52,21 @@ RSpec.describe Entries::Guards::OptionVolumeVelocityGuard do
         result = described_class.call(context)
         expect(result).to be_a(Hash)
         expect(result[:blocked]).to include('volume velocity too low')
+      end
+    end
+
+    context 'when the multiplier is unresolvable' do
+      before do
+        allow(OptionsBuying::StateStore).to receive(:stream_window).with('55112').and_return(
+          [{ vol: 1000 }, { vol: 1100 }, { vol: 1250 }]
+        )
+        allow(Trading::DteParameterResolver).to receive(:volume_velocity_multiplier).and_return(nil)
+      end
+
+      it 'blocks with an explicit reason instead of assuming a multiplier' do
+        result = described_class.call(context)
+        expect(result).to be_a(Hash)
+        expect(result[:blocked]).to include('volume_velocity_multiplier_unconfigured')
       end
     end
   end

@@ -48,11 +48,8 @@ module Market
       def trading_days_before(anchor_date, count)
         anchor = on_or_before_trading_day(anchor_date)
         trading_days_counted = 0
-        days_back = 0
 
-        max_days_back = count * 7
-        while days_back < max_days_back
-          days_back += 1
+        (1..(count * 2)).each do |days_back|
           candidate = anchor - days_back.days
           next unless trading_day?(candidate)
 
@@ -67,21 +64,17 @@ module Market
       def trading_days_ago(count)
         current = Date.current
         trading_days_counted = 0
-        days_back = 0
 
-        # Use while loop instead of fixed range - handles weekends + holiday clusters
-        # Max 10 trading days worth of calendar days (14 days) as safety
-        max_days_back = count * 7
-        while days_back < max_days_back
-          days_back += 1
+        # Look back up to 2x the count to find enough trading days
+        (1..(count * 2)).each do |days_back|
           candidate = current - days_back.days
-          next unless trading_day?(candidate)
-
-          trading_days_counted += 1
-          return candidate if trading_days_counted == count
+          if trading_day?(candidate)
+            trading_days_counted += 1
+            return candidate if trading_days_counted == count
+          end
         end
 
-        # Fallback (shouldn't happen with sufficient max_days_back)
+        # Fallback
         current - count.days
       end
 

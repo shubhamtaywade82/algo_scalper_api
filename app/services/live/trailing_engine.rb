@@ -4,7 +4,7 @@ module Live
   # TrailingEngine for NEMESIS V3
   # Per-tick trailing stop management with tiered SL offsets
   # Updates peak profit percentage and applies dynamic SL adjustments
-  # rubocop:disable Metrics/ClassLength
+  # rubocop:disable-next Metrics/ClassLength
   class TrailingEngine
     def initialize(active_cache: Positions::ActiveCache.instance,
                    bracket_placer: nil)
@@ -36,22 +36,36 @@ module Live
       # 2. Update peak_profit_pct if current profit exceeds peak
       peak_updated = update_peak(position_data, tracker: tracker, pending_meta: pending_meta)
 
+      # 2.5 Fee-aware breakeven lock (scalp): once peak covers friction, pin SL at
+      # the exit price that nets >= 0 after exit fee + half spread. Only raises.
+      lock_result = apply_fee_aware_breakeven_lock(position_data, tracker: tracker)
+
       # 3. Apply trailing SL (direct or tiered based on config)
-      trailing = trailing_for(tracker)
       sl_result = if tailored_trailing_applicable?(position_data)
-                    apply_tailored_sl(position_data, tracker: tracker)
-                  elsif trailing.direct_trailing_enabled?
-                    apply_direct_trailing_sl(position_data, tracker: tracker, trailing: trailing)
+                    apply_tailored_sl(position_data)
+                  elsif Positions::TrailingConfig.direct_trailing_enabled?
+                    apply_direct_trailing_sl(position_data)
                   else
-                    apply_tiered_sl(position_data, tracker: tracker, trailing: trailing)
+                    apply_tiered_sl(position_data, tracker: tracker)
                   end
+
+      sl_updated = sl_result[:updated] || lock_result[:updated]
+      reason = if sl_result[:updated]
+                 sl_result[:reason]
+               elsif lock_result[:updated] || lock_result[:reason]
+                 # Lock applied, or attempted and failed — surface the lock outcome
+                 # (a rejected lock is more actionable than 'tier_not_reached').
+                 lock_result[:reason]
+               else
+                 sl_result[:reason]
+               end
 
       {
         peak_updated: peak_updated,
-        sl_updated: sl_result[:updated],
+        sl_updated: sl_updated,
         exit_triggered: false,
-        new_sl_price: sl_result[:new_sl_price],
-        reason: sl_result[:reason]
+        new_sl_price: [sl_result[:new_sl_price], lock_result[:new_sl_price]].compact.max,
+        reason: reason
       }
     rescue StandardError => e
       Rails.logger.error("[TrailingEngine] process_tick failed: #{e.class} - #{e.message}")
@@ -82,14 +96,16 @@ module Live
       end
 
       # Emergency defense-in-depth: sub-second path in UnifiedExitChecker is primary
-      tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
-      drawdown_cfg = Positions::ExitConfigResolver.for(tracker).dig(:position_sizing, :drawdown) || {}
+      drawdown_cfg = AlgoConfig.fetch.dig(:position_sizing, :drawdown) || {}
       unless drawdown_cfg[:emergency_peak_loss_exit] == false
         emergency_min_peak = (drawdown_cfg[:emergency_min_peak_pct] || 0.10).to_f
-        if peak >= emergency_min_peak && current < -0.02 && tracker&.active?
+        if peak >= emergency_min_peak && current < -0.02
+          tracker = PositionTracker.find_by(id: position_data.tracker_id)
+          if tracker&.active?
             reason = "emergency_peak_loss_exit (peak: #{(peak * 100).round(2)}%, current: #{(current * 100).round(2)}%)"
-            Live::ExitEngine.execute_exit(tracker: tracker, reason: reason, source: :trailing_engine)
+            exit_engine.execute_exit(tracker, reason)
             return true
+          end
         end
       end
 
@@ -97,8 +113,8 @@ module Live
       capital_deployed = calculate_capital_deployed(position_data)
 
       # Check if drawdown threshold is breached (with capital-aware thresholds)
-      trailing = trailing_for(tracker)
-      return false unless trailing.peak_drawdown_triggered?(
+      # TrailingConfig expects decimal (e.g. 0.05 for 5%)
+      return false unless Positions::TrailingConfig.peak_drawdown_triggered?(
         peak,
         current,
         _capital_deployed: capital_deployed
@@ -106,7 +122,9 @@ module Live
 
       # Apply peak-drawdown activation gating (if enabled)
       if peak_drawdown_activation_enabled?
-        activation_ready = trailing.peak_drawdown_active?(
+        # Use peak profit % (not current) for activation check
+        # TrailingConfig expects decimal for both profit_pct and current_sl_offset_pct
+        activation_ready = Positions::TrailingConfig.peak_drawdown_active?(
           profit_pct: peak,
           current_sl_offset_pct: current_sl_offset_pct_decimal(position_data)
         )
@@ -128,7 +146,7 @@ module Live
       end
 
       drawdown_pct = (peak - current) * 100.0
-      threshold = trailing.calculate_tiered_drawdown_threshold(peak)
+      threshold = Positions::TrailingConfig.calculate_tiered_drawdown_threshold(peak)
       capital_info = capital_deployed ? " (capital: ₹#{capital_deployed.round(0)})" : ''
       reason = "peak_drawdown_exit (drawdown: #{drawdown_pct.round(2)}%, threshold: #{(threshold * 100).round(2)}%, peak: #{(peak * 100).round(2)}%#{capital_info})"
 
@@ -177,7 +195,7 @@ module Live
       highest_price = entry_price * (1.0 + current)
       lowest_price = entry_price * (1.0 + min_profit)
 
-      persist_extremes_if_changed(position_data.tracker_id, highest_price, lowest_price, tracker: tracker, pending_meta: pending_meta)
+      persist_extremes_if_changed(position_data.tracker_id, highest_price, lowest_price)
 
       if peak_updated
         Rails.logger.debug { "[TrailingEngine] Updated peak_profit_pct for #{position_data.tracker_id}: #{(peak * 100).round(2)}% → #{(current * 100).round(2)}% (Highest: ₹#{highest_price.round(2)})" }
@@ -193,22 +211,13 @@ module Live
     # @param tracker_id [Integer] Tracker ID
     # @param highest_price [Float] New highest price
     # @param lowest_price [Float] New lowest price
-    # @param tracker [PositionTracker] Tracker object
-    def persist_extremes_if_changed(tracker_id, highest_price, lowest_price, tracker: nil, pending_meta: nil)
-      tracker ||= PositionTracker.find_by(id: tracker_id)
+    def persist_extremes_if_changed(tracker_id, highest_price, lowest_price)
+      tracker = PositionTracker.find_by(id: tracker_id)
       return unless tracker
 
-      meta = (pending_meta || {}).stringify_keys
-      old_highest = if pending_meta
-                      meta['highest_price'].to_f
-                    else
-                      tracker.runtime_meta_fetch('highest_price').to_f
-                    end
-      old_lowest = if pending_meta
-                     meta['lowest_price']
-                   else
-                     tracker.runtime_meta_fetch('lowest_price')
-                   end
+      meta = tracker.meta || {}
+      old_highest = meta['highest_price'].to_f
+      old_lowest = meta['lowest_price']
 
       new_highest = [old_highest, highest_price].max
       new_lowest = old_lowest.nil? ? lowest_price : [old_lowest.to_f, lowest_price].min
@@ -218,24 +227,77 @@ module Live
 
       meta['highest_price'] = new_highest
       meta['lowest_price'] = new_lowest
+      tracker.update_column(:meta, meta)
+    end
 
-      if pending_meta
-        pending_meta['highest_price'] = new_highest
-        pending_meta['lowest_price'] = new_lowest
-      elsif tracker.exit_requested_at.blank? && tracker.exit_sent_at.blank? && !tracker.exited?
-        Live::PositionRuntimeCache.instance.merge(
-          tracker_id,
-          highest_price: new_highest,
-          lowest_price: new_lowest
-        )
+    # Fee-aware breakeven lock — the "PnL > fees" guarantee on the SL side.
+    #
+    # Once the position has peaked at breakeven_arm_factor x round-trip friction
+    # (fees + spread, per Scalp::FeeAwareExitTargets), the SL is pinned at the
+    # exit price that nets >= 0 after the FULL round-trip friction (both order
+    # fees and the whole spread — see breakeven_lock_price).
+    # The lock only ever RAISES the SL (never lowers it) and never blocks the
+    # trailing engines — a failure here degrades to "no lock this tick",
+    # logged loudly, leaving the SL exactly where it was.
+    #
+    # @param position_data [Positions::ActiveCache::PositionData]
+    # @param tracker [PositionTracker]
+    # @return [Hash] { updated: Boolean, new_sl_price: Float|nil, reason: String|nil }
+    def apply_fee_aware_breakeven_lock(position_data, tracker:)
+      return { updated: false, new_sl_price: nil } unless Scalp::FeeAwareExitTargets.enabled?
+      if position_data.respond_to?(:short_position?) && position_data.short_position?
+        return { updated: false, new_sl_price: nil }
       end
+
+      targets = Scalp::FeeAwareExitTargets.new(tracker)
+      lock_price = targets.breakeven_lock_price
+      current_sl = position_data.sl_price.to_f
+      peak = position_data.peak_profit_pct.to_f
+
+      if lock_price.nil? || lock_price <= current_sl || !targets.breakeven_armed?(peak)
+        return { updated: false, new_sl_price: nil }
+      end
+
+      entry_price = position_data.entry_price.to_f
+      sl_offset_pct = entry_price.positive? ? ((lock_price - entry_price) / entry_price * 100.0).round(2) : nil
+
+      bracket_result = @bracket_placer.update_bracket(
+        tracker: tracker,
+        sl_price: lock_price,
+        reason: "fee_aware_breakeven_lock (peak #{(peak * 100).round(2)}% covers friction, " \
+                "lock ₹#{lock_price.round(2)})"
+      )
+
+      if bracket_result[:success]
+        @active_cache.update_position(
+          position_data.tracker_id,
+          sl_price: lock_price,
+          sl_offset_pct: sl_offset_pct
+        )
+        position_data.sl_price = lock_price if position_data.respond_to?(:sl_price=)
+        position_data.sl_offset_pct = sl_offset_pct if position_data.respond_to?(:sl_offset_pct=)
+
+        Rails.logger.info(
+          "[TrailingEngine] Fee-aware breakeven lock for #{tracker.order_no}: " \
+          "SL ₹#{current_sl.round(2)} → ₹#{lock_price.round(2)} (peak #{(peak * 100).round(2)}%)"
+        )
+        { updated: true, new_sl_price: lock_price, reason: 'fee_aware_breakeven_lock' }
+      else
+        Rails.logger.warn("[TrailingEngine] Breakeven lock bracket update failed for #{tracker.order_no}: #{bracket_result[:error]}")
+        { updated: false, new_sl_price: nil, reason: bracket_result[:error] }
+      end
+    rescue StandardError => e
+      # Self-isolating (documented): the lock is an additional protection layer —
+      # a data/config failure here must never take the trailing path down.
+      Rails.logger.error("[TrailingEngine] Fee-aware breakeven lock failed for tracker=#{tracker&.id}: #{e.class} - #{e.message}")
+      { updated: false, new_sl_price: nil }
     end
 
     # Apply direct trailing SL (follows price directly, only moves upward)
     # @param position_data [Positions::ActiveCache::PositionData] Position data
     # @return [Hash] Result hash with :updated, :new_sl_price, :reason
-    # rubocop:disable Metrics/AbcSize
-    def apply_direct_trailing_sl(position_data, tracker: nil, trailing: nil)
+    # rubocop:disable-next Metrics/AbcSize
+    def apply_direct_trailing_sl(position_data, tracker: nil)
       return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
 
       entry_price = position_data.entry_price.to_f
@@ -245,11 +307,9 @@ module Live
 
       return { updated: false, new_sl_price: current_sl, reason: 'no_current_price' } unless current_price.positive?
 
-      tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
-      trailing ||= trailing_for(tracker)
-
       # Calculate new SL based on current price (maintains fixed distance below)
-      new_sl_price = trailing.calculate_direct_trailing_sl(
+      # TrailingConfig expects decimal (e.g. 0.05 for 5%)
+      new_sl_price = Positions::TrailingConfig.calculate_direct_trailing_sl(
         current_price: current_price,
         entry_price: entry_price,
         current_profit_pct: current_profit_pct
@@ -260,6 +320,7 @@ module Live
       # Only update if new SL is higher than current SL (only moves upward)
       return { updated: false, new_sl_price: current_sl, reason: 'sl_not_improved' } unless new_sl_price > current_sl
 
+      tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
       return { updated: false, new_sl_price: current_sl, reason: 'tracker_not_found' } unless tracker&.active?
 
       # Calculate SL offset for logging
@@ -294,30 +355,28 @@ module Live
       Rails.logger.error("[TrailingEngine] Failed to apply direct trailing SL: #{e.class} - #{e.message}")
       { updated: false, new_sl_price: nil, reason: e.message }
     end
-    # rubocop:enable Metrics/AbcSize
 
     # Apply tiered SL offsets based on current profit percentage
     # @param position_data [Positions::ActiveCache::PositionData] Position data
     # @return [Hash] Result hash with :updated, :new_sl_price, :reason
-    # rubocop:disable Metrics/AbcSize
-    def apply_tiered_sl(position_data, tracker: nil, trailing: nil)
+    # rubocop:disable-next Metrics/AbcSize
+    def apply_tiered_sl(position_data, tracker: nil)
       return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
 
       entry_price = position_data.entry_price.to_f
       current_profit_pct = position_data.pnl_pct.to_f # decimal (e.g. 0.05 for 5%)
       current_sl = position_data.sl_price.to_f
 
-      tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
-      trailing ||= trailing_for(tracker)
-
-      sl_offset_pct = trailing.sl_offset_for(current_profit_pct)
+      # TrailingConfig expects decimal
+      sl_offset_pct = Positions::TrailingConfig.sl_offset_for(current_profit_pct)
       return { updated: false, new_sl_price: current_sl, reason: 'tier_not_reached' } unless sl_offset_pct
 
-      new_sl_price = trailing.sl_price_from_entry(entry_price, sl_offset_pct)
+      new_sl_price = Positions::TrailingConfig.sl_price_from_entry(entry_price, sl_offset_pct)
       return { updated: false, new_sl_price: nil, reason: 'invalid_sl_calculation' } unless new_sl_price.positive?
 
       return { updated: false, new_sl_price: current_sl, reason: 'sl_not_improved' } unless new_sl_price > current_sl
 
+      tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
       return { updated: false, new_sl_price: current_sl, reason: 'tracker_not_found' } unless tracker&.active?
 
       bracket_result = @bracket_placer.update_bracket(
@@ -349,7 +408,6 @@ module Live
       Rails.logger.error("[TrailingEngine] Failed to apply tiered SL: #{e.class} - #{e.message}")
       { updated: false, new_sl_price: nil, reason: e.message }
     end
-    # rubocop:enable Metrics/AbcSize
 
     private
 
@@ -367,8 +425,7 @@ module Live
     end
 
     # Apply tailored trailing SL (Gamma-Aware + MFE approach for indices)
-    # rubocop:disable Metrics/AbcSize
-    def apply_tailored_sl(position_data, tracker: nil)
+    def apply_tailored_sl(position_data)
       return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
 
       current_price = position_data.current_ltp.to_f
@@ -376,7 +433,7 @@ module Live
       peak_profit_pct = position_data.peak_profit_pct.to_f
       prices = position_data.price_history || [current_price]
 
-      tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
+      tracker = PositionTracker.find_by(id: position_data.tracker_id)
       return { updated: false, new_sl_price: current_sl, reason: 'tracker_not_found' } unless tracker&.active?
 
       # 1. Use Orders::Analyzer for combined analysis
@@ -418,15 +475,10 @@ module Live
       Rails.logger.error("[TrailingEngine] Failed to apply tailored SL: #{e.class} - #{e.message}")
       { updated: false, new_sl_price: nil, reason: e.message }
     end
-    # rubocop:enable Metrics/AbcSize
 
     # Build failure result hash
     # @param error [String] Error message
     # @return [Hash]
-    def trailing_for(tracker)
-      Positions::TrailingConfig.from_tracker(tracker)
-    end
-
     def failure_result(error)
       {
         peak_updated: false,
@@ -441,11 +493,10 @@ module Live
     end
 
     def feature_flags
-      @feature_flags ||= begin
-        AlgoConfig.fetch[:feature_flags] || {}
-      rescue StandardError
-        {}
-      end
+      # Strict read (wave 3): a corrupt config document used to read as
+      # "feature off" — silently disabling the peak-drawdown activation.
+      # Trailing evaluation rescues log-and-isolate.
+      @feature_flags ||= AlgoConfig.fetch[:feature_flags] || {}
     end
 
     # Returns SL offset as percentage (e.g. 10.0 for 10%) for display/logging
@@ -484,5 +535,4 @@ module Live
       nil
     end
   end
-  # rubocop:enable Metrics/ClassLength
 end

@@ -23,7 +23,7 @@ module Ledger
 
       def legacy_wallet_snapshot
         gateway = Orders::GatewayPaper.new
-        snapshot = gateway.send(:legacy_wallet_snapshot)
+        snapshot = gateway.wallet_snapshot
         snapshot.merge(source: 'legacy')
       end
     end

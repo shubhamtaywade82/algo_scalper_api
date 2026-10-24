@@ -19,15 +19,15 @@ end
 def filter_scope(scope)
   ids = parse_ids
   symbols = parse_symbols
-  status = ENV['STATUS']
-  date_from = ENV['DATE_FROM']
-  date_to = ENV['DATE_TO']
+  status = ENV.fetch('STATUS', nil)
+  date_from = ENV.fetch('DATE_FROM', nil)
+  date_to = ENV.fetch('DATE_TO', nil)
 
   scope = scope.where(id: ids) if ids.any?
   scope = scope.where(symbol: symbols) if symbols.any?
   scope = scope.where(status: status) if status.present?
-  scope = scope.where('created_at >= ?', Date.parse(date_from).beginning_of_day) if date_from
-  scope = scope.where('created_at <= ?', Date.parse(date_to).end_of_day) if date_to
+  scope = scope.where(created_at: Date.parse(date_from).beginning_of_day..) if date_from
+  scope = scope.where(created_at: ..Date.parse(date_to).end_of_day) if date_to
   scope
 end
 
@@ -42,7 +42,7 @@ end
 
 def fetch_ohlc(watchable, position)
   entry_date = position.created_at.to_date
-  days = (Date.today - entry_date).to_i + 2
+  days = (Time.zone.today - entry_date).to_i + 2
   days = [days, 10].min
 
   data = watchable.intraday_ohlc(interval: '1', days: days)
@@ -102,12 +102,11 @@ def validate_position(position)
 
     result = check_candle_for_time(series, ts, entry_price)
     match = result[:within] || result[:prev_match]
-    if best.nil? || (match && !best[:matched])
-      best = { position: position, field: field, label: label, entry_time: ts, entry_price: entry_price,
-               candle_count: series.candles.size, candle: result[:candle], prev_candle: result[:prev_candle],
-               within: result[:within], prev_match: result[:prev_match],
-               matched: match }
-    end
+    next unless best.nil? || (match && !best[:matched])
+    best = { position: position, field: field, label: label, entry_time: ts, entry_price: entry_price,
+             candle_count: series.candles.size, candle: result[:candle], prev_candle: result[:prev_candle],
+             within: result[:within], prev_match: result[:prev_match],
+             matched: match }
   end
 
   return best if best
@@ -157,7 +156,7 @@ def display_result(result)
          "(O: #{format_price(candle.open)}, C: #{format_price(candle.close)})"
     low_dev = ((entry_price - candle.low.to_f) / candle.low.to_f * 100).round(3)
     high_dev = ((entry_price - candle.high.to_f) / candle.high.to_f * 100).round(3)
-    puts "     Deviation from low: #{low_dev.positive? ? '+' : ''}#{low_dev}%, from high: #{high_dev.positive? ? '+' : ''}#{high_dev}%"
+    puts "     Deviation from low: #{'+' if low_dev.positive?}#{low_dev}%, from high: #{'+' if high_dev.positive?}#{high_dev}%"
   end
 end
 

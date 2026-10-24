@@ -13,7 +13,7 @@ class StrategyAgent < ApplicationAgent
     - If the bias is BULLISH, formulate a long/CALL strategy.
     - If the bias is BEARISH, formulate a short/PUT strategy.
     - If the bias is NEUTRAL, or the trend is weak, or there is no clear confluence, do NOT trade (action: NO_TRADE).
-    
+
     Define:
     1. Action: BUY_CALL, BUY_PUT, or NO_TRADE.
     2. Entry Trigger: Under what condition or price level to enter the trade (e.g., tap into an Order Block, break of structure).

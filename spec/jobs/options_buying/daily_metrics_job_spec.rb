@@ -2,7 +2,7 @@
 
 require 'rails_helper'
 
-RSpec.describe OptionsBuying::DailyMetricsJob, type: :job do
+RSpec.describe OptionsBuying::DailyMetricsJob do
   let(:index_cfg) { { key: 'NIFTY', sid: '13', segment: 'IDX_I' } }
   let(:instrument) { instance_double(Instrument) }
 

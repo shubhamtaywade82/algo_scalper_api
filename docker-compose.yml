@@ -30,6 +30,7 @@ services:
       RAILS_LOG_TO_STDOUT: "true"
       DATABASE_URL: postgres://postgres:postgres@db:5432/algo_scalper_api_development
       REDIS_URL: redis://redis:6379/0
+      DISABLE_TRADING_SERVICES: "1"
     depends_on:
       db:
         condition: service_healthy
@@ -50,6 +51,7 @@ services:
       RAILS_LOG_TO_STDOUT: "true"
       DATABASE_URL: postgres://postgres:postgres@db:5432/algo_scalper_api_development
       REDIS_URL: redis://redis:6379/0
+      DISABLE_TRADING_SERVICES: "1"
     depends_on:
       db:
         condition: service_healthy
@@ -67,6 +69,17 @@ services:
     ports:
       - "3000:80"
 
+  arch-dashboard:
+    build:
+      context: ./architecture-dashboard
+      dockerfile: Dockerfile
+    depends_on: []
+    ports:
+      - "3003:3003"
+    environment:
+      - NEXT_TELEMETRY_DISABLED=1
+
 volumes:
   pg_data_v15:
   redis_data:
+

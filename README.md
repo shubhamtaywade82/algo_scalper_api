@@ -8,16 +8,14 @@ Algo Scalper API automates the entire trade lifecycle — from signal identifica
 
 ### Key Capabilities
 
-- **Multi-Strategy Signal Engine** — Supertrend + ADX with multi-timeframe confirmation, market regime detection, and dynamic validation modes (balanced/conservative). Optional **market context** (`MarketContext::RegimeComposer`, chain signal extraction, `Trading::MarketPermissionGate`) is configurable in `config/algo.yml` (`market_context`); see `docs/trading/market_context_and_permission_gate.md`.
+- **Multi-Strategy Signal Engine** — Supertrend + ADX with multi-timeframe confirmation, market regime detection, and dynamic validation modes (balanced/conservative)
 - **Smart Money Concepts (SMC)** — Order block detection, FVG analysis, break-of-structure entries, institutional flow scoring
 - **Real-time WebSocket Hub** — DhanHQ tick ingestion with write-through Redis caching, automatic reconnection, and per-position subscription management
-- **Institutional Risk Management** — Dual-path exit evaluation: per-tick `UnifiedExitChecker` (SL, TP, trailing, early trend failure, time-based) plus 5-second enforcement loop (premium R-stop, profit floor, structure invalidation, premium momentum failure, R:R booking, percentage PnL exit, time stop)
+- **Institutional Risk Management** — 15 exit rule engines: stop-loss, take-profit, trailing stops (tiered/direct/gamma-aware), peak drawdown, time-based, early trend failure, premium momentum failure, structure invalidation
 - **Options Chain Intelligence** — ATM±1 strike selection with liquidity scoring, gamma ramp detection, expected move validation, per-index rules (NIFTY/BANKNIFTY/SENSEX)
-- **Expiry Week Power Trend** — ADX >= 40 + within 5 days of monthly expiry + 12:00-13:45 window → `ExpiryWeekPowerTrendGuard` enriches context to bypass chop-zone block
-- **20-Guard Entry Pipeline** — Full guard chain from DrawdownGuard through SmcNavigatorGuard
 - **Paper & Live Trading** — Seamless toggle; both modes use real DhanHQ WebSocket data. Paper simulates fills; live submits to exchange via DhanHQ API
 - **Circuit Breaker** — Redis-backed singleton with API control (`GET/POST/DELETE /api/circuit_breaker/trip`); EntryGuard checks before every entry, RiskManager force-closes all positions when tripped
-- **AI Technical Analysis** — Local Ollama LLM integration (`ollama-client` gem `~> 1.1`); auto-selects best available model
+- **AI Technical Analysis** — Optional OpenAI integration for multi-timeframe analysis and SMC pattern enrichment
 - **Telegram Notifications** — Trade alerts, PnL milestones, daily stats, SMC signals
 
 ## Tech Stack
@@ -27,13 +25,14 @@ Algo Scalper API automates the entire trade lifecycle — from signal identifica
 | Language | Ruby 3.3.4 |
 | Framework | Rails 8.0.2 (API-only mode) |
 | Database | PostgreSQL |
-| Cache/State | Redis (tick cache, PnL cache, position state, circuit breaker) |
+| Cache/State | Redis (tick cache, PnL cache, position state) |
 | Job Queue | Solid Queue (not Sidekiq) |
 | WebSocket Broadcast | Solid Cable (ActionCable backend) |
 | Broker | DhanHQ v2 via `dhanhq` gem |
-| AI | Ollama via `ollama-client` gem (`~> 1.1`) — local LLM, no OpenAI |
+| AI | OpenAI (optional) |
 | Notifications | Telegram Bot |
 | Frontend | Next.js dashboard (separate process) |
+| Deployment | Kamal + Docker |
 
 ## Quick Start
 
@@ -42,7 +41,6 @@ Algo Scalper API automates the entire trade lifecycle — from signal identifica
 - Ruby 3.3.4, PostgreSQL 14+, Redis
 - DhanHQ account with API credentials
 - Node.js (for dashboard)
-- Ollama running locally (optional, for AI analysis)
 
 ### Setup
 
@@ -63,8 +61,8 @@ This launches (via `Procfile.dev`):
 
 | Process | Command | Purpose |
 |---------|---------|---------|
-| `web` | `bin/rails server -p 3011` | Rails API server |
-| `trading` | `ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon` | Trading brain (11 services in threads) |
+| `web` | `bin/rails server -p 3001` | Rails API server |
+| `trading` | `ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon` | Trading brain (all live services) |
 | `jobs` | `bin/jobs` | Solid Queue worker (SMC scanner, AI analysis, instrument sync) |
 | `dashboard` | `cd dashboard && npm run dev` | Next.js frontend |
 
@@ -76,7 +74,6 @@ bundle exec rspec spec/path/file_spec.rb   # run single spec
 bundle exec rubocop                        # lint check
 bin/brakeman --no-pager                    # security scan
 bin/jobs                                   # start Solid Queue worker standalone
-ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon  # trading daemon standalone
 ```
 
 ## Architecture
@@ -89,7 +86,7 @@ ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon  # trading daemon s
 ├──────────────┬──────────────┬──────────────┬─────────────────────┤
 │ web          │ trading      │ jobs         │ dashboard           │
 │ Rails API    │ Daemon       │ Solid Queue  │ Next.js             │
-│ port 3011    │ 11 services  │ recurring    │ frontend            │
+│ port 3001    │ 11 services  │ recurring    │ frontend            │
 │              │ in threads   │ tasks        │                     │
 └──────┬───────┴──────┬───────┴──────┬───────┴─────────────────────┘
        │              │              │
@@ -104,19 +101,19 @@ The **web** and **trading** processes share PostgreSQL and Redis but do NOT shar
 
 Started by `TradingSystem::Supervisor` (registered in `lib/trading_system/bootstrap.rb`):
 
-| # | Service | Cadence |
-|---|---------|---------|
-| 1 | `Live::MarketFeedHubService` | Event-driven (WebSocket) |
-| 2 | `Signal::Scheduler` | 30s per cycle |
-| 3 | `Live::RiskManagerService` | 5s enforcement loop + per-tick EventBus |
-| 4 | `TradingSystem::PositionHeartbeat` | 10s |
-| 5 | `TradingSystem::OrderRouter` | On-demand |
-| 6 | `Live::PaperPnlRefresher` | 1s (refreshes paper trackers when present) |
-| 7 | `Live::ExitEngine` | On-demand |
-| 8 | `Positions::ActiveCacheService` | On-demand |
-| 9 | `Live::ReconciliationService` | 30s |
-| 10 | `Live::StatsNotifierService` | At market close |
-| 11 | `Smc::Scanner` | 5 min |
+| # | Service | Thread | Cadence |
+|---|---------|--------|---------|
+| 1 | `Live::MarketFeedHubService` | WebSocket event loop | Event-driven |
+| 2 | `Signal::Scheduler` | `signal-scheduler` | 30s per cycle |
+| 3 | `Live::RiskManagerService` | risk monitor | 5s enforcement loop + per-tick EventBus |
+| 4 | `TradingSystem::PositionHeartbeat` | `position-heartbeat` | 10s |
+| 5 | `TradingSystem::OrderRouter` | (stateless) | On-demand |
+| 6 | `Live::PaperPnlRefresher` | `paper-pnl-refresher` | 1s (paper mode) |
+| 7 | `Live::ExitEngine` | (called directly) | On-demand |
+| 8 | `Positions::ActiveCacheService` | (called directly) | On-demand |
+| 9 | `Live::ReconciliationService` | reconciliation | 30s |
+| 10 | `Live::StatsNotifierService` | `stats-notifier` | At market close |
+| 11 | `Smc::Scanner` | `smc-scanner` | 5 min |
 
 ### Recurring Jobs (Solid Queue)
 
@@ -154,9 +151,9 @@ app/services/
     scheduler.rb                       # 30s signal polling loop
   entries/                             # entry pipeline
     entry_guard.rb                     # orchestrates entry from signal to order
-    entry_guard_pipeline.rb            # 20-guard chain
+    entry_guard_pipeline.rb            # 10-guard chain (circuit breaker → cooldown)
     bos_entry_engine.rb                # Break-of-Structure entry state machine
-    guards/                            # individual entry guards (20 total)
+    guards/                            # individual entry guards
   capital/                             # position sizing
     allocator.rb                       # rupee-based and percentage-based sizing
     dynamic_risk_allocator.rb          # trend-score-based dynamic risk
@@ -165,6 +162,7 @@ app/services/
     gateway_live.rb                    # real DhanHQ execution with retry
     gateway_paper.rb                   # simulated fills
     placer.rb                          # DhanHQ API calls, idempotency, PLACE_ORDER live-order gate
+    bracket_placer.rb                  # SL/TP bracket placement
   options/                             # options analysis
     chain_analyzer.rb                  # strike selection with qualification scoring
     derivative_chain_analyzer.rb       # expiry resolution
@@ -172,7 +170,7 @@ app/services/
     index_rules/                       # per-index strike rules (nifty, banknifty, sensex)
   risk/                                # risk management
     circuit_breaker.rb                 # Redis-backed emergency halt
-    rules/                             # exit rule engines
+    rules/                             # 15 exit rule engines
   smc/                                 # Smart Money Concepts
     scanner.rb                         # SMC pattern detection loop
     bias_engine.rb                     # SMC directional bias
@@ -184,10 +182,12 @@ app/services/
     token_manager.rb                   # 3-tier token provisioning (authority → TOTP → static)
   adapters/                            # broker adapters
     option_chain/dhan_adapter.rb       # live option chain fetch
-
-lib/services/ai/
-  ollama_client.rb                     # Ollama::Client wrapper (chat, generate, stream)
-  technical_analysis_agent.rb          # LLM-backed technical analysis agent
+  trading/                             # trading utilities
+    permission_resolver.rb             # SMC + AVRZ permission gating
+    capital_allocator.rb               # lot calculation
+  positions/                           # position state management
+    active_cache.rb                    # in-memory + Redis position cache
+    trailing_config.rb                 # trailing stop configuration
 ```
 
 ### Trading Flow
@@ -203,45 +203,25 @@ Signal::Scheduler (30s loop)
   │   ├─ Comprehensive validation (IV proxy, theta risk, ADX strength, trend confirm)
   │   ├─ Entries::EntryFilterEngine (structure, liquidity, volatility)
   │   ├─ Trading::PermissionResolver (SMC + AVRZ gating)
-  │   └─ SMC decision alignment check
+  │   ├─ SMC decision alignment check
+  │   └─ Signal::MomentumValidator (momentum scoring 0-3)
   │
   ├─ Options::ChainAnalyzer.pick_strikes_with_qualification
   │   ├─ Fetch nearest expiry from instrument
   │   ├─ Fetch option chain via DhanAdapter
+  │   ├─ Filter by DB Derivative records
   │   ├─ Score strikes (liquidity, OI, spread, IV)
   │   └─ Expected move validation
   │
   └─ Entries::EntryGuard.try_enter
-      ├─ EntryGuardPipeline (20 guards in sequence)
+      ├─ EntryGuardPipeline (10 guards in sequence):
+      │   CircuitBreaker → BosContract → TimeRegime → BankniftyLastWeek
+      │   → EdgeFailure → DailyLimits → InstrumentLookup → Exposure
+      │   → Cooldown → LtpResolution
       ├─ Capital::Allocator.qty_for (risk-based sizing)
       ├─ Orders.config.gateway.place_market (paper or live)
       └─ PositionTracker.create + subscribe to WebSocket feed
 ```
-
-### Entry Guard Pipeline (20 guards, in order)
-
-| # | Guard | Purpose |
-|---|-------|---------|
-| 1 | `DrawdownGuard` | Portfolio-level drawdown limit |
-| 2 | `EntryPolicyGuard` | Entry policy enforcement |
-| 3 | `CircuitBreakerGuard` | System-wide halt check |
-| 4 | `MiddayQualityGuard` | Quality gate; bypassed if ADX >= 28 |
-| 5 | `EdgeFailureGuard` | Pause when strategy has lost edge for index |
-| 6 | `LossStreakGuard` | Block on consecutive loss streak |
-| 7 | `DailyLimitsGuard` | Daily loss/profit/trade limits |
-| 8 | `MaxConcurrentGuard` | Max simultaneous open positions |
-| 9 | `InstrumentLookupGuard` | Resolves instrument; sets context[:instrument] |
-| 10 | `LtpResolutionGuard` | Requires valid LTP; sets context[:ltp] |
-| 11 | `ExpiryWeekPowerTrendGuard` | Enriches context[:expiry_power_trend] when pattern detected |
-| 12 | `TimeRegimeGuard` | Time-of-day regime check; bypassed when expiry_power_trend = true |
-| 13 | `BankniftyLastWeekGuard` | BANKNIFTY: only last week before monthly expiry |
-| 14 | `WeeklyExpiryGuard` | Requires weekly contract |
-| 15 | `BosStructureGuard` | Break-of-Structure requirement |
-| 16 | `ExposureGuard` | Max same-side positions |
-| 17 | `CooldownGuard` | Re-entry cooldown per symbol |
-| 18 | `SizingGuard` | Capital sizing gate |
-| 19 | `RiskPolicyGuard` | Risk policy compliance |
-| 20 | `SmcNavigatorGuard` | SMC alignment check |
 
 ### Position Management Flow
 
@@ -266,27 +246,21 @@ DhanHQ WebSocket tick
 
 ## Paper vs Live Trading
 
-**Effective** paper vs live is resolved in `AlgoConfig.fetch` (30s cache):
-
-1. `config/algo.yml` (base)
-2. DB `settings` → `algo_config_overrides` (JSON, deep-merged)
-3. `config/signal_tier_presets.yml` for tier **`exploratory` | `standard` | `selective`** (from `SIGNAL_TIER` env or `signals.signal_tier`)
-4. **`LIVE_TRADING`** — when unset or false, **`paper_trading.enabled` is forced `true`**; when true, forced `false` (overrides YAML for gateway choice at boot)
+Controlled by `config/algo.yml`:
 
 ```yaml
 paper_trading:
-  enabled: true    # Base YAML; LIVE_TRADING=false keeps paper even if this were false
+  enabled: true    # true = paper (simulated fills), false = live (real DhanHQ orders)
   balance: 100000  # simulated starting capital
 
 dhanhq:
-  enable_orders: false  # must be true for live broker calls (with PLACE_ORDER=true)
+  enable_orders: false  # legacy broker toggle (keep false unless explicitly needed)
+
+# Runtime live-order gate:
+# PLACE_ORDER=true (environment variable)
 ```
 
-For **live broker** order placement: set `LIVE_TRADING=true`, `dhanhq.enable_orders: true`, and `PLACE_ORDER=true`. `Orders::Placer` dry-runs if either gate is off.
-
-Both modes use **real DhanHQ WebSocket data** for market ticks.
-
-Signals, guards, strike qualification, and risk rules use the **same logic** in paper and live. The only intentional differences are **order execution** (simulated fills and `GatewayPaper` wallet math vs DhanHQ orders and real balances) and **broker position sync** (live reconciles to DhanHQ positions; paper stays on `PositionTracker` + ticks).
+Both modes use **real DhanHQ WebSocket data** for market ticks. The difference is only in order execution:
 
 | Aspect | Paper Mode | Live Mode |
 |--------|-----------|-----------|
@@ -297,7 +271,7 @@ Signals, guards, strike qualification, and risk rules use the **same logic** in 
 | Order updates | Synthetic | DhanHQ WebSocket |
 | Wallet | Simulated balance | Real funds API |
 
-## Environment Variables
+### Environment Variables
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
@@ -307,26 +281,17 @@ Signals, guards, strike qualification, and risk rules use the **same logic** in 
 | `DHAN_TOTP_SECRET` | Recommended | For TOTP auto-refresh |
 | `ENABLE_TRADING_SERVICES` | Auto (Procfile) | Must be `"true"` for daemon |
 | `PLACE_ORDER` | Live only | Must be `"true"` to allow live broker order placement |
-| `LIVE_TRADING` | Recommended | When unset/false: paper gateway forced. Set `"true"` only when intentionally going live |
-| `SIGNAL_TIER` | Optional | `exploratory` / `standard` / `selective` — merges `config/signal_tier_presets.yml` |
-| `REDIS_URL` | Optional | Redis connection (default: redis://127.0.0.1:6379/0) |
-| `DATABASE_URL` | Optional | PostgreSQL connection |
-| `RAILS_ENV` | Optional | Rails environment |
-| `OLLAMA_MODEL` | Optional | Ollama model name (default: qwen3.5:4b) |
-| `OLLAMA_BASE_URL` / `OLLAMA_HOST_URL` | Optional | Ollama server URL (default: http://localhost:11434) |
-| `OLLAMA_TIMEOUT` | Optional | Ollama request timeout in seconds (default: 120) |
-| `TELEGRAM_BOT_TOKEN` | Optional | Telegram bot token |
-| `TELEGRAM_CHAT_ID` | Optional | Telegram chat ID |
+| `DHANHQ_WS_ENABLED` | Optional | Enable WebSocket (defaults based on env) |
+| `DISABLE_TRADING_SERVICES` | Optional | Set to `"1"` to disable |
+| `BACKTEST_MODE` | Optional | Set to `"1"` for backtesting |
 
 ### Live Trading Checklist
 
-Before live execution:
+Before switching `paper_trading.enabled: false`:
 
-- [ ] `LIVE_TRADING=true` in environment (and restart trading daemon so gateway picks live)
 - [ ] DhanHQ credentials set (`DHAN_CLIENT_ID`, `DHAN_ACCESS_TOKEN`)
 - [ ] TOTP credentials set (`DHAN_PIN`, `DHAN_TOTP_SECRET`) for token auto-refresh
-- [ ] `PLACE_ORDER=true` in environment
-- [ ] `dhanhq.enable_orders: true` in `config/algo.yml`
+- [ ] `PLACE_ORDER=true` in environment for intentional live broker order placement
 - [ ] `InstrumentsImporter` has run recently (`rails runner 'puts Derivative.count'`)
 - [ ] Database migrated (`rails db:migrate:status`)
 - [ ] Redis running (`redis-cli ping`)
@@ -344,15 +309,9 @@ PATCH /api/settings/bulk              # Bulk update settings
 GET  /api/circuit_breaker             # Circuit breaker status
 POST /api/circuit_breaker/trip        # Trip circuit breaker (emergency halt)
 DELETE /api/circuit_breaker/trip      # Reset circuit breaker
-GET  /api/smc/decision                # SMC analytics decision (namespaced API)
-GET  /smc/decision                    # Legacy URL → 301 redirect to /api/smc/decision
+GET  /smc/decision                    # SMC analytics decision
 POST /cable                           # ActionCable WebSocket (positions, dashboard channels)
 ```
-
-### OpenAPI (RSwag)
-
-- Spec file: `swagger/v1/swagger.yaml` (regenerate with `bundle exec rake rswag:specs:swaggerize`).
-- Swagger UI: `/api-docs` when mounted (development/test by default; in production set `ENABLE_SWAGGER_UI=true`).
 
 ## Database Schema
 
@@ -372,7 +331,7 @@ Key tables:
 
 ## Configuration
 
-All trading parameters live in `config/algo.yml`. Key sections:
+All trading parameters live in `config/algo.yml` (838 lines). Key sections:
 
 | Section | Purpose |
 |---------|---------|
@@ -384,32 +343,24 @@ All trading parameters live in `config/algo.yml`. Key sections:
 | `position_sizing` | Rupee-based or percentage-based capital allocation |
 | `signals` | Signal generation: ADX thresholds, timeframes, validation modes |
 | `chain_analyzer` | Options chain scoring parameters |
-| `expiry_week_power_trend` | ADX/timing/expiry window config for the power trend guard |
 | `broker_fees` | Brokerage and transaction charges |
 | `telegram` | Telegram bot configuration and PnL milestones |
-| `ai` | Ollama AI settings (enabled flag) |
-
-All percentage values use **DECIMAL format** (0.12 = 12%, not 12.0).
+| `ai` | OpenAI API settings |
 
 Runtime config changes: `AlgoConfig.fetch` has a 30-second in-process cache. DB overrides via the `settings` table are deep-merged on top of YAML values, enabling hot config changes without restart.
 
 ## Critical Rules
 
 - **DhanHQ only** — no other broker code
-- Live services communicate via **direct method calls** — `event_bus.rb` has only a debug subscriber; do not treat it as active communication
+- Live services communicate via **direct method calls** — `event_bus.rb` has only a debug subscriber; it is infrastructure for future use
 - `exit_engine.rb` is the **single source of truth** for exit placement — RiskManager and TrailingEngine detect conditions and call it directly
 - `TickQuery` returns `nil` on cache miss — callers must treat nil as stale data, not zero
 - Position sizing must go through `capital/` — never inline the math
 - **Solid Queue** is the job runner (not Sidekiq) — use `ApplicationJob`
 - Redis tick cache is **write-through** — if Redis is down, fall back gracefully
 - **Never write to DB** from WebSocket tick handlers — enqueue a job or use the PnlUpdater flush
-- All percentage config values use **DECIMAL format** (0.12 = 12%)
+- All percentage config values use **DECIMAL format** (0.12 = 12%, not 12.0)
 - WebSocket event handlers must be **idempotent** — the feed can reconnect and replay
-- `Live::Gateway` is **deprecated** — use `Orders::GatewayLive` directly
-
-## WSL2 Note
-
-Default WSL2 memory limit is 8 GB even on 32 GB systems. Set `memory=16GB` in `~/.wslconfig` to prevent OOM kills of the trading daemon.
 
 ## License
 

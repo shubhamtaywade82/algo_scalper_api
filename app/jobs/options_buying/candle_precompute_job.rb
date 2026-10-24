@@ -7,17 +7,23 @@ module OptionsBuying
     queue_as :background
 
     TIMEFRAMES = %w[1 5 15 60 D].freeze
+    LIMITS = {
+      '1' => 500,
+      '5' => 300,
+      '15' => 200,
+      '60' => 100,
+      'D' => 100
+    }.freeze
 
     def perform(*_args)
       return unless market_hours?
 
       IndexConfigLoader.load_indices.each do |idx|
         index_key = idx[:key].to_s.upcase
-        sid = idx[:sid].to_s
-        segment = idx[:segment].to_s
+        sid = idx[:sid].to_i
 
         TIMEFRAMES.each do |tf|
-          cache_candles(index_key, sid, segment, tf)
+          cache_candles(index_key, sid, tf)
         end
       rescue StandardError => e
         Rails.logger.error("[CandlePrecomputeJob] #{index_key} failed: #{e.class} - #{e.message}")
@@ -28,37 +34,23 @@ module OptionsBuying
 
     def market_hours?
       now = Time.current
-      now >= now.beginning_of_day + 9.hours + 15.minutes && now <= now.beginning_of_day + 15.hours + 30.minutes
+      now.between?(now.beginning_of_day + 9.hours + 15.minutes, now.beginning_of_day + 15.hours + 30.minutes)
     end
 
-    def days_for_timeframe(timeframe)
-      case timeframe.to_s
-      when '1' then 5
-      when '5' then 10
-      when '15' then 20
-      when '60' then 30
-      else 5
-      end
-    end
-
-    def cache_candles(index_key, sid, segment, timeframe)
-      instrument = Instrument.find_by_sid_and_segment(security_id: sid.to_s, segment_code: segment)
+    def cache_candles(index_key, sid, timeframe)
+      instrument = Instrument.find_by(security_id: sid)
       return unless instrument
 
-      raw_candles = if timeframe == 'D'
-                      instrument.historical_ohlc
-                    else
-                      instrument.intraday_ohlc(
-                        interval: timeframe,
-                        days: days_for_timeframe(timeframe)
-                      )
-                    end
-      return if raw_candles.blank?
+      raw = timeframe == 'D' ? instrument.historical_ohlc : instrument.intraday_ohlc(interval: timeframe, days: 10)
+      return if raw.blank?
 
-      series = CandleSeries.new(symbol: sid, interval: timeframe)
-      series.load_from_raw(raw_candles)
+      series = CandleSeries.new(symbol: index_key, interval: timeframe)
+      series.load_from_raw(raw)
+      candles = series.to_hash
+      return if candles.blank?
 
-      StateStore.cache_index_candles(index_key, timeframe, series.to_hash)
+      candles = candles.transform_values { |arr| arr.last(LIMITS[timeframe]) }
+      StateStore.cache_index_candles(index_key, timeframe, candles)
     rescue StandardError => e
       Rails.logger.warn("[CandlePrecomputeJob] #{index_key} #{timeframe}m failed: #{e.class} - #{e.message}")
     end

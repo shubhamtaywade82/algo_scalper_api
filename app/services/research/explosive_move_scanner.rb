@@ -23,8 +23,8 @@ module Research
         bars = bars.where(expiry_flag: expiry_flag) if expiry_flag.present?
 
         bars.order(:ts).group_by { |bar| [bar.ts.to_date, bar.option_type, bar.actual_strike] }
-                       .filter_map { |key, rows| build_move(key, rows, min_gain_pct, min_premium) }
-                       .sort_by { |row| -row[:gain_pct] }
+            .filter_map { |key, rows| build_move(key, rows, min_gain_pct, min_premium) }
+            .sort_by { |row| -row[:gain_pct] }
       end
 
       private

@@ -81,6 +81,10 @@ module OptionsBuying
       volume_delta = TickMetrics.volume_delta(option_ticks)
       oi_delta = TickMetrics.oi_delta(option_ticks)
       volume_multiplier = volume_multiplier_for_index
+      # An unresolvable multiplier means the volume-confirmation cannot be
+      # evaluated — skip arming the breakout rather than assuming one.
+      return if volume_multiplier.nil?
+
       level_broken = direction == :bullish ? spot_ltp > level : spot_ltp < level
       return unless level_broken && volume_delta > (volume_baseline * volume_multiplier)
       return if require_oi_unwind? && !oi_delta.negative?
@@ -195,11 +199,19 @@ module OptionsBuying
       Mode.intraday? && Mode.config.dig(:breakout, :compression_arm) == true
     end
 
+    # Volume-confirmation multiplier, resolved from explicit configuration only
+    # (error-handling review 2026-09, wave 2 — used to rescue -> Mode.config || 2.0).
+    # Precedence: DTE-resolved tier value, else the mode breakout config.
+    # nil means "unconfigured" — the caller skips, it does not assume.
     def volume_multiplier_for_index
       dte = days_to_expiry_for_index
-      Trading::DteParameterResolver.volume_velocity_multiplier(dte: dte)
-    rescue StandardError
-      (Mode.config.dig(:breakout, :volume_multiplier) || 2.0).to_f
+      Trading::DteParameterResolver.volume_velocity_multiplier(dte: dte) || mode_volume_multiplier
+    end
+
+    def mode_volume_multiplier
+      raw = Mode.config.dig(:breakout, :volume_multiplier)
+      value = raw.to_f
+      raw.present? && value.finite? && value.positive? ? value : nil
     end
 
     def days_to_expiry_for_index

@@ -30,6 +30,17 @@ class MarketRegimeDetector
     regime_data
   end
 
+  def bollinger_band_breakout?
+    # Uses 20-period BB with 2.0 std dev
+    bb = series.bollinger_bands(period: 20, std_dev: 2.0)
+    return false unless bb && bb[:upper] && bb[:lower]
+
+    current_close = series.candles.last.close.to_f
+
+    # We define a breakout as closing outside the bands
+    current_close > bb[:upper] || current_close < bb[:lower]
+  end
+
   private
 
   def cache_key
@@ -60,7 +71,7 @@ class MarketRegimeDetector
 
     metrics = calculate_metrics
 
-    # rubocop:disable Style/MultilineBlockChain
+    # rubocop:disable-next Style/MultilineBlockChain
     case
     when trending?(metrics)
       trend_direction(metrics)
@@ -69,7 +80,6 @@ class MarketRegimeDetector
     else
       { regime: 'CHOPPY', confidence: 50.0 } # Needs more confirmation
     end.merge(metrics: metrics, timestamp: Time.current.iso8601)
-    # rubocop:enable Style/MultilineBlockChain
   end
 
   def calculate_metrics
@@ -106,17 +116,6 @@ class MarketRegimeDetector
     # Determine UP vs DOWN based on where the current price sits relative to recent high/low range
     direction = metrics[:price_position] > 0.6 ? 'UP' : 'DOWN'
     { regime: "TRENDING_#{direction}", confidence: metrics[:adx_value] }
-  end
-
-  def bollinger_band_breakout?
-    # Uses 20-period BB with 2.0 std dev
-    bb = series.bollinger_bands(period: 20, std_dev: 2.0)
-    return false unless bb && bb[:upper] && bb[:lower]
-
-    current_close = series.candles.last.close.to_f
-
-    # We define a breakout as closing outside the bands
-    current_close > bb[:upper] || current_close < bb[:lower]
   end
 
   def price_in_range

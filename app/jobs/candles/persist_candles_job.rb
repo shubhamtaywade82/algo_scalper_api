@@ -27,7 +27,10 @@ module Candles
         }
       end
 
-      Candles::Record.upsert_all(rows, unique_by: %i[instrument_key timeframe ts])
+      # upsert_all on purpose: bulk candle persistence is a high-throughput
+      # write path — per-row validations/inserts would defeat the batch, and
+      # candle rows are plain numeric snapshots with no model invariants.
+      Candles::Record.upsert_all(rows, unique_by: %i[instrument_key timeframe ts]) # rubocop:disable Rails/SkipsModelValidations
     end
   end
 end

@@ -40,9 +40,7 @@ module Live
     def all_statuses
       {
         ws_market_feed: running?(:ws_market_feed),
-        scheduler: running?(:scheduler) ? 'running' : 'unknown',
-        pnl_updater_running: running?(:pnl_updater),
-        ws_order_update: running?(:ws_order_update)
+        scheduler: running?(:scheduler) ? 'running' : 'unknown'
       }
     end
 

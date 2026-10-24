@@ -8,7 +8,7 @@ RSpec.describe Live::ExitEngine do
 
   describe '#resolved_entry_tf' do
     it 'defaults to 1m when metadata has no entry_tf' do
-      tracker = instance_double(PositionTracker, meta: {})
+      tracker = instance_double(PositionTracker, entry_tf: nil, meta: {})
       expect(engine.send(:resolved_entry_tf, tracker)).to eq('1m')
     end
   end

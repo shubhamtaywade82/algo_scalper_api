@@ -11,8 +11,6 @@ module Options
       @chain_data = chain_data # { last_price: float, oc: { strike => { ce: {}, pe: {} } } }
     end
 
-    OPTION_TYPES = %w[ce pe].freeze
-
     # Identifies strikes with strong institutional flow (long buildup)
     # @return [Hash] { 'ce' => [strikes], 'pe' => [strikes] }
     def strong_flow_strikes
@@ -20,7 +18,7 @@ module Options
       return result unless @chain_data && @chain_data[:oc]
 
       @chain_data[:oc].each do |strike, data|
-        OPTION_TYPES.each do |type|
+        %w[ce pe].each do |type|
           option = data[type]
           next unless option && option['oi'].to_i.positive?
 
@@ -74,7 +72,7 @@ module Options
       score = (oi_change_pct * 0.5) + (vol_ratio * 0.3) + (price_change_pct * 0.2)
 
       # Record current state for next cycle
-      record_strike_state(strike, type, option, history: history)
+      record_strike_state(strike, type, option)
 
       score
     end
@@ -87,7 +85,7 @@ module Options
       Rails.cache.read(cache_key(strike, type))
     end
 
-    def record_strike_state(strike, type, option, history: nil)
+    def record_strike_state(strike, type, option)
       current_state = {
         oi: option['oi'],
         ltp: option['last_price'],
@@ -96,7 +94,7 @@ module Options
       }
 
       # Update rolling averages (simple 5-period for responsiveness)
-      history ||= get_strike_history(strike, type) || {}
+      history = get_strike_history(strike, type) || {}
 
       prev_volumes = history[:volume_history] || []
       prev_volumes << option['volume'].to_f

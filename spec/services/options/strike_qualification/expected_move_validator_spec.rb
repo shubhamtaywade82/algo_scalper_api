@@ -46,6 +46,46 @@ RSpec.describe Options::StrikeQualification::ExpectedMoveValidator do
       expect(result[:reason]).to eq('expected_premium_below_threshold')
     end
 
+    it 'blocks BANKNIFTY when expected premium is too low' do
+      result = validator.call(
+        index_key: 'BANKNIFTY',
+        strike_type: :ATM,
+        permission: :scale_ready,
+        expected_spot_move: 40.0,
+        option_ltp: 300.0
+      )
+
+      # 40 * 0.45 = 18 < 20
+      expect(result[:ok]).to be(false)
+      expect(result[:reason]).to eq('expected_premium_below_threshold')
+    end
+
+    it 'allows BANKNIFTY when expected premium meets threshold' do
+      result = validator.call(
+        index_key: 'BANKNIFTY',
+        strike_type: :ATM,
+        permission: :scale_ready,
+        expected_spot_move: 50.0,
+        option_ltp: 300.0
+      )
+
+      # 50 * 0.45 = 22.5 >= 20
+      expect(result[:ok]).to be(true)
+      expect(result[:expected_premium]).to be >= result[:threshold]
+    end
+
+    it 'does not block BANKNIFTY as unsupported_index' do
+      result = validator.call(
+        index_key: 'BANKNIFTY',
+        strike_type: :ATM_PLUS_1,
+        permission: :full_deploy,
+        expected_spot_move: 100.0,
+        option_ltp: 300.0
+      )
+
+      expect(result[:reason]).not_to eq('unsupported_index')
+    end
+
     it 'always blocks SENSEX execution_only' do
       result = validator.call(
         index_key: 'SENSEX',

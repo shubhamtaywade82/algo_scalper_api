@@ -4,7 +4,7 @@ require 'rails_helper'
 
 RSpec.describe Risk::Rules::IvCollapseRule do
   let(:watchable) do
-    double('watchable', strike_price: 22000.0, option_type: 'CE', expiry_date: Date.current)
+    double('watchable', strike_price: 22_000.0, option_type: 'CE', expiry_date: Date.current)
   end
 
   let(:instrument) do
@@ -15,9 +15,9 @@ RSpec.describe Risk::Rules::IvCollapseRule do
     instance_double(
       PositionTracker,
       active?: true,
-      meta: { 'iv_at_entry' => 20.0 },
+      iv_at_entry: 20.0,
       watchable: watchable,
-      underlying_instrument: instrument
+      instrument: instrument
     )
   end
 

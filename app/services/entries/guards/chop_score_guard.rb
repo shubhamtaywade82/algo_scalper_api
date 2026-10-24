@@ -8,6 +8,9 @@ module Entries
         include BaseGuard
 
         def call(context)
+          # Selling exists specifically to trade the chop this guard filters out for buying.
+          return PASS if context[:position_side].to_s == 'short'
+
           cfg = config
           return PASS unless cfg.fetch(:enabled, true)
 
@@ -21,7 +24,10 @@ module Entries
             series_15m: instrument.candle_series(interval: '15'),
             config: cfg
           ).call
-          metadata = (context[:entry_metadata] ||= {})
+          metadata = context[:entry_metadata]
+          if metadata.nil? || metadata.frozen?
+            metadata = context[:entry_metadata] = (metadata ? metadata.dup : {})
+          end
           metadata[:chop_score] = result[:score]
           metadata[:chop_action] = result[:action].to_s
 

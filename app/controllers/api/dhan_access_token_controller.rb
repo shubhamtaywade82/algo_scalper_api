@@ -4,7 +4,7 @@ module Api
   class DhanAccessTokenController < ApplicationController
     include Api::TokenAuthenticatable
 
-    before_action :authenticate_dashboard_token!
+    before_action :authenticate_operator_token!
 
     def show
       token = Dhan::TokenManager.current_token

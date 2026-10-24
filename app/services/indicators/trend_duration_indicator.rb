@@ -93,7 +93,7 @@ module Indicators
       closes.each_with_index do |_close, idx|
         next if idx < @hma_length - 1
 
-        window = closes[[0, idx - @hma_length + 1].max..idx]
+        window = closes[0..idx]
         wma_half = calculate_wma(window, half)
         wma_full = calculate_wma(window, @hma_length)
 

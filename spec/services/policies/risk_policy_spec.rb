@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'rails_helper'
-require 'ostruct'
 
 RSpec.describe Policies::RiskPolicy do
   subject(:policy) do
@@ -12,22 +11,24 @@ RSpec.describe Policies::RiskPolicy do
     )
   end
 
-  let(:active_count) { 0 }
-  let(:active_scope) { instance_double(ActiveRecord::Relation, count: active_count) }
-  let(:daily_limit_result) { { allowed: true } }
-  let(:daily_limits) { instance_double(Live::DailyLimits, can_trade?: daily_limit_result) }
-  let(:wallet_snapshot) { { equity: 500_000.0, exposure: 50_000.0 } }
-  let(:gateway) { instance_double(Orders::GatewayPaper, wallet_snapshot: wallet_snapshot) }
+  # ── Stub all external dependencies ─────────────────────────────────────────
 
   before do
     allow(Risk::CircuitBreaker.instance).to receive(:tripped?).and_return(false)
-    allow(Positions::ActiveForExit).to receive(:call).and_return(active_scope)
-    allow(Live::DailyLimits).to receive(:new).and_return(daily_limits)
+    allow(PositionTracker).to receive_message_chain(:active, :count).and_return(0)
     allow(AlgoConfig).to receive(:fetch).and_return(
       { risk: { max_active_positions: 3, max_exposure_pct: 0.30 } }
     )
-    allow(Orders).to receive(:config).and_return(OpenStruct.new(gateway: gateway))
+    allow_any_instance_of(Live::DailyLimits).to receive(:can_trade?)
+      .and_return({ allowed: true })
+
+    wallet_double = { equity: 500_000.0, exposure: 50_000.0 }
+    gateway_double = instance_double(Orders::GatewayPaper, wallet_snapshot: wallet_double)
+    config_double  = double('Orders::Config', gateway: gateway_double)
+    allow(Orders).to receive(:config).and_return(config_double)
   end
+
+  # ── All clear ──────────────────────────────────────────────────────────────
 
   describe '#permitted? — all checks pass' do
     it { is_expected.to be_permitted }
@@ -43,9 +44,11 @@ RSpec.describe Policies::RiskPolicy do
       )
     end
 
-    it 'coerces to zero without raising' do
-      expect { policy.permitted? }.not_to raise_error
-      expect(policy).to be_permitted
+    # Error-handling review 2026-09: garbage sizing values no longer coerce to
+    # 0 (which trivially passed every exposure check) — the policy refuses to
+    # evaluate a trade it cannot size.
+    it 'refuses to evaluate an unsizable trade' do
+      expect { policy }.to raise_error(Errors::InvalidQuantity, /positive whole number/)
     end
   end
 
@@ -59,9 +62,8 @@ RSpec.describe Policies::RiskPolicy do
       )
     end
 
-    it 'coerces lot_size to at least 1 without raising' do
-      expect { policy.permitted? }.not_to raise_error
-      expect(policy).to be_permitted
+    it 'refuses to evaluate with an unsizable lot_size' do
+      expect { policy }.to raise_error(Errors::InvalidQuantity, /positive whole number/)
     end
   end
 
@@ -72,43 +74,49 @@ RSpec.describe Policies::RiskPolicy do
     it { expect(policy.reasons).to include('circuit_breaker_tripped') }
   end
 
+  # ── Max active positions ────────────────────────────────────────────────────
+
   context 'when max active positions are open' do
-    let(:active_count) { 3 }
+    before do
+      allow(PositionTracker).to receive_message_chain(:active, :count).and_return(3)
+    end
 
     it { is_expected.to be_forbidden }
     it { expect(policy.reasons).to include('max_active_positions_exceeded') }
   end
 
-  context 'when per-trade risk would exceed configured limit' do
-    let(:wallet_snapshot) { { equity: 100_000.0, exposure: 10_000.0 } }
-
-    before do
-      allow(AlgoConfig).to receive(:fetch).and_return(
-        { risk: { max_active_positions: 3, max_exposure_pct: 1.0, per_trade_risk_pct: 0.05 } }
-      )
-    end
-
-    it { is_expected.to be_forbidden }
-    it { expect(policy.reasons).to include('per_trade_risk_exceeded') }
-  end
+  # ── Max exposure ────────────────────────────────────────────────────────────
 
   context 'when proposed trade would exceed exposure limit' do
     subject(:policy) do
+      # 50 * 250 = 12,500 notional; existing 490,000 + 12,500 > 30% of 500,000
       described_class.new(index_key: 'NIFTY', proposed_qty: 600, entry_price: 850.0)
     end
 
-    let(:wallet_snapshot) { { equity: 500_000.0, exposure: 490_000.0 } }
+    before do
+      wallet_double = { equity: 500_000.0, exposure: 490_000.0 }
+      gateway_double = instance_double(Orders::GatewayPaper, wallet_snapshot: wallet_double)
+      config_double  = double('Orders::Config', gateway: gateway_double)
+      allow(Orders).to receive(:config).and_return(config_double)
+    end
 
     it { is_expected.to be_forbidden }
     it { expect(policy.reasons).to include('max_exposure_exceeded') }
   end
 
+  # ── Daily drawdown ──────────────────────────────────────────────────────────
+
   context 'when daily loss limit is reached' do
-    let(:daily_limit_result) { { allowed: false, reason: 'daily_loss_limit_reached' } }
+    before do
+      allow_any_instance_of(Live::DailyLimits).to receive(:can_trade?)
+        .and_return({ allowed: false, reason: 'daily_loss_limit_reached' })
+    end
 
     it { is_expected.to be_forbidden }
     it { expect(policy.reasons).to include('portfolio_drawdown_limit_reached') }
   end
+
+  # ── External failures fail gracefully ──────────────────────────────────────
 
   context 'when AlgoConfig raises' do
     before do

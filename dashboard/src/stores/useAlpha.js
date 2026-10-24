@@ -1,4 +1,5 @@
 import { createSignal, onMount, onCleanup } from 'solid-js'
+import { dashboardApiHeaders } from '../lib/dashboardApi'
 
 export function useAlpha() {
   const [status, setStatus] = createSignal({
@@ -14,7 +15,7 @@ export function useAlpha() {
 
   async function fetchStatus() {
     try {
-      const res = await fetch('/api/alpha/status')
+      const res = await fetch('/api/alpha/status', { headers: dashboardApiHeaders() })
       if (res.ok) setStatus(await res.json())
     } catch (e) {
       console.error('[AlphaStore] fetchStatus failed:', e)
@@ -23,7 +24,7 @@ export function useAlpha() {
 
   async function fetchHistory() {
     try {
-      const res = await fetch('/api/alpha/history')
+      const res = await fetch('/api/alpha/history', { headers: dashboardApiHeaders() })
       if (res.ok) setHistory(await res.json())
     } catch (e) {
       console.error('[AlphaStore] fetchHistory failed:', e)
@@ -32,7 +33,7 @@ export function useAlpha() {
 
   async function fetchPerformance() {
     try {
-      const res = await fetch('/api/alpha/performance')
+      const res = await fetch('/api/alpha/performance', { headers: dashboardApiHeaders() })
       if (res.ok) setPerformance(await res.json())
     } catch (e) {
       console.error('[AlphaStore] fetchPerformance failed:', e)

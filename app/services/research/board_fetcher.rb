@@ -19,8 +19,8 @@ module Research
       def fetch_strikes(symbol, option_type, expiry_flag, from_date, to_date, interval, spot, max_distance)
         Research::StrikeResolver
           .candidates(symbol: symbol, spot: spot, option_type: option_type, max_distance: max_distance)
-          .each_with_object({}) do |candidate, result|
-            result[candidate[:strike_label]] = Research::OptionCandleFetcher.call(
+          .to_h do |candidate|
+          [candidate[:strike_label], Research::OptionCandleFetcher.call(
               symbol: symbol,
               option_type: option_type,
               expiry_flag: expiry_flag,
@@ -29,8 +29,8 @@ module Research
               from_date: from_date,
               to_date: to_date,
               interval: interval
-            )
-          end
+            )]
+        end
       end
     end
   end

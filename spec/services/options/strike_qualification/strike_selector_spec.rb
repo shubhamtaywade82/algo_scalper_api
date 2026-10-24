@@ -41,7 +41,7 @@ RSpec.describe Options::StrikeQualification::StrikeSelector do
         index_key: 'NIFTY',
         side: :CE,
         permission: :scale_ready,
-        spot: 25_025,
+        spot: 25_020,
         option_chain: nifty_chain,
         trend: :bullish
       )
@@ -57,7 +57,7 @@ RSpec.describe Options::StrikeQualification::StrikeSelector do
         index_key: 'NIFTY',
         side: :PE,
         permission: :scale_ready,
-        spot: 25_025,
+        spot: 25_020,
         option_chain: nifty_chain,
         trend: :bearish
       )
@@ -73,7 +73,7 @@ RSpec.describe Options::StrikeQualification::StrikeSelector do
         index_key: 'NIFTY',
         side: :CE,
         permission: :scale_ready,
-        spot: 25_025,
+        spot: 25_020,
         option_chain: nifty_chain,
         trend: :chop
       )
@@ -88,7 +88,7 @@ RSpec.describe Options::StrikeQualification::StrikeSelector do
         index_key: 'NIFTY',
         side: :CE,
         permission: :execution_only,
-        spot: 25_025,
+        spot: 25_020,
         option_chain: nifty_chain,
         trend: :bullish
       )

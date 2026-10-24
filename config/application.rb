@@ -26,7 +26,17 @@ module AlgoScalperApi
     # Please, add to the `ignore` list any other `lib` subdirectories that do
     # not contain `.rb` files, or that should not be reloaded or eager loaded.
     # Common ones are `templates`, `generators`, or `middleware`, for example.
-    config.autoload_lib(ignore: %w[assets tasks])
+    #
+    # `research` holds standalone research scripts (top-level side-effecting code,
+    # no wrapping module) meant to be run directly via `ruby lib/research/*.rb` —
+    # they are not Zeitwerk-conformant and crash eager loading (and thus production
+    # boot) if autoloaded.
+    # `backtest_engine` is a self-contained vendored gem (own Gemfile/gemspec/spec
+    # suite) and must not be autoloaded by the parent app's Zeitwerk loader.
+    # `calibration` is orphaned/incomplete code that require_relatives files
+    # (indicators/primitives, indicators/super_trend2, indicators/dmi) that don't
+    # exist in the repo, breaking eager loading.
+    config.autoload_lib(ignore: %w[assets tasks research backtest_engine calibration])
 
     # Configuration for the application, engines, and railties goes here.
     #

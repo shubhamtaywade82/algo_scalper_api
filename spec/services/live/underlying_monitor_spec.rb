@@ -5,7 +5,7 @@ require 'rails_helper'
 RSpec.describe Live::UnderlyingMonitor do
   let(:position_data) do
     instance_double(
-      Positions::ActiveCache::PositionData,
+      Positions::PositionData,
       tracker_id: 42,
       underlying_segment: 'IDX_I',
       underlying_security_id: '13',
@@ -21,7 +21,7 @@ RSpec.describe Live::UnderlyingMonitor do
   describe '.evaluate' do
     context 'when underlying metadata is missing' do
       it 'returns default state' do
-        allow(position_data).to receive(:underlying_segment).and_return(nil)
+        allow(position_data).to receive_messages(underlying_segment: nil, index_key: nil, underlying_symbol: nil)
         result = described_class.evaluate(position_data)
 
         expect(result.trend_score).to be_nil

@@ -4,6 +4,7 @@ import Badge from '../ui/Badge'
 import Button from '../ui/Button'
 import Select from '../ui/Select'
 import Input from '../ui/Input'
+import { dashboardApiHeaders } from '../../lib/dashboardApi'
 
 const SYMBOLS = [
   { value: 'NIFTY', label: 'NIFTY' },
@@ -72,7 +73,7 @@ export default function SignalPipelinePanel() {
     const ts = timestamp()
     if (!ts) return
     try {
-      const res = await fetch(`/api/candles/${symbol()}?interval=5&days=2`)
+      const res = await fetch(`/api/candles/${symbol()}?interval=5&days=2`, { headers: dashboardApiHeaders() })
       const data = await res.json()
       const targetMs = new Date(ts).getTime()
       const closest = (data.candles || []).reduce((best, c) => {
@@ -93,7 +94,7 @@ export default function SignalPipelinePanel() {
   async function fetchHistory() {
     setHistoryLoading(true)
     try {
-      const res = await fetch('/api/research/signals?per_page=10')
+      const res = await fetch('/api/research/signals?per_page=10', { headers: dashboardApiHeaders() })
       const data = await res.json()
       setHistory(data.signals || [])
     } catch {
@@ -115,7 +116,7 @@ export default function SignalPipelinePanel() {
     try {
       const res = await fetch('/api/research/signals', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...dashboardApiHeaders() },
         body: JSON.stringify({
           underlying_symbol: symbol(),
           signal_timestamp: timestamp(),
@@ -141,7 +142,7 @@ export default function SignalPipelinePanel() {
   async function loadSignal(id) {
     setError(null)
     try {
-      const res = await fetch(`/api/research/signals/${id}`)
+      const res = await fetch(`/api/research/signals/${id}`, { headers: dashboardApiHeaders() })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
       setSignal(data.signal)

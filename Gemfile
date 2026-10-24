@@ -3,9 +3,11 @@
 source 'https://rubygems.org'
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
-gem 'rails', '~> 8.1.3'
+gem 'rails', '~> 8.1.4'
 # Use postgresql as the database for Active Record
-gem 'pg', '~> 1.6'
+gem 'pg', '~> 1.7'
+# SQLite for local-agent-stack shared memory & self-healing
+gem 'sqlite3', '~> 2.0'
 # Use the Puma web server [https://github.com/puma/puma]
 gem 'puma', '>= 5.0'
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
@@ -23,9 +25,13 @@ gem 'solid_cache'
 gem 'solid_queue'
 
 gem 'concurrent-ruby'
-gem 'connection_pool', '~> 2.4'
-gem 'json', '>= 2.19.2'
-gem 'redis'
+gem 'connection_pool', '~> 3.0'
+# json 3.0 changed JSON.parse to keyword-only args; ActiveSupport 8.1 still
+# calls JSON.parse(json, options) positionally, so json 3.x breaks every JSON
+# column cast at boot (db:prepare/seeds die with ArgumentError). Stay on 2.x
+# until Rails ships json-3 compatibility.
+gem 'json', '~> 2.21'
+gem 'redis', '~> 6.0'
 gem 'ruby-technical-analysis'
 gem 'technical-analysis'
 
@@ -46,20 +52,25 @@ gem 'kamal', require: false
 # Add HTTP asset caching/compression and X-Sendfile acceleration to Puma [https://github.com/basecamp/thruster/]
 gem 'thruster', require: false
 
-# DhanHQ Ruby client (v2 API wrapper and WebSocket feed)
-gem 'DhanHQ', '2.8.0', require: 'dhan_hq'
-
-# MCP adapter for DhanHQ tool specs and validated routing
-gem 'dhanhq-mcp', path: '/home/nemesis/project/trading-workspace/sdk/dhanhq-mcp'
-
-# TOTP generation for Dhan TOTP auth strategy
-gem 'rotp', '~> 6.3'
+# DhanHQ Ruby client (v4 API wrapper and WebSocket feed)
+gem 'DhanHQ', '~> 4.1'
 
 # Telegram bot for notifications
-gem 'telegram-bot-ruby', '~> 0.19'
+gem 'telegram-bot-ruby', '~> 2.8'
 
-# Local LLM only — no OpenAI/ruby-openai gems
-gem 'ollama-client', '~> 1.1'
+gem 'aasm', '~> 6.0'
+gem 'ollama-client', '~> 1.4'
+gem 'prometheus_exporter', '~> 2.3'
+# ruby_llm is PINNED to 1.x: ruby_llm-agents (all published 3.x) requires
+# "ruby_llm/schema" and RubyLLM::Model::Info — both only exist in ruby_llm
+# 1.x (1.x pulls ruby_llm-schema transitively; 2.x replaced it with
+# schematist and restructured the model registry). Bundling ruby_llm 2.x
+# with ruby_llm-agents 3.x fails at boot (LoadError ruby_llm/schema, then
+# NameError RubyLLM::Model::Info) — this is what PR #266 (1.16.0 -> 2.0.0)
+# inadvertently did to develop. Re-apply the 2.x bump only after
+# ruby_llm-agents ships a release that supports it.
+gem 'ruby_llm', '~> 1.16'
+gem 'ruby_llm-agents', '~> 3.16'
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 # gem "image_processing", "~> 1.2"
@@ -78,10 +89,10 @@ group :development, :test do
   gem 'brakeman', require: false
 
   # Code quality and style enforcement
-  gem 'rubocop', '~> 1.86', require: false
+  gem 'rubocop', '~> 1.92', require: false
   gem 'rubocop-factory_bot', '~> 2.28', require: false
-  gem 'rubocop-performance', '~> 1.21', require: false
-  gem 'rubocop-rails', '~> 2.23', require: false
+  gem 'rubocop-performance', '~> 1.27', require: false
+  gem 'rubocop-rails', '~> 2.38', require: false
   gem 'rubocop-rspec', '~> 3.8', require: false
   gem 'rubocop-rspec_rails'
 
@@ -117,6 +128,3 @@ end
 gem "json_schemer", "~> 2.4"
 
 gem "rswag", "~> 2.17", groups: %i[development test]
-
-# AI Multi-Agent orchestration framework
-gem 'ruby_llm-agents'

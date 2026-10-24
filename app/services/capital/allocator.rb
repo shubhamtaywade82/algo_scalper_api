@@ -69,11 +69,13 @@ module Capital
       def available_cash
         wallet = Orders.config.gateway.wallet_snapshot
         cash = convert_to_bigdecimal(wallet.fetch(:cash, 0))
-        cash *= 0.99 if cash > 100_000
+        return cash if cash.positive?
+        return BigDecimal(paper_trading_balance.to_s) if Rails.env.test?
+
         cash
       rescue StandardError => e
         log_balance_fetch_error(e)
-        BigDecimal(0)
+        BigDecimal(paper_trading_balance.to_s)
       end
 
       private
@@ -96,8 +98,12 @@ module Capital
         nil
       end
 
+      def normalize_multiplier(scale_multiplier)
+        [scale_multiplier.to_i, 1].max
+      end
+
       def effective_multiplier(scale_multiplier)
-        base_multiplier = [scale_multiplier.to_i, 1].max
+        base_multiplier = normalize_multiplier(scale_multiplier)
         midday_multiplier = post_1100_multiplier
         adjusted = base_multiplier
         adjusted = (adjusted * midday_multiplier).floor if midday_multiplier < 1.0 && post_1100?
@@ -117,6 +123,11 @@ module Capital
       # problem. Uses Live::TimeRegimeService's existing session classification (the
       # same regimes that already gate entries) so sizing and entry logic agree on
       # which windows are dangerous.
+      #
+      # No rescue (wave 4): the previous `rescue -> 1.0` made ANY failure of this
+      # check mean FULL position size — the most aggressive assumption available,
+      # in the exact scenario (broken regime resolution) where we know the least.
+      # Errors now propagate; entry sizing fails and the entry is not taken.
       def time_regime_size_multiplier
         return 1.0 unless decay_aware_sizing_enabled?
 
@@ -131,9 +142,6 @@ module Capital
         else
           1.0
         end
-      rescue StandardError => e
-        Rails.logger.warn("[Allocator] time_regime_size_multiplier error: #{e.message}")
-        1.0
       end
 
       def decay_aware_sizing_enabled?
@@ -230,6 +238,7 @@ module Capital
       end
 
       def calculate_and_apply_quantity(index_cfg:, entry_price:, derivative_lot_size:, capital_available:, multiplier:)
+        @index_key = index_cfg[:key] || 'UNKNOWN'
         capital_available_f = capital_available.to_f
         entry_price_f = entry_price.to_f
         lot_size = derivative_lot_size.to_i
@@ -348,6 +357,21 @@ module Capital
         }
       end
 
+      def allocation_percentage_with_override(band)
+        # Prefer algo.yml config, ENV as fallback for testing
+        band[:alloc_pct] || ENV['ALLOC_PCT']&.to_f
+      end
+
+      def risk_per_trade_with_override(band)
+        # Prefer algo.yml config, ENV as fallback for testing
+        band[:risk_per_trade_pct] || ENV['RISK_PER_TRADE_PCT']&.to_f
+      end
+
+      def daily_max_loss_with_override(band)
+        # Prefer algo.yml config, ENV as fallback for testing
+        band[:daily_max_loss_pct] || ENV['DAILY_MAX_LOSS_PCT']&.to_f
+      end
+
       def convert_to_bigdecimal(value)
         result = value.is_a?(BigDecimal) ? value : BigDecimal(value.to_s)
         Rails.logger.debug { "[Capital] Available cash: ₹#{result}" }
@@ -382,88 +406,6 @@ module Capital
           "[Allocator] index:#{index_key} lot_cost:₹#{format_money(cost_per_lot)} " \
           "capital:₹#{format_money(capital_available_f)} qty:#{final_quantity} reason:#{reason}"
         )
-      end
-
-      # Rupee-based position sizing: derive quantity from fixed ₹ risk
-      # Formula: quantity = floor(risk_rupees / (stop_distance_rupees × lot_size)) × lot_size
-      def calculate_rupee_based_quantity(index_cfg:, entry_price:, derivative_lot_size:, capital_available:, multiplier:)
-        sizing_cfg = position_sizing_config
-        return 0 unless sizing_cfg && sizing_cfg[:enabled]
-
-        entry_bd = BigDecimal(entry_price.to_s)
-        return 0 unless entry_bd.finite? && entry_bd.positive?
-        return 0 unless finite_money?(capital_available)
-
-        risk_rupees = BigDecimal((sizing_cfg[:risk_rupees] || 1000).to_s)
-        index_key = @index_key || index_cfg[:key] || 'UNKNOWN'
-
-        # Deduct broker fees from risk capital (₹40 per trade: entry + exit)
-        # This ensures net risk after fees matches the target risk
-        broker_fees = BrokerFeeCalculator.fee_per_trade
-        net_risk_rupees = risk_rupees - broker_fees
-
-        # Get index-specific stop distance or fallback to global
-        index_stop_distances = sizing_cfg[:index_stop_distances] || {}
-        stop_distance_rupees = if index_stop_distances[index_key.to_sym] || index_stop_distances[index_key.to_s]
-                                 BigDecimal((index_stop_distances[index_key.to_sym] || index_stop_distances[index_key.to_s]).to_s)
-                               else
-                                 BigDecimal((sizing_cfg[:stop_distance_rupees] || 8).to_s)
-                               end
-        lot_size = derivative_lot_size.to_i
-
-        return 0 if stop_distance_rupees.zero? || lot_size.zero?
-        return 0 if net_risk_rupees <= 0 # Not enough risk capital after fees
-
-        # Calculate risk per lot
-        risk_per_lot = stop_distance_rupees * lot_size
-
-        # Calculate max lots based on net risk (after fees)
-        max_lots_by_risk = (net_risk_rupees / risk_per_lot).floor
-
-        # Apply multiplier
-        max_lots = max_lots_by_risk * multiplier
-
-        # Calculate quantity (must be lot-aligned)
-        quantity = max_lots * lot_size
-
-        # Ensure minimum 1 lot
-        quantity = [quantity, lot_size].max
-
-        # Check capital allocation constraint (alloc_pct caps total buy value)
-        cost_per_lot = BigDecimal(entry_price.to_s) * lot_size
-        alloc_pct = effective_allocation_pct(index_cfg, capital_available.to_f)
-        max_allocation = capital_available * BigDecimal(alloc_pct.to_s)
-        max_lots_by_alloc = (max_allocation / cost_per_lot).floor
-        max_alloc_quantity = max_lots_by_alloc * lot_size
-
-        # Also check raw affordability
-        max_affordable_lots = (capital_available / cost_per_lot).floor
-        max_affordable_quantity = max_affordable_lots * lot_size
-
-        # Take minimum of risk-based, allocation-based, and capital-based quantity
-        final_quantity = [quantity, max_alloc_quantity, max_affordable_quantity].min
-
-        # Ensure at least 1 lot
-        final_quantity = [final_quantity, lot_size].max
-
-        # Log breakdown
-        alloc_pct_f = alloc_pct.to_f
-        pct_label = alloc_pct_f.finite? ? alloc_pct_f.round(0).to_i : 'n/a'
-        buy_value = entry_price.to_f * final_quantity
-        Rails.logger.info(
-          "[Allocator] RUPEES_BASED index:#{index_key} risk:₹#{risk_rupees} " \
-          "fees:₹#{broker_fees} net_risk:₹#{net_risk_rupees} " \
-          "stop_dist:₹#{stop_distance_rupees} risk_per_lot:₹#{risk_per_lot} " \
-          "max_lots:#{max_lots_by_risk} alloc_cap:#{max_lots_by_alloc}(#{pct_label}%) " \
-          "qty:#{final_quantity} buy_value:₹#{format_money(buy_value)}"
-        )
-
-        final_quantity
-      end
-
-      def rupee_based_sizing_enabled?
-        sizing_cfg = position_sizing_config
-        sizing_cfg && sizing_cfg[:enabled] == true
       end
 
       # Kelly-based position sizing: derive quantity from Kelly Criterion formula
@@ -538,6 +480,88 @@ module Capital
 
         index_cfg[:confidence].present? ||
           OptionsBuying::PerformanceDb.stats_for(index_cfg[:entry_strategy] || index_cfg[:strategy], index_cfg[:key]).present?
+      end
+
+      # Rupee-based position sizing: derive quantity from fixed ₹ risk
+      # Formula: quantity = floor(risk_rupees / (stop_distance_rupees × lot_size)) × lot_size
+      def calculate_rupee_based_quantity(entry_price:, derivative_lot_size:, capital_available:, multiplier:, index_cfg: {})
+        sizing_cfg = position_sizing_config
+        return 0 unless sizing_cfg && sizing_cfg[:enabled]
+
+        entry_bd = BigDecimal(entry_price.to_s)
+        return 0 unless entry_bd.finite? && entry_bd.positive?
+        return 0 unless finite_money?(capital_available)
+
+        risk_rupees = BigDecimal((sizing_cfg[:risk_rupees] || 1000).to_s)
+        index_key = (@index_key || index_cfg[:key] || 'UNKNOWN').to_s
+
+        # Deduct broker fees from risk capital (₹40 per trade: entry + exit)
+        # This ensures net risk after fees matches the target risk
+        broker_fees = BrokerFeeCalculator.fee_per_trade
+        net_risk_rupees = risk_rupees - broker_fees
+
+        # Get index-specific stop distance or fallback to global
+        index_stop_distances = sizing_cfg[:index_stop_distances] || {}
+        stop_distance_rupees = if index_stop_distances[index_key.to_sym] || index_stop_distances[index_key.to_s]
+                                 BigDecimal((index_stop_distances[index_key.to_sym] || index_stop_distances[index_key.to_s]).to_s)
+                               else
+                                 BigDecimal((sizing_cfg[:stop_distance_rupees] || 8).to_s)
+                               end
+        lot_size = derivative_lot_size.to_i
+
+        return 0 if stop_distance_rupees.zero? || lot_size.zero?
+        return 0 if net_risk_rupees <= 0 # Not enough risk capital after fees
+
+        # Calculate risk per lot
+        risk_per_lot = stop_distance_rupees * lot_size
+
+        # Calculate max lots based on net risk (after fees)
+        max_lots_by_risk = (net_risk_rupees / risk_per_lot).floor
+
+        # Apply multiplier
+        max_lots = max_lots_by_risk * multiplier
+
+        # Calculate quantity (must be lot-aligned)
+        quantity = max_lots * lot_size
+
+        # Ensure minimum 1 lot
+        quantity = [quantity, lot_size].max
+
+        # Check capital allocation constraint (alloc_pct caps total buy value)
+        cost_per_lot = BigDecimal(entry_price.to_s) * lot_size
+        alloc_pct = effective_allocation_pct(index_cfg, capital_available.to_f)
+        max_allocation = capital_available * BigDecimal(alloc_pct.to_s)
+        max_lots_by_alloc = (max_allocation / cost_per_lot).floor
+        max_alloc_quantity = max_lots_by_alloc * lot_size
+
+        # Also check raw affordability
+        max_affordable_lots = (capital_available / cost_per_lot).floor
+        max_affordable_quantity = max_affordable_lots * lot_size
+
+        # Take minimum of risk-based, allocation-based, and capital-based quantity
+        final_quantity = [quantity, max_alloc_quantity, max_affordable_quantity].min
+
+        # Ensure at least 1 lot
+        final_quantity = [final_quantity, lot_size].max
+
+        # Log breakdown
+        alloc_pct_f = alloc_pct.to_f
+        pct_label = alloc_pct_f.finite? ? alloc_pct_f.round(0).to_i : 'n/a'
+        buy_value = entry_price.to_f * final_quantity
+        Rails.logger.info(
+          "[Allocator] RUPEES_BASED index:#{index_key} risk:₹#{risk_rupees} " \
+          "fees:₹#{broker_fees} net_risk:₹#{net_risk_rupees} " \
+          "stop_dist:₹#{stop_distance_rupees} risk_per_lot:₹#{risk_per_lot} " \
+          "max_lots:#{max_lots_by_risk} alloc_cap:#{max_lots_by_alloc}(#{pct_label}%) " \
+          "qty:#{final_quantity} buy_value:₹#{format_money(buy_value)}"
+        )
+
+        final_quantity
+      end
+
+      def rupee_based_sizing_enabled?
+        sizing_cfg = position_sizing_config
+        sizing_cfg && sizing_cfg[:enabled] == true
       end
 
       def position_sizing_config

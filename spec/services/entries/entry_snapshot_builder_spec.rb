@@ -7,19 +7,16 @@ RSpec.describe Entries::EntrySnapshotBuilder do
   let(:pick) { { symbol: 'NIFTY24JUN24500CE', security_id: '999', strike: 24_500, expiry_date: Time.zone.today } }
 
   before do
-    allow(AlgoConfig).to receive(:position_snapshot).and_return(risk: { sl_pct: 0.10, tp_pct: 0.45 })
     allow(Trading::DteResolver).to receive(:days_to_expiry).and_return(0)
     allow(Market::VixGate).to receive(:current_ltp).and_return(14.8)
-    allow(AlgoConfig).to receive(:fetch).and_return(
-      options_buying: { execution: { max_bid_ask_spread_pct: 0.015 } },
-      risk: {
+    allow(AlgoConfig).to receive_messages(position_snapshot: { risk: { sl_pct: 0.10, tp_pct: 0.45 } }, fetch: { options_buying: { execution: { max_bid_ask_spread_pct: 0.015 } },
+                                                                                                                risk: {
         dte_parameters: {
           enabled: true,
           defaults: { sl_pct: 0.10 },
           by_dte: { '0' => { sl_pct: 0.08, tp_pct: 0.25 } }
         }
-      }
-    )
+      } })
   end
 
   describe '.build' do

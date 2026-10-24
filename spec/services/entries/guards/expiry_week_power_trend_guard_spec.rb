@@ -33,9 +33,16 @@ RSpec.describe Entries::Guards::ExpiryWeekPowerTrendGuard do
     allow(AlgoConfig).to receive(:fetch).and_return(enabled_config)
   end
 
+  after { travel_back }
+
+  # Freeze ALL time sources (Time.current AND Time.zone.today), not just
+  # Time.current: the guard's expiry-week check reads Time.zone.today for
+  # the last-Thursday fallback, so a Time.current-only stub left the test
+  # date-dependent — it failed whenever the real calendar date happened to
+  # fall within 5 days of a month's last Thursday (e.g. 2026-10-24 vs
+  # 2026-10-29). Deterministic with travel_to, which stubs both.
   def stub_time(time_str)
-    time = Time.zone.parse("2026-03-30 #{time_str} IST")
-    allow(Time).to receive(:current).and_return(time)
+    travel_to Time.zone.parse("2026-03-30 #{time_str} IST")
   end
 
   context 'when all conditions are met' do
@@ -43,8 +50,8 @@ RSpec.describe Entries::Guards::ExpiryWeekPowerTrendGuard do
 
     it 'returns PASS and sets expiry_power_trend on context' do
       expect(result).to eq(Entries::EntryGuardPipeline::PASS)
-      expect(context[:expiry_power_trend]).to eq(true)
-      expect(context[:entry_metadata][:expiry_power_trend]).to eq(true)
+      expect(context[:expiry_power_trend]).to be(true)
+      expect(context[:entry_metadata][:expiry_power_trend]).to be(true)
     end
   end
 
@@ -78,8 +85,8 @@ RSpec.describe Entries::Guards::ExpiryWeekPowerTrendGuard do
 
   context 'when ADX is below threshold' do
     before do
-      context[:pick][:adx_value] = 24.0
       stub_time('12:30')
+      context[:pick][:adx_value] = 24.0
     end
 
     it 'passes without enriching context' do
@@ -90,20 +97,20 @@ RSpec.describe Entries::Guards::ExpiryWeekPowerTrendGuard do
 
   context 'when ADX is exactly at threshold' do
     before do
-      context[:pick][:adx_value] = 40.0
       stub_time('12:30')
+      context[:pick][:adx_value] = 40.0
     end
 
     it 'sets expiry_power_trend' do
       expect(result).to eq(Entries::EntryGuardPipeline::PASS)
-      expect(context[:expiry_power_trend]).to eq(true)
+      expect(context[:expiry_power_trend]).to be(true)
     end
   end
 
   context 'when not in expiry week' do
     before do
-      allow(instrument).to receive(:expiry_list).and_return([expiry_30_days_out.to_s])
       stub_time('12:30')
+      allow(instrument).to receive(:expiry_list).and_return([expiry_30_days_out.to_s])
     end
 
     it 'passes without enriching context' do
@@ -114,8 +121,8 @@ RSpec.describe Entries::Guards::ExpiryWeekPowerTrendGuard do
 
   context 'when instrument is nil (no expiry list available)' do
     before do
-      context[:instrument] = nil
       stub_time('12:30')
+      context[:instrument] = nil
     end
 
     it 'passes without enriching context (cannot confirm expiry week)' do
@@ -126,20 +133,20 @@ RSpec.describe Entries::Guards::ExpiryWeekPowerTrendGuard do
 
   context 'when expiry is today (0 days out)' do
     before do
-      allow(instrument).to receive(:expiry_list).and_return([Time.zone.today.to_s])
       stub_time('12:30')
+      allow(instrument).to receive(:expiry_list).and_return([Time.zone.today.to_s])
     end
 
     it 'sets expiry_power_trend (same-day expiry qualifies)' do
       expect(result).to eq(Entries::EntryGuardPipeline::PASS)
-      expect(context[:expiry_power_trend]).to eq(true)
+      expect(context[:expiry_power_trend]).to be(true)
     end
   end
 
   context 'when ADX value is missing from pick' do
     before do
-      context[:pick] = {}
       stub_time('12:30')
+      context[:pick] = {}
     end
 
     it 'passes without enriching context' do

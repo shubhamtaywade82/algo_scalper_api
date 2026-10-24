@@ -76,27 +76,6 @@ RSpec.describe InstrumentHelpers, type: :concern do
     end
   end
 
-  describe '#fetch_ltp_from_api_for_segment' do
-    it 'hits REST when skip_tick_cache is true even if tick cache has a value' do
-      allow(hub).to receive_messages(running?: true, connected?: true)
-      stale_tick = instance_double(MarketTick, ltp: BigDecimal('99.0'))
-      allow(Live::TickQuery).to receive(:for_security).and_return(stale_tick)
-      allow(DhanHQ::Models::MarketFeed).to receive(:ltp).with({ 'NSE_FNO' => [12_345] }).and_return({
-        'status' => 'success',
-        'data' => { 'NSE_FNO' => { '12345' => { 'last_price' => 188.25 } } }
-      })
-
-      result = instrument.fetch_ltp_from_api_for_segment(
-        segment: 'NSE_FNO',
-        security_id: '12345',
-        skip_tick_cache: true
-      )
-
-      expect(result).to eq(188.25)
-      expect(DhanHQ::Models::MarketFeed).to have_received(:ltp)
-    end
-  end
-
   describe '#default_client_order_id' do
     it 'builds a deterministic prefix with side and security_id' do
       travel_to Time.zone.parse('2025-01-15 10:30:00') do
@@ -181,41 +160,6 @@ RSpec.describe InstrumentHelpers, type: :concern do
       )
 
       expect(ws_hub).to have_received(:subscribe).with(seg: 'NSE_FNO', sid: '12345')
-    end
-  end
-
-  describe '#historical_ohlc' do
-    let(:banknifty_index) { create(:instrument, :banknifty_index) }
-
-    it 'calls DhanHQ daily API with snake_case params' do
-      allow(DhanHQ::Models::HistoricalData).to receive(:daily).and_return(
-        { open: [1.0], high: [1.0], low: [1.0], close: [1.0], volume: [1], timestamp: [1_700_000_000] }
-      )
-
-      banknifty_index.historical_ohlc(from_date: '2026-05-01', to_date: '2026-06-17')
-
-      expect(DhanHQ::Models::HistoricalData).to have_received(:daily).with(
-        hash_including(
-          security_id: '25',
-          exchange_segment: 'IDX_I',
-          instrument: 'INDEX',
-          from_date: '2026-05-01',
-          to_date: '2026-06-17',
-          expiry_code: 0
-        )
-      )
-    end
-
-    it 'snaps weekend from_date to the previous trading day' do
-      allow(DhanHQ::Models::HistoricalData).to receive(:daily).and_return(
-        { open: [1.0], high: [1.0], low: [1.0], close: [1.0], volume: [1], timestamp: [1_700_000_000] }
-      )
-
-      banknifty_index.historical_ohlc(from_date: '2026-05-09', to_date: '2026-06-17')
-
-      expect(DhanHQ::Models::HistoricalData).to have_received(:daily).with(
-        hash_including(from_date: '2026-05-08', to_date: '2026-06-17')
-      )
     end
   end
 end

@@ -17,8 +17,9 @@ RSpec.describe Orders::Commands::CommandResult do
   end
 
   describe '.failure' do
-    let(:error)  { RuntimeError.new('boom') }
     subject(:result) { described_class.failure('broker_rejected', error: error, payload: { raw: {} }) }
+
+    let(:error) { RuntimeError.new('boom') }
 
     it { expect(result).to be_failure }
     it { expect(result).not_to be_success }

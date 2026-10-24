@@ -10,13 +10,12 @@ RSpec.describe OptionsBuying::CandlePrecomputeJob do
     before do
       allow_any_instance_of(described_class).to receive(:market_hours?).and_return(true)
       allow(IndexConfigLoader).to receive(:load_indices).and_return([
-        { key: 'NIFTY', sid: 13, segment: 'index' }
-      ])
+                                                                      { key: 'NIFTY', sid: 13, segment: 'index' }
+                                                                    ])
       allow(Instrument).to receive(:find_by).with(security_id: 13).and_return(instrument)
       allow(CandleSeries).to receive(:new).and_return(series)
       allow(OptionsBuying::StateStore).to receive(:cache_index_candles)
-      allow(instrument).to receive(:intraday_ohlc).and_return([{ timestamp: Time.current, close: 1 }])
-      allow(instrument).to receive(:historical_ohlc).and_return([{ timestamp: Time.current, close: 1 }])
+      allow(instrument).to receive_messages(intraday_ohlc: [{ timestamp: Time.current, close: 1 }], historical_ohlc: [{ timestamp: Time.current, close: 1 }])
     end
 
     it 'uses intraday candles for intraday timeframes' do

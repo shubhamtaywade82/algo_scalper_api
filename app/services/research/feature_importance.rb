@@ -29,7 +29,7 @@ module Research
 
       features.each do |name, extractor|
         x_vals = trades.map { |t| extractor.call(t) || 0.0 }
-        
+
         # Pearson Correlation
         r = pearson_correlation(x_vals, mfe_vals)
         correlations[name] = r.nan? ? 0.0 : r.round(4)
@@ -39,8 +39,6 @@ module Research
       correlations.sort_by { |_, r| -r.abs }.to_h
     end
 
-    private
-
     def self.pearson_correlation(x, y)
       n = x.size
       return 0.0 if n.zero?
@@ -48,9 +46,9 @@ module Research
       sum_x = x.sum
       sum_y = y.sum
 
-      sum_xx = x.map { |val| val**2 }.sum
-      sum_yy = y.map { |val| val**2 }.sum
-      sum_xy = x.zip(y).map { |val_x, val_y| val_x * val_y }.sum
+      sum_xx = x.sum { |val| val**2 }
+      sum_yy = y.sum { |val| val**2 }
+      sum_xy = x.zip(y).sum { |val_x, val_y| val_x * val_y }
 
       numerator = (n * sum_xy) - (sum_x * sum_y)
       denominator = Math.sqrt(((n * sum_xx) - (sum_x**2)) * ((n * sum_yy) - (sum_y**2)))

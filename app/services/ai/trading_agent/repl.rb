@@ -1,12 +1,18 @@
 # frozen_string_literal: true
 
-require 'readline'
+# rubocop:disable Rails/Output
+
+begin
+  require 'readline'
+rescue LoadError
+  require 'reline'
+  Readline = Reline unless defined?(Readline)
+end
 
 module Ai
   module TradingAgent
     # Interactive REPL for the trading agent.
     # Supports natural language queries and slash commands.
-    # rubocop:disable Rails/Output
     class Repl
       COMMANDS = {
         '/trade' => 'Analyze and trade: /trade <symbol> [timeframe]',
@@ -232,6 +238,7 @@ module Ai
         # ignore
       end
     end
-    # rubocop:enable Rails/Output
   end
 end
+
+# rubocop:enable Rails/Output

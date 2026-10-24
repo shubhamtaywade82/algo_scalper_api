@@ -1,9 +1,10 @@
 import { createSignal, createMemo, onMount } from 'solid-js'
 import { For, Show } from 'solid-js'
+import { dashboardApiHeaders } from '../lib/dashboardApi'
 import SignalsSidebar from '../components/signals/SignalsSidebar'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table'
-import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
+import Badge from '../components/ui/Badge'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table'
 
 function formatTime(timestamp) {
   if (!timestamp) return '—'
@@ -53,19 +54,9 @@ function getEntryOutcomeStyle(outcome) {
   switch (outcome) {
     case 'entered': return { cls: 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full', label: '● ENTERED' }
     case 'blocked': return { cls: 'text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full', label: '✗ BLOCKED' }
-    case 'skipped': return { cls: 'text-gray-400 bg-gray-500/10 border border-gray-500/20 rounded-full', label: '◌ SKIPPED' }
-    default: return { cls: 'text-gray-600', label: '— PENDING' }
+    case 'skipped': return { cls: 'text-gray-500 bg-gray-500/10 border border-gray-500/20 rounded-full', label: '◌ SKIPPED' }
+    default: return { cls: 'text-gray-600', label: '— —' }
   }
-}
-
-function formatEntryDetail(metadata) {
-  if (!metadata) return null
-  const reason = metadata.entry_blocked_reason
-  if (reason) return String(reason)
-  const stage = metadata.entry_skip_stage
-  const code = metadata.entry_skip_code
-  if (!stage && !code) return null
-  return [stage, code].filter(Boolean).join(' · ')
 }
 
 const SORT_COLS = [
@@ -95,7 +86,7 @@ const PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function Signals() {
   const [signals, setSignals] = createSignal([])
-  const [meta, setMeta] = createSignal({ total: 0, page: 1, per_page: 25, pages: 0, trading_mode: 'paper' })
+  const [meta, setMeta] = createSignal({ total: 0, page: 1, per_page: 25, pages: 0 })
   const [loading, setLoading] = createSignal(false)
   const [error, setError] = createSignal(null)
 
@@ -130,7 +121,7 @@ export default function Signals() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/signals?${buildQuery()}`)
+      const res = await fetch(`/api/signals?${buildQuery()}`, { headers: dashboardApiHeaders() })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setSignals(data.signals || [])
@@ -188,7 +179,6 @@ export default function Signals() {
     signals().map(sig => {
       const outcome = sig.metadata?.entry_outcome || 'pending'
       const style = getEntryOutcomeStyle(outcome)
-      const entryDetail = formatEntryDetail(sig.metadata)
       return {
         ...sig,
         displayTime: formatTime(sig.signal_timestamp),
@@ -200,7 +190,7 @@ export default function Signals() {
         confidenceBars: Math.round((Number(sig.confidence_score) || 0) * 5),
         confidenceClass: getConfidenceClass(sig.confidence_level),
         entryOutcome: outcome,
-        entryDetail,
+        entryBlockedReason: sig.metadata?.entry_blocked_reason || null,
         entryOutcomeCls: style.cls,
         entryOutcomeLabel: style.label
       }
@@ -216,13 +206,6 @@ export default function Signals() {
     if (cur < total) pages.add(cur + 1)
     return [...pages].sort((a, b) => a - b)
   })
-
-  function directionVariant(direction) {
-    const dir = String(direction || '').toLowerCase()
-    if (dir.includes('bullish') || dir.includes('buy')) return 'success'
-    if (dir.includes('bearish') || dir.includes('sell')) return 'danger'
-    return 'outline'
-  }
 
   return (
     <div class="flex flex-col lg:flex-row gap-6">
@@ -389,7 +372,7 @@ export default function Signals() {
                         </TableCell>
                         <TableCell class="p-4">
                           <Badge
-                            variant={directionVariant(sig.direction)}
+                            variant={sig.signalClass}
                             class="text-[10px] font-black uppercase tracking-widest"
                           >
                             {sig.direction}

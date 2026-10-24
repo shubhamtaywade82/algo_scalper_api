@@ -3,7 +3,7 @@
 namespace :trading do
   desc "Run full autonomous Observe-Think-Act loop for one or all symbols"
   task autonomous_optimize: :environment do
-    symbols = ENV['SYMBOL'] ? [ENV['SYMBOL'].upcase] : IndiaIndexRegistry.all_by_key.keys
+    symbols = ENV['SYMBOL'] ? [ENV['SYMBOL'].upcase] : IndexInstrumentCache::INDEX_KEYS
     days = (ENV['DAYS'] || 30).to_i
     dry_run = ENV['DRY_RUN'] == 'true'
 

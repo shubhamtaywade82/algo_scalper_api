@@ -22,14 +22,14 @@ flowchart LR
         DhanHQ[DhanHQ API<br/>Broker + Market Data]
         Telegram[Telegram<br/>Notifications]
         Authority[Authority Server<br/>Optional Token]
-        Ollama[Ollama<br/>Optional local LLM]
+        OpenAI[OpenAI<br/>Optional AI TA]
     end
 
     Trader -->|"Configures, monitors, dashboard"| API
     API -->|"Orders, option chain, WebSocket ticks"| DhanHQ
     API -->|"Alerts, PnL, daily stats"| Telegram
     API -.->|"Token (if configured)"| Authority
-    API -.->|"AI technical analysis"| Ollama
+    API -.->|"AI technical analysis"| OpenAI
 ```
 
 **Elements:**
@@ -37,7 +37,7 @@ flowchart LR
 - **DhanHQ:** Orders (REST), option chain, WebSocket market feed + order updates.
 - **Telegram:** Trade alerts, PnL milestones, daily stats, SMC signals.
 - **Authority server:** Optional; provides Dhan access token (`TRADER_API_BASE_URL/auth/dhan/token`).
-- **Ollama:** Optional local LLM (`ollama-client`); used by `AiTechnicalAnalysisJob` and related AI paths for NIFTY/SENSEX.
+- **OpenAI:** Optional; used by `AiTechnicalAnalysisJob` for NIFTY/SENSEX.
 
 ---
 
@@ -49,7 +49,7 @@ Deployable runnables and shared data stores. Aligned with `Procfile.dev` and dep
 flowchart TB
     subgraph Host["Single host (e.g. bin/dev)"]
         subgraph Processes["OS processes"]
-            Web["Web<br/>Rails API :3011"]
+            Web["Web<br/>Rails API :3001"]
             Daemon["Trading Daemon<br/>11 services in threads"]
             Jobs["Jobs<br/>Solid Queue worker"]
             Dashboard["Dashboard<br/>Next.js"]
@@ -241,12 +241,12 @@ What `./bin/dev` (Procfile.dev) starts. Web and Trading are separate OS processe
 ├────────────────┬────────────────┬────────────────┬─────────────────────┤
 │ web             │ trading        │ jobs           │ dashboard           │
 │ bin/rails       │ ENABLE_...=true│ bin/jobs       │ cd dashboard        │
-│ server -p 3011  │ rake           │                │ npm run dev         │
+│ server -p 3001  │ rake           │                │ npm run dev         │
 │                 │ trading:daemon │                │                     │
 ├─────────────────┼────────────────┼────────────────┼─────────────────────┤
 │ Rails API       │ Supervisor     │ Solid Queue    │ Next.js             │
 │ ActionCable     │ 11 services    │ recurring      │ frontend            │
-│ port 3011      │ in threads     │ tasks          │                     │
+│ port 3001      │ in threads     │ tasks          │                     │
 └────────┬────────┴───────┬────────┴───────┬────────┴─────────────────────┘
          │                │                │
          └────────────────┼────────────────┘

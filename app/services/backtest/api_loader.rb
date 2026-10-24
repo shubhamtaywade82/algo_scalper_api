@@ -51,9 +51,11 @@ module Backtest
           return []
         end
 
-        # No close data and no failure status - log and return empty
-        Rails.logger.error("[Backtest::ApiLoader] Unexpected API response for #{@symbol}: #{response.inspect}")
-        return []
+        # If no close data and no failure status, log and return empty
+        unless response.is_a?(Hash) && (response['close'] || response[:close])
+          Rails.logger.error("[Backtest::ApiLoader] Unexpected API response for #{@symbol}: #{response.inspect}")
+          return []
+        end
       end
 
       # Extract data hash
@@ -74,7 +76,7 @@ module Backtest
 
       timestamps.each_with_index.map do |ts, i|
         # Normalize timestamp (can be epoch or string)
-        timestamp = ts.is_a?(Numeric) ? Time.at(ts) : Time.zone.parse(ts.to_s)
+        timestamp = ts.is_a?(Numeric) ? Time.at(ts) : Time.parse(ts.to_s)
 
         {
           timestamp: timestamp,

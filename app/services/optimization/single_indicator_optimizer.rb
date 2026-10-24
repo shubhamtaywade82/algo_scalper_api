@@ -26,6 +26,7 @@ module Optimization
       }
     }.freeze
     UPSERT_UNIQUE_BY_WITH_INDICATOR = %i[instrument_id interval indicator].freeze
+    UPSERT_UNIQUE_BY_WITHOUT_INDICATOR = %i[instrument_id interval].freeze
 
     def initialize(instrument:, interval:, indicator:, lookback_days: 45, dry_run: false)
       @instrument = instrument
@@ -40,18 +41,24 @@ module Optimization
     end
 
     def run
-      log("[SingleIndicatorOptimizer] Optimizing #{@indicator} for #{@instrument.symbol_name} @ #{@interval}m (#{@lookback} days)")
+      Rails.logger.info("[SingleIndicatorOptimizer] Optimizing #{@indicator} for #{@instrument.symbol_name} @ #{@interval}m (#{@lookback} days)")
+      $stdout.puts "[SingleIndicatorOptimizer] Optimizing #{@indicator} for #{@instrument.symbol_name} @ #{@interval}m"
+      $stdout.flush
 
       load_series!
       return { error: 'Failed to load series' } unless @series&.candles&.any?
 
-      log("[SingleIndicatorOptimizer] Loaded #{@series.candles.size} candles")
+      Rails.logger.info("[SingleIndicatorOptimizer] Loaded #{@series.candles.size} candles")
+      $stdout.puts "[SingleIndicatorOptimizer] Loaded #{@series.candles.size} candles"
+      $stdout.flush
 
       best = { score: -Float::INFINITY, params: nil, metrics: nil }
       total_combinations = param_combinations.size
       processed = 0
 
-      log("[SingleIndicatorOptimizer] Testing #{total_combinations} parameter combinations...")
+      Rails.logger.info("[SingleIndicatorOptimizer] Testing #{total_combinations} parameter combinations...")
+      $stdout.puts "[SingleIndicatorOptimizer] Testing #{total_combinations} parameter combinations..."
+      $stdout.flush
 
       param_combinations.each do |candidate|
         processed += 1
@@ -65,10 +72,14 @@ module Optimization
         if score > best[:score]
           best = { score: score, params: candidate, metrics: metrics }
 
-          log(
-            "[SingleIndicatorOptimizer] New best: AvgMove=#{score.round(4)}%, Signals=#{metrics[:total_signals]}, " \
-            "WinRate=#{metrics[:win_rate]&.round(3)} (#{processed}/#{total_combinations})"
+          Rails.logger.info(
+            "[SingleIndicatorOptimizer] New best: AvgMove=#{score.round(4)}%, " \
+            "Signals=#{metrics[:total_signals]}, " \
+            "WinRate=#{metrics[:win_rate]&.round(3)} " \
+            "(#{processed}/#{total_combinations})"
           )
+          $stdout.puts "[SingleIndicatorOptimizer] New best: AvgMove=#{score.round(4)}%, Signals=#{metrics[:total_signals]} (#{processed}/#{total_combinations})"
+          $stdout.flush
 
           persist(best)
         end
@@ -77,10 +88,14 @@ module Optimization
         next unless (processed % [total_combinations / 10, 1].max).zero?
 
         progress_pct = (processed.to_f / total_combinations * 100).round(1)
-        log("[SingleIndicatorOptimizer] Progress: #{progress_pct}% (#{processed}/#{total_combinations})")
+        Rails.logger.info("[SingleIndicatorOptimizer] Progress: #{progress_pct}% (#{processed}/#{total_combinations})")
+        $stdout.puts "[SingleIndicatorOptimizer] Progress: #{progress_pct}% (#{processed}/#{total_combinations})"
+        $stdout.flush
       end
 
-      log("[SingleIndicatorOptimizer] Optimization complete. Best AvgMove: #{best[:score]&.round(4)}%")
+      Rails.logger.info("[SingleIndicatorOptimizer] Optimization complete. Best AvgMove: #{best[:score].round(4)}%")
+      $stdout.puts "[SingleIndicatorOptimizer] Optimization complete. Best AvgMove: #{best[:score]&.round(4)}%"
+      $stdout.flush
       best
     rescue StandardError => e
       Rails.logger.error("[SingleIndicatorOptimizer] Optimization failed: #{e.class} - #{e.message}")
@@ -90,14 +105,10 @@ module Optimization
 
     private
 
-    def log(msg, level: :info)
-      Rails.logger.public_send(level, msg)
-      $stdout.puts msg
-      $stdout.flush
-    end
-
     def load_series!
-      log("[SingleIndicatorOptimizer] Fetching intraday OHLC for #{@instrument.symbol_name} @ #{@interval}m (#{@lookback} days)")
+      Rails.logger.info("[SingleIndicatorOptimizer] Fetching intraday OHLC for #{@instrument.symbol_name} @ #{@interval}m (#{@lookback} days)")
+      $stdout.puts '[SingleIndicatorOptimizer] Fetching intraday OHLC...'
+      $stdout.flush
 
       raw = @instrument.intraday_ohlc(
         interval: @interval,
@@ -106,28 +117,38 @@ module Optimization
 
       if raw.blank?
         error_msg = "No intraday OHLC data returned for #{@instrument.symbol_name} @ #{@interval}m"
-        log("[SingleIndicatorOptimizer] #{error_msg}", level: :error)
+        Rails.logger.error("[SingleIndicatorOptimizer] #{error_msg}")
+        $stdout.puts "[SingleIndicatorOptimizer] ❌ #{error_msg}"
+        $stdout.flush
         return nil
       end
 
-      log("[SingleIndicatorOptimizer] Received #{raw.is_a?(Hash) ? raw.keys.size : raw.size} records from API")
+      Rails.logger.info("[SingleIndicatorOptimizer] Received #{raw.is_a?(Hash) ? raw.keys.size : raw.size} records from API")
+      $stdout.puts '[SingleIndicatorOptimizer] Received data from API'
+      $stdout.flush
 
       @series = CandleSeries.new(symbol: @instrument.symbol_name, interval: @interval)
       @series.load_from_raw(raw)
 
       unless @series.candles.any?
         error_msg = "No candles loaded for #{@instrument.symbol_name} @ #{@interval}m (raw data: #{raw.class})"
-        log("[SingleIndicatorOptimizer] #{error_msg}", level: :warn)
+        Rails.logger.warn("[SingleIndicatorOptimizer] #{error_msg}")
+        $stdout.puts "[SingleIndicatorOptimizer] ⚠️  #{error_msg}"
+        $stdout.flush
         return nil
       end
 
-      log("[SingleIndicatorOptimizer] Successfully loaded #{@series.candles.size} candles")
+      Rails.logger.info("[SingleIndicatorOptimizer] Successfully loaded #{@series.candles.size} candles")
+      $stdout.puts "[SingleIndicatorOptimizer] ✅ Loaded #{@series.candles.size} candles"
+      $stdout.flush
 
       @series
     rescue StandardError => e
       error_msg = "Failed to load series: #{e.class} - #{e.message}"
-      log("[SingleIndicatorOptimizer] #{error_msg}", level: :error)
+      Rails.logger.error("[SingleIndicatorOptimizer] #{error_msg}")
       Rails.logger.error("[SingleIndicatorOptimizer] Backtrace: #{e.backtrace.first(5).join("\n")}")
+      $stdout.puts "[SingleIndicatorOptimizer] ❌ #{error_msg}"
+      $stdout.flush
       nil
     end
 
@@ -158,18 +179,34 @@ module Optimization
       return unless defined?(BestIndicatorParam)
       return unless best[:params] && best[:metrics]
 
-      BestIndicatorParam.upsert( # rubocop:disable Rails/SkipsModelValidations
-        {
-          instrument_id: @instrument.id,
-          interval: @interval,
-          indicator: @indicator.to_s,
-          params: best[:params],
-          metrics: best[:metrics],
-          score: best[:score],
-          updated_at: Time.current
-        },
-        unique_by: UPSERT_UNIQUE_BY_WITH_INDICATOR
-      )
+      # Check if indicator column exists (for backward compatibility)
+      if BestIndicatorParam.column_names.include?('indicator')
+        BestIndicatorParam.upsert( # rubocop:disable Rails/SkipsModelValidations
+          {
+            instrument_id: @instrument.id,
+            interval: @interval,
+            indicator: @indicator.to_s,
+            params: best[:params],
+            metrics: best[:metrics],
+            score: best[:score],
+            updated_at: Time.current
+          },
+          unique_by: UPSERT_UNIQUE_BY_WITH_INDICATOR
+        )
+      else
+        # Fallback for old schema
+        BestIndicatorParam.upsert( # rubocop:disable Rails/SkipsModelValidations
+          {
+            instrument_id: @instrument.id,
+            interval: @interval,
+            params: { indicator: @indicator.to_s, **best[:params] },
+            metrics: best[:metrics],
+            score: best[:score],
+            updated_at: Time.current
+          },
+          unique_by: UPSERT_UNIQUE_BY_WITHOUT_INDICATOR
+        )
+      end
     rescue StandardError => e
       Rails.logger.warn("[SingleIndicatorOptimizer] Failed to persist result: #{e.message}")
     end

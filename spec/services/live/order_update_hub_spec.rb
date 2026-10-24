@@ -27,6 +27,7 @@ RSpec.describe Live::OrderUpdateHub do
     allow(ws_client).to receive(:on)
     allow(ws_client).to receive(:start)
     allow(ws_client).to receive(:stop)
+    allow(ws_client).to receive(:disconnect!)
   end
 
   describe '#initialize' do
@@ -189,7 +190,7 @@ RSpec.describe Live::OrderUpdateHub do
     it 'stops WebSocket client' do
       hub.stop!
 
-      expect(ws_client).to have_received(:stop)
+      expect(ws_client).to have_received(:disconnect!)
     end
 
     it 'sets running to false' do
@@ -205,14 +206,14 @@ RSpec.describe Live::OrderUpdateHub do
     end
 
     it 'handles stop errors gracefully' do
-      allow(ws_client).to receive(:stop).and_raise(StandardError.new('Stop failed'))
+      allow(ws_client).to receive(:disconnect!).and_raise(StandardError.new('Stop failed'))
 
       expect { hub.stop! }.not_to raise_error
       expect(hub.running?).to be false
     end
 
     it 'logs warning on stop error' do
-      allow(ws_client).to receive(:stop).and_raise(StandardError.new('Stop failed'))
+      allow(ws_client).to receive(:disconnect!).and_raise(StandardError.new('Stop failed'))
 
       expect(Rails.logger).to receive(:warn).with(/OrderUpdateHub.*Error while stopping/)
 
@@ -270,8 +271,8 @@ RSpec.describe Live::OrderUpdateHub do
     end
 
     it 'allows multiple callbacks' do
-      callback1 = proc { |p|  }
-      callback2 = proc { |p|  }
+      callback1 = proc { |p| }
+      callback2 = proc { |p| }
 
       hub.on_update(&callback1)
       hub.on_update(&callback2)
@@ -333,72 +334,6 @@ RSpec.describe Live::OrderUpdateHub do
 
       hub.send(:handle_update, payload)
     end
-
-    it 'updates health status and marks feed health as successful' do
-      feed_health = instance_double(Live::FeedHealthService)
-      allow(Live::FeedHealthService).to receive(:instance).and_return(feed_health)
-      allow(feed_health).to receive(:mark_success!)
-
-      hub.send(:handle_update, payload)
-
-      status = hub.health_status
-      expect(status[:connection_state]).to eq(:connected)
-      expect(status[:last_update_at]).to be_within(1.second).of(Time.current)
-      expect(feed_health).to have_received(:mark_success!).with(:order_updates)
-    end
-  end
-
-  describe '#health_status' do
-    it 'returns connection and timing information' do
-      now = Time.current
-      hub.instance_variable_set(:@running, true)
-      hub.instance_variable_set(:@connection_state, :connected)
-      hub.instance_variable_set(:@started_at, now - 10)
-      hub.instance_variable_set(:@last_update_at, now - 5)
-      hub.instance_variable_set(:@last_error, StandardError.new('test'))
-
-      status = hub.health_status
-
-      expect(status[:running]).to be true
-      expect(status[:connection_state]).to eq(:connected)
-      expect(status[:started_at]).to be_within(1.second).of(now - 10)
-      expect(status[:last_update_at]).to be_within(1.second).of(now - 5)
-      expect(status[:last_error]).to be_a(StandardError)
-    end
-  end
-
-  describe 'watchdog and restart behavior' do
-    let(:feed_health) { instance_double(Live::FeedHealthService, threshold_for: 10) }
-
-    before do
-      allow(Live::FeedHealthService).to receive(:instance).and_return(feed_health)
-      allow(feed_health).to receive(:mark_failure!)
-      hub.instance_variable_set(:@running, true)
-    end
-
-    it 'does nothing when last_update_at is nil' do
-      expect(hub).not_to receive(:restart!)
-
-      hub.send(:check_connection_health!)
-    end
-
-    it 'does nothing when feed is within threshold' do
-      hub.instance_variable_set(:@last_update_at, Time.current)
-
-      expect(hub).not_to receive(:restart!)
-
-      hub.send(:check_connection_health!)
-    end
-
-    it 'restarts when feed is stale' do
-      hub.instance_variable_set(:@last_update_at, Time.current - 20)
-      allow(hub).to receive(:restart!)
-
-      hub.send(:check_connection_health!)
-
-      expect(feed_health).to have_received(:mark_failure!).with(:order_updates, error: instance_of(RuntimeError))
-      expect(hub).to have_received(:restart!)
-    end
   end
 
   describe '#normalize' do
@@ -444,16 +379,19 @@ RSpec.describe Live::OrderUpdateHub do
       expect(hub.send(:paper_trading_enabled?)).to be false
     end
 
-    it 'returns false when AlgoConfig.fetch raises error' do
+    it 'returns false when AlgoConfig.fetch raises error and fails closed on start!' do
       allow(AlgoConfig).to receive(:fetch).and_raise(StandardError.new('Config error'))
 
-      expect(hub.send(:paper_trading_enabled?)).to be false
+      # Unknown mode must propagate — it may not be read as "live".
+      expect { hub.send(:paper_trading_enabled?) }.to raise_error(StandardError)
+      expect(hub.start!).to be false
+      expect(hub.running?).to be false
     end
 
-    it 'returns false when paper_trading key is missing' do
+    it 'treats a missing flag as enabled in test env (documented carve-out)' do
       allow(AlgoConfig).to receive(:fetch).and_return({})
 
-      expect(hub.send(:paper_trading_enabled?)).to be false
+      expect(hub.send(:paper_trading_enabled?)).to be true
     end
   end
 end

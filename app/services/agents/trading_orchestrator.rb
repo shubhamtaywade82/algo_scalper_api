@@ -13,7 +13,7 @@ module Agents
 
     DIRECTION_MAP = {
       "BUY_CALL" => :bullish,
-      "BUY_PUT"  => :bearish
+      "BUY_PUT" => :bearish
     }.freeze
 
     def self.call(index_key:, interval: "5")
@@ -29,24 +29,24 @@ module Agents
       log "Starting pipeline for #{@index_key}"
 
       index_cfg = resolve_index_cfg
-      return abort("No index config for #{@index_key}") unless index_cfg
+      return halt("No index config for #{@index_key}") unless index_cfg
 
       # ── Stage 1: Market Analysis ──────────────────────────────────────────
       analyst_result = run_agent("MarketAnalystAgent") do
         MarketAnalystAgent.call(index_key: @index_key, interval: @interval)
       end
-      return abort("MarketAnalystAgent failed: #{analyst_result[:error]}") if analyst_result[:error]
+      return halt("MarketAnalystAgent failed: #{analyst_result[:error]}") if analyst_result[:error]
 
       analysis = analyst_result[:content]
 
       # ── Stage 2: Strategy ─────────────────────────────────────────────────
       strategy_result = run_agent("StrategyAgent") do
         StrategyAgent.call(
-          index_key:       @index_key,
+          index_key: @index_key,
           market_analysis: format_for_prompt(analysis)
         )
       end
-      return abort("StrategyAgent failed: #{strategy_result[:error]}") if strategy_result[:error]
+      return halt("StrategyAgent failed: #{strategy_result[:error]}") if strategy_result[:error]
 
       strategy = strategy_result[:content]
       action   = extract_action(strategy)
@@ -62,7 +62,7 @@ module Agents
       risk_result = run_agent("RiskAgent") do
         RiskAgent.call(strategy_details: format_for_prompt(strategy))
       end
-      return abort("RiskAgent failed: #{risk_result[:error]}") if risk_result[:error]
+      return halt("RiskAgent failed: #{risk_result[:error]}") if risk_result[:error]
 
       risk    = risk_result[:content]
       verdict = extract_verdict(risk)
@@ -80,7 +80,7 @@ module Agents
       selector_result = run_agent("OptionSelectorAgent") do
         OptionSelectorAgent.call(index_key: @index_key, direction: direction.to_s)
       end
-      return abort("OptionSelectorAgent failed: #{selector_result[:error]}") if selector_result[:error]
+      return halt("OptionSelectorAgent failed: #{selector_result[:error]}") if selector_result[:error]
 
       selection = selector_result[:content]
 
@@ -100,16 +100,16 @@ module Agents
       size_multiplier = extract_size_multiplier(risk)
 
       entered = Entries::EntryGuard.try_enter(
-        index_cfg:       index_cfg,
-        pick:            pick,
-        direction:       direction,
+        index_cfg: index_cfg,
+        pick: pick,
+        direction: direction,
         scale_multiplier: size_multiplier,
-        entry_metadata:  {
-          entry_contract:   Entries::EntryGuard::SUPERTREND_CONTRACT,
-          permission:       :scale_ready,
-          ai_orchestrated:  true,
-          agent_action:     action,
-          agent_rationale:  extract_rationale(strategy)
+        entry_metadata: {
+          entry_contract: Entries::EntryGuard::SUPERTREND_CONTRACT,
+          permission: :scale_ready,
+          ai_orchestrated: true,
+          agent_action: action,
+          agent_rationale: extract_rationale(strategy)
         }
       )
 
@@ -118,14 +118,14 @@ module Agents
 
       log "Pipeline complete — entered=#{entered}"
       result(
-        action:   action,
-        entered:  entered,
+        action: action,
+        entered: entered,
         telegram_sent: true,
         analysis: analysis,
         strategy: strategy,
-        risk:     risk,
+        risk: risk,
         selection: selection,
-        pick:     pick
+        pick: pick
       )
     rescue StandardError => e
       Rails.logger.error("#{TAG} Unhandled error: #{e.class} - #{e.message}\n#{e.backtrace.first(8).join("\n")}")
@@ -216,7 +216,7 @@ module Agents
       return (strategy[:rationale] || strategy["rationale"]).to_s if strategy.is_a?(Hash)
 
       # Pull last 200 chars of narrative as rationale
-      strategy.to_s.strip.split("\n").reject(&:blank?).last(3).join(" ").truncate(300)
+      strategy.to_s.strip.split("\n").compact_blank.last(3).join(" ").truncate(300)
     end
 
     # ── Telegram Messages ─────────────────────────────────────────────────────
@@ -264,7 +264,7 @@ module Agents
         📊 Bias: #{bias} | Action: #{action}
         ❌ <b>No valid strikes from option chain</b>
 
-        Agent suggested: #{dig(selection, :selected_contract, "unknown")} @ #{dig(selection, :premium, "?")}
+        Agent suggested: #{dig(selection, :selected_contract, 'unknown')} @ #{dig(selection, :premium, '?')}
         Market may be outside normal range.
       HTML
     end
@@ -348,7 +348,7 @@ module Agents
       Rails.logger.info("#{TAG} #{msg}")
     end
 
-    def abort(reason)
+    def halt(reason)
       log "Aborted: #{reason}"
       { error: reason, entered: false }
     end

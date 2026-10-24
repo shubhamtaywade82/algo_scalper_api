@@ -3,68 +3,1182 @@
 require 'rails_helper'
 
 RSpec.describe Live::UnifiedExitChecker do
+  include ActiveSupport::Testing::TimeHelpers
+
+  let(:mock_instrument) do
+    instance_double(
+      Instrument,
+      symbol_name: 'NIFTY',
+      candle_series: double(candles: []),
+      adx: 25.0
+    )
+  end
+
   let(:tracker) do
     instance_double(
       PositionTracker,
       id: 1,
       active?: true,
-      entry_price: 100.0,
-      quantity: 10,
-      meta: { 'direction' => 'bullish' },
-      instrument: nil,
-      watchable: nil
+      entry_price: 200.0,
+      quantity: 50,
+      current_pnl_pct: 0.0,
+      meta: {},
+      order_no: 'ORD-1',
+      symbol: 'NIFTY24MAR22000CE',
+      instrument: mock_instrument,
+      watchable: nil,
+      side: 'long_ce',
+      created_at: 10.minutes.ago,
+      last_pnl_rupees: 0.0,
+      high_water_mark_pnl: 0.0
     )
   end
 
   before do
     described_class.instance_variable_set(:@exit_config, nil)
     described_class.instance_variable_set(:@exit_config_expires_at, nil)
-    allow(AlgoConfig).to receive(:fetch).and_return(
-      risk: {
-        adaptive_trailing: {
-          enabled: true,
-          supertrend_flip_exit: false,
-          counter_candles: 0
+
+    allow(AlgoConfig).to receive(:fetch).and_return({
+      position_sizing: {
+        drawdown: {
+          emergency_peak_loss_exit: true,
+          emergency_min_peak_pct: 0.10
         }
-      }
-    )
+      },
+      risk: {},
+      indices: [{ key: 'NIFTY', segment: 'IDX_I', sid: '13' }]
+    })
   end
 
-  describe '.check_exit_conditions' do
-    it 'returns nil when pnl snapshot is missing' do
+  describe 'emergency peak-loss exit' do
+    it 'triggers when peak >= 10% and current < -2%' do
+      allow(tracker).to receive_messages(high_water_mark_pnl: 1500.0, current_pnl_pct: -0.05)      # -5%
+
+      result = described_class.send(:emergency_peak_loss_exit_triggered?, tracker)
+      expect(result).to be true
+    end
+
+    it 'does not trigger when peak < 10%' do
+      allow(tracker).to receive_messages(high_water_mark_pnl: 500.0, current_pnl_pct: -0.05)
+
+      result = described_class.send(:emergency_peak_loss_exit_triggered?, tracker)
+      expect(result).to be false
+    end
+
+    it 'does not trigger when current loss is shallow (> -2%)' do
+      allow(tracker).to receive_messages(high_water_mark_pnl: 1500.0, current_pnl_pct: -0.01)      # -1% (above -2% threshold)
+
+      result = described_class.send(:emergency_peak_loss_exit_triggered?, tracker)
+      expect(result).to be false
+    end
+
+    it 'does not trigger when disabled in config' do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        position_sizing: {
+          drawdown: { emergency_peak_loss_exit: false }
+        },
+        risk: {},
+        indices: []
+      })
+      allow(tracker).to receive_messages(high_water_mark_pnl: 1500.0, current_pnl_pct: -0.05)
+
+      result = described_class.send(:emergency_peak_loss_exit_triggered?, tracker)
+      expect(result).to be false
+    end
+
+    context 'when the tracker is a short position' do
+      before do
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({ pnl_pct: 0.0, pnl: 0.0 })
+        allow(described_class).to receive(:portfolio_floor_breach?).and_return(false)
+        allow(tracker).to receive(:short_position?).and_return(true)
+      end
+
+      it 'returns nil without evaluating any long-only exit condition' do
+        allow(described_class).to receive(:emergency_peak_loss_exit_triggered?)
+
+        expect(described_class.check_exit_conditions(tracker)).to be_nil
+        expect(described_class).not_to have_received(:emergency_peak_loss_exit_triggered?)
+      end
+
+      it 'still evaluates the portfolio floor breach kill-switch' do
+        allow(described_class).to receive(:portfolio_floor_breach?).and_return(true)
+
+        result = described_class.check_exit_conditions(tracker)
+        expect(result[:reason]).to eq('PORTFOLIO_FLOOR_BREACH')
+      end
+    end
+
+    it 'handles zero entry value gracefully' do
+      allow(tracker).to receive(:entry_price).and_return(0.0)
+      result = described_class.send(:emergency_peak_loss_exit_triggered?, tracker)
+      expect(result).to be false
+    end
+  end
+
+  describe 'missing/stale PnL snapshot (regression: used to silently disable every hard limit)' do
+    before do
+      allow(described_class).to receive(:portfolio_floor_breach?).and_return(false)
+      allow(Rails.logger).to receive(:error)
+    end
+
+    context 'when there is no snapshot at all' do
+      before { allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(nil) }
+
+      it 'logs the blind spot instead of failing silently' do
+        described_class.check_exit_conditions(tracker)
+
+        expect(Rails.logger).to have_received(:error).with(a_string_matching(/snapshot missing/))
+      end
+
+      it 'still catches a hard stop-loss via the DB-synced fallback' do
+        allow(tracker).to receive(:current_pnl_pct).and_return(-0.15) # past the -12% default SL
+
+        result = described_class.check_exit_conditions(tracker)
+
+        expect(result[:exit]).to be true
+        expect(result[:reason]).to include('STOP_LOSS')
+        expect(result[:reason]).to include('SNAPSHOT_FALLBACK')
+      end
+
+      it 'returns nil (no exit) when the fallback PnL has not breached stop-loss' do
+        allow(tracker).to receive(:current_pnl_pct).and_return(-0.03)
+
+        expect(described_class.check_exit_conditions(tracker)).to be_nil
+      end
+
+      it 'does not evaluate the fallback for a short position' do
+        allow(tracker).to receive_messages(short_position?: true, current_pnl_pct: -0.99)
+
+        expect(described_class.check_exit_conditions(tracker)).to be_nil
+      end
+    end
+
+    context 'when a snapshot exists but is older than the staleness threshold' do
+      before do
+        stale_snapshot = { pnl_pct: -0.01, pnl: -20.0, timestamp: 30.seconds.ago.to_i }
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(stale_snapshot)
+      end
+
+      it 'logs the blind spot and falls back rather than trusting the frozen pnl_pct' do
+        allow(tracker).to receive(:current_pnl_pct).and_return(-0.20)
+
+        result = described_class.check_exit_conditions(tracker)
+
+        expect(Rails.logger).to have_received(:error).with(a_string_matching(/snapshot stale/))
+        expect(result[:exit]).to be true
+      end
+    end
+
+    describe '#snapshot_stale?' do
+      it 'is false for a recent timestamp' do
+        expect(described_class.send(:snapshot_stale?, { timestamp: 2.seconds.ago.to_i })).to be false
+      end
+
+      it 'is true past the staleness threshold' do
+        expect(described_class.send(:snapshot_stale?, { timestamp: 30.seconds.ago.to_i })).to be true
+      end
+
+      it 'is false when there is no timestamp to judge staleness by' do
+        expect(described_class.send(:snapshot_stale?, { pnl_pct: 0.0 })).to be false
+      end
+    end
+
+    it 'still fires the portfolio floor breach kill-switch even with no snapshot at all' do
       allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(nil)
-
-      expect(described_class.check_exit_conditions(tracker)).to be_nil
-    end
-
-    it 'returns adaptive hard stop when loss exceeds entry guard floor' do
-      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(
-        { pnl_pct: -0.31, ltp: 69.0, pnl: -310.0, hwm_pnl: 0.0 }
-      )
+      allow(described_class).to receive(:portfolio_floor_breach?).and_return(true)
 
       result = described_class.check_exit_conditions(tracker)
 
-      expect(result[:reason]).to eq('ADAPTIVE_TRAIL_HARD_STOP')
-      expect(result[:path]).to eq('adaptive_trail')
+      expect(result[:reason]).to eq('PORTFOLIO_FLOOR_BREACH')
+      expect(result[:pnl_pct]).to be_nil
+    end
+  end
+
+  describe 'structure invalidation' do
+    it 'triggers exit for long_pe when underlying rises above invalidation price' do
+      allow(tracker).to receive(:meta).and_return({
+        'direction' => 'long_pe',
+        'structure_invalidation_price' => 23_800.0,
+        'index_key' => 'NIFTY'
+      })
+      tick = double(ltp: 23_850.0)
+      allow(Live::TickQuery).to receive(:for_security).and_return(tick)
+
+      result = described_class.send(:structure_invalidated?, tracker, 23_850.0, 23_800.0)
+      expect(result).to be true
     end
 
-    it 'returns adaptive trail exit when giveback exceeds stage floor' do
-      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(
-        { pnl_pct: 1.10, ltp: 210.0, pnl: 1100.0, hwm_pnl: 2000.0 }
+    it 'triggers exit for long_ce when underlying falls below invalidation price' do
+      allow(tracker).to receive(:meta).and_return({
+        'direction' => 'long_ce',
+        'structure_invalidation_price' => 23_800.0,
+        'index_key' => 'NIFTY'
+      })
+
+      result = described_class.send(:structure_invalidated?, tracker, 23_750.0, 23_800.0)
+      expect(result).to be true
+    end
+
+    it 'does not trigger for long_pe when underlying is below invalidation' do
+      allow(tracker).to receive(:meta).and_return({ 'direction' => 'long_pe' })
+      result = described_class.send(:structure_invalidated?, tracker, 23_750.0, 23_800.0)
+      expect(result).to be false
+    end
+
+    it 'does not trigger for unknown direction' do
+      allow(tracker).to receive(:meta).and_return({ 'direction' => 'unknown' })
+      result = described_class.send(:structure_invalidated?, tracker, 23_850.0, 23_800.0)
+      expect(result).to be false
+    end
+
+    it 'propagates infra failures from TickQuery (wave-3 contract: no-data != broken)' do
+      allow(Live::TickQuery).to receive(:for_security).and_raise(StandardError)
+      # Callers (RiskManager/ExitPolicy) rescue-and-log; the resolver itself must
+      # stay loud so a broken tick path is never confused with "no tick yet".
+      expect { described_class.send(:resolve_underlying_ltp, 'NIFTY') }.to raise_error(StandardError)
+    end
+
+    it 'returns nil when no tick is available for the underlying' do
+      allow(Live::TickQuery).to receive(:for_security).and_return(nil)
+      result = described_class.send(:resolve_underlying_ltp, 'NIFTY')
+      expect(result).to be_nil
+    end
+
+    it 'skips structure invalidation when invalidation_price is nil in meta' do
+      tick_query_spy = instance_spy(Live::TickQuery)
+      allow(Live::TickQuery).to receive(:for_security).and_return(tick_query_spy)
+      allow(tracker).to receive(:meta).and_return({
+        'direction' => 'long_pe',
+        'index_key' => 'NIFTY'
+      })
+      expect(Live::TickQuery).not_to have_received(:for_security)
+    end
+  end
+
+  describe 'options-aware structure invalidation dual condition' do
+    let(:tracker) do
+      instance_double(PositionTracker, instrument: mock_instrument, watchable: nil, active?: true, id: 1,
+                                       meta: {
+          'structure_invalidation_price' => 23_500.0,
+          'index_key' => 'NIFTY',
+          'direction' => 'long_ce',
+          'entry_underlying_price' => 23_500.0,
+          'peak_premium' => 200.0
+        },
+                                       created_at: 5.minutes.ago,
+                                       entry_price: 180.0,
+                                       quantity: 100,
+                                       order_no: 'ORD-1')
+    end
+
+    before do
+      described_class.instance_variable_set(:@exit_config, nil)
+      described_class.instance_variable_set(:@exit_config_expires_at, nil)
+
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        risk: {
+          exits: {
+            structure_invalidation: {
+              enabled: true,
+              min_hold_seconds: 120,
+              buffer_pct: 0.004,
+              underlying_move_pct: 0.01,
+              premium_drop_pct: 0.05
+            }
+          }
+        }
+      })
+
+      allow(described_class).to receive_messages(
+        early_exit_triggered?: false,
+        loss_limit_hit?: false,
+        emergency_peak_loss_exit_triggered?: false,
+        profit_target_hit?: false,
+        premium_momentum_failure_hit?: false,
+        trailing_stop_hit?: false,
+        time_based_exit?: false
       )
+    end
+
+    context 'when only underlying moved 1%+ (premium still near peak)' do
+      before do
+        allow(described_class).to receive(:resolve_underlying_ltp).and_return(23_147.0)
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({
+          pnl: -200, pnl_pct: -0.02, ltp: 196.0, hwm_pnl: 0
+        })
+      end
+
+      it 'does NOT trigger structure invalidation' do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result).to be_nil
+      end
+    end
+
+    context 'when only premium dropped 5%+ (underlying stable)' do
+      before do
+        allow(described_class).to receive(:resolve_underlying_ltp).and_return(23_453.0)
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({
+          pnl: -1000, pnl_pct: -0.10, ltp: 180.0, hwm_pnl: 0
+        })
+      end
+
+      it 'does NOT trigger structure invalidation' do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result).to be_nil
+      end
+    end
+
+    context 'when BOTH underlying moved 1%+ AND premium dropped 5%+' do
+      before do
+        allow(described_class).to receive(:resolve_underlying_ltp).and_return(23_147.0)
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({
+          pnl: -1500, pnl_pct: -0.15, ltp: 170.0, hwm_pnl: 0
+        })
+      end
+
+      it 'triggers structure invalidation' do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result).to include(exit: true)
+        expect(result[:reason]).to include('STRUCTURE_INVALIDATION')
+        expect(result[:path]).to eq('structure_invalidation')
+      end
+    end
+
+    context 'when dual condition config is absent (backward compat)' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          risk: {
+            exits: {
+              structure_invalidation: {
+                enabled: true,
+                min_hold_seconds: 120,
+                buffer_pct: 0.004
+              }
+            }
+          }
+        })
+
+        allow(described_class).to receive(:resolve_underlying_ltp).and_return(23_400.0)
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({
+          pnl: -500, pnl_pct: -0.03, ltp: 150.0, hwm_pnl: 0
+        })
+      end
+
+      it 'falls back to legacy single-condition check' do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result).to include(exit: true)
+        expect(result[:reason]).to include('STRUCTURE_INVALIDATION')
+      end
+    end
+  end
+
+  describe 'structure invalidation config check' do
+    let(:tracker) do
+      instance_double(PositionTracker, instrument: mock_instrument, watchable: nil, active?: true, id: 1,
+                                       meta: {
+          'structure_invalidation_price' => 23_500.0,
+          'index_key' => 'NIFTY',
+          'direction' => 'long_ce'
+        },
+                                       created_at: 5.minutes.ago,
+                                       entry_price: 100.0,
+                                       quantity: 1)
+    end
+
+    before do
+      described_class.instance_variable_set(:@exit_config, nil)
+      described_class.instance_variable_set(:@exit_config_expires_at, nil)
+
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({
+        pnl: -500, pnl_pct: -0.03, ltp: 150.0, hwm_pnl: 0
+      })
+      allow(described_class).to receive_messages(resolve_underlying_ltp: 23_400.0, early_exit_triggered?: false, loss_limit_hit?: false, emergency_peak_loss_exit_triggered?: false, profit_target_hit?: false, premium_momentum_failure_hit?: false, trailing_stop_hit?: false, time_based_exit?: false)
+    end
+
+    context 'when structure_invalidation.enabled is false' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          risk: {
+            exits: {
+              structure_invalidation: {
+                enabled: false,
+                min_hold_seconds: 120,
+                buffer_pct: 0.004
+              }
+            }
+          }
+        })
+      end
+
+      it 'skips structure invalidation check entirely' do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result).to be_nil
+      end
+    end
+
+    context 'when structure_invalidation.enabled is true' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          risk: {
+            exits: {
+              structure_invalidation: {
+                enabled: true,
+                min_hold_seconds: 120,
+                buffer_pct: 0.004
+              }
+            }
+          }
+        })
+      end
+
+      it 'checks structure invalidation and exits when invalidated' do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result).to include(exit: true)
+        expect(result[:reason]).to include('STRUCTURE_INVALIDATION')
+      end
+    end
+  end
+
+  describe '#profit_target_hit? with trailing suppression' do
+    let(:config) do
+      {
+        stop_loss: { type: 'static', value: 0.06 },
+        take_profit: 0.12,
+        trailing: { enabled: true, type: 'adaptive', activation_profit: 0.025, drop_threshold: 0.018 },
+        early_exit: { enabled: false, profit_threshold: 0.07 },
+        premium_momentum_failure: { enabled: false },
+        time_based: { enabled: false, exit_time: '15:20' }
+      }
+    end
+
+    before do
+      described_class.instance_variable_set(:@exit_config, nil)
+      described_class.instance_variable_set(:@exit_config_expires_at, nil)
+      allow(described_class).to receive(:exit_config).and_return(config)
+    end
+
+    context 'when trailing is armed and profit exceeds TP' do
+      let(:tracker) do
+        instance_double(PositionTracker, instrument: mock_instrument, watchable: nil, active?: true, id: 1,
+                                         entry_price: 100.0,
+                                         quantity: 100,
+                                         meta: {},
+                                         high_water_mark_pnl: 2_000.0)
+      end
+
+      let(:snapshot) { { pnl_pct: 0.15, ltp: 115.0, pnl: 1_500.0, hwm_pnl: 2_000.0 } }
+
+      it 'suppresses TP and returns false' do
+        result = described_class.send(:profit_target_hit?, tracker, snapshot)
+        expect(result).to be false
+      end
+    end
+
+    context 'when trailing is NOT armed and profit exceeds TP' do
+      let(:tracker) do
+        instance_double(PositionTracker, instrument: mock_instrument, watchable: nil, active?: true, id: 1,
+                                         entry_price: 100.0,
+                                         quantity: 100,
+                                         meta: {},
+                                         high_water_mark_pnl: 200.0)
+      end
+
+      let(:snapshot) { { pnl_pct: 0.13, ltp: 113.0, pnl: 1_300.0, hwm_pnl: 200.0 } }
+
+      it 'triggers TP normally' do
+        result = described_class.send(:profit_target_hit?, tracker, snapshot)
+        expect(result).to be true
+      end
+    end
+  end
+
+  describe '#percentage_pnl_exit_hit?' do
+    # Trailing arms at 10% activation. At 141% profit, trailing is always armed.
+    let(:snapshot_trailing_armed) { { pnl_pct: 1.4182, ltp: 669.0, pnl: 39_215.0, hwm_pnl: 39_215.0 } }
+    # At 22% profit with no HWM (trailing not yet armed — hwm_pnl = 0)
+    let(:snapshot_trailing_not_armed) { { pnl_pct: 0.22, ltp: 337.0, pnl: 6_035.0, hwm_pnl: 0.0 } }
+    let(:snapshot_below_target) { { pnl_pct: 0.15, ltp: 319.0, pnl: 4_235.0, hwm_pnl: 0.0 } }
+
+    let(:config_enabled) do
+      {
+        stop_loss: { type: 'static', value: 0.10 },
+        take_profit: 0.25,
+        trailing: { enabled: true, type: 'adaptive', activation_profit: 0.10, drop_threshold: 0.05 },
+        early_exit: { enabled: false, profit_threshold: 0.07 },
+        premium_momentum_failure: { enabled: false },
+        time_based: { enabled: false, exit_time: '15:20' }
+      }
+    end
+
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        risk: { percentage_pnl_exit: { enabled: true, target_pct: 0.20 } },
+        exit: {}
+      })
+      allow(described_class).to receive(:exit_config).and_return(config_enabled)
+    end
+
+    context 'when trailing is armed (position rode to 141.82%)' do
+      it 'does NOT fire — trailing manages the position, runner is preserved' do
+        # trailing_armed? returns true because hwm_pnl > entry_value * activation (0.10)
+        # entry_value for tracker = 276.65 * 100 = 27_665; hwm = 39_215 > 2_766.5 → armed
+        result = described_class.send(:percentage_pnl_exit_hit?, tracker, snapshot_trailing_armed)
+        expect(result).to be false
+      end
+    end
+
+    context 'when trailing is NOT armed and pnl exceeds target (trailing failed to engage)' do
+      it 'fires as a safety net' do
+        result = described_class.send(:percentage_pnl_exit_hit?, tracker, snapshot_trailing_not_armed)
+        expect(result).to be true
+      end
+    end
+
+    context 'when pnl is below target' do
+      it 'does not fire' do
+        result = described_class.send(:percentage_pnl_exit_hit?, tracker, snapshot_below_target)
+        expect(result).to be false
+      end
+    end
+
+    context 'when percentage_pnl_exit is disabled' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          risk: { percentage_pnl_exit: { enabled: false, target_pct: 0.20 } },
+          exit: {}
+        })
+      end
+
+      it 'does not fire regardless of pnl_pct' do
+        result = described_class.send(:percentage_pnl_exit_hit?, tracker, snapshot_trailing_not_armed)
+        expect(result).to be false
+      end
+    end
+  end
+
+  describe '#adaptive_trailing_exit? with tightening_multiplier' do
+    let(:tiers) do
+      [
+        { min_profit: 0.15, drawdown: 0.10 },
+        { min_profit: 0.50, drawdown: 0.06 },
+        { min_profit: 1.00, drawdown: 0.03 }
+      ]
+    end
+
+    let(:peak_profit_pct) { 1.4182 }
+
+    let(:snapshot_at_hwm) { { hwm_pnl: 39_215.0, pnl: 39_215.0 } }
+    let(:snapshot_2pct_drop) { { hwm_pnl: 39_215.0, pnl: 38_430.0 } }  # ~2% drop from HWM
+    let(:snapshot_45pct_drop) { { hwm_pnl: 39_215.0, pnl: 37_553.0 } } # ~4.3% drop from HWM
+
+    it 'does not fire at HWM with normal multiplier' do
+      result = described_class.send(
+        :adaptive_trailing_exit?,
+        tracker,
+        snapshot_at_hwm,
+        peak_profit_pct,
+        tiers,
+        tightening_multiplier: 1.0
+      )
+      expect(result).to be false
+    end
+
+    it 'does not fire at 2% drop with normal multiplier (needs ~4.23%)' do
+      result = described_class.send(
+        :adaptive_trailing_exit?,
+        tracker,
+        snapshot_2pct_drop,
+        peak_profit_pct,
+        tiers,
+        tightening_multiplier: 1.0
+      )
+      expect(result).to be false
+    end
+
+    it 'fires at ~4.3% drop with normal multiplier' do
+      result = described_class.send(
+        :adaptive_trailing_exit?,
+        tracker,
+        snapshot_45pct_drop,
+        peak_profit_pct,
+        tiers,
+        tightening_multiplier: 1.0
+      )
+      expect(result).to be true
+    end
+
+    it 'fires at 2% drop with tightening multiplier 0.5' do
+      result = described_class.send(
+        :adaptive_trailing_exit?,
+        tracker,
+        snapshot_2pct_drop,
+        peak_profit_pct,
+        tiers,
+        tightening_multiplier: 0.5
+      )
+      expect(result).to be true
+    end
+
+    it 'does not fire at HWM even with tightening multiplier 0.5' do
+      result = described_class.send(
+        :adaptive_trailing_exit?,
+        tracker,
+        snapshot_at_hwm,
+        peak_profit_pct,
+        tiers,
+        tightening_multiplier: 0.5
+      )
+      expect(result).to be false
+    end
+  end
+
+  describe 'underlying-context-aware trailing exit (integration)' do
+    let(:exit_config) do
+      {
+        trailing: {
+          enabled: true,
+          type: 'adaptive',
+          activation_profit: 0.15,
+          drop_threshold: 0.15
+        }
+      }
+    end
+
+    let(:tracker) do
+      instance_double(PositionTracker, instrument: mock_instrument, watchable: nil, id: 99,
+                                       active?: true,
+                                       entry_price: 276.65,
+                                       quantity: 100,
+                                       high_water_mark_pnl: 39_215.0,
+                                       current_pnl_pct: 1.4182,
+                                       symbol: 'SENSEX-Mar2026-75000-CE',
+                                       order_no: 'ORD-SENSEX',
+                                       meta: { 'index_key' => 'sensex', 'direction' => 'long_ce' })
+    end
+
+    let(:snapshot_at_hwm) { { pnl_pct: 1.4182, ltp: 669.0, pnl: 39_215.0, hwm_pnl: 39_215.0 } }
+    let(:snapshot_2pct_drop) { { pnl_pct: 1.38, ltp: 655.0, pnl: 38_430.0, hwm_pnl: 39_215.0 } }
+    let(:snapshot_5pct_drop) { { pnl_pct: 1.35, ltp: 635.0, pnl: 37_260.0, hwm_pnl: 39_215.0 } }
+
+    let(:healthy_state) do
+      OpenStruct.new(
+        trend_score: 45.0,
+        bos_state: :intact,
+        bos_direction: :neutral,
+        atr_trend: :flat,
+        atr_ratio: 0.95,
+        mtf_confirm: true,
+        ltp: 79_500.0,
+        smc_bias_flip: false
+      )
+    end
+
+    let(:bos_break_state) do
+      OpenStruct.new(
+        trend_score: 20.0,
+        bos_state: :broken,
+        bos_direction: :bearish,
+        atr_trend: :rising,
+        atr_ratio: 1.1,
+        mtf_confirm: false,
+        ltp: 78_200.0,
+        smc_bias_flip: false
+      )
+    end
+
+    let(:weak_trend_state) do
+      OpenStruct.new(
+        trend_score: 10.0,
+        bos_state: :intact,
+        bos_direction: :neutral,
+        atr_trend: :flat,
+        atr_ratio: 0.80,
+        mtf_confirm: false,
+        ltp: 79_000.0,
+        smc_bias_flip: false
+      )
+    end
+
+    before do
+      described_class.instance_variable_set(:@exit_config, nil)
+      described_class.instance_variable_set(:@exit_config_expires_at, nil)
+      allow(described_class).to receive(:exit_config).and_return(exit_config)
+
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        risk: {
+          underlying_context_exit: {
+            enabled: true,
+            trend_score_threshold: 15,
+            atr_ratio_threshold: 0.65,
+            tightening_multiplier: 0.5
+          },
+          institutional_trailing: {
+            sensex: {
+              activation_trigger: 0.15,
+              trailing_distance: 0.15,
+              adaptive_drawdown: [
+                { min_profit: 0.15, drawdown: 0.10 },
+                { min_profit: 0.50, drawdown: 0.06 },
+                { min_profit: 1.00, drawdown: 0.03 }
+              ]
+            }
+          },
+          exits: {},
+          percentage_pnl_exit: { enabled: false }
+        },
+        exit: {}
+      })
+
+      allow(Positions::ActiveCache.instance).to receive(:get_by_tracker_id).and_return(nil)
+      allow(Live::UnderlyingMonitor).to receive(:evaluate).and_return(healthy_state)
+      allow(Orders::Analyzer).to receive(:new).and_return(instance_double(Orders::Analyzer, recommended_sl: nil))
+
+      allow(described_class).to receive_messages(
+        portfolio_floor_breach?: false,
+        early_exit_triggered?: false,
+        loss_limit_hit?: false,
+        emergency_peak_loss_exit_triggered?: false,
+        profit_target_hit?: false,
+        percentage_pnl_exit_hit?: false,
+        premium_momentum_failure_hit?: false,
+        check_structure_invalidation: nil,
+        check_smc_navigator_exit: nil,
+        time_based_exit?: false
+      )
+    end
+
+    context 'when underlying is healthy and position is at HWM' do
+      before do
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(snapshot_at_hwm)
+      end
+
+      it 'does not exit' do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result).to be_nil
+      end
+    end
+
+    context 'when BOS breaks against position' do
+      before do
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(snapshot_at_hwm)
+        allow(Live::UnderlyingMonitor).to receive(:evaluate).and_return(bos_break_state)
+      end
+
+      it 'exits immediately with UNDERLYING_STRUCTURE_BREAK' do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result).not_to be_nil
+        expect(result[:exit]).to be true
+        expect(result[:reason]).to include('UNDERLYING_STRUCTURE_BREAK')
+        expect(result[:path]).to eq('underlying_context_exit')
+      end
+    end
+
+    context 'when trend is weak and position drops 2% from HWM' do
+      before do
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(snapshot_2pct_drop)
+        allow(Live::UnderlyingMonitor).to receive(:evaluate).and_return(weak_trend_state)
+      end
+
+      it 'exits via trailing stop due to tightened allowed_dd' do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result).not_to be_nil
+        expect(result[:exit]).to be true
+        expect(result[:reason]).to eq('TRAILING_STOP')
+        expect(result[:path]).to eq('trailing_stop')
+      end
+    end
+
+    context 'when underlying is healthy and position drops 5% from HWM' do
+      before do
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(snapshot_5pct_drop)
+      end
+
+      it 'exits via normal trailing' do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result).not_to be_nil
+        expect(result[:exit]).to be true
+        expect(result[:reason]).to eq('TRAILING_STOP')
+      end
+    end
+
+    context 'when trailing is not armed (hwm_pnl = 0)' do
+      before do
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(
+          { pnl_pct: 0.22, ltp: 337.0, pnl: 6_035.0, hwm_pnl: 0.0 }
+        )
+      end
+
+      it 'does not call UnderlyingMonitor.evaluate' do
+        described_class.check_exit_conditions(tracker)
+        expect(Live::UnderlyingMonitor).not_to have_received(:evaluate)
+      end
+    end
+  end
+
+  describe 'Portfolio Floor Breach' do
+    it 'exits immediately when portfolio floor is breached' do
+      allow(Portfolio::DrawdownGuard).to receive(:triggered?).and_return(true)
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({ pnl_pct: 0.01 })
 
       result = described_class.check_exit_conditions(tracker)
+      expect(result).not_to be_nil
+      expect(result[:reason]).to eq('PORTFOLIO_FLOOR_BREACH')
+      expect(result[:path]).to eq('profit_lock')
+    end
+  end
 
-      expect(result[:reason]).to eq('ADAPTIVE_TRAIL')
-      expect(result[:path]).to eq('adaptive_trail')
+  describe 'Early Trend Failure' do
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        exit: { early_exit: { enabled: true, profit_threshold: 0.07 } },
+        risk: {
+          exits: {
+            premium_momentum_failure: { enabled: false },
+            smc_navigator_exit: { enabled: false },
+            structure_invalidation: { enabled: false }
+          }
+        }
+      })
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({ pnl_pct: 0.02 })
     end
 
-    it 'returns nil when price remains above the trail floor' do
-      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(
-        { pnl_pct: 0.05, ltp: 105.0, pnl: 50.0, hwm_pnl: 50.0 }
-      )
+    it 'triggers when EarlyTrendFailure service returns true' do
+      allow(Live::EarlyTrendFailure).to receive(:early_trend_failure?).and_return(true)
 
-      expect(described_class.check_exit_conditions(tracker)).to be_nil
+      # We need to make sure the rule evaluates to exit.
+      # Since we are testing check_exit_conditions, it will call the actual rule.
+      # The rule delegates to Live::UnifiedExitChecker.early_exit_triggered?
+      # So we should stub THAT.
+      allow(described_class).to receive(:early_exit_triggered?).and_return(true)
+
+      result = described_class.check_exit_conditions(tracker)
+      expect(result[:reason]).to eq('EARLY_TREND_FAILURE')
+    end
+  end
+
+  describe 'Premium Momentum Failure' do
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        risk: {
+          exits: {
+            premium_momentum_failure: { enabled: true },
+            smc_navigator_exit: { enabled: false },
+            structure_invalidation: { enabled: false }
+          }
+        },
+        exit: { early_exit: { enabled: false } }
+      })
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({ pnl_pct: 0.05, ltp: 150.0 })
+    end
+
+    it 'triggers when PremiumMomentumFailureRule evaluates to exit' do
+      # Avoid mocking the rule directly as it complicates RuleResult return types.
+      # Instead, mock the underlying legacy method that the rule delegates to.
+      allow(described_class).to receive(:premium_momentum_failure_hit?).and_return(true)
+
+      result = described_class.check_exit_conditions(tracker)
+      expect(result[:reason]).to eq('PREMIUM_MOMENTUM_FAILURE')
+    end
+  end
+
+  describe 'SMC Navigator Exit' do
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        risk: {
+          exits: {
+            smc_navigator_exit: { enabled: true, min_hold_seconds: 0, min_confidence: 0.6 },
+            premium_momentum_failure: { enabled: false },
+            structure_invalidation: { enabled: false }
+          }
+        },
+        exit: { early_exit: { enabled: false } }
+      })
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({ pnl_pct: 0.05, ltp: 150.0 })
+    end
+
+    it 'triggers when Smc::Navigator suggests exit with high confidence' do
+      nav_result = double(suggest_exit?: true, confidence: 0.8, reason: 'LTF_CHOCH')
+      allow(Smc::Navigator).to receive(:evaluate_exit).and_return(nav_result)
+
+      result = described_class.check_exit_conditions(tracker)
+      expect(result[:reason]).to include('SMC_NAVIGATOR_EXIT')
+    end
+  end
+
+  describe 'Time-Based Exit' do
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        exit: {
+          time_based: { enabled: true, exit_time: '15:20' },
+          early_exit: { enabled: false },
+          trailing: { enabled: false }
+        },
+        risk: {
+          exits: {
+            premium_momentum_failure: { enabled: false },
+            smc_navigator_exit: { enabled: false },
+            structure_invalidation: { enabled: false }
+          }
+        }
+      })
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({ pnl_pct: 0.05 })
+    end
+
+    it 'triggers when current time is past exit time' do
+      travel_to(Time.zone.parse('15:21')) do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result[:reason]).to eq('TIME_BASED')
+      end
+    end
+
+    it 'does not trigger before exit time' do
+      travel_to(Time.zone.parse('15:19')) do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result).to be_nil
+      end
+    end
+  end
+
+  describe '.live_sl_price' do
+    let(:tracker) do
+      instance_double(PositionTracker, instrument: mock_instrument, watchable: nil, active?: true, id: 1,
+                                       entry_price: 200.0,
+                                       quantity: 50,
+                                       symbol: 'NIFTY24MAR22000CE',
+                                       meta: { 'index_key' => 'NIFTY' },
+                                       high_water_mark_pnl: 2_000.0)
+    end
+
+    context 'with adaptive drawdown tiers configured' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return(
+          exit: { trailing: { enabled: true, activation_profit: 0.035, drop_threshold: 0.025 } },
+          risk: {
+            institutional_trailing: {
+              nifty: {
+                adaptive_drawdown: [
+                  { min_profit: 0.03, drawdown: 0.06 },
+                  { min_profit: 0.15, drawdown: 0.10 }
+                ]
+              }
+            }
+          }
+        )
+      end
+
+      it 'derives the implied SL price from the active tier drawdown, not a stale static value' do
+        # peak_profit_pct = hwm_pnl / (entry * qty) = 2000 / 10000 = 0.20 -> tier {0.15, 0.10}
+        # allowed_drop_from_hwm = 0.10 / 0.20 = 0.5 -> pnl_floor = 2000 * 0.5 = 1000
+        # delta_pnl_needed = pnl(1800) - pnl_floor(1000) = 800 -> implied = 180 - 800/50
+        snapshot = { pnl: 1_800.0, hwm_pnl: 2_000.0 }
+        result = described_class.live_sl_price(tracker, snapshot, 180.0)
+        expect(result).to eq(164.0)
+      end
+
+      it 'returns nil when activation threshold has not been reached' do
+        snapshot = { pnl: 50.0, hwm_pnl: 50.0 } # peak_profit_pct = 0.005, below 0.035 activation
+        result = described_class.live_sl_price(tracker, snapshot, 201.0)
+        expect(result).to be_nil
+      end
+    end
+
+    context 'without adaptive tiers configured (index falls back to Orders::Analyzer)' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return(
+          exit: { trailing: { enabled: true, activation_profit: 0.035, drop_threshold: 0.025 } },
+          risk: {}
+        )
+        allow(Positions::ActiveCache.instance).to receive(:get_by_tracker_id).and_return(nil)
+      end
+
+      it 'delegates to Orders::Analyzer#recommended_sl' do
+        snapshot = { pnl: 1_800.0, hwm_pnl: 2_000.0 }
+        allow_any_instance_of(Orders::Analyzer).to receive(:recommended_sl).and_return(175.5) # rubocop:disable RSpec/AnyInstance
+        result = described_class.live_sl_price(tracker, snapshot, 180.0)
+        expect(result).to eq(175.5)
+      end
+    end
+
+    context 'for a non-index instrument (simple drop-from-peak rule)' do
+      let(:tracker) do
+        instance_double(PositionTracker, instrument: mock_instrument, watchable: nil, active?: true, id: 1,
+                                         entry_price: 200.0,
+                                         quantity: 50,
+                                         symbol: 'RELIANCE24MAR3000CE',
+                                         meta: {},
+                                         high_water_mark_pnl: 2_000.0)
+      end
+
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return(
+          exit: { trailing: { enabled: true, activation_profit: 0.035, drop_threshold: 0.10 } },
+          risk: {}
+        )
+      end
+
+      it 'derives the implied SL price from the flat drop_threshold' do
+        # pnl_floor = hwm(2000) * (1 - 0.10) = 1800 -> delta = 1900 - 1800 = 100 -> implied = 180 - 100/50
+        snapshot = { pnl: 1_900.0, hwm_pnl: 2_000.0 }
+        result = described_class.live_sl_price(tracker, snapshot, 180.0)
+        expect(result).to eq(178.0)
+      end
+    end
+
+    it 'returns nil when trailing is disabled in config' do
+      allow(AlgoConfig).to receive(:fetch).and_return(exit: { trailing: { enabled: false } }, risk: {})
+      result = described_class.live_sl_price(tracker, { pnl: 1_800.0, hwm_pnl: 2_000.0 }, 180.0)
+      expect(result).to be_nil
+    end
+  end
+
+  describe 'fee-aware exit targets (Scalp::FeeAwareExitTargets integration)' do
+    # SENSEX fee-hostile fixture: entry 50 x qty 20 = 1,000 value.
+    # fees 40/1000 = 0.04; estimated spread (50 x 0.01 x 2)/50 = 0.02 -> friction 0.06
+    # -> fee floor 3 x 0.06 = 0.18, above the 0.05 static target.
+    let(:fee_hostile_tracker) do
+      instance_double(
+        PositionTracker,
+        id: 9, active?: true, entry_price: 50.0, quantity: 20,
+        current_pnl_pct: 0.0, meta: {}, order_no: 'ORD-9',
+        symbol: 'SENSEX24SEP81000CE', instrument: mock_instrument, watchable: nil,
+        side: 'long_ce', created_at: 5.minutes.ago,
+        last_pnl_rupees: 0.0, high_water_mark_pnl: 0.0
+      )
+    end
+
+    before do
+      described_class.instance_variable_set(:@exit_config, nil)
+      described_class.instance_variable_set(:@exit_config_expires_at, nil)
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        risk: {
+          scalp_exit: { enabled: true },
+          percentage_pnl_exit: { enabled: true, target_pct: 0.05 }
+        },
+        broker_fees: { enabled: true, fee_per_order: 20 },
+        position_sizing: { drawdown: { emergency_peak_loss_exit: false } },
+        exit: {},
+        indices: []
+      })
+      allow(Live::TickQuery).to receive(:for).and_return(nil) # no live quote -> spread estimate
+      allow(described_class).to receive_messages(
+        portfolio_floor_breach?: false, emergency_peak_loss_exit_triggered?: false
+      )
+    end
+
+    context 'when the position is fee-hostile (cheap premium, small lot)' do
+      it 'raises the percentage target to cover friction — 15% profit no longer exits' do
+        # fee-aware target = max(0.05, 3 x 0.0695) = 0.2084 (statutory fees
+        # 49.48/1000 + spread 0.02); pnl 0.15 < 0.2084
+        snapshot = { pnl_pct: 0.15, ltp: 57.5, pnl: 150.0, hwm_pnl: 0.0 }
+        expect(described_class.send(:percentage_pnl_exit_hit?, fee_hostile_tracker, snapshot)).to be false
+      end
+
+      it 'exits once profit clears the fee-aware floor' do
+        snapshot = { pnl_pct: 0.22, ltp: 61.0, pnl: 220.0, hwm_pnl: 0.0 }
+        expect(described_class.send(:percentage_pnl_exit_hit?, fee_hostile_tracker, snapshot)).to be true
+      end
+    end
+
+    context 'when scalp_exit is disabled (opt-out restores static behaviour)' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          risk: { percentage_pnl_exit: { enabled: true, target_pct: 0.05 } },
+          exit: {}
+        })
+      end
+
+      it 'uses the static target — 15% profit exits again' do
+        snapshot = { pnl_pct: 0.15, ltp: 57.5, pnl: 150.0, hwm_pnl: 0.0 }
+        expect(described_class.send(:percentage_pnl_exit_hit?, fee_hostile_tracker, snapshot)).to be true
+      end
+    end
+
+    context 'when the fee layer raises a domain error' do
+      it 'falls back to the base target without taking the waterfall down' do
+        allow(Scalp::FeeAwareExitTargets).to receive(:new).and_raise(Errors::ConfigurationError, 'garbage config')
+        allow(Rails.logger).to receive(:error)
+
+        snapshot = { pnl_pct: 0.06, ltp: 53.0, pnl: 60.0, hwm_pnl: 0.0 }
+        expect(described_class.send(:percentage_pnl_exit_hit?, fee_hostile_tracker, snapshot)).to be true
+        expect(Rails.logger).to have_received(:error).with(/fee-aware target unavailable/)
+      end
+    end
+  end
+
+  describe 'chain telemetry + momentum scaling in evaluate_trailing_stop' do
+    let(:config) do
+      {
+        stop_loss: { type: 'static', value: 0.50 },
+        take_profit: 5.0,
+        trailing: { enabled: true, type: 'adaptive', activation_profit: 0.10, drop_threshold: 0.05 },
+        early_exit: { enabled: false, profit_threshold: 0.07 },
+        premium_momentum_failure: { enabled: false },
+        time_based: { enabled: false, exit_time: '15:20' }
+      }
+    end
+
+    # hwm 2000 / entry_value 10000 = 20% >= 10% activation -> armed
+    let(:armed_snapshot) { { ltp: 130.0, pnl_pct: 0.30, pnl: 1_500.0, hwm_pnl: 2_000.0 } }
+
+    before do
+      described_class.instance_variable_set(:@exit_config, nil)
+      described_class.instance_variable_set(:@exit_config_expires_at, nil)
+      allow(described_class).to receive(:exit_config).and_return(config)
+      allow(AlgoConfig).to receive(:fetch).and_return({ risk: {}, exit: {} })
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(nil)
+    end
+
+    context 'when the chain layer signals an exit (IV collapse / gamma wall)' do
+      it 'returns a chain_context_exit' do
+        allow(described_class).to receive(:evaluate_underlying_context).and_return({ action: :hold, multiplier: 1.0, reason: nil })
+        allow(Scalp::ChainTrailingContext).to receive(:evaluate)
+          .and_return({ action: :exit, multiplier: 1.0, reason: 'SCALP_IV_COLLAPSE (test)' })
+
+        result = described_class.evaluate_trailing_stop(tracker, armed_snapshot)
+        expect(result).to include(exit: true, path: 'chain_context_exit')
+        expect(result[:reason]).to include('SCALP_IV_COLLAPSE')
+      end
+    end
+
+    context 'when underlying momentum scales and the chain layer widens' do
+      it 'multiplies both into the trailing multiplier (0.5 x 1.2 = 0.6)' do
+        allow(described_class).to receive(:evaluate_underlying_context)
+          .and_return({ action: :tighten, multiplier: 0.5, reason: 'UNDERLYING_MOMENTUM_FADING' })
+        allow(Scalp::ChainTrailingContext).to receive(:evaluate)
+          .and_return({ action: :widen, multiplier: 1.2, reason: 'SCALP_CONVEXITY' })
+        allow(described_class).to receive(:trailing_stop_hit?)
+
+        expect(described_class.evaluate_trailing_stop(tracker, armed_snapshot)).to be_nil
+        expect(described_class).to have_received(:trailing_stop_hit?)
+          .with(tracker, armed_snapshot, tightening_multiplier: 0.6)
+      end
+    end
+
+    context 'when the evaluator returns :scale (strong momentum widens the trail)' do
+      it 'passes a multiplier above 1.0 through to the trailing check' do
+        allow(described_class).to receive(:evaluate_underlying_context)
+          .and_return({ action: :scale, multiplier: 1.4, reason: 'UNDERLYING_MOMENTUM_STRONG' })
+        allow(Scalp::ChainTrailingContext).to receive(:evaluate)
+          .and_return({ action: :hold, multiplier: 1.0, reason: nil })
+        allow(described_class).to receive(:trailing_stop_hit?)
+
+        expect(described_class.evaluate_trailing_stop(tracker, armed_snapshot)).to be_nil
+        expect(described_class).to have_received(:trailing_stop_hit?)
+          .with(tracker, armed_snapshot, tightening_multiplier: 1.4)
+      end
+    end
+
+    context 'when trailing is not armed' do
+      it 'skips both context layers entirely' do
+        unarmored = { ltp: 105.0, pnl_pct: 0.05, pnl: 250.0, hwm_pnl: 100.0 } # peak 1% < 10%
+        allow(described_class).to receive(:evaluate_underlying_context)
+        allow(Scalp::ChainTrailingContext).to receive(:evaluate)
+        allow(described_class).to receive(:trailing_stop_hit?).and_return(false)
+
+        expect(described_class.evaluate_trailing_stop(tracker, unarmored)).to be_nil
+        expect(described_class).not_to have_received(:evaluate_underlying_context)
+        expect(Scalp::ChainTrailingContext).not_to have_received(:evaluate)
+      end
     end
   end
 end

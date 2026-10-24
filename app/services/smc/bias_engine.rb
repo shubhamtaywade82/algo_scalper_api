@@ -72,26 +72,18 @@ module Smc
 
       ltf_series = @instrument.candles(interval: LTF_INTERVAL)
 
-      htf_trimmed = trim_series(htf_series, max_candles: HTF_CANDLES)
-      mtf_trimmed = trim_series(mtf_series, max_candles: MTF_CANDLES)
-      ltf_trimmed = trim_series(ltf_series, max_candles: LTF_CANDLES)
+      htf = Smc::Context.new(trim_series(htf_series, max_candles: HTF_CANDLES))
+      mtf = Smc::Context.new(trim_series(mtf_series, max_candles: MTF_CANDLES))
+      ltf = Smc::Context.new(trim_series(ltf_series, max_candles: LTF_CANDLES))
 
-      Rails.logger.warn("[Smc::BiasEngine] details: HTF series unavailable for #{@instrument.symbol_name}") if htf_trimmed.nil?
-      Rails.logger.warn("[Smc::BiasEngine] details: MTF series unavailable for #{@instrument.symbol_name}") if mtf_trimmed.nil?
-      Rails.logger.warn("[Smc::BiasEngine] details: LTF series unavailable for #{@instrument.symbol_name}") if ltf_trimmed.nil?
-
-      htf = htf_trimmed ? Smc::Context.new(htf_trimmed) : nil
-      mtf = mtf_trimmed ? Smc::Context.new(mtf_trimmed) : nil
-      ltf = ltf_trimmed ? Smc::Context.new(ltf_trimmed) : nil
-
-      avrz = ltf_series ? Avrz::Detector.new(ltf_series) : nil
+      avrz = Avrz::Detector.new(ltf_series)
 
       base = {
         decision: decision_value,
         timeframes: {
-          htf: { interval: HTF_INTERVAL, context: htf&.to_h },
-          mtf: { interval: MTF_INTERVAL, context: mtf&.to_h },
-          ltf: { interval: LTF_INTERVAL, context: ltf&.to_h, avrz: avrz&.to_h }
+          htf: { interval: HTF_INTERVAL, context: htf.to_h },
+          mtf: { interval: MTF_INTERVAL, context: mtf.to_h },
+          ltf: { interval: LTF_INTERVAL, context: ltf.to_h, avrz: avrz.to_h }
         }
       }
       merge_smc_confluence_mtf!(base, htf_series, mtf_series, ltf_series)
@@ -99,7 +91,7 @@ module Smc
 
     # Analyze SMC/AVRZ data with AI (Ollama)
     # Returns AI analysis of the market structure, liquidity, and trading bias
-    # Uses AiAnalyzer with pre-fetched data and single-pass analysis
+    # Uses new AiAnalyzer with chat completion, history, and tool calling
     def analyze_with_ai(stream: false, &)
       return nil unless ai_enabled?
 
@@ -115,8 +107,7 @@ module Smc
     def ai_enabled?
       AlgoConfig.fetch.dig(:ai, :enabled) == true &&
         Services::Ai::OllamaClient.instance.enabled?
-    rescue StandardError => e
-      Rails.logger.warn("[Smc::BiasEngine] ai_enabled? check failed: #{e.class} - #{e.message}")
+    rescue StandardError
       false
     end
 
@@ -141,17 +132,7 @@ module Smc
       sleep(@delay_seconds) if @delay_seconds.positive?
 
       series = @instrument.candles(interval: interval)
-      if series.nil?
-        Rails.logger.warn("[Smc::BiasEngine] No candle data for #{@instrument.symbol_name} interval=#{interval} — skipping context build")
-        return nil
-      end
-
       trimmed = trim_series(series, max_candles: max_candles)
-      if trimmed.nil?
-        Rails.logger.warn("[Smc::BiasEngine] trim_series returned nil for #{@instrument.symbol_name} interval=#{interval}")
-        return nil
-      end
-
       Smc::Context.new(trimmed)
     end
 
@@ -172,8 +153,7 @@ module Smc
 
     def smc_confluence_digest_enabled?
       AlgoConfig.fetch.dig(:signals, :enable_smc_confluence_digest) == true
-    rescue StandardError => e
-      Rails.logger.warn("[Smc::BiasEngine] smc_confluence_digest_enabled? check failed: #{e.class} - #{e.message}")
+    rescue StandardError
       false
     end
 
@@ -205,20 +185,14 @@ module Smc
     end
 
     def htf_bias_valid?(ctx)
-      return false if ctx.nil?
-
       ctx.pd.discount? || ctx.pd.premium?
     end
 
     def mtf_aligns?(htf, mtf)
-      return false if htf.nil? || mtf.nil?
-
       htf.structure.trend == mtf.structure.trend || mtf.structure.choch?
     end
 
     def ltf_entry(htf, _mtf, ltf)
-      return :no_trade if htf.nil? || ltf.nil?
-
       # State-machine driven entry: Trap -> Expansion -> Trend -> Entry Zone
       # We check if LTF is in a phase that supports the bias
 
@@ -250,9 +224,9 @@ module Smc
         decision: decision.to_s,
         contexts: {
           decision: decision.to_s,
-          htf: htf&.to_h,
-          mtf: mtf&.to_h,
-          ltf: ltf&.to_h
+          htf: htf.to_h,
+          mtf: mtf.to_h,
+          ltf: ltf.to_h
         },
         price: current_price
       )
@@ -273,8 +247,11 @@ module Smc
       reasons
     end
 
+    # Best-known price for the alert payload, or nil when no source has one.
+    # A fabricated 0.0 here used to flow into signal events and duplicate-suppression
+    # math (error-handling review 2026-09, wave 2).
     def current_price
-      @instrument.ltp&.to_f || @instrument.latest_ltp&.to_f || 0.0
+      @instrument.ltp || @instrument.latest_ltp
     end
   end
 end

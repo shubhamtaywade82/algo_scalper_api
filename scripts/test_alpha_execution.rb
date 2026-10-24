@@ -1,8 +1,10 @@
+# frozen_string_literal: true
+
 # scripts/test_alpha_execution.rb
 
 # 1. Setup a valid signal for a contract we know exists
 # We'll use a realistic strike for NIFTY (around 23200)
-derivative = Derivative.where(underlying_symbol: 'NIFTY').where('expiry_date >= ?', Date.today).first
+derivative = Derivative.where(underlying_symbol: 'NIFTY').where(expiry_date: Time.zone.today..).first
 
 unless derivative
   puts "❌ Could not find any NIFTY derivative. Please check your DB."
@@ -22,10 +24,10 @@ signal = {
   alpha_source: :momentum,
   timestamp: Time.current.iso8601,
   lot_size: 75,
-  entry_price: 23205.0, # Index price
-  underlying_ltp: 23205.0,
-  stop_loss: 23150.0,
-  target: 23300.0
+  entry_price: 23_205.0, # Index price
+  underlying_ltp: 23_205.0,
+  stop_loss: 23_150.0,
+  target: 23_300.0
 }
 
 puts "🚀 Executing Alpha Signal via AlphaExecutionService..."
@@ -37,7 +39,7 @@ puts "--- Execution Result ---"
 puts "Status: #{result[:status]}"
 if result[:status] == :success
   puts "Order ID: #{result[:order_id]}"
-  
+
   # 4. Verify Side Effects
   tracker = PositionTracker.find_by(order_no: result[:order_id])
   if tracker
@@ -47,14 +49,14 @@ if result[:status] == :success
   else
     puts "❌ Order placed but PositionTracker was NOT found (check InstrumentHelpers)."
   end
-  
+
   audit = AlphaSignal.find_by(order_id: result[:order_id])
   if audit
     puts "✅ AlphaSignal Audit recorded: Source=#{audit.alpha_source}, Status=#{audit.status}"
   else
     puts "❌ AlphaSignal audit entry was NOT found."
   end
-  
+
 else
   puts "❌ Execution Failed: #{result[:reason]}"
 end

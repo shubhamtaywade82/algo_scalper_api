@@ -2,7 +2,7 @@
 
 require 'rails_helper'
 
-# rubocop:disable RSpec/DescribeClass -- route behavior, not a single class
+# rubocop:disable-next RSpec/DescribeClass -- route behavior, not a single class
 RSpec.describe 'Legacy SMC route redirect' do
   it 'returns 301 to /api/smc/decision with query preserved' do
     get '/smc/decision', params: { security_id: '13', segment: 'IDX_I', details: '1' }
@@ -14,4 +14,3 @@ RSpec.describe 'Legacy SMC route redirect' do
     expect(q).to include('security_id' => '13', 'segment' => 'IDX_I', 'details' => '1')
   end
 end
-# rubocop:enable RSpec/DescribeClass

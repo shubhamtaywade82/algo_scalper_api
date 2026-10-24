@@ -169,7 +169,6 @@ indices:
 paper_trading:
   enabled: true
   balance: 100000
-  realized_scope: cumulative
 
 # Option Chain (unchanged)
 option_chain:

@@ -6,7 +6,7 @@ module Entries
     class EarliestEntryGuard
       include BaseGuard
 
-      DEFAULT_EARLIEST = '09:45'
+      DEFAULT_EARLIEST = '09:30'
 
       def self.call(context)
         index_cfg = context[:index_cfg] || {}

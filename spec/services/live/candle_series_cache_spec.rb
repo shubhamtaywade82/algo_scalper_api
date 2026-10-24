@@ -12,7 +12,7 @@ RSpec.describe Live::CandleSeriesCache do
   let(:candle_payload) do
     {
       'updated_at' => Time.current.to_i,
-      'candles'    => Array.new(25) do |i|
+      'candles' => Array.new(25) do |i|
         ts = (Time.zone.parse('2026-06-19 09:15:00') + i.minutes).utc.iso8601(3)
         { 'timestamp' => ts, 'open' => 100.0 + i, 'high' => 106.0 + i,
           'low' => 98.0 + i, 'close' => 104.0 + i, 'volume' => 1000, 'oi' => 0 }
@@ -249,7 +249,7 @@ RSpec.describe Live::CandleSeriesCache do
 
       it 'creates a new forming candle' do
         described_class.append_tick(instrument: instrument, tick: tick, interval: 5)
-        expect(redis_double).to have_received(:set) do |key, value, **_opts|
+        expect(redis_double).to have_received(:set) do |_key, value, **_opts|
           parsed = JSON.parse(value)
           expect(parsed['candles'].last['open']).to eq(250.0)
           expect(parsed['candles'].last['close']).to eq(250.0)
@@ -267,7 +267,7 @@ RSpec.describe Live::CandleSeriesCache do
       let(:existing_payload) do
         {
           'updated_at' => Time.current.to_i,
-          'candles'    => [
+          'candles' => [
             { 'timestamp' => current_bucket_iso, 'open' => 240.0, 'high' => 245.0,
               'low' => 238.0, 'close' => 243.0, 'volume' => 200, 'oi' => 0 }
           ]
@@ -345,7 +345,7 @@ RSpec.describe Live::CandleSeriesCache do
     it 'merges with existing cached candles without duplicates' do
       existing = {
         'updated_at' => Time.current.to_i,
-        'candles'    => [
+        'candles' => [
           { 'timestamp' => Time.zone.parse('2026-06-19 09:15:00').utc.iso8601(3),
             'open' => 99.0, 'high' => 100.0, 'low' => 97.0, 'close' => 99.5, 'volume' => 800, 'oi' => 0 }
         ]

@@ -112,12 +112,16 @@ module Backtest
         normalized = params.with_indifferent_access
 
         # Try different naming conventions for period
-        period = normalized[:atr_period] || normalized[:st_atr] ||
-                 normalized[:supertrend_period] || normalized[:period]
+        period = normalized[:atr_period] || normalized['atr_period'] ||
+                 normalized[:st_atr] || normalized['st_atr'] ||
+                 normalized[:supertrend_period] || normalized['supertrend_period'] ||
+                 normalized[:period] || normalized['period']
 
         # Try different naming conventions for multiplier
-        multiplier = normalized[:multiplier] || normalized[:st_mult] ||
-                     normalized[:supertrend_multiplier] || normalized[:base_multiplier]
+        multiplier = normalized[:multiplier] || normalized['multiplier'] ||
+                     normalized[:st_mult] || normalized['st_mult'] ||
+                     normalized[:supertrend_multiplier] || normalized['supertrend_multiplier'] ||
+                     normalized[:base_multiplier] || normalized['base_multiplier']
 
         return nil unless period && multiplier
 
@@ -138,7 +142,9 @@ module Backtest
         normalized = params.with_indifferent_access
 
         # Try different naming conventions
-        normalized[:adx_thresh] || normalized[:adx_1m_threshold] || normalized[:adx_min_strength]
+        normalized[:adx_thresh] || normalized['adx_thresh'] ||
+          normalized[:adx_1m_threshold] || normalized['adx_1m_threshold'] ||
+          normalized[:adx_min_strength] || normalized['adx_min_strength']
       end
     end
   end

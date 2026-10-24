@@ -6,7 +6,7 @@ FORBIDDEN_PATHS = [
   "app/services/exit",
   "app/services/live",
   "app/services/capital"
-]
+].freeze
 
 changed_files = `git diff --name-only origin/main`.split("\n")
 

@@ -149,9 +149,9 @@ RSpec.describe Entries::Guards::SizingGuard do
         }
       end
 
-      it 'defaults to scale_ready' do
+      it 'blocks — deployment authorization must be explicit, never assumed' do
         result = described_class.call(context)
-        expect(result).to eq(Entries::EntryGuardPipeline::PASS)
+        expect(result).to include(blocked: /permission_unresolved/)
       end
     end
 
@@ -267,11 +267,22 @@ RSpec.describe Entries::Guards::SizingGuard do
       end
     end
 
-    context 'when SafeNumeric.to_non_negative_integer caps the permission_cap' do
+    context 'when the allocator returns unresolvable garbage' do
+      before do
+        allow(Capital::Allocator).to receive(:qty_for).and_return('not-a-number')
+      end
+
+      it 'blocks with its own reason instead of masquerading as quantity 0' do
+        result = described_class.call(context)
+        expect(result).to include(blocked: /allocator_quantity_invalid/)
+      end
+    end
+
+    context 'when the profile permission cap is missing' do
       let(:profile) do
         {
           allow_execution_only: true,
-          max_lots_by_permission: { scale_ready: nil }
+          max_lots_by_permission: { execution_only: 2 } # no :scale_ready key
         }
       end
 
@@ -279,11 +290,8 @@ RSpec.describe Entries::Guards::SizingGuard do
         allow(Trading::InstrumentExecutionProfile).to receive(:for).with('NIFTY').and_return(profile)
       end
 
-      it 'handles nil permission cap gracefully' do
-        allow(Trading::CapitalAllocator).to receive(:max_lots).and_return(0)
-
-        result = described_class.call(context)
-        expect(result).to include(blocked: 'capital_sizing_cap_zero')
+      it 'raises — the frozen profile table is corrupt, not a runtime condition' do
+        expect { described_class.call(context) }.to raise_error(Errors::InvariantViolation, /scale_ready/)
       end
     end
   end

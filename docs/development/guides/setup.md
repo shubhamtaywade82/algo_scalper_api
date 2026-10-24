@@ -26,10 +26,7 @@ DHAN_TOTP_SECRET="base32-totp-secret"
 
 # Trading Daemon Control
 ENABLE_TRADING_SERVICES=true                   # required for trading daemon
-
-# Paper by default: omit LIVE_TRADING or set false. Live gateway path only when LIVE_TRADING=true
-# LIVE_TRADING=false
-# SIGNAL_TIER=standard   # exploratory | standard | selective — merges signal_tier_presets.yml
+# DISABLE_TRADING_SERVICES=1                   # force-disable trading services if set
 
 # Jobs Control (Solid Queue worker)
 ENABLE_JOBS=true                              # controls the jobs process invoked via ./bin/dev
@@ -44,14 +41,9 @@ The DhanHQ initializer normalizes `DHAN_CLIENT_ID` / `CLIENT_ID` and `DHAN_ACCES
 
 ## 3. Trading Configuration (`config/algo.yml`)
 
-`config/algo.yml` is the primary source of truth for trading behaviour. At runtime `AlgoConfig.fetch` (30-second cache) builds effective config in this order:
+`config/algo.yml` is the primary source of truth for trading behaviour. At runtime it is merged with **run-mode profiles** and overrides from the `settings` table via `AlgoConfig.fetch` (30-second cache).
 
-1. Base `config/algo.yml`
-2. DB `settings.algo_config_overrides` (JSON, deep-merged)
-3. **`config/signal_tier_presets.yml`** for the active tier: `SIGNAL_TIER` env or `signals.signal_tier` (`exploratory` | `standard` | `selective`)
-4. **`LIVE_TRADING` env** — forces `paper_trading.enabled` (paper when unset/false; live when true)
-
-There are **no** separate `run_mode` keys or `config/profiles/*.yml` overlays. Tune behaviour in YAML, DB overrides, or tier presets. See [Testing profiles](../testing_profiles.md) for historical note.
+- **Run mode**: Set `run_mode: production` (default), `exit_testing`, or `entry_testing` in `algo.yml`, or use `ENV RUN_MODE=...`. See [Testing profiles](../testing_profiles.md) for exit-testing (frequent entries) vs entry-testing (relaxed guards) vs production.
 
 Key sections:
 
@@ -65,7 +57,8 @@ Key sections:
 - **`trade_limits`**: Daily trade count, exposure and loss limits.
 - **`chain_analyzer`**: Option chain scoring configuration used by `Options::ChainAnalyzer`.
 - **`paper_trading`**:
-  - Effective flag after `LIVE_TRADING` — `true` → `Orders::GatewayPaper`; `false` → `Orders::GatewayLive` (restart after change)
+  - `paper_trading.enabled: true` → paper mode (`Orders::GatewayPaper`)
+  - `paper_trading.enabled: false` → live mode (`Orders::GatewayLive`)
 - **`dhanhq`**:
   - `dhanhq.enable_orders: true` must be set (or `ENABLE_ORDER=true`) before any real orders are sent.
 
@@ -85,7 +78,7 @@ The jobs process can be skipped by setting `ENABLE_JOBS=false` in your environme
 
 This uses `Procfile.dev` to start:
 
-- `web` — Rails API server on port 3011
+- `web` — Rails API server on port 3001
 - `trading` — trading daemon (`ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon`)
 - `jobs` — Solid Queue worker
 - `dashboard` — Next.js dashboard (in `dashboard/`)
@@ -95,7 +88,7 @@ This uses `Procfile.dev` to start:
 If you only need the Rails API (no trading threads), you can start the web server alone:
 
 ```bash
-bin/rails server -p 3011
+bin/rails server -p 3001
 ```
 
 In this mode the trading daemon is not started; endpoints still function for health checks, settings, dashboard reads, etc.
@@ -117,8 +110,8 @@ The daemon will:
 
 To validate strategies safely:
 
-- Omit `LIVE_TRADING` or set `LIVE_TRADING=false` so `paper_trading.enabled` stays forced true.
-- Prefer `dhanhq.enable_orders: false` and omit `PLACE_ORDER` (or keep it unset) so live-path dry-runs stay safe if you ever flip `LIVE_TRADING`.
+- Ensure `paper_trading.enabled: true` in `config/algo.yml`.
+- Ensure `dhanhq.enable_orders: false` (or omit/leave `ENABLE_ORDER` unset) so that all orders are treated as dry-run in logs.
 
 In this configuration:
 

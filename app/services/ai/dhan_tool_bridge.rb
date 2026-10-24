@@ -6,10 +6,25 @@ module Ai
   # This uses the local `dhanhq-mcp` adapter for validated DhanHQ tool specs
   # and routing, while keeping auth, risk, and execution controlled by the
   # Rails app and its existing Dhan integration.
+  #
+  # The adapter gem is PATH-INSTALLED on the operator workstation and is not
+  # in this repo's Gemfile (it referenced /home/nemesis/... which does not
+  # exist on CI or other machines). The class therefore guards on the
+  # adapter's presence: without it, tools_for_ollama degrades to [] and call
+  # returns a structured adapter_unavailable failure instead of raising
+  # NameError at load/first-use.
   class DhanToolBridge
-    MCP_TOOL_NAMES = Dhanhq::Mcp::TOOL_SPEC.filter_map { |t| t[:name] }.freeze
+    ADAPTER_AVAILABLE = begin
+      defined?(Dhanhq::Mcp) ? true : false
+    rescue StandardError
+      false
+    end
 
     class << self
+      def adapter_available?
+        ADAPTER_AVAILABLE
+      end
+
       def context
         @context ||= Dhanhq::Mcp::Context.new(client: dhanhq_client)
       end
@@ -18,48 +33,24 @@ module Ai
         @dhanhq_client ||= DhanHQ::Client.new(api_type: :option_chain)
       end
 
-      # Schema overrides for tools that need better descriptions or enums
-      TOOL_OVERRIDES = {
-        'instrument.find' => {
-          description: 'Find instrument by symbol. Use exchange_segment IDX_I for indices (NIFTY, BANKNIFTY, SENSEX), NSE_EQ for stocks, NSE_FNO for F&O.',
-          parameters: {
-            type: 'object',
-            properties: {
-              exchange_segment: { type: 'string', enum: %w[NSE_EQ NSE_FNO NSE_CURRENCY NSE_COMM BSE_EQ BSE_FNO BSE_CURRENCY MCX_COMM IDX_I] },
-              symbol: { type: 'string', description: 'Trading symbol, e.g. NIFTY, BANKNIFTY, SENSEX, RELIANCE' }
-            },
-            required: %w[exchange_segment symbol]
-          }
-        },
-        'option.chain' => {
-          description: 'Fetch option chain for an expiry. Returns last_price and strikes with call/put data.',
-          parameters: {
-            type: 'object',
-            properties: {
-              exchange_segment: { type: 'string' },
-              symbol: { type: 'string' },
-              expiry: { type: 'string', description: 'Expiry date YYYY-MM-DD' }
-            },
-            required: %w[exchange_segment symbol expiry]
-          }
-        }
-      }.freeze
-
       def tools_for_ollama
+        return [] unless adapter_available?
+
         Dhanhq::Mcp::TOOL_SPEC.filter_map do |tool|
-          override = TOOL_OVERRIDES[tool[:name]]
           {
             type: "function",
             function: {
               name: tool[:name],
-              description: override&.dig(:description) || tool[:description],
-              parameters: override&.dig(:parameters) || tool[:input_schema]
+              description: tool[:description],
+              parameters: tool[:input_schema]
             }
           }
         end
       end
 
       def call(tool_name, arguments = {})
+        return unavailable_result(tool_name) unless adapter_available?
+
         validated_args = arguments.is_a?(Hash) ? arguments : {}
 
         result = Dhanhq::Mcp::Router.call(
@@ -78,6 +69,17 @@ module Ai
       def reset!
         @context = nil
         @dhanhq_client = nil
+      end
+
+      private
+
+      def unavailable_result(tool_name)
+        Rails.logger.error(
+          '[Ai::DhanToolBridge] dhanhq-mcp adapter is not installed ' \
+          "(tool=#{tool_name}) — add the gem to the Gemfile to enable MCP tool bridging"
+        )
+        { error: 'adapter_unavailable', tool_name: tool_name,
+          message: 'dhanhq-mcp adapter gem is not installed' }
       end
     end
   end

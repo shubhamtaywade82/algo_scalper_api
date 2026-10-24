@@ -21,14 +21,21 @@ RSpec.describe Entries::AdvisoryLock do
 
     it 'serializes concurrent callers on the same index key' do
       order = Queue.new
+      t1_acquired = Queue.new
       t1 = Thread.new do
         described_class.with_index_lock('BANKNIFTY') do
           order << :t1_start
+          t1_acquired << true
           sleep 0.05
           order << :t1_end
         end
       end
-      sleep 0.01 # ensure t1 acquires first
+      # Wait until t1 demonstrably HOLDS the lock before launching t2 — a fixed
+      # head-start sleep races t1's connection setup (pool checkout + fresh
+      # connection establishment can exceed it on a loaded host) and can hand
+      # the lock to t2 first, failing the order assertion even though the lock
+      # serializes correctly.
+      t1_acquired.pop
       t2 = Thread.new do
         described_class.with_index_lock('BANKNIFTY') do
           order << :t2_start

@@ -64,7 +64,7 @@ RSpec.describe Indicators::BaseIndicator do
 
       it 'returns true for candles within trading hours' do
         candle = Candle.new(
-          ts: Time.zone.parse('2024-01-01 10:30:00 IST'),
+          timestamp: Time.zone.parse('2024-01-01 10:30:00 IST'),
           open: 22_000,
           high: 22_050,
           low: 21_980,
@@ -76,7 +76,7 @@ RSpec.describe Indicators::BaseIndicator do
 
       it 'returns false for candles outside trading hours' do
         candle = Candle.new(
-          ts: Time.zone.parse('2024-01-01 09:00:00 IST'),
+          timestamp: Time.zone.parse('2024-01-01 09:00:00 IST'),
           open: 22_000,
           high: 22_050,
           low: 21_980,
@@ -92,7 +92,7 @@ RSpec.describe Indicators::BaseIndicator do
 
       it 'returns true for all candles' do
         candle = Candle.new(
-          ts: Time.zone.parse('2024-01-01 09:00:00 IST'),
+          timestamp: Time.zone.parse('2024-01-01 09:00:00 IST'),
           open: 22_000,
           high: 22_050,
           low: 21_980,

@@ -18,9 +18,9 @@ RSpec.describe Research::StrikeResolver do
     it 'builds strikes from ATM-max_distance to ATM+max_distance' do
       candidates = described_class.candidates(symbol: 'NIFTY', spot: 24_982, option_type: 'CE', max_distance: 2)
 
-      expect(candidates.map { |c| c[:distance] }).to eq([-2, -1, 0, 1, 2])
-      expect(candidates.map { |c| c[:actual_strike] }).to eq([24_900, 24_950, 25_000, 25_050, 25_100])
-      expect(candidates.map { |c| c[:strike_label] }).to eq(%w[ATM-2 ATM-1 ATM ATM+1 ATM+2])
+      expect(candidates.pluck(:distance)).to eq([-2, -1, 0, 1, 2])
+      expect(candidates.pluck(:actual_strike)).to eq([24_900, 24_950, 25_000, 25_050, 25_100])
+      expect(candidates.pluck(:strike_label)).to eq(%w[ATM-2 ATM-1 ATM ATM+1 ATM+2])
     end
   end
 

@@ -59,4 +59,33 @@ RSpec.describe Notifications::TelegramNotifier do
       end
     end
   end
+
+  describe "formatting and parse_mode" do
+    before do
+      allow(ENV).to receive(:fetch).with("TELEGRAM_CHAT_ID", nil).and_return("12345")
+      allow(ENV).to receive(:fetch).with("TELEGRAM_BOT_TOKEN", nil).and_return("fake_token")
+      allow(TelegramNotifier).to receive(:post).and_return(instance_double(Net::HTTPSuccess))
+    end
+
+    it "formats inline code containing underscores into HTML code tags" do
+      input = "verify your `CLIENT_ID`, `DHAN_PIN`, and `DHAN_TOTP_SECRET`"
+      formatted = Telegram::Formatter.to_html(input)
+      expect(formatted).to include("<code>CLIENT_ID</code>", "<code>DHAN_PIN</code>", "<code>DHAN_TOTP_SECRET</code>")
+    end
+
+    it "restores placeholders cleanly without leaking tokens" do
+      input = "verify your `CLIENT_ID`, `DHAN_PIN`, and `DHAN_TOTP_SECRET`"
+      formatted = Telegram::Formatter.to_html(input)
+      expect(formatted).not_to match(/@@|%%/)
+    end
+
+    it "sets parse_mode to HTML when using formatter even if Markdown was requested" do
+      TelegramNotifier.send_message("Hello `test_code`", parse_mode: "Markdown")
+
+      expect(TelegramNotifier).to have_received(:post).with(
+        "sendMessage",
+        hash_including(chat_id: "12345", parse_mode: "HTML")
+      )
+    end
+  end
 end

@@ -1,7 +1,6 @@
 import { For, Show } from 'solid-js'
 import { A } from '@solidjs/router'
 import { navigationConfig } from '../../lib/config/routes'
-import { useAuth } from '../../stores/useAuth'
 
 // SVG icon mapping — avoids external icon dependency
 const ICONS = {
@@ -34,11 +33,6 @@ const ICONS = {
   analysis: () => (
     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path d="M3 3v18h18M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-  ),
-  research: () => (
-    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path d="M9 2v6.5L4 20a1 1 0 0 0 1 1.5h14a1 1 0 0 0 1-1.5L15 8.5V2M9 2h6M8 15h8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   ),
   marketWatch: () => (
@@ -121,7 +115,8 @@ function NavItem(props) {
     <A
       href={props.item.href}
       end={props.item.end}
-      class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-200 group"
+      title={props.collapsed ? props.item.label : undefined}
+      class={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-200 group ${props.collapsed ? 'justify-center px-0' : ''}`}
       activeClass="bg-primary-500/15 text-primary-300 border border-primary-500/25 shadow-[0_0_15px_rgba(59,130,246,0.1)]"
       inactiveClass="text-gray-500 hover:text-gray-300 hover:bg-white/[0.03] border border-transparent"
     >
@@ -137,17 +132,15 @@ function NavItem(props) {
 
 export default function Sidebar(props) {
   const collapsed = () => props.collapsed
-  const auth = useAuth()
-  const user = () => auth.user()
 
   return (
-    <aside class={`fixed left-0 top-14 bottom-0 bg-gray-900/80 backdrop-blur-xl border-r border-white/5 transition-all duration-300 z-40 flex flex-col justify-between overflow-hidden ${collapsed() ? 'w-16' : 'w-56'}`}>
-      <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-4">
+    <aside class={`sticky top-0 h-screen shrink-0 bg-gray-900/80 backdrop-blur-xl border-r border-white/5 transition-all duration-300 z-40 flex flex-col justify-between ${collapsed() ? 'w-16' : 'w-56'}`}>
+      <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-4 scrollbar-thin">
         <For each={navigationConfig}>
-          {(section) => (
+          {(section, i) => (
             <div>
-              <Show when={!collapsed()}>
-                <div class="px-3 py-1.5 text-[8px] font-black text-gray-600 uppercase tracking-[0.2em]">
+              <Show when={!collapsed()} fallback={<Show when={i() > 0}><div class="mx-3 mb-2 border-t border-white/5" /></Show>}>
+                <div class="px-3 py-1.5 text-[8px] font-black text-gray-500 uppercase tracking-[0.2em]">
                   {section.section.label}
                 </div>
               </Show>
@@ -161,41 +154,6 @@ export default function Sidebar(props) {
             </div>
           )}
         </For>
-      </div>
-
-      {/* User profile footer */}
-      <div class={`shrink-0 border-t border-white/5 bg-gray-900/90 backdrop-blur-xl ${collapsed() ? 'p-2' : 'p-3'}`}>
-        <Show when={!collapsed() && user()} fallback={
-          <A href="/login" class="flex items-center justify-center gap-2 text-gray-500 hover:text-gray-300 transition-colors">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M13 12H3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <Show when={!collapsed()}>
-              <span class="text-[10px] font-bold uppercase tracking-widest">Sign In</span>
-            </Show>
-          </A>
-        }>
-          <div class="flex items-center gap-3">
-            <div class="w-7 h-7 rounded-full bg-primary-500/20 flex items-center justify-center shrink-0">
-              <span class="text-[10px] font-black text-primary-400">
-                {(user()?.name || 'U').charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <div class="flex-1 min-w-0">
-              <p class="text-[11px] font-bold text-gray-200 truncate">{user()?.name}</p>
-              <p class="text-[8px] text-gray-500 truncate">{user()?.email}</p>
-            </div>
-            <button
-              onClick={auth.logout}
-              class="text-gray-500 hover:text-rose-400 transition-colors shrink-0"
-              title="Sign out"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-          </div>
-        </Show>
       </div>
     </aside>
   )

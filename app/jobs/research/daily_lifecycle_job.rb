@@ -51,7 +51,7 @@ module Research
       Candles::Record
         .for_instrument(symbol)
         .for_timeframe("1m")
-        .where("ts >= ?", entry_ts)
+        .where(ts: entry_ts..)
         .order(:ts)
         .first
         &.open

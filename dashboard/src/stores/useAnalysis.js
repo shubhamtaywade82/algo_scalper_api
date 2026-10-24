@@ -1,64 +1,42 @@
 import { createSignal, onMount, onCleanup } from 'solid-js'
-import cable from '../cable'
+import { dashboardApiHeaders } from '../lib/dashboardApi'
 
 const INDICES = ['NIFTY', 'SENSEX', 'BANKNIFTY']
-const POLL_INTERVAL_MS = 10000
+const POLL_INTERVAL_MS = 30000
 
 export function useAnalysis() {
   // Per-index state maps: { NIFTY: signal, SENSEX: signal, BANKNIFTY: signal }
   const liveData = Object.fromEntries(INDICES.map(k => [k, createSignal(null)]))
-  const loading   = Object.fromEntries(INDICES.map(k => [k, createSignal(false)]))
-  const errors    = Object.fromEntries(INDICES.map(k => [k, createSignal(null)]))
+  const loadingMap = Object.fromEntries(INDICES.map(k => [k, createSignal(false)]))
+  const errors = Object.fromEntries(INDICES.map(k => [k, createSignal(null)]))
 
   // Historical / snapshot follow the selected Analysis tab (auto-loaded once per index per visit)
   const [activeIndex, setActiveIndex] = createSignal(null)
   const [historicalData, setHistoricalData] = createSignal(null)
   const [historicalLoading, setHistoricalLoading] = createSignal(false)
-  const [riskExplorerData, setRiskExplorerData] = createSignal(null)
-  const [riskExplorerLoading, setRiskExplorerLoading] = createSignal(false)
   const [snapshotLoading, setSnapshotLoading] = createSignal(false)
-  const [snapshotData, setSnapshotData]   = createSignal(null)
+  const [snapshotData, setSnapshotData] = createSignal(null)
   const [snapshotError, setSnapshotError] = createSignal(null)
-  const [optimizationLoading, setOptimizationLoading] = createSignal(false)
-  const [optimizationData, setOptimizationData] = createSignal(null)
-  const [optimizationError, setOptimizationError] = createSignal(null)
   const [autoHistoricalLoadedForIndex, setAutoHistoricalLoadedForIndex] = createSignal({})
   const [autoSnapshotLoadedForIndex, setAutoSnapshotLoadedForIndex] = createSignal({})
 
-  let pollTimer = null
-  let subscription = null
-
-  function applyWsUpdate(data) {
-    if (!data) return
-    
-    // Check if packet contains index-specific analysis data
-    INDICES.forEach(idx => {
-      const key = idx.toLowerCase()
-      const analysisData = data[idx] || data[key] || (data.indices && (data.indices[idx] || data.indices[key]))
-      
-      if (analysisData && typeof analysisData === 'object' && analysisData.ltp) {
-        console.debug(`⚡ [Analysis:WS] Update for ${idx}:`, analysisData)
-        const [, setData] = liveData[idx]
-        setData(prev => ({ ...prev, ...analysisData }))
-      }
-    })
-  }
-
   async function fetchOne(index) {
+    if (!INDICES.includes(index)) return
+    const [, setLoading] = loadingMap[index]
+    const [, setError] = errors[index]
     const [, setData] = liveData[index]
-    const [, setLoad] = loading[index]
-    const [, setErr]  = errors[index]
+
     try {
-      setLoad(true)
-      setErr(null)
-      const res = await fetch(`/api/analysis/${index}`)
+      setLoading(true)
+      setError(null)
+      const res = await fetch(`/api/analysis/${index}`, { headers: dashboardApiHeaders() })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setData(await res.json())
     } catch (e) {
-      console.error(`[Analysis] fetch failed for ${index}:`, e)
-      setErr(e.message)
+      console.error(`[Analysis] live fetch failed for ${index}:`, e)
+      setError(e.message)
     } finally {
-      setLoad(false)
+      setLoading(false)
     }
   }
 
@@ -75,7 +53,7 @@ export function useAnalysis() {
     setActiveIndex(index)
     try {
       setHistoricalLoading(true)
-      const res = await fetch(`/api/analysis/${index}/historical?weeks=${weeks}`)
+      const res = await fetch(`/api/analysis/${index}/historical?weeks=${weeks}`, { headers: dashboardApiHeaders() })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setHistoricalData(await res.json())
     } catch (e) {
@@ -86,21 +64,6 @@ export function useAnalysis() {
     }
   }
 
-  async function fetchRiskExplorer(index, weeks = 8) {
-    setActiveIndex(index)
-    try {
-      setRiskExplorerLoading(true)
-      const res = await fetch(`/api/analysis/${index}/risk_explorer?weeks=${weeks}`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      setRiskExplorerData(await res.json())
-    } catch (e) {
-      console.error('[Analysis] risk_explorer fetch failed:', e)
-      setRiskExplorerData({ error: e.message })
-    } finally {
-      setRiskExplorerLoading(false)
-    }
-  }
-
   function ensureAutoLoadedDetails(index, { skipAiSnapshot = false } = {}) {
     if (!index || !INDICES.includes(index)) return
 
@@ -108,7 +71,6 @@ export function useAnalysis() {
     if (!histDone[index]) {
       setAutoHistoricalLoadedForIndex({ ...histDone, [index]: true })
       void fetchHistorical(index)
-      void fetchRiskExplorer(index)
     }
 
     if (skipAiSnapshot) return
@@ -124,7 +86,6 @@ export function useAnalysis() {
     setActiveIndex(index)
     setSnapshotLoading(true)
     setSnapshotError(null)
-    setSnapshotData(null)
     try {
       const res = await fetch(`/api/analysis/${index}/ai_snapshot`, { method: 'POST' })
       if (!res.ok) {
@@ -141,68 +102,28 @@ export function useAnalysis() {
     }
   }
 
-  async function runOptimization(index, lookbackDays = 5, indicator = 'all') {
-    setActiveIndex(index)
-    setOptimizationLoading(true)
-    setOptimizationError(null)
-    setOptimizationData(null)
-    try {
-      const res = await fetch(`/api/analysis/${index}/optimize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lookback_days: lookback_days, indicator: indicator })
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        const msg = data.message || data.error || `HTTP ${res.status}`
-        throw new Error(msg)
-      }
-      const data = await res.json()
-      setOptimizationData(data.results)
-    } catch (e) {
-      setOptimizationError(e.message || 'Optimization failed')
-    } finally {
-      setOptimizationLoading(false)
-    }
-  }
-
+  let pollTimer = null
   onMount(() => {
     fetchAll()
-    pollTimer = setInterval(fetchAll, POLL_INTERVAL_MS)
-
-    subscription = cable.subscriptions.create('DashboardChannel', {
-      connected() { console.log('✅ [Analysis:WS] Connected') },
-      received(data) { applyWsUpdate(data) }
-    })
+    pollTimer = setInterval(() => fetchAll(), POLL_INTERVAL_MS)
   })
-
-  onCleanup(() => {
-    clearInterval(pollTimer)
-    subscription?.unsubscribe()
-  })
+  onCleanup(() => clearInterval(pollTimer))
 
   return {
     INDICES,
-    liveData:        (idx) => liveData[idx][0](),
-    isLoading:       (idx) => loading[idx][0](),
-    getError:        (idx) => errors[idx][0](),
+    liveData: (idx) => liveData[idx][0](),
+    isLoading: (idx) => loadingMap[idx][0](),
+    getError: (idx) => errors[idx][0](),
     fetchOne,
     fetchAll,
     fetchHistorical,
-    fetchRiskExplorer,
     fetchAiSnapshot,
-    runOptimization,
     ensureAutoLoadedDetails,
     activeIndex,
     historicalData,
     historicalLoading,
-    riskExplorerData,
-    riskExplorerLoading,
     snapshotLoading,
     snapshotData,
     snapshotError,
-    optimizationLoading,
-    optimizationData,
-    optimizationError,
   }
 }

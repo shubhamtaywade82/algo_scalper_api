@@ -5,6 +5,24 @@ require "dhan_hq"
 # Ensure error constants are loaded before `DhanHQ::Constants` references them.
 require "DhanHQ/errors"
 
+# DhanHQ 3.4.0 ships a handful of lib/DhanHQ/**/*.rb files whose class name doesn't
+# match the Zeitwerk-expected constant for the filename (e.g. edis_contract.rb defines
+# EdisFormContract, not EdisContract; ohlc_series.rb defines OHLCSeries, not OhlcSeries).
+# This breaks CI's eager_load (config.eager_load = ENV["CI"].present?) with a
+# Zeitwerk::NameError. We never reference these constants directly, so ignore the files.
+if defined?(DhanHQ::LOADER)
+  gem_dir = Gem.loaded_specs["DhanHQ"].gem_dir
+  [
+    "contracts/edis_contract.rb",
+    "contracts/forever_order_contract.rb",
+    "contracts/iceberg_order_contract.rb",
+    "contracts/twap_order_contract.rb",
+    "market_data/ohlc_series.rb"
+  ].each do |relative_path|
+    DhanHQ::LOADER.ignore(File.join(gem_dir, "lib", "DhanHQ", relative_path))
+  end
+end
+
 # Normalize environment variables to support both naming conventions
 # The DhanHQ gem expects variables with DHAN_ prefix (or CLIENT_ID/ACCESS_TOKEN)
 # We support both DHANHQ_ and DHAN_ prefixes for flexibility
@@ -89,11 +107,8 @@ skip_ws = Rails.env.test? ||
 Rails.application.configure do
   config.x.dhanhq = ActiveSupport::InheritableOptions.new(
     enabled: !Rails.env.test? && !skip_ws, # Disable in test environment or script mode
-    # Market and order WebSockets are always enabled at the app layer; test.rb forces off.
-    # Runtime still skips feeds when credentials are missing, paper mode (order hub), or
-    # MarketFeedHub#enabled? guards (BACKTEST_MODE, SCRIPT_MODE, etc.).
-    ws_enabled: true,
-    order_ws_enabled: true,
+    ws_enabled: !skip_ws, # Disable WebSocket in test environment or script mode
+    order_ws_enabled: !skip_ws, # Disable order WebSocket in test environment or script mode
     enable_order_logging: ENV["ENABLE_ORDER"] == "true", # Order payload logging
     ws_mode: (ENV["DHANHQ_WS_MODE"] || "quote").to_sym,
     ws_watchlist: ENV.fetch("DHANHQ_WS_WATCHLIST", nil),
@@ -106,20 +121,111 @@ end
 
 # Prefer DHAN_CLIENT_ID; fall back to CLIENT_ID for compatibility.
 client_id = ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
+# DhanHQ gem 3.4.0 raises InvalidAuthenticationError for DATA APIs
+# (/v2/charts, /v2/optionchain, ...) when client_id is nil, and CI runs
+# specs without credentials. VCR cassette replays never validate the
+# header value, so a fixed test placeholder keeps the gem's contract
+# satisfied without touching recorded cassettes.
+client_id ||= 'test-client-id' if Rails.env.test?
 DhanHQ.configuration.client_id = client_id if client_id
 
-# Route all token acquisition through TokenManager so the configured
-# DHAN_AUTH_MODE strategy (totp / manual / renew / authority) is used
-# consistently by both the gem client and the trading daemon.
+# Inject access token from DB so the gem always uses the latest valid token.
+# No refresh API exists; token must be renewed via /auth/dhan/login when expired.
 DhanHQ.configure do |config|
   config.access_token_provider = lambda do
-    Dhan::TokenManager.current_token!
+    fetch_authority_token!
   end
 
   config.on_token_expired = lambda do |_error|
-    Rails.logger.warn "[SCALPER] Token expired — forcing refresh via #{ENV.fetch('DHAN_AUTH_MODE', 'totp')} strategy"
+    Rails.logger.warn "[SCALPER] Token invalid/expired, forcing TOTP refresh..."
     Rails.cache.delete("scalper:dhan_token")
-    Dhan::TokenManager.clear_cache! if defined?(Dhan::TokenManager)
     Dhan::TokenManager.refresh!(force: true) if defined?(Dhan::TokenManager)
   end
+end
+
+def fetch_authority_token!
+  Rails.cache.fetch("scalper:dhan_token", expires_in: 60.seconds) do
+    # Tier 1: External Token Authority Server
+    token_url = token_authority_url
+    authority_token = ENV["DHAN_TOKEN_ACCESS_TOKEN"].presence
+
+    if token_url.present? && authority_token.present?
+      begin
+        response = Faraday.get(token_url) do |req|
+          req.headers["Authorization"] = "Bearer #{authority_token}"
+        end
+
+        if response.success?
+          data = JSON.parse(response.body)
+          if data["access_token"].present?
+            Rails.logger.info "[SCALPER] Token resolved via Tier 1 (Token Authority)"
+            return data["access_token"]
+          end
+        end
+
+        log_token_authority_fallback_once!(
+          key: "scalper:token_authority_failed_http",
+          message: "[SCALPER] Tier 1 (Token authority) HTTP failed (#{response.status}), trying Tier 2 (TOTP refresh)..."
+        )
+      rescue StandardError => e
+        log_token_authority_fallback_once!(
+          key: "scalper:token_authority_error",
+          message: "[SCALPER] Tier 1 (Token authority) error: #{e.message}, trying Tier 2 (TOTP refresh)..."
+        )
+      end
+    elsif token_url.present?
+      log_token_authority_fallback_once!(
+        key: "scalper:token_authority_missing_bearer",
+        message: "[SCALPER] Tier 1 token missing (DHAN_TOKEN_ACCESS_TOKEN), trying Tier 2 (TOTP refresh)..."
+      )
+    end
+
+    # Tier 2: Automated TOTP Refresh (Dhan::TokenManager)
+    if defined?(Dhan::TokenManager)
+      begin
+        totp_token = Dhan::TokenManager.current_token!
+        if totp_token.present?
+          Rails.logger.info "[SCALPER] Token resolved via Tier 2 (TOTP refresh)"
+          return totp_token
+        end
+
+        Rails.logger.warn "[SCALPER] Tier 2 (TOTP refresh) returned no token, trying Tier 3 (Static ENV)..."
+      rescue StandardError => e
+        Rails.logger.warn "[SCALPER] Tier 2 (TOTP refresh) error: #{e.message}, trying Tier 3 (Static ENV)..."
+      end
+    end
+
+    # Tier 3: Static Environment Variable Fallback
+    env_token = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+    if env_token.present?
+      Rails.logger.info "[SCALPER] Token resolved via Tier 3 (Static ENV)"
+      return env_token
+    end
+
+    # Stop: All 3 tiers failed
+    raise "[SCALPER] DhanHQ authentication failed across all tiers:\n  " \
+          "- Tier 1 (Token Authority): Unreachable or unconfigured\n  " \
+          "- Tier 2 (TOTP Auto-Refresh): Failed or missing credentials (DHAN_CLIENT_ID, DHAN_PIN, DHAN_TOTP_SECRET)\n  " \
+          "- Tier 3 (Static ENV): ENV[DHAN_ACCESS_TOKEN or ACCESS_TOKEN] not set"
+  end
+end
+
+def token_authority_url
+  raw_base = ENV["TRADER_API_BASE_URL"].to_s.strip
+  return nil if raw_base.blank?
+  return nil if raw_base.include?("<") || raw_base.include?(">")
+
+  uri = URI.parse(raw_base)
+  return nil unless uri.is_a?(URI::HTTP) && uri.host.present?
+
+  "#{raw_base.chomp('/')}/auth/dhan/token"
+rescue URI::InvalidURIError
+  nil
+end
+
+def log_token_authority_fallback_once!(key:, message:)
+  return if Rails.cache.read(key)
+
+  Rails.logger.warn(message)
+  Rails.cache.write(key, true, expires_in: 10.minutes)
 end

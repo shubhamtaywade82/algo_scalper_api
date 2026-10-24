@@ -15,7 +15,7 @@ module Signal
       regime strategy strategy_mode smc_decision smc_permission validation_passed
       entry_path entry_outcome entry_blocked_reason entry_skip_stage entry_skip_code
       adx_value confidence_score regime_confidence gamma_pressure iv_rank_proxy
-      theta_risk_score
+      theta_risk_score effective_timeframe
     ].freeze
 
     class << self

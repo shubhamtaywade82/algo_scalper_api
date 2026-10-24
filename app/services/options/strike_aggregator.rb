@@ -1,6 +1,15 @@
 # frozen_string_literal: true
 
 module Options
+  # Combines HistoricalCalibrationEngine results for ATM, OTM1, OTM2 strikes
+  # into a single weighted stats hash for use by CalibrationConfigPatchBuilder.
+  #
+  # Input: each *_stats is a Hash from HistoricalCalibrationEngine#call, containing
+  # :ce and :pe leg summaries (avg_gain, avg_retrace_abs, avg_loss_abs, etc.)
+  #
+  # Output: a combined stats Hash with the same keys as engine[:combined],
+  # weighted across the three strikes. Nil inputs are skipped; weights are
+  # redistributed proportionally.
   class StrikeAggregator
     WEIGHTS = { atm: 0.50, otm1: 0.25, otm2: 0.25 }.freeze
 
@@ -16,8 +25,10 @@ module Options
       available = @entries.compact
       return fallback_empty if available.empty?
 
-      total_weight = available.keys.sum { |key| WEIGHTS[key] }
-      normalized = available.map { |key, _| [key, WEIGHTS[key] / total_weight] }
+      # Redistribute weights to available entries
+      # normalized: [[:atm, 0.5], [:otm1, 0.25], ...]  — flat pairs, not a Hash
+      total_weight = available.keys.sum { |k| WEIGHTS[k] }
+      normalized   = available.map { |k, _| [k, WEIGHTS[k] / total_weight] }
 
       {
         avg_gain: weighted_avg(normalized) { |stats| avg_ce_pe(stats, :avg_gain) },
@@ -35,6 +46,7 @@ module Options
 
     private
 
+    # Available entries: [[:key, normalized_weight], ...]
     def weighted_avg(entries, &)
       entries.sum { |(key, weight)| weight * yield(@entries[key]).to_f }.round(4)
     end
@@ -52,14 +64,8 @@ module Options
     end
 
     def fallback_empty
-      {
-        avg_gain: 0.0,
-        avg_retrace_abs: 0.0,
-        avg_loss_abs: 0.0,
-        avg_oc: 0.0,
-        oc_stddev: 0.0,
-        sessions: { morning_oc: 0.0, midday_oc: 0.0, afternoon_oc: 0.0 }
-      }
+      { avg_gain: 0.0, avg_retrace_abs: 0.0, avg_loss_abs: 0.0, avg_oc: 0.0, oc_stddev: 0.0,
+        sessions: { morning_oc: 0.0, midday_oc: 0.0, afternoon_oc: 0.0 } }
     end
   end
 end

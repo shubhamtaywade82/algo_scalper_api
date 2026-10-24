@@ -1,5 +1,6 @@
-import { Show, createEffect, For } from 'solid-js'
+import { Show, createEffect, createMemo, onCleanup, For } from 'solid-js'
 import { usePositionDetail } from '../../stores/usePositionDetail'
+import { useDashboardContext } from '../../context/DashboardContext'
 import AnimatedNumber from '../AnimatedNumber'
 
 function Field(props) {
@@ -13,11 +14,40 @@ function Field(props) {
 
 export default function PositionDetailDrawer(props) {
   const { detail, loading, error, fetchDetail, clear } = usePositionDetail()
+  const ctx = useDashboardContext()
 
+  // 1. Initial fetch & 3s polling for structural detail while drawer is open
   createEffect(() => {
     const id = props.positionId
-    if (id != null) fetchDetail(id)
-    else clear()
+    if (id != null) {
+      fetchDetail(id)
+      const timer = setInterval(() => fetchDetail(id), 3000)
+      onCleanup(() => clearInterval(timer))
+    } else {
+      clear()
+    }
+  })
+
+  // 2. Reactive real-time merge of WebSocket ticks (0ms latency!)
+  const liveDetail = createMemo(() => {
+    const d = detail()
+    if (!d) return null
+
+    const openList = typeof ctx?.open === 'function' ? ctx.open() : []
+    const livePos = openList?.find((p) => p.id === d.id)
+
+    if (!livePos) return d
+
+    return {
+      ...d,
+      ltp: livePos.ltp ?? d.ltp,
+      pnl: livePos.pnl ?? d.pnl,
+      pnl_pct: livePos.pnl_pct ?? d.pnl_pct,
+      hwm_pnl: livePos.hwm_pnl ?? d.hwm_pnl,
+      sl_price: livePos.sl_price ?? d.sl_price,
+      tp_price: livePos.tp_price ?? d.tp_price,
+      time_in_position_sec: livePos.time_in_position_sec ?? d.time_in_position_sec
+    }
   })
 
   function handleKeydown(e) {
@@ -27,28 +57,34 @@ export default function PositionDetailDrawer(props) {
   return (
     <Show when={props.positionId != null}>
       <div class="fixed inset-0 z-50 flex justify-end" onKeyDown={handleKeydown}>
-        <div class="fixed inset-0 bg-black/60" onClick={() => props.onClose()} />
-        <div class="relative w-full max-w-md h-full bg-gray-900 border-l border-white/10 overflow-y-auto p-6 space-y-6">
+        <div class="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity" onClick={() => props.onClose()} />
+        <div class="relative w-full max-w-md h-full bg-gray-900 border-l border-white/10 overflow-y-auto p-6 space-y-6 shadow-2xl">
           <div class="flex items-center justify-between">
-            <h2 class="text-lg font-black text-white uppercase tracking-tight">Position Detail</h2>
-            <button type="button" class="text-gray-400 hover:text-white text-xl leading-none" onClick={() => props.onClose()}>&times;</button>
+            <div class="flex items-center gap-2">
+              <h2 class="text-lg font-black text-white uppercase tracking-tight">Position Detail</h2>
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                LIVE
+              </span>
+            </div>
+            <button type="button" class="text-gray-400 hover:text-white text-xl leading-none transition-colors" onClick={() => props.onClose()}>&times;</button>
           </div>
 
-          <Show when={loading()}>
+          <Show when={loading() && !liveDetail()}>
             <div class="text-center text-gray-500 text-sm py-10">Loading…</div>
           </Show>
 
-          <Show when={error()}>
+          <Show when={error() && !liveDetail()}>
             <div class="text-center text-rose-400 text-sm py-10">Failed to load: {error()}</div>
           </Show>
 
-          <Show when={!loading() && detail()}>
+          <Show when={liveDetail()}>
             {(d) => (
               <div class="space-y-6">
                 <div class="flex items-center justify-between">
                   <div>
                     <div class="text-xl font-black text-white uppercase">{d().symbol}</div>
-                    <div class="text-[10px] text-gray-500 uppercase tracking-wider">
+                    <div class="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">
                       {d().side} · Qty {d().quantity} · {d().paper ? 'Paper' : 'Live'}
                     </div>
                   </div>
@@ -59,6 +95,8 @@ export default function PositionDetailDrawer(props) {
                   <Field label={d().exit_price != null ? 'Exit Price' : 'LTP'} value={<AnimatedNumber value={d().exit_price ?? d().ltp} decimals={2} />} />
                   <Field label="PnL" value={<AnimatedNumber value={d().pnl} showSign currency absolute decimals={2} pnlColor />} />
                   <Field label="PnL %" value={<AnimatedNumber value={d().pnl_pct} showSign suffix="%" decimals={2} pnlColor />} />
+                  <Field label="Stop Loss (SL)" value={<AnimatedNumber value={d().sl_price} decimals={2} />} />
+                  <Field label="Take Profit (TP)" value={<AnimatedNumber value={d().tp_price} decimals={2} />} />
                   <Field label="High Water Mark" value={<AnimatedNumber value={d().hwm_pnl} currency decimals={2} />} />
                 </div>
 

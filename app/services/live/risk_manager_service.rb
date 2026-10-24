@@ -11,31 +11,30 @@ require_relative 'risk_manager_service/pnl_cache'
 require_relative 'risk_manager_service/config'
 
 module Live
-  # Responsible for monitoring active PositionTracker entries, keeping PnL up-to-date in Redis,
-  # and enforcing exits according to configured risk rules.
-  #
-  # Behaviour:
-  # - If an external ExitEngine is provided (recommended), RiskManagerService will NOT place exits itself.
-  #   Instead ExitEngine calls the enforcement methods and RiskManagerService supplies helper functions.
-  # - If no external ExitEngine is provided, RiskManagerService will execute exits itself (backwards compatibility).
+  # RiskManagerService for NEMESIS V3
+  # 5-layer risk enforcement system:
+  # 1. Hard Stops (SL/TP)
+  # 2. Dynamic Trailing (Tiered/Direct)
+  # 3. Market Structure (BOS invalidation)
+  # 4. Premium Momentum (Option decay/stagnation)
+  # 5. Global/Time Limits (IV collapse, Stall detection, Daily limits)
   class RiskManagerService
-    LOOP_INTERVAL = 5
-    API_CALL_STAGGER_SECONDS = 1.0
-
     include Runner
     include ExitEnforcement
     include ExitExecution
     include PnlCache
     include Config
 
+    LOOP_INTERVAL = 5
+
     def initialize(exit_engine: nil)
       @exit_engine = exit_engine
-      @algo_config = begin
-        AlgoConfig.fetch
-      rescue StandardError
-        {}
-      end
-      @paper_mode = @algo_config.dig(:paper_trading, :enabled) == true
+      # SAFETY-CRITICAL (error-handling review 2026-09, wave 3): a config
+      # fetch failure used to read as "not paper" — i.e. the LIVE gateway.
+      # Unknown mode now refuses to start the service (test env keeps the
+      # documented default; see AlgoConfig.paper_trading_enabled?).
+      @algo_config = AlgoConfig.fetch
+      @paper_mode = AlgoConfig.paper_trading_enabled?
       @orders_gateway = Orders.config ? Orders.config.gateway : Orders::GatewayFactory.build(paper_mode: @paper_mode)
       @active_cache = begin
         Positions::ActiveCache.instance
@@ -54,7 +53,6 @@ module Live
       @cycle_tracker_map = nil
     end
 
-    # Start monitoring loop (non-blocking)
     def start
       # Check if thread is actually alive, not just if @running is true
       return if @running && @thread&.alive?
@@ -64,8 +62,8 @@ module Live
       # Start watchdog only when service is explicitly started
       start_watchdog unless @watchdog_thread&.alive?
 
-      # Subscribe to high-frequency LTP/PnL events for sub-second risk evaluation
-      @event_subscription = Core::EventBus.instance.subscribe(:ltp) do |event|
+      # Subscribe to PnL updates from EventBus for high-frequency evaluation
+      @event_subscription = Core::EventBus.instance.subscribe(Core::EventBus::EVENTS[:pnl_update]) do |event|
         handle_pnl_event(event)
       end
 
@@ -78,28 +76,34 @@ module Live
 
           begin
             monitor_loop(last_paper_pnl_update)
-            # update timestamp after paper update occurred inside monitor_loop
             last_paper_pnl_update = Time.current
           rescue StandardError => e
-            Notifications::TelegramNotifier.instance.notify_error("#{e.class} - #{e.message}", context: 'RiskManagerService#monitor_loop')
             Rails.logger.error("[RiskManagerService] monitor_loop crashed: #{e.class} - #{e.message}\n#{e.backtrace.first(8).join("\n")}")
           end
           sleep LOOP_INTERVAL
         end
       end
+
+      Rails.logger.info '[RiskManager] Service started'
     end
 
     def stop
       @running = false
-      @thread&.kill
-      @thread = nil
-      @watchdog_thread&.kill
-      @watchdog_thread = nil
 
       if @event_subscription
         Core::EventBus.instance.unsubscribe(@event_subscription)
         @event_subscription = nil
       end
+
+      # Allow threads up to 5s to finish current cycle and exit naturally
+      [@thread, @watchdog_thread].compact.each do |th|
+        th.join(5)
+        th.kill if th.alive?
+      end
+
+      @thread = nil
+      @watchdog_thread = nil
+      Rails.logger.info '[RiskManager] Service stopped'
     end
 
     delegate :sleep, to: :Kernel
@@ -114,28 +118,46 @@ module Live
       tracker_id = event[:tracker_id]
       return unless tracker_id
 
-      # Concurrency lock: don't process if this tracker is already being analyzed
-      # in the main monitor_loop or another event thread.
-      return if @active_enforcements.put_if_absent(tracker_id, true)
+      # Atomic lock for per-tracker concurrency guard
+      return unless @active_enforcements.put_if_absent(tracker_id, true).nil?
 
       begin
         @last_realtime_tick_at = Time.current
 
-        # Use ActivePositionsCache to avoid DB load in the high-frequency path
-        tracker = Positions::ActivePositionsCache.instance.active_trackers.find { |t| t.id == tracker_id }
+        if event[:pnl]
+          Portfolio::PnlTracker.update_unrealized(tracker_id: tracker_id, pnl: event[:pnl].to_f)
+          Portfolio::ProfitLockEngine.evaluate!
+        end
+
+        # Use ActiveCache/ActivePositionsCache to avoid DB load in the high-frequency path
+        tracker = Positions::ActivePositionsCache.instance.active_trackers.find { |t| t.id == tracker_id } ||
+                  PositionTracker.find_by(id: tracker_id)
         return unless tracker&.active?
 
-        position_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker_id)
-        return unless position_data
+        # Evaluate immediate exits (Hard SL, TP, Trailing)
+        # We use UnifiedExitChecker for sub-second logic
+        exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker)
 
+        if exit_decision && exit_decision[:exit]
+          reason = "#{exit_decision[:reason]} (Sub-second Trigger)"
+          Rails.logger.info("[RiskManager] ⚡ HIGH-FREQUENCY EXIT for #{tracker.order_no}: #{reason}")
+
+          # Execute exit immediately
+          engine = @exit_engine || self
+          dispatch_exit(engine, tracker, reason)
+          tracker.reload
+          return unless tracker.active?
+        end
+
+        return unless realtime_tick_first_enabled?
         return unless should_run_realtime_enforcement?(tracker_id)
 
-        run_enforcement_for_tracker(tracker, @exit_engine || self, position_data: position_data)
+        run_enforcement_for_tracker(tracker, @exit_engine || self)
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] Event-driven evaluation failed for tracker=#{tracker_id}: #{e.class} - #{e.message}")
       ensure
         @active_enforcements.delete(tracker_id)
       end
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] Event-driven evaluation failed for tracker=#{tracker_id}: #{e.class} - #{e.message}")
     end
 
     def should_run_realtime_enforcement?(tracker_id)
@@ -162,31 +184,6 @@ module Live
     rescue StandardError => e
       Rails.logger.error("[RiskManagerService] active_cache unavailable: #{e.class} - #{e.message}")
       nil
-    end
-
-    # Lightweight risk evaluation helper (unchanged semantics)
-    def evaluate_signal_risk(signal_data)
-      confidence = signal_data[:confidence] || 0.0
-      entry_price = signal_data[:entry_price]
-      stop_loss = signal_data[:stop_loss]
-
-      risk_level =
-        case confidence
-        when 0.8..1.0 then :low
-        when 0.6...0.8 then :medium
-        else :high
-        end
-
-      max_position_size =
-        case risk_level
-        when :low then 100
-        when :medium then 50
-        else 25
-        end
-
-      recommended_stop_loss = stop_loss || (entry_price * 0.98)
-
-      { risk_level: risk_level, max_position_size: max_position_size, recommended_stop_loss: recommended_stop_loss }
     end
   end
 end

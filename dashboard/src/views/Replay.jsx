@@ -1,4 +1,4 @@
-import { createSignal, createMemo, For, Show, onMount, onCleanup } from 'solid-js'
+import { createSignal, createMemo, createEffect, For, Show, onMount, onCleanup } from 'solid-js'
 import AnimatedNumber from '../components/AnimatedNumber'
 import { useReplay } from '../stores/useReplay'
 import { createChart, CandlestickSeries, ColorType } from 'lightweight-charts'

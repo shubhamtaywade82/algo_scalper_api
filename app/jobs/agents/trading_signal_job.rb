@@ -24,7 +24,7 @@ module Agents
 
       result = Agents::TradingOrchestrator.call(
         index_key: index_key,
-        interval:  interval
+        interval: interval
       )
 
       Rails.logger.info(
@@ -38,7 +38,11 @@ module Agents
     private
 
     def market_open?
-      Market::Calendar.market_open? rescue true
+
+        Market::Calendar.market_open?
+    rescue StandardError
+        true
+
     end
   end
 end

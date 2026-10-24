@@ -1,21 +1,35 @@
 ---
 slug: vwap-reversal
-name: VWAP Reversal
+name: VWAP + RSI Pullback
 class_name: VwapReversalStrategy
 timeframes:
 - 3m
 instruments:
 - NIFTY
+- BANKNIFTY
+- SENSEX
 params:
   rsi_period:
     type: Integer
     default: '14'
-  rsi_oversold:
+  rsi_neutral_low:
     type: Integer
-    default: '30'
-  rsi_overbought:
+    default: '40'
+  rsi_neutral_high:
     type: Integer
-    default: '70'
-  vwap_band_pct:
+    default: '60'
+  vwap_touch_band_pct:
     type: Float
-    default: '0.5'
+    default: '0.10'
+  vwap_stop_buffer_pct:
+    type: Float
+    default: '0.05'
+  min_reward_risk:
+    type: Float
+    default: '1.5'
+  slope_lookback:
+    type: Integer
+    default: '6'
+  min_slope_pct:
+    type: Float
+    default: '0.05'

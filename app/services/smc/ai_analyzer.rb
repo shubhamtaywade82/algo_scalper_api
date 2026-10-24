@@ -1,31 +1,27 @@
 # frozen_string_literal: true
 
 module Smc
-  # AI-powered SMC analysis with pre-fetched data (no tool calling)
-  # Optimized to fetch all required data upfront and perform single-pass analysis
+  # AI-powered SMC analysis using chat completion with history and tool calling
   class AiAnalyzer
+    MAX_ITERATIONS = ENV.fetch('SMC_AI_MAX_ITERATIONS', '10').to_i
+    MAX_MESSAGE_HISTORY = ENV.fetch('SMC_AI_MAX_MESSAGE_HISTORY', '12').to_i
+
     def initialize(instrument, initial_data:)
       @instrument = instrument
       @initial_data = initial_data
       @ai_client = Services::Ai::OllamaClient.instance
       @model = select_model
-      @prefetched_data = {}
     end
 
     def analyze(stream: false, &)
       return nil unless ai_enabled?
 
-      # Pre-fetch all required data upfront
-      prefetch_all_data
+      initialize_conversation
 
-      # Build comprehensive prompt with all data
-      prompt = build_comprehensive_prompt
-
-      # Single-pass AI analysis
       if stream && block_given?
-        execute_streaming_analysis(prompt, &)
+        execute_conversation_stream(&)
       else
-        execute_single_pass_analysis(prompt)
+        execute_conversation
       end
     rescue StandardError => e
       Rails.logger.error("[Smc::AiAnalyzer] Error: #{e.class} - #{e.message}")
@@ -37,525 +33,641 @@ module Smc
 
     def ai_enabled?
       AlgoConfig.fetch.dig(:ai, :enabled) == true && @ai_client.enabled?
-    rescue StandardError => e
-      Rails.logger.warn("[Smc::AiAnalyzer] ai_enabled? check failed: #{e.class} - #{e.message}")
+    rescue StandardError
       false
     end
 
     def select_model
-      @ai_client.selected_model || ENV['OLLAMA_MODEL'] || 'qwen3.5:4b'
+      @ai_client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3.2:3b'
     end
 
-    # Pre-fetch all required data upfront to avoid redundant API calls
-    def prefetch_all_data
-      Rails.logger.info("[Smc::AiAnalyzer] Pre-fetching all required data for #{@instrument.symbol_name}")
-
-      # 1. Current LTP (already available, no API call)
-      @prefetched_data[:ltp] = current_ltp
-
-      # 2. Trend analysis (uses existing candles, no API call)
-      @prefetched_data[:trend_analysis] = compute_trend_analysis
-
-      # 3. Option chain (only for indices, may make API call)
-      if index?
-        Rails.logger.debug('[Smc::AiAnalyzer] Pre-fetching option chain for index')
-        @prefetched_data[:option_chain] = fetch_option_chain_data
-      else
-        @prefetched_data[:option_chain] = nil
-      end
-
-      # 4. Technical indicators (optional, can be expensive - fetch only if needed)
-      # Skip by default to avoid expensive API calls unless explicitly needed
-      @prefetched_data[:technical_indicators] = fetch_technical_indicators_if_needed
-
-      # 5. Historical candles summary (already computed for trend, just format it)
-      @prefetched_data[:candles_summary] = format_candles_summary
-
-      Rails.logger.info("[Smc::AiAnalyzer] Data pre-fetch complete. Option chain: #{@prefetched_data[:option_chain].present? ? 'available' : 'N/A'}, Indicators: #{@prefetched_data[:technical_indicators].present? ? 'available' : 'N/A'}")
-    end
-
-    def index?
-      segment = @instrument.exchange_segment
-      segment.to_s.upcase == 'IDX_I'
-    end
-
-    def current_ltp
-      ltp = @instrument.ltp || @instrument.latest_ltp
-      { ltp: ltp.to_f, symbol: @instrument.symbol_name }
-    end
-
-    def fetch_option_chain_data
-      return nil unless index?
-
-      begin
-        # Use the same logic as get_option_chain but without tool wrapper
-        index_key = @instrument.symbol_name
-        expiry_list = @instrument.expiry_list
-
-        unless expiry_list&.any?
-          Rails.logger.warn("[Smc::AiAnalyzer] No expiry list available for #{index_key}")
-          return nil
-        end
-
-        # Parse and find nearest expiry
-        today = Time.zone.today
-        parsed_expiries = expiry_list.compact.filter_map do |raw|
-          case raw
-          when Date then raw
-          when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
-          when String
-            begin
-              Date.parse(raw)
-            rescue ArgumentError
-              nil
-            end
-          end
-        end
-
-        valid_expiries = parsed_expiries.select { |date| date >= today }.sort
-        unless valid_expiries.any?
-          Rails.logger.warn("[Smc::AiAnalyzer] No future expiry dates found for #{index_key}")
-          return nil
-        end
-
-        expiry = valid_expiries.min
-        spot = @instrument.ltp&.to_f || @instrument.latest_ltp&.to_f
-
-        unless spot&.positive?
-          Rails.logger.warn("[Smc::AiAnalyzer] No valid spot LTP for #{index_key}")
-          return nil
-        end
-
-        # Load chain using DerivativeChainAnalyzer
-        analyzer = Options::DerivativeChainAnalyzer.new(index_key: index_key)
-        chain = analyzer.load_chain_for_expiry(expiry, spot)
-
-        # Filter to ATM±2 strikes
-        strike_rounding = case index_key.to_s.upcase
-                          when 'SENSEX', 'BANKNIFTY' then 100
-                          else 50
-                          end
-        atm_strike = ((spot / strike_rounding).round * strike_rounding).to_i
-        max_strike_distance = strike_rounding * 2
-
-        filtered_chain = chain.select do |opt|
-          strike = opt[:strike]&.to_f || opt['strike']&.to_f
-          next false unless strike&.positive?
-
-          (strike - atm_strike).abs <= max_strike_distance
-        end
-
-        lot_size = @instrument.lot_size_from_derivatives
-
-        {
-          index: index_key,
-          expiry: expiry.to_s,
-          spot: spot,
-          lot_size: lot_size,
-          available_expiries: valid_expiries.first(10).map(&:to_s),
-          options: filtered_chain.first(20).map do |opt|
-            raw_type = opt[:type] || opt[:option_type]
-            normalized_type = case raw_type.to_s.upcase
-                              when 'CE', 'CALL' then 'CE'
-                              when 'PE', 'PUT' then 'PE'
-                              else
-                                opt[:delta]&.positive? ? 'CE' : 'PE'
-                              end
-
-            {
-              strike: opt[:strike],
-              option_type: normalized_type,
-              ltp: opt[:ltp],
-              premium: opt[:ltp],
-              delta: opt[:delta],
-              theta: opt[:theta],
-              gamma: opt[:gamma],
-              iv: opt[:iv],
-              oi: opt[:oi],
-              change: opt[:change],
-              lot_size: opt[:lot_size] || lot_size
-            }
-          end
-        }
-      rescue StandardError => e
-        Rails.logger.error("[Smc::AiAnalyzer] Failed to fetch option chain: #{e.class} - #{e.message}")
-        nil
-      end
-    end
-
-    def fetch_technical_indicators_if_needed
-      # Skip by default to avoid expensive API calls
-      # Only fetch if explicitly needed (can be enabled via config)
-      return nil unless ENV['SMC_AI_FETCH_INDICATORS'] == 'true'
-
-      begin
-        symbol_name = @instrument.symbol_name.to_s.upcase
-        index_symbol = case symbol_name
-                       when 'NIFTY' then :nifty
-                       when 'SENSEX' then :sensex
-                       when 'BANKNIFTY' then :banknifty
-                       else
-                         symbol_name.downcase.to_sym
-                       end
-
-        analyzer = IndexTechnicalAnalyzer.new(index_symbol)
-        result = analyzer.call(timeframes: [15]) # Use 15m timeframe
-
-        return nil unless result[:success] && analyzer.indicators
-
-        indicators_for_timeframe = analyzer.indicators[15] || analyzer.indicators['15']
-        return nil unless indicators_for_timeframe
-
-        {
-          timeframe: '15m',
-          rsi: indicators_for_timeframe[:rsi],
-          macd: indicators_for_timeframe[:macd],
-          adx: indicators_for_timeframe[:adx],
-          atr: indicators_for_timeframe[:atr]
-        }
-      rescue StandardError => e
-        Rails.logger.warn("[Smc::AiAnalyzer] Failed to fetch indicators: #{e.message}")
-        nil
-      end
-    end
-
-    def format_candles_summary
-      # Get recent candles for summary (already computed in trend analysis)
-      series = @instrument.candles(interval: '5')
-      candles = series&.candles&.last(20) || []
-
-      return nil if candles.empty?
-
-      {
-        count: candles.size,
-        latest: {
-          timestamp: candles.last.timestamp,
-          open: candles.last.open,
-          high: candles.last.high,
-          low: candles.last.low,
-          close: candles.last.close,
-          volume: candles.last.volume
-        },
-        summary: {
-          high: candles.map(&:high).max,
-          low: candles.map(&:low).min,
-          avg_volume: (candles.sum(&:volume).to_f / candles.size).round(2)
-        }
-      }
-    end
-
-    # Compute actual price trend analysis from OHLC data
-    def compute_trend_analysis
-      series = @instrument.candles(interval: '5')
-      candles = series&.candles || []
-
-      return 'Insufficient candle data for trend analysis' if candles.size < 10
-
-      recent_candles = candles.last(225) # ~3 days
-      daily_data = group_candles_by_day(recent_candles)
-
-      current_price = candles.last.close
-      first_price = recent_candles.first.close
-      price_change = current_price - first_price
-      price_change_pct = (price_change / first_price * 100).round(2)
-
-      gap_analysis = detect_gaps(recent_candles)
-      trend_direction = if price_change_pct < -0.5
-                          'BEARISH'
-                        elsif price_change_pct > 0.5
-                          'BULLISH'
-                        else
-                          'SIDEWAYS'
-                        end
-
-      pattern = detect_swing_pattern(daily_data)
-
-      <<~ANALYSIS
-        **Overall Trend: #{trend_direction}**
-        - Price change over period: #{'+' if price_change >= 0}#{price_change.round(2)} points (#{'+' if price_change_pct >= 0}#{price_change_pct}%)
-        - First candle close: ₹#{first_price.round(2)}
-        - Current price: ₹#{current_price.round(2)}
-
-        **Gap Analysis:**
-        #{gap_analysis}
-
-        **Swing Pattern:**
-        #{pattern}
-
-        **Daily Summary:**
-        #{format_daily_summary(daily_data)}
-
-        **DIRECTION RECOMMENDATION:**
-        #{direction_recommendation(trend_direction, gap_analysis, pattern)}
-      ANALYSIS
-    rescue StandardError => e
-      Rails.logger.warn("[Smc::AiAnalyzer] Trend analysis error: #{e.message}")
-      'Trend analysis unavailable - proceed with caution and analyze candle data manually'
-    end
-
-    def group_candles_by_day(candles)
-      return {} if candles.empty?
-
-      grouped = candles.group_by { |c| c.timestamp.to_date }
-      grouped.transform_values do |day_candles|
-        {
-          open: day_candles.first.open,
-          high: day_candles.map(&:high).max,
-          low: day_candles.map(&:low).min,
-          close: day_candles.last.close,
-          date: day_candles.first.timestamp.to_date
-        }
-      end
-    end
-
-    def detect_gaps(candles)
-      gaps = []
-      prev_candle = nil
-
-      candles.each do |candle|
-        if prev_candle
-          gap = candle.open - prev_candle.close
-          gap_pct = (gap / prev_candle.close * 100).abs
-
-          if gap_pct > 0.3
-            gap_type = gap.positive? ? 'GAP UP' : 'GAP DOWN'
-            gaps << {
-              type: gap_type,
-              size: gap.abs.round(2),
-              pct: gap_pct.round(2),
-              time: candle.timestamp
-            }
-          end
-        end
-        prev_candle = candle
-      end
-
-      if gaps.empty?
-        '- No significant gaps detected'
-      else
-        recent_gaps = gaps.last(3)
-        # rubocop:disable Style/MultilineBlockChain
-        recent_gaps.map do |g|
-          "- #{g[:type]}: #{g[:size]} points (#{g[:pct]}%) at #{g[:time]}"
-        end.join("\n")
-        # rubocop:enable Style/MultilineBlockChain
-      end
-    end
-
-    def detect_swing_pattern(daily_data)
-      return '- Insufficient daily data' if daily_data.size < 2
-
-      dates = daily_data.keys.sort
-      lows = dates.map { |d| daily_data[d][:low] }
-      highs = dates.map { |d| daily_data[d][:high] }
-
-      lower_lows = lows.each_cons(2).all? { |a, b| b < a }
-      lower_highs = highs.each_cons(2).all? { |a, b| b < a }
-      higher_lows = lows.each_cons(2).all? { |a, b| b > a }
-      higher_highs = highs.each_cons(2).all? { |a, b| b > a }
-
-      patterns = []
-      patterns << '- LOWER LOWS detected (bearish)' if lower_lows
-      patterns << '- LOWER HIGHS detected (bearish)' if lower_highs
-      patterns << '- HIGHER LOWS detected (bullish)' if higher_lows
-      patterns << '- HIGHER HIGHS detected (bullish)' if higher_highs
-
-      if patterns.empty?
-        '- Mixed pattern (no clear trend)'
-      else
-        patterns.join("\n")
-      end
-    end
-
-    def format_daily_summary(daily_data)
-      return '- No daily data available' if daily_data.empty?
-
-      dates = daily_data.keys.sort.last(3)
-      # rubocop:disable Style/MultilineBlockChain
-      dates.map do |date|
-        d = daily_data[date]
-        "- #{date}: Open ₹#{d[:open].round(2)}, High ₹#{d[:high].round(2)}, Low ₹#{d[:low].round(2)}, Close ₹#{d[:close].round(2)}"
-      end.join("\n")
-      # rubocop:enable Style/MultilineBlockChain
-    end
-
-    def direction_recommendation(trend, gap_analysis, pattern)
-      bearish_signals = 0
-      bullish_signals = 0
-
-      bearish_signals += 2 if trend == 'BEARISH'
-      bullish_signals += 2 if trend == 'BULLISH'
-      bearish_signals += 2 if gap_analysis.include?('GAP DOWN')
-      bullish_signals += 2 if gap_analysis.include?('GAP UP')
-      bearish_signals += 1 if pattern.include?('LOWER LOWS')
-      bearish_signals += 1 if pattern.include?('LOWER HIGHS')
-      bullish_signals += 1 if pattern.include?('HIGHER LOWS')
-      bullish_signals += 1 if pattern.include?('HIGHER HIGHS')
-
-      if bearish_signals > bullish_signals + 1
-        <<~REC
-          ⚠️ BEARISH BIAS DETECTED - DO NOT RECOMMEND BUY CE
-          - If trading: Consider BUY PE or AVOID
-          - Bearish signals: #{bearish_signals}, Bullish signals: #{bullish_signals}
-        REC
-      elsif bullish_signals > bearish_signals + 1
-        <<~REC
-          ✅ BULLISH BIAS DETECTED - BUY CE may be appropriate
-          - If trading: Consider BUY CE
-          - Bullish signals: #{bullish_signals}, Bearish signals: #{bearish_signals}
-        REC
-      else
-        <<~REC
-          ⚠️ MIXED SIGNALS - Consider AVOID TRADING
-          - No clear directional bias
-          - Bullish signals: #{bullish_signals}, Bearish signals: #{bearish_signals}
-        REC
-      end
-    end
-
-    def build_comprehensive_prompt
+    def initialize_conversation
+      # Get current LTP first and include it in the initial prompt
+      ltp_data = get_current_ltp
+      ltp_value = ltp_data[:ltp] || ltp_data['ltp'] || 0.0
       symbol_name = @instrument.symbol_name.to_s.upcase
-      decision = @initial_data[:decision]
-      ltp_value = @prefetched_data[:ltp][:ltp] || @prefetched_data[:ltp]['ltp'] || 0.0
 
+      # Calculate strike rounding based on index
       strike_rounding = case symbol_name
+                        when 'NIFTY' then 50
                         when 'SENSEX', 'BANKNIFTY' then 100
                         else 50
                         end
 
-      lot_size = @instrument.lot_size_from_derivatives
-      atm_strike = ltp_value.positive? ? ((ltp_value / strike_rounding).round * strike_rounding).to_i : nil
+      @messages = [
+        {
+          role: 'system',
+          content: system_prompt
+        },
+        {
+          role: 'user',
+          content: initial_analysis_prompt
+        },
+        {
+          role: 'tool',
+          tool_call_id: 'initial_ltp',
+          name: 'get_current_ltp',
+          content: JSON.pretty_generate(ltp_data)
+        },
+        {
+          role: 'user',
+          content: "Current LTP for #{symbol_name}: ₹#{ltp_value.round(2)}. Use this exact price to calculate strikes. Round to nearest #{strike_rounding} for #{symbol_name}. DO NOT use strikes from other indices."
+        }
+      ]
+    end
 
-      # Determine trend direction
-      trend_direction = determine_trend_direction
+    def system_prompt
+      <<~PROMPT
+        You are an expert Smart Money Concepts (SMC) and market structure analyst specializing in Indian index options trading (NIFTY, BANKNIFTY, SENSEX).
 
-      prompt_parts = []
-      prompt_parts << system_prompt
-      prompt_parts << ''
-      prompt_parts << ('=' * 80)
-      prompt_parts << 'COMPLETE MARKET DATA (ALL DATA PROVIDED - NO TOOLS NEEDED)'
-      prompt_parts << ('=' * 80)
-      prompt_parts << ''
-      prompt_parts << "**INDEX:** #{symbol_name}"
-      prompt_parts << "**CURRENT LTP:** ₹#{ltp_value.round(2)}"
-      prompt_parts << "**ATM STRIKE:** ₹#{atm_strike || 'N/A'} (rounded to nearest #{strike_rounding})"
-      prompt_parts << "**LOT SIZE:** #{lot_size || 'N/A'} (1 lot = #{lot_size || 'N/A'} shares)"
-      prompt_parts << "**SMC DECISION:** #{decision}"
-      prompt_parts << "**DETECTED TREND:** #{trend_direction.to_s.upcase}"
-      prompt_parts << ''
+        Your PRIMARY GOAL: Provide clear, actionable trading recommendations for options buyers.
 
-      # CRITICAL: Check SMC decision first - it's the primary gate
-      if decision.to_s.downcase == 'no_trade'
-        prompt_parts << '⛔ **SMC DECISION: NO_TRADE** - This is a HARD BLOCK'
-        prompt_parts << '   ❌ **YOU MUST RECOMMEND "AVOID TRADING"** - NO EXCEPTIONS'
-        prompt_parts << '   Reason: SMC structure shows no valid setup (no BOS, no equilibrium reclaim, no displacement, or conflicting signals)'
-        prompt_parts << '   DO NOT override this with price trend analysis - SMC structure takes precedence'
-        recommended_option = nil
-      else
-        # Only show trend-based recommendations when SMC allows trading
-        case trend_direction
-        when :bearish
-          prompt_parts << '📉 **BEARISH TREND DETECTED** - This is a TRADING OPPORTUNITY for BUY PE!'
-          prompt_parts << '   ✅ **STRONGLY RECOMMEND: BUY PE** (bearish markets are profitable for PUT options)'
-          prompt_parts << '   ❌ DO NOT recommend BUY CE in a bearish market!'
-          recommended_option = 'PE'
-        when :bullish
-          prompt_parts << '📈 **BULLISH TREND DETECTED** - This is a TRADING OPPORTUNITY for BUY CE!'
-          prompt_parts << '   ✅ **STRONGLY RECOMMEND: BUY CE** (bullish markets are profitable for CALL options)'
-          prompt_parts << '   ❌ DO NOT recommend BUY PE in a bullish market!'
-          recommended_option = 'CE'
+        You analyze market structure, liquidity, premium/discount zones, order blocks, and AVRZ rejections to determine:
+        - Whether to trade or avoid trading
+        - If trading: Buy CE (CALL) or Buy PE (PUT)
+        - Specific strike prices to select
+        - Entry strategy (when and how to enter)
+        - Exit strategy (when to take profit and stop loss)
+        - Risk management guidelines
+
+        You have access to tools to fetch additional market data if needed. Use them when you need:
+        - Current LTP (last traded price) - for strike calculation
+        - Historical candle data - for deeper structure analysis
+        - Technical indicators (RSI, MACD, ADX, Supertrend) - for confirmation
+        - Option chain data - for strike selection with premiums
+
+        CRITICAL: Always provide specific, actionable recommendations:
+        - Use exact strike prices (e.g., "₹26,300" for NIFTY, "₹85,500" for SENSEX, "₹52,000" for BANKNIFTY)
+        - ALWAYS use get_current_ltp tool FIRST to get the current price before calculating strikes
+        - For NIFTY: Round strikes to nearest 50 (e.g., 26,300, 26,350, 26,400)
+        - For SENSEX: Round strikes to nearest 100 (e.g., 85,500, 85,600, 85,700)
+        - For BANKNIFTY: Round strikes to nearest 100 (e.g., 52,000, 52,100, 52,200)
+        - NEVER guess strike prices - ALWAYS calculate from actual LTP
+        - Specify entry/exit levels clearly
+        - Include risk management details
+        - Never give vague recommendations - always be specific and actionable
+      PROMPT
+    end
+
+    def initial_analysis_prompt
+      symbol_name = @instrument.symbol_name || 'UNKNOWN'
+      decision = @initial_data[:decision]
+
+      <<~PROMPT
+        Analyze the following SMC/AVRZ market structure data for #{symbol_name}:
+
+        Trading Decision: #{decision}
+
+        Market Structure Analysis (Multi-Timeframe):
+
+        #{JSON.pretty_generate(@initial_data[:timeframes])}
+
+        Provide a complete trading action plan for options buyers:
+
+        **MANDATORY SECTIONS:**
+
+        1. **Trade Decision** (MANDATORY):
+           - State clearly: "BUY CE" or "BUY PE" or "AVOID TRADING"
+           - If AVOID: Explain why current market conditions are not suitable
+           - If BUY: Validate or challenge the #{decision} decision with reasoning
+
+        2. **Strike Selection** (MANDATORY if trading):
+           - YOU MUST call get_current_ltp tool FIRST to get the current price
+           - Calculate strikes from the actual LTP:
+             * For NIFTY: Round to nearest 50 (e.g., if LTP is 26,328, use 26,300, 26,350, 26,400)
+             * For SENSEX: Round to nearest 100 (e.g., if LTP is 85,762, use 85,700, 85,800, 85,900)
+             * For BANKNIFTY: Round to nearest 100 (e.g., if LTP is 52,145, use 52,100, 52,200, 52,300)
+           - Recommend 2-3 specific strike prices with exact values matching the index (DO NOT use NIFTY strikes for SENSEX or vice versa)
+           - Label each strike (ATM, ATM+1, ATM-1, etc.)
+           - Explain why these strikes were chosen based on SMC levels (order blocks, liquidity zones, structure)
+           - If option chain data is needed, use the get_option_chain tool
+
+        3. **Entry Strategy** (MANDATORY if trading):
+           - Specific entry price level or trigger condition
+           - Entry timing (immediate, wait for pullback, wait for confirmation)
+           - How to enter (market order, limit order, specific price level)
+
+        4. **Exit Strategy** (MANDATORY if trading):
+           - Take Profit (TP): Specific target price or strike level
+           - Stop Loss (SL): Specific stop loss price or strike level
+           - Exit timing: When to exit (time-based, price-based, or signal-based)
+
+        5. **Risk Management** (MANDATORY if trading):
+           - Position sizing: How much capital to allocate
+           - Risk per trade: Maximum loss acceptable
+           - Time decay considerations: Expiry date impact
+
+        6. **Market Structure Context** (Brief):
+           - Overall trend and structure breaks
+           - Key liquidity zones and order blocks
+           - Premium/Discount position
+
+        If you need additional data (current price, indicators, option chain), use the available tools.
+        Focus on providing actionable, specific recommendations that a trader can execute immediately.
+      PROMPT
+    end
+
+    def execute_conversation
+      iteration = 0
+      full_response = ''
+      failed_tools = [] # Track failed tool calls to prevent infinite loops
+      consecutive_errors = 0 # Track consecutive errors
+
+      while iteration < MAX_ITERATIONS
+        Rails.logger.debug { "[Smc::AiAnalyzer] Iteration #{iteration + 1}/#{MAX_ITERATIONS}" }
+
+        # Prepare tools for this request
+        tools = build_tools_definition
+
+        # Make chat request with tools
+        begin
+          response = @ai_client.chat(
+            messages: limit_message_history(@messages),
+            model: @model,
+            temperature: 0.3,
+            tools: tools,
+            tool_choice: 'auto'
+          )
+        rescue StandardError => e
+          Rails.logger.error("[Smc::AiAnalyzer] Chat API error: #{e.class} - #{e.message}")
+          Rails.logger.debug { "[Smc::AiAnalyzer] Messages: #{@messages.inspect}" }
+          Rails.logger.debug { "[Smc::AiAnalyzer] Tools: #{tools.inspect}" }
+          raise
+        end
+
+        unless response
+          Rails.logger.warn('[Smc::AiAnalyzer] No response from AI client')
+          break
+        end
+
+        # Extract content and tool_calls from response
+        # Response format depends on whether tools were used
+        if response.is_a?(Hash)
+          # When tools are used, response is a hash with content and tool_calls
+          content = response[:content] || response['content']
+          tool_calls = response[:tool_calls] || response['tool_calls']
+        elsif response.is_a?(String)
+          # When no tools, response is just content string
+          content = response
+          tool_calls = nil
         else
-          prompt_parts << '⚠️ **NEUTRAL/UNCLEAR TREND** - Recommend AVOID trading (no clear direction)'
-          recommended_option = nil
+          # Try to extract from response object
+          content = response.respond_to?(:content) ? response.content : response.to_s
+          tool_calls = response.respond_to?(:tool_calls) ? response.tool_calls : nil
+        end
+
+        # Check if response contains tool calls (native format)
+        if tool_calls&.any?
+          tool_names = tool_calls.map do |tc|
+            tc_hash = tc.is_a?(Hash) ? tc : tc.to_h
+            func = tc_hash['function'] || tc_hash[:function] || {}
+            func['name'] || func[:name] || 'unknown'
+          end
+          Rails.logger.debug { "[Smc::AiAnalyzer] Tool calls detected: #{tool_names.join(', ')}" }
+          Rails.logger.debug { "[Smc::AiAnalyzer] Tool calls structure: #{tool_calls.inspect}" }
+
+          # Check if we've had too many consecutive errors - force analysis
+          if consecutive_errors >= 3 || iteration >= MAX_ITERATIONS - 1
+            Rails.logger.warn("[Smc::AiAnalyzer] Too many consecutive errors (#{consecutive_errors}) or near max iterations (#{iteration}), forcing final analysis")
+            ltp_info = @messages.find { |m| m[:role] == 'tool' && m[:content]&.include?('"ltp"') }
+            ltp_value = if ltp_info
+                          ltp_match = ltp_info[:content].match(/"ltp":\s*([\d.]+)/)
+                          ltp_match ? ltp_match[1] : nil
+                        end
+
+            # Determine strike rounding based on symbol
+            symbol_name = @instrument.symbol_name.to_s.upcase
+            strike_rounding = case symbol_name
+                              when 'NIFTY' then 50
+                              when 'SENSEX', 'BANKNIFTY' then 100
+                              else 50
+                              end
+
+            final_prompt = if ltp_value
+                             "STOP CALLING TOOLS. Provide your analysis NOW. You have the SMC market structure data and LTP (₹#{ltp_value}) for #{symbol_name}. Calculate strikes from LTP (round to nearest #{strike_rounding} for #{symbol_name}). Provide complete trading recommendation: 1) Trade Decision (BUY CE/PE or AVOID), 2) Specific Strike Selection (exact values like ₹#{((ltp_value.to_f / strike_rounding).round * strike_rounding).to_i}), 3) Entry Strategy, 4) Exit Strategy, 5) Risk Management."
+                           else
+                             'STOP CALLING TOOLS. Provide your analysis NOW based on the SMC data you already have. Do not call any more tools - provide a complete trading recommendation with strike selection based on the current LTP and SMC analysis.'
+                           end
+
+            @messages << {
+              role: 'user',
+              content: final_prompt
+            }
+            # Make one final request without tools
+            final_response = @ai_client.chat(
+              messages: limit_message_history(@messages),
+              model: @model,
+              temperature: 0.3
+            )
+            full_response = final_response.is_a?(Hash) ? (final_response[:content] || final_response['content'] || '') : final_response.to_s
+            break
+          end
+
+          # Add assistant message with tool calls
+          # Format tool calls exactly as they came from the API (preserve structure)
+          formatted_tool_calls = tool_calls.map do |tc|
+            tc_hash = tc.is_a?(Hash) ? tc : tc.to_h
+            func = tc_hash['function'] || tc_hash[:function] || {}
+            func_name = func['name'] || func[:name]
+            func_args = func['arguments'] || func[:arguments]
+
+            # Handle arguments - preserve as-is if string, convert if hash
+            # OpenAI/Ollama expects arguments as JSON string
+            args_string = if func_args.is_a?(String)
+                            # Already JSON string - validate it's valid JSON
+                            begin
+                              JSON.parse(func_args) # Validate it's valid JSON
+                              func_args # Return as-is if valid
+                            rescue JSON::ParserError => e
+                              Rails.logger.warn("[Smc::AiAnalyzer] Invalid JSON in tool arguments: #{e.message}, using empty object")
+                              '{}'
+                            end
+                          elsif func_args.is_a?(Hash)
+                            func_args.to_json # Convert hash to JSON string
+                          elsif func_args.nil?
+                            '{}' # Default to empty object
+                          else
+                            Rails.logger.warn("[Smc::AiAnalyzer] Unexpected argument type: #{func_args.class}, using empty object")
+                            '{}'
+                          end
+
+            {
+              'id' => tc_hash['id'] || tc_hash[:id],
+              'type' => 'function',
+              'function' => {
+                'name' => func_name,
+                'arguments' => args_string
+              }
+            }
+          end
+
+          @messages << {
+            role: 'assistant',
+            content: content,
+            tool_calls: formatted_tool_calls
+          }
+
+          # Execute tools and add results
+          tool_calls.each_with_index do |tool_call, index|
+            tc_hash = tool_call.is_a?(Hash) ? tool_call : tool_call.to_h
+            func = tc_hash['function'] || tc_hash[:function] || {}
+            tool_name = func['name'] || func[:name]
+            tool_args_raw = func['arguments'] || func[:arguments]
+
+            # Parse arguments safely
+            tool_args = begin
+              if tool_args_raw.is_a?(String)
+                JSON.parse(tool_args_raw)
+              elsif tool_args_raw.is_a?(Hash)
+                tool_args_raw
+              else
+                {}
+              end
+            rescue JSON::ParserError => e
+              Rails.logger.warn("[Smc::AiAnalyzer] Failed to parse tool arguments: #{e.message}")
+              {}
+            end
+
+            Rails.logger.debug { "[Smc::AiAnalyzer] Executing tool: #{tool_name} with args: #{tool_args.inspect}" }
+
+            # Check if this tool has failed before
+            tool_key = "#{tool_name}:#{tool_args.to_json}"
+            if failed_tools.include?(tool_key)
+              Rails.logger.warn("[Smc::AiAnalyzer] Skipping previously failed tool: #{tool_name}")
+              tool_result = { error: 'This tool failed previously. Skipping to avoid infinite loop.' }
+              consecutive_errors += 1
+            else
+              tool_result = execute_tool(tool_name, tool_args)
+
+              # Track failed tools - check for errors OR null/empty results
+              if tool_result.is_a?(Hash)
+                has_error = tool_result[:error].present?
+                # For get_technical_indicators, check if all values are null
+                is_empty_result = tool_name == 'get_technical_indicators' &&
+                                  tool_result[:rsi].nil? &&
+                                  tool_result[:macd].nil? &&
+                                  tool_result[:adx].nil? &&
+                                  tool_result[:supertrend].nil? &&
+                                  tool_result[:atr].nil? &&
+                                  !tool_result[:error]
+                # For get_option_chain, check if options array is empty
+                is_empty_option_chain = tool_name == 'get_option_chain' &&
+                                        tool_result[:options].is_a?(Array) &&
+                                        tool_result[:options].empty? &&
+                                        !tool_result[:error]
+
+                if has_error
+                  failed_tools << tool_key
+                  consecutive_errors += 1
+                elsif is_empty_result || is_empty_option_chain
+                  # Don't mark as failed, but track that we got empty results
+                  Rails.logger.warn("[Smc::AiAnalyzer] Tool returned empty/null results: #{tool_name}")
+                  # Still increment consecutive_errors to eventually force analysis
+                  consecutive_errors += 1
+                else
+                  consecutive_errors = 0 # Reset on success
+                end
+              else
+                consecutive_errors = 0 # Reset on success
+              end
+            end
+
+            # Get the tool_call_id from the formatted tool call (use index to match)
+            # This ensures we use the same ID that was added to the assistant message
+            formatted_tc = formatted_tool_calls[index]
+            tool_call_id = formatted_tc ? formatted_tc[:id] : (tc_hash['id'] || tc_hash[:id] || SecureRandom.hex(8))
+
+            # Format tool result - must be a string (JSON or plain text)
+            tool_content = if tool_result.is_a?(Hash) || tool_result.is_a?(Array)
+                             JSON.pretty_generate(tool_result)
+                           else
+                             tool_result.to_s
+                           end
+
+            @messages << {
+              role: 'tool',
+              tool_call_id: tool_call_id,
+              name: tool_name,
+              content: tool_content
+            }
+          end
+
+          # Add user message prompting for analysis
+          # If we've had errors or empty results, be more directive to prevent loops
+          user_prompt = if consecutive_errors >= 3
+                          'STOP CALLING TOOLS IMMEDIATELY. You have reached the maximum iterations or encountered multiple tool errors/empty results. You MUST provide your analysis NOW based on the SMC market structure data provided initially and the LTP (₹85,762.01 for SENSEX). Calculate strikes from LTP (round to nearest 50 for SENSEX). Provide your complete trading recommendation with: 1) Trade Decision (BUY CE/PE or AVOID), 2) Specific Strike Selection, 3) Entry Strategy, 4) Exit Strategy, 5) Risk Management. DO NOT call any more tools.'
+                        elsif consecutive_errors >= 2
+                          'STOP CALLING TOOLS. You have encountered multiple tool errors or empty results. Provide your analysis NOW based on the SMC market structure data provided initially and the LTP you have. Calculate strikes from LTP (round to nearest 50 for indices). Provide your complete trading recommendation with strike selection, entry/exit strategy, and risk management.'
+                        elsif consecutive_errors.positive?
+                          'You have encountered some tool errors or empty results. Please provide your analysis now based on the SMC data and any successful tool results. Calculate strikes from the LTP if needed. Do not call more tools - provide your complete trading recommendation.'
+                        else
+                          'Based on the tool results, continue your analysis. If you have all the data you need, provide your complete analysis now.'
+                        end
+
+          @messages << {
+            role: 'user',
+            content: user_prompt
+          }
+
+          iteration += 1
+          next
+        end
+
+        # No tool calls - final response
+        full_response = content || response.to_s
+        Rails.logger.info('[Smc::AiAnalyzer] Final analysis received')
+        break
+      end
+
+      Rails.logger.warn("[Smc::AiAnalyzer] Reached max iterations (#{MAX_ITERATIONS})") if iteration >= MAX_ITERATIONS
+
+      full_response.presence
+    end
+
+    def execute_conversation_stream(&)
+      iteration = 0
+      full_response = +''
+
+      while iteration < MAX_ITERATIONS
+        Rails.logger.debug { "[Smc::AiAnalyzer] Stream iteration #{iteration + 1}/#{MAX_ITERATIONS}" }
+
+        tools = build_tools_definition
+
+        # Stream response
+        stream_response = nil
+        @ai_client.chat_stream(
+          messages: limit_message_history(@messages),
+          model: @model,
+          temperature: 0.3,
+          tools: tools,
+          tool_choice: 'auto'
+        ) do |chunk|
+          stream_response ||= +''
+          stream_response << chunk if chunk.present?
+          yield(chunk) if block_given?
+        end
+
+        unless stream_response
+          Rails.logger.warn('[Smc::AiAnalyzer] No stream response')
+          break
+        end
+
+        # Check for tool calls in streamed response
+        tool_calls = extract_tool_calls_from_text(stream_response)
+        if tool_calls&.any?
+          Rails.logger.info { "[Smc::AiAnalyzer] Tool calls detected in stream: #{tool_calls.map { |tc| tc['tool'] || tc[:tool] }.join(', ')}" }
+
+          # Remove tool call JSON from the response text (clean it up)
+          cleaned_response = stream_response.dup
+          tool_calls.each do |tc|
+            # Remove the tool call JSON from text
+            tool_json = tc.is_a?(Hash) ? tc.to_json : tc.to_s
+            cleaned_response.gsub!(tool_json, '')
+            cleaned_response.gsub!(/\{"name"\s*:\s*"[^"]+"\s*,\s*"parameters"\s*:\s*\{[^}]+\}\s*\}/, '')
+          end
+          cleaned_response.strip!
+
+          # Add assistant message (with cleaned content)
+          assistant_content = cleaned_response.strip.presence || 'I will fetch additional data to complete the analysis.'
+          @messages << {
+            role: 'assistant',
+            content: assistant_content
+          }
+
+          # Execute tools
+          tool_calls.each do |tool_call|
+            tool_name = tool_call['tool'] || tool_call[:tool] || tool_call['name'] || tool_call[:name]
+            tool_args = tool_call['arguments'] || tool_call[:arguments] || tool_call['parameters'] || tool_call[:parameters] || {}
+
+            Rails.logger.info { "[Smc::AiAnalyzer] Executing tool: #{tool_name} with args: #{tool_args.inspect}" }
+
+            tool_result = execute_tool(tool_name, tool_args)
+
+            @messages << {
+              role: 'tool',
+              name: tool_name,
+              content: JSON.pretty_generate(tool_result)
+            }
+          end
+
+          @messages << {
+            role: 'user',
+            content: 'Based on the tool results above, continue your analysis. Provide a complete analysis with actionable insights for options trading.'
+          }
+
+          iteration += 1
+          next
+        end
+
+        # Final response
+        full_response = stream_response
+        break
+      end
+
+      full_response.presence
+    end
+
+    def build_tools_definition
+      [
+        {
+          type: 'function',
+          function: {
+            name: 'get_current_ltp',
+            description: 'Get the current Last Traded Price (LTP) for the instrument',
+            parameters: {
+              type: 'object',
+              properties: {},
+              required: []
+            }
+          }
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'get_historical_candles',
+            description: 'Get historical candle data for the instrument',
+            parameters: {
+              type: 'object',
+              properties: {
+                interval: {
+                  type: 'string',
+                  enum: %w[5m 15m 1h daily],
+                  description: 'Timeframe for candles'
+                },
+                limit: {
+                  type: 'integer',
+                  description: 'Number of candles to fetch (default: 50, max: 200)',
+                  default: 50
+                }
+              },
+              required: ['interval']
+            }
+          }
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'get_technical_indicators',
+            description: 'Get technical indicators (RSI, MACD, ADX, Supertrend, ATR) for the instrument',
+            parameters: {
+              type: 'object',
+              properties: {
+                timeframe: {
+                  type: 'string',
+                  enum: %w[5m 15m 1h daily],
+                  description: 'Timeframe for indicators'
+                }
+              },
+              required: ['timeframe']
+            }
+          }
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'get_option_chain',
+            description: 'Get option chain data for the index (if applicable)',
+            parameters: {
+              type: 'object',
+              properties: {
+                expiry_date: {
+                  type: 'string',
+                  description: 'Expiry date in YYYY-MM-DD format (optional - if not provided, will automatically use the nearest available expiry date)'
+                }
+              },
+              required: []
+            }
+          }
+        }
+      ]
+    end
+
+    def extract_tool_calls_from_response(_response)
+      # This method is no longer needed - tool_calls are extracted in execute_conversation
+      # Keeping for backward compatibility
+      nil
+    end
+
+    def extract_tool_calls_from_text(text)
+      # Extract tool calls from text - handle multiple formats
+      tool_calls = []
+      seen_tools = []
+
+      # Pattern 1: {"name": "tool_name", "parameters": {...}} (Ollama format)
+      # Handle both single-line and multi-line JSON
+      # Use a more lenient pattern that matches the actual format
+      text.scan(/\{"name"\s*:\s*"([^"]+)"\s*,\s*"parameters"\s*:\s*(\{[^}]*\})\s*\}/) do |name, params_str|
+        next if seen_tools.include?(name) # Avoid duplicates
+
+        begin
+          # Try to parse parameters - handle nested objects
+          parsed_params = JSON.parse(params_str)
+          tool_calls << {
+            'tool' => name,
+            'arguments' => parsed_params
+          }
+          seen_tools << name unless seen_tools.include?(name)
+          Rails.logger.info { "[Smc::AiAnalyzer] Extracted tool call: #{name} with params: #{parsed_params.inspect}" }
+        rescue JSON::ParserError => e
+          Rails.logger.debug { "[Smc::AiAnalyzer] Failed to parse tool call params for #{name}: #{e.message}, params: #{params[0..100]}" }
         end
       end
-      prompt_parts << ''
 
-      # Add trend analysis
-      prompt_parts << '**PRICE TREND ANALYSIS:**'
-      prompt_parts << @prefetched_data[:trend_analysis]
-      prompt_parts << ''
+      # Pattern 2: {"tool": "tool_name", "arguments": {...}} (alternative format)
+      text.scan(/\{"tool"\s*:\s*"([^"]+)"\s*,\s*"arguments"\s*:\s*(\{[^}]*\})\s*\}/m) do |tool, args|
+        next if seen_tools.include?(tool) # Avoid duplicates
 
-      # Add market structure with validation context
-      prompt_parts << '**MARKET STRUCTURE ANALYSIS (Multi-Timeframe):**'
-      prompt_parts << JSON.pretty_generate(@initial_data[:timeframes])
-      prompt_parts << ''
-
-      # Add SMC structure validation context
-      htf_data = @initial_data.dig(:timeframes, :htf, :context) || {}
-      mtf_data = @initial_data.dig(:timeframes, :mtf, :context) || {}
-      ltf_data = @initial_data.dig(:timeframes, :ltf, :context) || {}
-
-      prompt_parts << '**SMC STRUCTURE VALIDATION (CRITICAL FOR TRADE DECISION):**'
-      prompt_parts << "- HTF Trend: #{htf_data[:trend] || 'N/A'}"
-      prompt_parts << "- HTF Structure: #{htf_data[:structure]&.dig(:state) || 'N/A'}"
-      prompt_parts << "- BOS (Break of Structure): #{mtf_data[:structure]&.dig(:bos) ? 'YES' : 'NO'}"
-      prompt_parts << "- Displacement: #{ltf_data[:fvg]&.dig(:gaps)&.any? ? 'YES' : 'NO'}"
-      prompt_parts << "- Equilibrium Position: #{if htf_data[:premium_discount]&.dig(:premium)
-                                                   'PREMIUM (above)'
-                                                 else
-                                                   htf_data[:premium_discount]&.dig(:discount) ? 'DISCOUNT (below)' : 'N/A'
-                                                 end}"
-      prompt_parts << "- Price vs Equilibrium: #{ltp_value > (htf_data[:premium_discount]&.dig(:equilibrium) || 0) ? 'ABOVE' : 'BELOW'} equilibrium"
-      prompt_parts << ''
-      prompt_parts << '**TRADE VALIDATION RULES (MUST PASS ALL FOR BUY CE/PE):**'
-      prompt_parts << '1. BOS (Break of Structure) must be present on MTF/HTF'
-      prompt_parts << '2. Price must be above equilibrium (for CE) or below equilibrium (for PE)'
-      prompt_parts << '3. Displacement must be present (FVG gaps)'
-      prompt_parts << '4. HTF trend must align with trade direction (bullish for CE, bearish for PE)'
-      prompt_parts << '5. No conflicting signals across timeframes'
-      prompt_parts << ''
-      prompt_parts << '**IF ANY RULE FAILS → RECOMMEND "AVOID TRADING"**'
-      prompt_parts << ''
-
-      # Add LTF engine outputs (Displacement, Volume, Zone, Navigator) when available
-      ltf_engines = @initial_data[:ltf_engines]
-      if ltf_engines.present?
-        prompt_parts << build_ltf_engines_section(ltf_engines)
-        prompt_parts << ''
+        begin
+          parsed_args = JSON.parse(args)
+          tool_calls << {
+            'tool' => tool,
+            'arguments' => parsed_args
+          }
+          seen_tools << tool unless seen_tools.include?(tool)
+          Rails.logger.debug { "[Smc::AiAnalyzer] Extracted tool call: #{tool} with args: #{parsed_args.inspect}" }
+        rescue JSON::ParserError => e
+          Rails.logger.debug { "[Smc::AiAnalyzer] Failed to parse tool call args for #{tool}: #{e.message}" }
+        end
       end
 
-      append_tick_ai_extras(prompt_parts)
+      # Pattern 3: Try to find complete JSON objects (more lenient parsing)
+      # Look for standalone JSON objects that might be tool calls
+      text.scan(/\{["']name["']\s*:\s*["']([^"']+)["']\s*,\s*["']parameters["']\s*:\s*(\{[^}]*(?:\{[^}]*\}[^}]*)*\})\s*\}/m) do |name, params_str|
+        next if seen_tools.include?(name) # Avoid duplicates
 
-      # Add option chain data if available
-      if @prefetched_data[:option_chain]&.dig(:options)&.any?
-        prompt_parts << build_option_chain_section(@prefetched_data[:option_chain], atm_strike, trend_direction)
-        prompt_parts << ''
+        begin
+          parsed_params = JSON.parse(params_str)
+          tool_calls << {
+            'tool' => name,
+            'arguments' => parsed_params
+          }
+          seen_tools << name unless seen_tools.include?(name)
+        rescue JSON::ParserError
+          # Skip if can't parse
+        end
       end
 
-      # Add technical indicators if available
-      if @prefetched_data[:technical_indicators]
-        prompt_parts << '**TECHNICAL INDICATORS:**'
-        indicators = @prefetched_data[:technical_indicators]
-        prompt_parts << "- RSI: #{indicators[:rsi]&.round(2) || 'N/A'}"
-        prompt_parts << "- MACD: #{indicators[:macd]&.to_json || 'N/A'}"
-        prompt_parts << "- ADX: #{indicators[:adx]&.round(2) || 'N/A'}"
-        prompt_parts << "- ATR: #{indicators[:atr]&.round(2) || 'N/A'}"
-        prompt_parts << ''
+      # Pattern 4: Multiple tool calls in array format [{"name": "...", "parameters": {...}}, ...]
+      array_match = text.match(/\[\s*(\{"name"\s*:\s*"[^"]+"\s*,\s*"parameters"\s*:\s*\{[^}]*\}\s*\},?\s*)+\s*\]/m)
+      if array_match
+        begin
+          parsed = JSON.parse(array_match[0])
+          parsed.each do |tc|
+            tool_name = tc['name'] || tc['tool']
+            next if seen_tools.include?(tool_name) # Avoid duplicates
+
+            tool_calls << {
+              'tool' => tool_name,
+              'arguments' => tc['parameters'] || tc['arguments'] || {}
+            }
+            seen_tools << tool_name unless seen_tools.include?(tool_name)
+          end
+        rescue JSON::ParserError => e
+          Rails.logger.debug { "[Smc::AiAnalyzer] Failed to parse tool call array: #{e.message}" }
+        end
       end
 
-      # Add analysis instructions
-      prompt_parts << '**YOUR TASK:**'
-      if decision.to_s.downcase == 'no_trade'
-        prompt_parts << '**MANDATORY: RECOMMEND "AVOID TRADING"**'
-        prompt_parts << 'SMC decision is "no_trade" - this is a hard block. Explain why:'
-        prompt_parts << '- No BOS (Break of Structure) detected'
-        prompt_parts << '- Price below equilibrium (no reclaim)'
-        prompt_parts << '- No displacement or structure break'
-        prompt_parts << '- Range/compression market (no directional edge)'
-        prompt_parts << '- Conflicting signals across timeframes'
-        prompt_parts << 'DO NOT recommend any trades regardless of price trend.'
-      elsif recommended_option
-        prompt_parts << "**STRONGLY PREFER: BUY #{recommended_option}** (this is a trading opportunity based on clear trend)"
-        prompt_parts << 'Only recommend AVOID if there are SPECIFIC risk factors that make trading dangerous.'
-        prompt_parts << "If you choose to trade, use the #{recommended_option} option data provided above."
-      else
-        prompt_parts << 'Given the unclear trend, recommend **AVOID TRADING**.'
-      end
-      prompt_parts << ''
-      prompt_parts << initial_analysis_instructions
-
-      prompt_parts.join("\n")
+      tool_calls
     end
 
     def append_tick_ai_extras(prompt_parts)
@@ -582,8 +694,7 @@ module Smc
       return obj.to_s unless obj.is_a?(Hash) || obj.is_a?(Array)
 
       JSON.pretty_generate(obj.deep_stringify_keys)
-    rescue StandardError => e
-      Rails.logger.warn("[Smc::AiAnalyzer] json_pretty failed: #{e.class} - #{e.message}")
+    rescue StandardError
       obj.to_json
     end
 
@@ -607,271 +718,266 @@ module Smc
         :bearish
       elsif bullish_count > bearish_count
         :bullish
+      end
+    end
+
+    def execute_tool(tool_name, arguments)
+      # Normalize arguments (handle both string keys and symbol keys)
+      args = arguments.is_a?(Hash) ? arguments : {}
+      normalized_args = {}
+      args.each { |k, v| normalized_args[k.to_s] = v }
+
+      case tool_name.to_s
+      when 'get_current_ltp'
+        # Ignore any parameters passed (tool takes no parameters)
+        get_current_ltp
+      when 'get_historical_candles'
+        interval = normalized_args['interval']
+        return { error: 'interval parameter is required for get_historical_candles' } unless interval
+
+        get_historical_candles(
+          interval: interval,
+          limit: (normalized_args['limit'] || 50).to_i
+        )
+      when 'get_technical_indicators'
+        timeframe = normalized_args['timeframe']
+        return { error: 'timeframe parameter is required for get_technical_indicators' } unless timeframe
+
+        get_technical_indicators(
+          timeframe: timeframe
+        )
+      when 'get_option_chain'
+        # expiry_date is optional - will use nearest expiry if not provided
+        get_option_chain(
+          expiry_date: normalized_args['expiry_date']
+        )
       else
-        :neutral
+        { error: "Unknown tool: #{tool_name}. Available tools: get_current_ltp, get_historical_candles, get_technical_indicators, get_option_chain" }
       end
+    rescue StandardError => e
+      Rails.logger.error("[Smc::AiAnalyzer] Tool error (#{tool_name}): #{e.class} - #{e.message}")
+      Rails.logger.debug { e.backtrace.first(3).join("\n") }
+      { error: "#{e.class}: #{e.message}" }
     end
 
-    def build_option_chain_section(option_chain_data, atm_strike, trend_direction)
-      options = option_chain_data[:options]
-      expiry = option_chain_data[:expiry]
-      spot = option_chain_data[:spot]
-      lot_size = option_chain_data[:lot_size]
-
-      lines = []
-      lines << '**OPTION CHAIN DATA (CRITICAL: Use ONLY these EXACT strikes and premiums):**'
-      lines << "- Expiry: #{expiry}"
-      lines << "- Current Spot (LTP): ₹#{spot&.round(2)}"
-      lines << "- Calculated ATM Strike: ₹#{atm_strike || 'N/A'}"
-      lines << "- Lot Size: #{lot_size} (1 lot = #{lot_size} shares)"
-      lines << ''
-
-      ce_options = options.select { |o| o[:option_type] == 'CE' }
-      pe_options = options.select { |o| o[:option_type] == 'PE' }
-
-      case trend_direction
-      when :bearish
-        lines << '**AVAILABLE PUT (PE) OPTIONS (use ONLY these strikes):**'
-        pe_options.sort_by { |o| o[:strike].to_f }.each do |opt|
-          strike = opt[:strike].to_i
-          premium = opt[:ltp]&.to_f
-          delta = opt[:delta]&.to_f
-          is_atm = strike == atm_strike
-          label = is_atm ? ' (ATM)' : ''
-          lines << "- Strike ₹#{strike}#{label}: Premium ₹#{premium&.round(2) || 'N/A'}, Delta #{delta&.round(5) || 'N/A'}"
-        end
-      when :bullish
-        lines << '**AVAILABLE CALL (CE) OPTIONS (use ONLY these strikes):**'
-        ce_options.sort_by { |o| o[:strike].to_f }.each do |opt|
-          strike = opt[:strike].to_i
-          premium = opt[:ltp]&.to_f
-          delta = opt[:delta]&.to_f
-          is_atm = strike == atm_strike
-          label = is_atm ? ' (ATM)' : ''
-          lines << "- Strike ₹#{strike}#{label}: Premium ₹#{premium&.round(2) || 'N/A'}, Delta #{delta&.round(5) || 'N/A'}"
-        end
-      else
-        lines << '**AVAILABLE OPTIONS (both CE and PE):**'
-        lines << '**CALL (CE) OPTIONS:**'
-        ce_options.sort_by { |o| o[:strike].to_f }.first(5).each do |opt|
-          lines << "- Strike ₹#{opt[:strike].to_i}: Premium ₹#{opt[:ltp]&.to_f&.round(2) || 'N/A'}"
-        end
-        lines << '**PUT (PE) OPTIONS:**'
-        pe_options.sort_by { |o| o[:strike].to_f }.first(5).each do |opt|
-          lines << "- Strike ₹#{opt[:strike].to_i}: Premium ₹#{opt[:ltp]&.to_f&.round(2) || 'N/A'}"
-        end
-      end
-
-      lines.join("\n")
+    def get_current_ltp
+      ltp = @instrument.ltp || @instrument.latest_ltp
+      { ltp: ltp.to_f, symbol: @instrument.symbol_name }
     end
 
-    def build_ltf_engines_section(engines)
-      lines = ['**LTF ENGINE ANALYSIS (5m real-time confirmation):**']
+    def get_historical_candles(interval:, limit:)
+      series = @instrument.candles(interval: interval)
+      candles = series&.candles&.last([limit, 200].min) || []
 
-      if (disp = engines[:displacement])
-        direction = if disp[:bullish] then 'BULLISH'
-                    elsif disp[:bearish] then 'BEARISH'
-                    else 'NONE (no displacement candle)'
-                    end
-        lines << "- Displacement: #{direction}"
-        lines << "  Body: #{disp[:body]} pts | ATR: #{disp[:atr]} pts | Body/ATR ratio: #{disp[:body_atr_ratio]} (threshold ≥1.2)"
-      end
-
-      if (vol = engines[:volume])
-        spike_str = vol[:spike] ? "YES ─ volume spike confirmed (#{vol[:ratio]}x avg)" : "NO (#{vol[:ratio]}x avg)"
-        lines << "- Volume Spike: #{spike_str}"
-        lines << "  Current volume: #{vol[:current]} | Avg volume (20-bar): #{vol[:avg]}"
-      end
-
-      if (z = engines[:zone])
-        loc = z[:location]&.upcase || 'UNKNOWN'
-        eq = z[:equilibrium] ? "₹#{z[:equilibrium]}" : 'N/A'
-        lines << "- Market Zone: #{loc} (Equilibrium: #{eq})"
-        lines << '  Premium zone = supply; Discount zone = demand'
-      end
-
-      if (nav = engines[:navigator])
-        decision_str = nav[:allow] ? "ALLOW (confidence: #{nav[:confidence]})" : "BLOCK ─ #{nav[:reason]} (confidence: #{nav[:confidence]})"
-        lines << "- Navigator Entry Evaluation: #{decision_str}"
-      end
-
-      lines << ''
-      lines << '**Use the above LTF confirmations to validate or reject the trade setup:**'
-      lines << '- Displacement present + Volume spike = high-quality move'
-      lines << '- Zone location must match bias (CE in Discount, PE in Premium)'
-      lines << '- Navigator BLOCK = reduce confidence or recommend AVOID'
-
-      lines.join("\n")
-    end
-
-    def system_prompt
-      <<~PROMPT
-        You are an expert Smart Money Concepts (SMC) and market structure analyst specializing in Indian index options trading (NIFTY, BANKNIFTY, SENSEX).
-
-        Your PRIMARY GOAL: Provide clear, actionable trading recommendations for options buyers.
-
-        CRITICAL: This is an OPTIONS BUYING strategy ONLY. We ONLY BUY options (CALL or PUT) - we NEVER write/sell options.
-        TERMINOLOGY: Always use "EXIT" or "exit the position" - NEVER use "sell options" (which implies options selling/writing).
-        Exit strategy must use: SL (stop loss), TP1 (take profit 1), optionally TP2 (take profit 2).
-        Always provide index spot levels (underlying index price) to watch for exit decisions.
-
-        **CRITICAL: DIRECTION ACCURACY IS YOUR TOP PRIORITY**
-
-        Before recommending BUY CE or BUY PE, you MUST:
-        1. **Analyze the ACTUAL price trend from candle data** - NOT just SMC signals
-        2. **Check for gap ups/downs** - Gap downs indicate bearish momentum, gap ups indicate bullish
-        3. **Verify price direction over last 2-3 days** - Is price making lower lows (bearish) or higher highs (bullish)?
-        4. **Match your recommendation to actual price movement** - DO NOT recommend BUY CE when price is declining
-
-        **CRITICAL: SMC DECISION IS THE PRIMARY GATE**
-        - If SMC decision is "no_trade" → **YOU MUST RECOMMEND "AVOID TRADING"** - NO EXCEPTIONS
-        - SMC "no_trade" means: No BOS (Break of Structure), no equilibrium reclaim, no displacement, or conflicting signals
-        - **DO NOT override SMC "no_trade" with price trend analysis** - SMC structure takes precedence
-        - Only recommend trades when SMC decision is "call" or "put"
-
-        **TREND DETECTION RULES (ONLY APPLIES WHEN SMC ALLOWS TRADING):**
-        - If price has declined >1% over 2-3 days AND making lower lows → BEARISH → **PREFER BUY PE** (bearish markets are profitable for PUT options)
-        - If price has risen >1% over 2-3 days AND making higher highs → BULLISH → **PREFER BUY CE** (bullish markets are profitable for CALL options)
-        - If there's a gap down at market open → BEARISH signal → **PREFER BUY PE** (NOT BUY CE)
-        - If there's a gap up at market open → BULLISH signal → **PREFER BUY CE**
-        - **ONLY recommend AVOID if**: Extreme volatility, no clear structure, conflicting signals, or high risk conditions that make trading dangerous
-        - **CRITICAL**: Bearish markets are OPPORTUNITIES for BUY PE trades - do NOT avoid just because market is bearish!
-
-        **DO NOT:**
-        - Recommend BUY CE when price is clearly declining (lower highs, lower lows)
-        - Ignore gap downs/ups when making recommendations
-        - Give bullish recommendations in a bearish trend
-        - Override SMC "no_trade" decision with price trend analysis
-        - Recommend trades when SMC structure shows: no BOS, price below equilibrium, no displacement, or range/compression
-        - Use simple delta division to calculate exact index levels (delta is non-linear)
-
-        You analyze market structure, liquidity, premium/discount zones, order blocks, and AVRZ rejections to determine:
-        - Whether to trade or avoid trading
-        - If trading: Buy CE (CALL) or Buy PE (PUT) - MUST match actual price direction
-        - Specific strike prices to select
-        - Entry strategy (when and how to enter)
-        - Exit strategy (when to take profit and stop loss)
-        - Risk management guidelines
-
-        CRITICAL: Always provide specific, actionable recommendations:
-        - Use exact strike prices from the option chain data provided
-        - ALWAYS use premium prices (LTP) from the option chain data - NEVER estimate or guess
-        - Stop Loss (SL) and Take Profit (TP1, TP2) MUST be based on premium percentages, NOT underlying prices
-        - Always provide index spot levels (underlying index price) to watch for exit decisions
-        - CRITICAL: Calculate percentages correctly - if entry is ₹100, 30% loss = ₹70 (NOT ₹30), 50% gain = ₹150 (NOT ₹50)
-        - CRITICAL: NEVER mix strike prices with premium prices in calculations
-        - **CRITICAL: DELTA IS NON-LINEAR - DO NOT USE SIMPLE DIVISION**
-        - Delta changes with price movement (gamma effect), IV changes, and time decay
-        - For index spot level estimation: Use delta as APPROXIMATE guide only, NOT exact calculation
-        - Format: "SL at premium ₹Y (approximate index spot level ₹ABC - delta-based estimate, actual may vary)"
-        - **WARNING**: Premium can hit SL/TP due to theta decay or IV contraction WITHOUT underlying moving
-        - Consider THETA (time decay) and expiry date when setting targets - theta accelerates near expiry
-        - Intraday realistic expectations: TP 10-25% gain, SL 15-25% loss (NOT 50-100% for intraday)
-        - Exit Strategy Format: "Entry premium: ₹X. SL at premium ₹Y (approximate index spot level ₹ABC). TP1 at premium ₹W (approximate index spot level ₹DEF). TP2 at premium ₹V (approximate index spot level ₹GHI)"
-        - **IMPORTANT**: Monitor premium price directly - do not rely solely on underlying levels
-        - Risk Management Format: "Position size: X lots. Risk per trade: ₹Y (premium loss × lot size × shares per lot). Maximum loss: ₹Z"
-        - Never give vague recommendations - always be specific and actionable
-      PROMPT
-    end
-
-    def initial_analysis_instructions
-      <<~INSTRUCTIONS
-        **MANDATORY SECTIONS:**
-
-        1. **Trade Decision** (MANDATORY):
-           - State clearly: "BUY CE" or "BUY PE" or "AVOID TRADING"
-           - **CRITICAL**: Your decision MUST match the actual price trend provided above
-           - If AVOID: Explain the SPECIFIC risk factors that make trading dangerous
-
-        2. **Strike Selection** (MANDATORY if trading):
-           - Use ONLY the strikes listed in the option chain data above
-           - DO NOT calculate, invent, or guess strike prices
-           - Label each strike (ATM, ATM+1, ATM-1, etc.) based on which strike is closest to the current LTP
-           - Explain why these strikes were chosen based on SMC levels
-
-        3. **Entry Strategy** (MANDATORY if trading):
-           - Format: "Enter at premium ₹X (actual LTP from option chain for strike ₹Y)"
-           - Entry timing (immediate, wait for pullback, wait for confirmation)
-           - How to enter (market order, limit order, specific premium price level)
-           - MUST use the exact premium (LTP) value from the option chain data
-
-        4. **Exit Strategy** (MANDATORY if trading):
-           - Stop Loss (SL): Provide premium level AND approximate index spot level to watch
-             * Format: "SL at premium ₹X (approximate index spot level ₹Y - delta-based estimate)"
-             * **WARNING**: Delta is non-linear - use as approximate guide only
-             * **CRITICAL**: Premium can hit SL due to theta decay or IV contraction WITHOUT underlying moving
-           - Take Profit: Use TP1, TP2 format for multiple targets
-             * Format: "TP1 at premium ₹X (approximate index spot level ₹Y)"
-             * Format: "TP2 at premium ₹X (approximate index spot level ₹Y)" (optional)
-           - Index Spot Levels to Watch: Provide key underlying index price levels to monitor (approximate only)
-           - **CRITICAL**: Monitor premium price directly - do not rely solely on underlying levels
-           - YOU MUST calculate SL/TP based on premium percentages, NOT underlying prices
-           - Intraday realistic expectations: TP 10-25% gain, SL 15-25% loss
-
-        5. **Risk Management** (MANDATORY if trading):
-           - Position size recommendation: "Position size: N lots (X shares total)"
-           - Risk per trade: "Risk per trade: ₹Y (premium loss ₹Z × lot size × N lots)"
-           - Maximum loss: State the maximum acceptable loss for this trade
-           - Risk-reward ratio: Calculate and state (e.g., "Risk-reward ratio: 1:2.5")
-           - Time decay considerations: Expiry date impact on premium erosion
-
-        6. **Market Structure Context** (Brief):
-           - Overall trend and structure breaks
-           - Key liquidity zones and order blocks
-           - Premium/Discount position
-
-        Focus on providing actionable, specific recommendations that a trader can execute immediately.
-      INSTRUCTIONS
-    end
-
-    def execute_single_pass_analysis(prompt)
-      Rails.logger.info('[Smc::AiAnalyzer] Executing single-pass AI analysis')
-
-      response = @ai_client.chat(
-        messages: [
+      {
+        interval: interval,
+        count: candles.size,
+        candles: candles.map do |c|
           {
-            role: 'system',
-            content: system_prompt
-          },
-          {
-            role: 'user',
-            content: prompt
+            timestamp: c.timestamp,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+            volume: c.volume
           }
-        ],
-        model: @model,
-        temperature: 0.3
-      )
+        end
+      }
+    rescue StandardError => e
+      { error: "Failed to fetch candles: #{e.message}" }
+    end
 
-      if response.is_a?(Hash)
-        response[:content] || response['content'] || response.to_s
-      else
-        response.to_s
+    def get_technical_indicators(timeframe:)
+      # Convert timeframe string (e.g., "15m") to integer minutes for IndexTechnicalAnalyzer
+      timeframe_minutes = case timeframe.to_s
+                          when '5m' then 5
+                          when '15m' then 15
+                          when '1h' then 60
+                          when 'daily' then 1440
+                          else
+                            timeframe.to_s.delete('m').to_i
+                          end
+
+      # Use IndexTechnicalAnalyzer to get proper indicator values
+      begin
+        # Get symbol name and normalize to symbol (e.g., "SENSEX" -> :sensex)
+        symbol_name = @instrument.symbol_name.to_s.upcase
+        index_symbol = case symbol_name
+                       when 'NIFTY' then :nifty
+                       when 'SENSEX' then :sensex
+                       when 'BANKNIFTY' then :banknifty
+                       else
+                         symbol_name.downcase.to_sym
+                       end
+
+        analyzer = IndexTechnicalAnalyzer.new(index_symbol)
+        result = analyzer.call(timeframes: [timeframe_minutes])
+
+        unless result[:success] && analyzer.indicators
+          return {
+            timeframe: timeframe,
+            rsi: nil,
+            macd: nil,
+            adx: nil,
+            supertrend: nil,
+            atr: nil,
+            note: 'Indicators not available - insufficient data or calculation error'
+          }
+        end
+
+        # Extract indicators from analyzer.indicators hash
+        # Format: { timeframe_minutes => { rsi: ..., macd: ..., adx: ..., atr: ... } }
+        indicators_for_timeframe = analyzer.indicators[timeframe_minutes]
+        indicators_for_timeframe ||= analyzer.indicators[timeframe_minutes.to_s] if analyzer.indicators
+
+        rsi_value = indicators_for_timeframe ? indicators_for_timeframe[:rsi] : nil
+        macd_hash = indicators_for_timeframe ? indicators_for_timeframe[:macd] : nil
+        adx_value = indicators_for_timeframe ? indicators_for_timeframe[:adx] : nil
+        atr_value = indicators_for_timeframe ? indicators_for_timeframe[:atr] : nil
+
+        # For supertrend, we need to compute it separately or extract from bias_summary
+        # For now, return what we have
+        {
+          timeframe: timeframe,
+          rsi: rsi_value,
+          macd: macd_hash,
+          adx: adx_value,
+          supertrend: nil, # Supertrend not directly available from IndexTechnicalAnalyzer
+          atr: atr_value
+        }
+      rescue StandardError => e
+        Rails.logger.error("[Smc::AiAnalyzer] Indicator calculation error: #{e.class} - #{e.message}")
+        Rails.logger.debug { e.backtrace.first(5).join("\n") }
+        {
+          timeframe: timeframe,
+          rsi: nil,
+          macd: nil,
+          adx: nil,
+          supertrend: nil,
+          atr: nil,
+          error: "Failed to calculate indicators: #{e.message}"
+        }
       end
     end
 
-    def execute_streaming_analysis(prompt, &)
-      Rails.logger.info('[Smc::AiAnalyzer] Executing streaming AI analysis')
+    def get_option_chain(expiry_date: nil)
+      # Only for indices - check exchange_segment (method that computes it if needed)
+      # exchange_segment method returns 'IDX_I' for indices
+      segment = @instrument.exchange_segment
+      is_index = segment.to_s.upcase == 'IDX_I'
 
-      full_response = +''
-      @ai_client.chat_stream(
-        messages: [
-          {
-            role: 'system',
-            content: system_prompt
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        model: @model,
-        temperature: 0.3
-      ) do |chunk|
-        full_response << chunk if chunk.present?
-        yield(chunk) if block_given?
+      unless is_index
+        Rails.logger.warn("[Smc::AiAnalyzer] Option chain requested for non-index: #{@instrument.symbol_name} (exchange_segment: #{segment})")
+        return { error: "Option chain only available for indices. Current instrument segment: #{segment}" }
       end
 
-      full_response.presence
+      index_key = @instrument.symbol_name
+
+      # If expiry_date is provided, validate it; otherwise get nearest expiry from instrument directly
+      if expiry_date
+        begin
+          expiry = Date.parse(expiry_date.to_s)
+          # Validate that expiry is not in the past
+          if expiry < Time.zone.today
+            Rails.logger.warn("[Smc::AiAnalyzer] Provided expiry #{expiry} is in the past, ignoring and using nearest expiry")
+            expiry = nil
+          end
+        rescue ArgumentError
+          Rails.logger.warn("[Smc::AiAnalyzer] Invalid expiry date format: #{expiry_date}, using nearest expiry")
+          expiry = nil
+        end
+      end
+
+      # If expiry is still nil, get nearest expiry from instrument's expiry_list
+      if expiry
+        days_away = (expiry - Time.zone.today).to_i
+        Rails.logger.info("[Smc::AiAnalyzer] Using provided expiry: #{expiry} (#{days_away} days away) for #{index_key}")
+      else
+        Rails.logger.debug { "[Smc::AiAnalyzer] No expiry_date provided, finding nearest expiry from instrument for #{index_key}" }
+
+        # Get expiry list directly from instrument (more reliable than going through DerivativeChainAnalyzer)
+        expiry_list = @instrument.expiry_list
+        unless expiry_list&.any?
+          Rails.logger.warn("[Smc::AiAnalyzer] No expiry list available for #{index_key}")
+          return { error: 'No expiry dates available for this index' }
+        end
+
+        # Parse and find nearest expiry
+        today = Time.zone.today
+        parsed_expiries = expiry_list.compact.filter_map do |raw|
+          case raw
+          when Date then raw
+          when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
+          when String
+            begin
+              Date.parse(raw)
+            rescue ArgumentError
+              nil
+            end
+          end
+        end
+
+        nearest_expiry_date = parsed_expiries.select { |date| date >= today }.min
+        unless nearest_expiry_date
+          Rails.logger.warn("[Smc::AiAnalyzer] No future expiry dates found for #{index_key}")
+          return { error: 'No future expiry dates available for this index' }
+        end
+
+        expiry = nearest_expiry_date
+        days_away = (expiry - Time.zone.today).to_i
+        Rails.logger.info("[Smc::AiAnalyzer] Using nearest expiry from instrument: #{expiry} (#{days_away} days away) for #{index_key}")
+      end
+
+      # Get spot LTP from instrument directly
+      spot = @instrument.ltp&.to_f || @instrument.latest_ltp&.to_f
+      unless spot&.positive?
+        Rails.logger.warn("[Smc::AiAnalyzer] No valid spot LTP for #{index_key}: #{spot.inspect}")
+        return { error: "No spot price available for #{index_key}" }
+      end
+
+      # Now use DerivativeChainAnalyzer for loading the chain (it needs index_cfg for DB queries)
+      analyzer = Options::DerivativeChainAnalyzer.new(index_key: index_key)
+      Rails.logger.debug { "[Smc::AiAnalyzer] Loading option chain for #{index_key} expiry #{expiry} with spot #{spot}" }
+      chain = analyzer.load_chain_for_expiry(expiry, spot)
+
+      # If chain is empty, return helpful message
+      if chain.empty?
+        return {
+          index: index_key,
+          expiry: expiry.to_s,
+          spot: spot,
+          options: [],
+          note: "No option chain data available for expiry #{expiry}. Use LTP (#{spot}) to calculate strikes manually."
+        }
+      end
+
+      {
+        index: index_key,
+        expiry: expiry.to_s,
+        spot: spot,
+        options: chain.first(20).map do |opt|
+          {
+            strike: opt[:strike],
+            option_type: opt[:option_type],
+            ltp: opt[:ltp],
+            oi: opt[:oi],
+            change: opt[:change]
+          }
+        end
+      }
+    rescue StandardError => e
+      { error: "Failed to fetch option chain: #{e.message}" }
+    end
+
+    def limit_message_history(messages)
+      return messages if messages.size <= MAX_MESSAGE_HISTORY
+
+      # Keep system message and most recent messages
+      system_msg = messages.first
+      conversation_msgs = messages[1..] || []
+      recent_msgs = conversation_msgs.last(MAX_MESSAGE_HISTORY - 1)
+
+      [system_msg] + recent_msgs
     end
   end
 end

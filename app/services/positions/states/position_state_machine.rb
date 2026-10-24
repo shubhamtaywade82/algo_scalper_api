@@ -78,9 +78,7 @@ module Positions
         false
       end
 
-      def terminal?
-        state.terminal?
-      end
+      delegate :terminal?, to: :state
 
       # ── Transition logic ──────────────────────────────────────────────────
 
@@ -118,7 +116,7 @@ module Positions
       # @raise [IllegalTransitionError] if transition is not allowed
       def transition_to!(to_state)
         to_sym = to_state.to_sym
-        return if current_status == to_sym  # already there — idempotent no-op
+        return if current_status == to_sym # already there — idempotent no-op
 
         assert_transition!(to_sym)
         state.on_exit

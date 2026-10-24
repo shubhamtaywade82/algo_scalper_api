@@ -12,7 +12,14 @@ module Live
 
       # Fetch live broker positions keyed by security_id (string). Returns {} on paper mode or failure.
       def fetch_positions_indexed
-        return {} if paper_trading_enabled?
+        if paper_trading_enabled?
+          begin
+            Live::FeedHealthService.instance.mark_success!(:positions)
+          rescue StandardError
+            nil
+          end
+          return {}
+        end
 
         positions = DhanHQ::Models::Position.active.each_with_object({}) do |position, map|
           security_id = position.respond_to?(:security_id) ? position.security_id : position[:security_id]
@@ -85,6 +92,12 @@ module Live
           hwm = tracker.high_water_mark_pnl || BigDecimal(0)
           hwm = [hwm, pnl].max
 
+          tracker.update!(
+            last_pnl_rupees: pnl,
+            last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil,
+            high_water_mark_pnl: hwm
+          )
+
           update_pnl_in_redis(tracker, pnl, pnl_pct, ltp)
         rescue StandardError => e
           Rails.logger.error("[RiskManager] update_paper_positions_pnl failed for #{tracker.order_no}: #{e.class} - #{e.message}")
@@ -143,24 +156,22 @@ module Live
 
         if position.respond_to?(:exchange_segment) && position.exchange_segment == 'NSE_FNO'
           begin
-            return nil if ltp_api_rate_limited?(segment: 'NSE_FNO', security_id: tracker.security_id)
-
             response = DhanHQ::Models::MarketFeed.ltp({ 'NSE_FNO' => [tracker.security_id.to_i] })
             if response['status'] == 'success'
               option_data = response.dig('data', 'NSE_FNO', tracker.security_id.to_s)
               if option_data && option_data['last_price']
                 ltp = BigDecimal(option_data['last_price'].to_s)
-                cache_ltp_tick(segment: 'NSE_FNO', security_id: tracker.security_id, ltp: ltp)
+                begin
+                  Live::RedisPnlCache.instance.store_tick(segment: 'NSE_FNO', security_id: tracker.security_id, ltp: ltp,
+                                                          timestamp: Time.current)
+                rescue StandardError
+                  nil
+                end
                 return ltp
               end
             end
           rescue StandardError => e
-            if rate_limit_error?(e)
-              mark_ltp_api_rate_limited!(segment: 'NSE_FNO', security_id: tracker.security_id)
-              Rails.logger.debug("[RiskManager] current_ltp(fetch option) rate limited for #{tracker.order_no}")
-            else
-              Rails.logger.error("[RiskManager] current_ltp(fetch option) failed for #{tracker.order_no}: #{e.class} - #{e.message}")
-            end
+            Rails.logger.error("[RiskManager] current_ltp(fetch option) failed for #{tracker.order_no}: #{e.class} - #{e.message}")
           end
         end
 
@@ -189,32 +200,17 @@ module Live
           rescue StandardError
             nil
           end
-          if ltp
-            ltp_bd = BigDecimal(ltp.to_s)
-            cache_ltp_tick(segment: segment, security_id: security_id, ltp: ltp_bd)
-            return ltp_bd
-          end
+          return BigDecimal(ltp.to_s) if ltp
         end
 
         begin
-          return nil if ltp_api_rate_limited?(segment: segment, security_id: security_id)
-
           response = DhanHQ::Models::MarketFeed.ltp({ segment => [security_id.to_i] })
           if response['status'] == 'success'
             option_data = response.dig('data', segment, security_id.to_s)
-            if option_data && option_data['last_price']
-              ltp = BigDecimal(option_data['last_price'].to_s)
-              cache_ltp_tick(segment: segment, security_id: security_id, ltp: ltp)
-              return ltp
-            end
+            return BigDecimal(option_data['last_price'].to_s) if option_data && option_data['last_price']
           end
         rescue StandardError => e
-          if rate_limit_error?(e)
-            mark_ltp_api_rate_limited!(segment: segment, security_id: security_id)
-            Rails.logger.debug("[RiskManager] get_paper_ltp API rate limited for #{tracker.order_no}")
-          else
-            Rails.logger.error("[RiskManager] get_paper_ltp API error for #{tracker.order_no}: #{e.class} - #{e.message}")
-          end
+          Rails.logger.error("[RiskManager] get_paper_ltp API error for #{tracker.order_no}: #{e.class} - #{e.message}")
         end
 
         nil
@@ -289,43 +285,6 @@ module Live
         )
       rescue StandardError => e
         Rails.logger.error("[RiskManager] update_pnl_in_redis failed for #{tracker.order_no}: #{e.class} - #{e.message}")
-      end
-
-      def rate_limit_error?(error)
-        return false unless error
-
-        message = error.message.to_s
-        message.include?('429') || message.match?(/rate\s*limit/i) || error.class.name.include?('RateLimitError')
-      end
-
-      def ltp_api_rate_limited?(segment:, security_id:)
-        Rails.cache.read(ltp_rate_limit_key(segment: segment, security_id: security_id)).present?
-      rescue StandardError
-        false
-      end
-
-      def mark_ltp_api_rate_limited!(segment:, security_id:)
-        Rails.cache.write(ltp_rate_limit_key(segment: segment, security_id: security_id), true, expires_in: 20.seconds)
-      rescue StandardError
-        nil
-      end
-
-      def ltp_rate_limit_key(segment:, security_id:)
-        "risk_manager:ltp_rate_limit:#{segment}:#{security_id}"
-      end
-
-      def cache_ltp_tick(segment:, security_id:, ltp:, timestamp: Time.current)
-        return if segment.blank? || security_id.blank? || ltp.to_f <= 0
-
-        Live::TickCache.put(
-          segment: segment.to_s,
-          security_id: security_id.to_s,
-          ltp: ltp.to_f,
-          timestamp: timestamp,
-          ts: timestamp.to_i
-        )
-      rescue StandardError => e
-        Rails.logger.debug { "[RiskManager] cache_ltp_tick failed for #{segment}/#{security_id}: #{e.message}" }
       end
     end
   end

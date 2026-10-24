@@ -98,7 +98,7 @@ module OptionsBuying
         closes = candles.map { |c| c[:close].to_f }
         ema20 = calculate_ema(closes, 20)
 
-        vwap = OptionsBuying::VwapCalculator.new(@index_key).compute(index_sid)
+        vwap = OptionsBuying::VWAPCalculator.new(@index_key).compute(index_sid)
 
         near_ema = (spot_ltp - ema20).abs / spot_ltp < 0.002
         near_vwap = vwap && (spot_ltp - vwap).abs / spot_ltp < 0.002

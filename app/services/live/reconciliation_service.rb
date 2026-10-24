@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'singleton'
+require 'concurrent/map'
 
 module Live
   # ReconciliationService ensures data consistency across:
@@ -17,16 +18,19 @@ module Live
     # RiskManagerService already ensures caches every 5 seconds
     # This service is primarily for on-demand reconciliation
     RECONCILIATION_INTERVAL = 30.seconds
+    RECONCILIATION_COOLDOWN_SECONDS = 60
+    MAX_RECONCILE_EXIT_ATTEMPTS = 3
 
     def initialize
       @last_reconciliation = nil
+      @exit_attempts = Concurrent::Map.new
+      @exit_cooldowns = Concurrent::Map.new
       @stats = {
         reconciliations: 0,
         positions_fixed: 0,
         subscriptions_fixed: 0,
         activecache_fixed: 0,
         pnl_synced: 0,
-        exited_pnl_fixed: 0,
         errors: 0
       }
     end
@@ -104,32 +108,18 @@ module Live
       @stats[:reconciliations] += 1
 
       active_trackers = Positions::ActivePositionsCache.instance.active_trackers
+      return if active_trackers.empty?
 
-      unless active_trackers.empty?
-        hub = Live::MarketFeedHub.instance
-        active_cache = Positions::ActiveCache.instance
-        redis_cache = Live::RedisPnlCache.instance
+      hub = Live::MarketFeedHub.instance
+      active_cache = Positions::ActiveCache.instance
+      redis_cache = Live::RedisPnlCache.instance
 
-        active_trackers.each do |tracker|
-          reconcile_position(tracker, hub, active_cache, redis_cache)
-        rescue StandardError => e
-          @stats[:errors] += 1
-          Rails.logger.error("[ReconciliationService] Failed to reconcile tracker #{tracker.id}: #{e.class} - #{e.message}")
-        end
+      active_trackers.each do |tracker|
+        reconcile_position(tracker, hub, active_cache, redis_cache)
+      rescue StandardError => e
+        @stats[:errors] += 1
+        Rails.logger.error("[ReconciliationService] Failed to reconcile tracker #{tracker.id}: #{e.class} - #{e.message}")
       end
-
-      reconcile_exited_pnl_truth
-    end
-
-    def reconcile_exited_pnl_truth
-      batch = Positions::ExitedPnlReconciler.call(since: 1.day.ago)
-      return if batch[:fixed].zero?
-
-      @stats[:exited_pnl_fixed] += batch[:fixed]
-      @stats[:positions_fixed] += batch[:fixed]
-      Rails.logger.info(
-        "[ReconciliationService] Exited PnL truth sync: scanned=#{batch[:scanned]} fixed=#{batch[:fixed]}"
-      )
     end
 
     def reconcile_position(tracker, hub, active_cache, redis_cache)
@@ -186,29 +176,48 @@ module Live
     end
 
     def fix_stuck_exit(tracker)
-      Rails.logger.warn("[ReconciliationService] Auto-correcting stuck exit for #{tracker.order_no}")
+      now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      last_attempt_at = @exit_cooldowns[tracker.id]
 
-      # Try the standard ExitEngine path first to ensure proper routing
-      supervisor = Rails.application.config.x.trading_supervisor
-      exit_engine = if supervisor.respond_to?(:[])
-                      supervisor[:exit_manager]
-                    elsif supervisor.respond_to?(:exit_manager)
-                      supervisor.exit_manager
-                    end
+      if last_attempt_at && (now - last_attempt_at) < RECONCILIATION_COOLDOWN_SECONDS
+        Rails.logger.info("[ReconciliationService] Cooldown active for #{tracker.order_no} stuck exit; skipping this cycle")
+        return
+      end
+
+      attempts = (@exit_attempts[tracker.id] || 0) + 1
+      @exit_attempts[tracker.id] = attempts
+      @exit_cooldowns[tracker.id] = now
+
+      if attempts > MAX_RECONCILE_EXIT_ATTEMPTS
+        msg = "[ReconciliationService] Exceeded max exit attempts (#{MAX_RECONCILE_EXIT_ATTEMPTS}) for #{tracker.order_no}. Manual intervention required."
+        Rails.logger.error(msg)
+        Notifications::TelegramNotifier.instance.notify_error(msg, context: 'Live::ReconciliationService#fix_stuck_exit')
+        AuditLog.create!(
+          event_type: 'reconciliation_max_attempts_exceeded',
+          metadata: { order_no: tracker.order_no, tracker_id: tracker.id, attempts: attempts }
+        )
+        return
+      end
+
+      Rails.logger.warn("[ReconciliationService] Auto-correcting stuck exit for #{tracker.order_no} (attempt #{attempts}/#{MAX_RECONCILE_EXIT_ATTEMPTS})")
+
+      exit_engine = Rails.application.config.x.trading_supervisor&.[](:exit_manager)
 
       if exit_engine
         # The engine will check stale_exit_intent? and allow a retry
-        exit_engine.execute_exit(tracker, tracker.exit_reason.presence || 'AUTO_RECONCILED_EXIT')
+        exit_engine.execute_exit(tracker, 'AUTO_RECONCILED_EXIT')
       else
-        # No exit_engine reference means we cannot confirm a broker fill — marking the
-        # tracker exited here would be a data-integrity lie (position may still be live
-        # at the broker). Escalate instead of silently papering over a critical fault.
-        message = "ReconciliationService: stuck exit for #{tracker.order_no} (tracker=#{tracker.id}) " \
-                  'but no exit_engine reference available — CANNOT confirm broker fill, ' \
-                  'tracker NOT marked exited. Manual intervention required.'
-        Rails.logger.error("[ReconciliationService] #{message}")
-        Notifications::TelegramNotifier.instance.notify_error(message, context: 'Live::ReconciliationService#fix_stuck_exit')
+        Rails.logger.error("[ReconciliationService] CANNOT confirm broker fill for #{tracker.order_no} - exit_manager unreachable, position stays flagged as stuck")
+        Notifications::TelegramNotifier.instance.notify_error(
+          "CANNOT confirm broker fill for stuck exit on #{tracker.order_no} - exit_manager unreachable, retrying next cycle",
+          context: 'Live::ReconciliationService#fix_stuck_exit'
+        )
       end
+
+      AuditLog.create!(
+        event_type: 'reconciliation_mismatch',
+        metadata: { order_no: tracker.order_no, tracker_id: tracker.id, kind: 'stuck_exit', attempt: attempts }
+      )
     rescue StandardError => e
       Rails.logger.error("[ReconciliationService] Failed to auto-correct stuck exit for #{tracker.order_no}: #{e.class} - #{e.message}")
     end

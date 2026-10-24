@@ -111,14 +111,13 @@ module Research
       ]
 
       # Step 1: Evaluate all hypotheses
-      hypotheses.each { |h| h.evaluate(trades) }
-
-      # Set verdict for sample_size == 0
       hypotheses.each do |h|
-        if h.sample_size.zero?
+        h.evaluate(trades)
+      # Set verdict for sample_size == 0
+      if h.sample_size.zero?
           h.verdict = :insufficient_evidence
           h.reason = "No matching sample events found"
-        end
+      end
       end
 
       # Get hypotheses eligible for statistical significance testing (sample_size >= 250)
@@ -138,11 +137,9 @@ module Research
           if h.p_value <= threshold
             max_significant_idx = idx
           end
-        end
 
         # Step 3: Assign verdicts: accepted (significant) vs rejected
-        sorted_hyps.each_with_index do |h, idx|
-          threshold = ((idx + 1).to_f / m) * fdr_target
+        threshold = ((idx + 1).to_f / m) * fdr_target
           if idx <= max_significant_idx
             if h.expectancy > 0.0 && h.success_rate >= 60.0
               h.verdict = :accepted

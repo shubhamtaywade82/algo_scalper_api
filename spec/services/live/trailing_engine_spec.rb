@@ -6,39 +6,26 @@ RSpec.describe Live::TrailingEngine do
   let(:active_cache) { instance_double(Positions::ActiveCache, update_position: true) }
   let(:bracket_placer) { instance_double(Orders::BracketPlacer) }
   let(:exit_engine) { instance_double(Live::ExitEngine) }
-  let(:tracker) do
-    instance_double(
-      PositionTracker,
-      id: 42,
-      order_no: 'ORD42',
-      active?: true,
-      meta: {},
-      symbol: 'SEC42',
-      entry_price: 100.0,
-      quantity: 50,
-      exit_requested_at: nil,
-      exit_sent_at: nil
-    )
-  end
-  let(:trailing_view) { Positions::TrailingConfig.live_view }
+  let(:tracker) { instance_double(PositionTracker, id: 42, order_no: 'ORD42', active?: true, meta: {}, symbol: 'SEC42', entry_price: 100.0, quantity: 50) }
   let(:engine) { described_class.new(active_cache: active_cache, bracket_placer: bracket_placer) }
 
   before do
     Positions::TrailingConfig.reset_config!
-    allow(Positions::TrailingConfig).to receive(:from_tracker).and_return(trailing_view)
     allow(PositionTracker).to receive(:find_by).and_return(tracker)
     allow(bracket_placer).to receive(:update_bracket).and_return({ success: true })
     allow(exit_engine).to receive(:execute_exit)
     allow(tracker).to receive(:update_column)
-    allow(tracker).to receive(:runtime_meta_fetch).and_return(nil)
     allow(tracker).to receive(:with_lock).and_yield
     allow(tracker).to receive(:exited?).and_return(false)
     allow(Rails.logger).to receive_messages(info: nil, warn: nil, error: nil, debug: nil)
+    # Scalp overlay (fee-aware breakeven lock) is opt-in: legacy fixtures here run
+    # with it OFF — the dedicated describe below exercises it with the layer on.
+    allow(Scalp::FeeAwareExitTargets).to receive(:enabled?).and_return(false)
   end
 
   describe '#process_tick' do
     it 'updates peak and SL when tier threshold is satisfied' do
-      allow(trailing_view).to receive(:direct_trailing_enabled?).and_return(false)
+      allow(Positions::TrailingConfig).to receive(:direct_trailing_enabled?).and_return(false)
       # 0.12 = 12% profit, peak was 0.10
       position = build_position(pnl_pct: 0.12, peak_profit_pct: 0.10, sl_price: 70.0)
 
@@ -54,7 +41,7 @@ RSpec.describe Live::TrailingEngine do
     end
 
     it 'skips SL update when profit has not reached the first tier' do
-      allow(trailing_view).to receive(:direct_trailing_enabled?).and_return(false)
+      allow(Positions::TrailingConfig).to receive(:direct_trailing_enabled?).and_return(false)
       # 0.03 = 3% profit, peak was 0.05. Tier 1 is at 0.05 (default)
       position = build_position(pnl_pct: 0.03, peak_profit_pct: 0.05)
 
@@ -74,7 +61,9 @@ RSpec.describe Live::TrailingEngine do
     end
 
     it 'applies direct trailing when enabled and SL improves' do
-      allow(trailing_view).to receive_messages(direct_trailing_enabled?: true, calculate_direct_trailing_sl: 140.0)
+      # Entry 100, LTP 150. If direct trailing is 5% offset, new SL should be ~142.5.
+      # But calculate_direct_trailing_sl is what really matters.
+      allow(Positions::TrailingConfig).to receive_messages(direct_trailing_enabled?: true, calculate_direct_trailing_sl: 140.0)
 
       position = build_position(current_ltp: 150.0, sl_price: 130.0)
       result = engine.process_tick(position)
@@ -130,9 +119,10 @@ RSpec.describe Live::TrailingEngine do
       end
 
       it 'does not exit if activation thresholds are not met' do
-        # peak 0.20, current 0.12, sl_offset 0.08
-        # OR logic: profit 0.20 >= 0.25 (False) OR sl_offset 0.08 >= 0.10 (False) → blocked
-        position = build_position(peak_profit_pct: 0.20, pnl_pct: 0.12, sl_offset_pct: 0.08)
+        # peak 0.20 (< 0.25), current 0.10, sl_offset 0.08 (< 0.10)
+        # activation_profit_pct is 0.25 (default)
+        # neither peak >= 0.25 nor sl_offset_pct >= 0.10 is satisfied
+        position = build_position(peak_profit_pct: 0.20, pnl_pct: 0.10, sl_offset_pct: 0.08)
 
         result = engine.process_tick(position, exit_engine: exit_engine)
 
@@ -143,7 +133,7 @@ RSpec.describe Live::TrailingEngine do
       it 'exits once when activation thresholds are satisfied' do
         # peak 0.60, current 0.30
         # sl_price 112.0 means sl_offset is 0.12 (12%)
-        # activation thresholds: peak >= 0.25 OR sl_offset >= 0.10 (True)
+        # activation thresholds: peak >= 0.25 AND sl_offset >= 0.10 (True)
         # drawdown 0.30 >= threshold 0.008 (True)
         position = build_position(peak_profit_pct: 0.60, pnl_pct: 0.30, sl_price: 112.0, sl_offset_pct: 0.12)
         allow(tracker).to receive(:active?).and_return(true, false)
@@ -161,7 +151,7 @@ RSpec.describe Live::TrailingEngine do
       # Entry 100 * Qty 50 = 5000 capital
       position = build_position(entry_price: 100.0, quantity: 50, peak_profit_pct: 0.10, pnl_pct: 0.05)
 
-      expect(trailing_view).to receive(:peak_drawdown_triggered?).with(
+      expect(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).with(
         0.10, 0.05, hash_including(_capital_deployed: 5000.0)
       ).and_return(false)
 
@@ -171,72 +161,139 @@ RSpec.describe Live::TrailingEngine do
 
   describe '#check_peak_drawdown emergency exit' do
     it 'triggers emergency exit when peak >= 10% and current < -2%' do
-      allow(tracker).to receive(:meta).and_return(
-        'config_snapshot' => {
-          'position_sizing' => {
-            'drawdown' => { 'emergency_peak_loss_exit' => true, 'emergency_min_peak_pct' => 0.10 }
-          }
-        }
-      )
-      allow(engine).to receive(:feature_flags).and_return(enable_peak_drawdown_activation: false)
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        position_sizing: {
+          drawdown: { emergency_peak_loss_exit: true, emergency_min_peak_pct: 0.10 }
+        },
+        feature_flags: { enable_peak_drawdown_activation: false }
+      })
       position = build_position(peak_profit_pct: 0.15, pnl_pct: -0.05)
-      allow(Live::ExitEngine).to receive(:execute_exit)
 
       result = engine.check_peak_drawdown(position, exit_engine)
       expect(result).to be true
-      expect(Live::ExitEngine).to have_received(:execute_exit).with(
-        hash_including(reason: /emergency_peak_loss_exit/)
+      expect(exit_engine).to have_received(:execute_exit).with(
+        tracker, /emergency_peak_loss_exit/
       )
     end
 
-    it 'does not trigger emergency when peak < 10%' do
-      allow(tracker).to receive(:meta).and_return(
-        'config_snapshot' => {
-          'position_sizing' => {
-            'drawdown' => { 'emergency_peak_loss_exit' => true, 'emergency_min_peak_pct' => 0.10 }
-          }
-        }
-      )
-      allow(engine).to receive(:feature_flags).and_return(enable_peak_drawdown_activation: false)
-      allow(Live::ExitEngine).to receive(:execute_exit)
+    it 'does not trigger emergency when peak < 10% (falls through to tiered check instead)' do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        position_sizing: {
+          drawdown: { emergency_peak_loss_exit: true, emergency_min_peak_pct: 0.10 }
+        },
+        feature_flags: { enable_peak_drawdown_activation: false }
+      })
+      # Isolate the emergency branch: the ordinary tiered drawdown check further
+      # down in check_peak_drawdown would otherwise also fire for this fixture.
+      allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(false)
       position = build_position(peak_profit_pct: 0.05, pnl_pct: -0.05)
 
-      engine.check_peak_drawdown(position, exit_engine)
-      expect(Live::ExitEngine).not_to have_received(:execute_exit)
+      result = engine.check_peak_drawdown(position, exit_engine)
+      expect(result).to be false
+      expect(exit_engine).not_to have_received(:execute_exit)
     end
 
-    it 'does not trigger emergency when current loss is shallow (> -2%)' do
-      allow(tracker).to receive(:meta).and_return(
-        'config_snapshot' => {
-          'position_sizing' => {
-            'drawdown' => { 'emergency_peak_loss_exit' => true, 'emergency_min_peak_pct' => 0.10 }
-          }
-        }
-      )
-      allow(engine).to receive(:feature_flags).and_return(enable_peak_drawdown_activation: false)
-      allow(Live::ExitEngine).to receive(:execute_exit)
+    it 'does not trigger emergency when current loss is shallow (> -2%, falls through to tiered check instead)' do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        position_sizing: {
+          drawdown: { emergency_peak_loss_exit: true, emergency_min_peak_pct: 0.10 }
+        },
+        feature_flags: { enable_peak_drawdown_activation: false }
+      })
+      allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(false)
       position = build_position(peak_profit_pct: 0.15, pnl_pct: -0.01)
 
-      engine.check_peak_drawdown(position, exit_engine)
-      expect(Live::ExitEngine).not_to have_received(:execute_exit)
+      result = engine.check_peak_drawdown(position, exit_engine)
+      expect(result).to be false
+      expect(exit_engine).not_to have_received(:execute_exit)
     end
   end
 
   describe '#update_peak persistence' do
-    it 'persists extremes to Redis when new peak is reached' do
-      runtime_cache = Live::PositionRuntimeCache.instance
-      allow(runtime_cache).to receive(:merge).and_call_original
-
+    it 'persists extremes to database when new peak is reached' do
+      # Entry 100, Current Profit 20%, Old Peak 10%
+      # Highest price = 100 * 1.2 = 120
       position = build_position(entry_price: 100.0, peak_profit_pct: 0.10, pnl_pct: 0.20)
 
-      expect(tracker).not_to receive(:update_column)
+      # Should update meta in DB
+      expect(tracker).to receive(:update_column).with(
+        :meta, hash_including('highest_price' => 120.0)
+      )
 
       engine.update_peak(position, tracker: tracker)
+    end
+  end
 
-      expect(runtime_cache).to have_received(:merge).with(
-        tracker.id,
-        hash_including(highest_price: 120.0, lowest_price: kind_of(Numeric))
+  describe '#apply_fee_aware_breakeven_lock' do
+    # With defaults: entry 100, qty 50 -> position value 5000.
+    # statutory round-trip fees 58.61/5000 = 0.0117 (Orders::ChargesCalculator);
+    # spread estimate 100 x 0.01 x 2 = 2 -> spread_pct 0.02.
+    # friction = 0.0317; lock price = 100 + (58.61 + 2)/50 = 101.21
+    # (round-trip net-zero: statutory fees + full spread — review P2).
+    # Armed when peak >= 0.0317 x 1.2 = 0.0381.
+    before do
+      allow(Scalp::FeeAwareExitTargets).to receive(:enabled?).and_return(true)
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        risk: { scalp_exit: { enabled: true } },
+        broker_fees: { enabled: true, fee_per_order: 20 }
+      })
+      allow(Live::TickQuery).to receive(:for).and_return(nil) # no live quote -> estimate
+      allow(Positions::TrailingConfig).to receive(:direct_trailing_enabled?).and_return(false)
+      allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(false)
+    end
+
+    it 'locks SL at the fee-breakeven price once peak covers friction' do
+      position = build_position(pnl_pct: 0.04, peak_profit_pct: 0.05, sl_price: 70.0)
+
+      result = engine.process_tick(position, exit_engine: nil)
+
+      expect(bracket_placer).to have_received(:update_bracket).with(
+        tracker: tracker,
+        sl_price: 101.21,
+        reason: /fee_aware_breakeven_lock/
       )
+      expect(result[:sl_updated]).to be true
+      expect(result[:new_sl_price]).to eq(101.21)
+      expect(result[:reason]).to eq('fee_aware_breakeven_lock')
+      expect(active_cache).to have_received(:update_position).with(
+        42, hash_including(sl_price: 101.21)
+      )
+    end
+
+    it 'does not lock before the peak covers friction (young trade)' do
+      position = build_position(pnl_pct: 0.01, peak_profit_pct: 0.02, sl_price: 70.0)
+
+      result = engine.process_tick(position, exit_engine: nil)
+
+      expect(bracket_placer).not_to have_received(:update_bracket)
+      expect(result[:reason]).to eq('tier_not_reached')
+    end
+
+    it 'never lowers an SL that is already above the lock price' do
+      position = build_position(pnl_pct: 0.05, peak_profit_pct: 0.06, sl_price: 105.0)
+
+      engine.process_tick(position, exit_engine: nil)
+
+      expect(bracket_placer).not_to have_received(:update_bracket)
+    end
+
+    it 'skips short positions (tiered trailing still applies per existing behaviour)' do
+      position = build_position(pnl_pct: 0.05, peak_profit_pct: 0.06, sl_price: 70.0, position_side: 'short')
+
+      engine.process_tick(position, exit_engine: nil)
+
+      expect(bracket_placer).not_to have_received(:update_bracket)
+        .with(tracker: tracker, sl_price: 100.84, reason: /fee_aware_breakeven_lock/)
+    end
+
+    it 'reports lock failure without raising when the bracket update fails' do
+      allow(bracket_placer).to receive(:update_bracket).and_return({ success: false, error: 'rejected' })
+      position = build_position(pnl_pct: 0.04, peak_profit_pct: 0.05, sl_price: 70.0)
+
+      result = engine.process_tick(position, exit_engine: nil)
+
+      expect(result[:sl_updated]).to be false
+      expect(result[:reason]).to eq('rejected')
     end
   end
 

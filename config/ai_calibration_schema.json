@@ -1,0 +1,130 @@
+{
+  "type": "object",
+  "required": ["internal_reasoning", "system_diagnosis", "parameter_changes"],
+  "additionalProperties": false,
+  "properties": {
+    "internal_reasoning": {
+      "type": "string",
+      "description": "Step-by-step thinking process (Chain of Thought) analyzing the dataset before arriving at conclusions"
+    },
+    "system_diagnosis": {
+      "type": "object",
+      "required": ["primary_failure", "secondary_issues", "most_lossy_regime"],
+      "additionalProperties": false,
+      "properties": {
+        "primary_failure": {
+          "type": "string",
+          "description": "The single most impactful issue causing losses"
+        },
+        "secondary_issues": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional contributing issues"
+        },
+        "most_lossy_regime": {
+          "type": "string",
+          "enum": ["trend", "range", "volatile", "chop_decay", "close_gamma", "unknown"],
+          "description": "The market regime where most losses occur"
+        }
+      }
+    },
+    "parameter_changes": {
+      "type": "array",
+      "description": "Direct parameter adjustments to existing config keys",
+      "items": {
+        "type": "object",
+        "required": ["parameter", "current", "suggested", "change", "reason", "confidence"],
+        "additionalProperties": false,
+        "properties": {
+          "parameter": {
+            "type": "string",
+            "description": "Exact config key name (e.g. sl_pct, target_rr, trailing_activation)"
+          },
+          "current": {
+            "type": "number",
+            "description": "Current value of the parameter"
+          },
+          "suggested": {
+            "type": "number",
+            "description": "Suggested new value"
+          },
+          "change": {
+            "type": "string",
+            "enum": ["increase", "decrease", "no_change"],
+            "description": "Direction of change"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Data-grounded reason for the change"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Confidence score 0.0-1.0 based on sample size and signal strength"
+          }
+        }
+      }
+    },
+    "entry_filters": {
+      "type": "array",
+      "description": "Suggestions to improve entry quality",
+      "items": {
+        "type": "object",
+        "required": ["parameter", "current", "suggested", "reason", "confidence"],
+        "additionalProperties": false,
+        "properties": {
+          "parameter": { "type": "string" },
+          "current":   { "type": "number" },
+          "suggested": { "type": "number" },
+          "reason":    { "type": "string" },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    },
+    "exit_improvements": {
+      "type": "array",
+      "description": "Suggestions to improve exit efficiency",
+      "items": {
+        "type": "object",
+        "required": ["parameter", "current", "suggested", "reason", "confidence"],
+        "additionalProperties": false,
+        "properties": {
+          "parameter": { "type": "string" },
+          "current":   { "type": "number" },
+          "suggested": { "type": "number" },
+          "reason":    { "type": "string" },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    },
+    "regime_rules": {
+      "type": "array",
+      "description": "Regime-specific action rules",
+      "items": {
+        "type": "object",
+        "required": ["regime", "action", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "regime": {
+            "type": "string",
+            "enum": ["trend", "range", "volatile", "chop_decay", "close_gamma"]
+          },
+          "action": {
+            "type": "string",
+            "enum": ["disable_entries", "reduce_size", "tighten_sl"]
+          },
+          "reason": { "type": "string" }
+        }
+      }
+    }
+  }
+}

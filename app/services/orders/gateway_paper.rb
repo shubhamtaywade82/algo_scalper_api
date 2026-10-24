@@ -3,15 +3,22 @@
 module Orders
   class GatewayPaper < Orders::Gateway
     def exit_market(tracker, client_order_id: nil)
-      ltp = Live::TickQuery.ltp_for(tracker) || tracker.entry_price
-
-      exit_price = BigDecimal(ltp.to_s)
+      # Same staleness-checked + REST-fallback tick resolution as place_market — without it,
+      # a cache miss at exit time fell straight to tracker.entry_price (pinning the exit fill
+      # to the entry price instead of the real market), which the daily fill-reconciliation
+      # check caught in production.
+      tick = resolve_fresh_tick(segment: tracker.segment, security_id: tracker.security_id.to_s)
+      # For long exits (selling), use bid; for short exits (buying to cover), use ask
+      exit_price = resolve_exit_fill(tracker, tick)
       coid = client_order_id || "PAPER-EXIT-#{tracker.id}"
 
       # Return normalized shape with exit_price - ExitEngine remains the single source of truth.
+      # bid/ask are exposed for Execution recording (fills are first-class now).
       {
         success: true,
         exit_price: exit_price,
+        bid: tick&.bid&.to_f,
+        ask: tick&.ask&.to_f,
         order_id: coid,
         client_order_id: coid,
         status: :accepted,
@@ -21,66 +28,35 @@ module Orders
 
     def place_market(side:, segment:, security_id:, qty:, meta: {})
       order_no = meta[:client_order_id] || "PAPER-#{SecureRandom.hex(3)}"
+      tick = resolve_fresh_tick(segment: segment, security_id: security_id.to_s)
+      fill_price = resolve_entry_fill(side, tick, nil)
 
-      fill_price = resolve_fill_price(side, segment, security_id, meta)
-
+      # Simulate broker ack only; domain services own tracker persistence.
+      # bid/ask are exposed so Execution records carry the full fill context
+      # (side touched + slippage applied) instead of a bare price.
       {
         success: true,
         order_id: order_no,
         paper: true,
-        status: :accepted,
-        fill_price: fill_price
+        fill_price: fill_price&.to_f,
+        bid: tick&.bid&.to_f,
+        ask: tick&.ask&.to_f,
+        requested_price: tick&.ltp&.to_f
       }
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] place_market failed for #{segment}-#{security_id}: #{e.class} - #{e.message}")
       { success: false, error: e.message, paper: true }
     end
 
-    def place_ioc_limit(side:, segment:, security_id:, qty:, price:, meta: {})
-      # Paper mode: IOC always fills at the given price
-      {
-        success: true,
-        order_id: "PAPER-IOC-#{SecureRandom.hex(3)}",
-        paper: true,
-        status: :accepted,
-        fill_price: price.to_f
-      }
-    rescue StandardError => e
-      Rails.logger.error("[GatewayPaper] place_ioc_limit failed for #{segment}-#{security_id}: #{e.class} - #{e.message}")
-      { success: false, error: e.message, paper: true }
-    end
-
-    # Returns unified shape: { cash:, equity:, mtm:, exposure:, utilized:, margin: }
-    # cash = free balance (like broker available); utilized/exposure = premium tied in open legs.
+    # Paper wallet is the double-entry ledger (Ledger::WalletReader) — single
+    # source of truth: seed + all-time realized PnL - brokerage - premium locked
+    # in open positions. (Legacy derived snapshot only counted today's PnL.)
     def wallet_snapshot
-      if ledger_wallet_enabled?
-        ledger = Ledger::WalletReader.snapshot(mode: :paper)
-        return ledger if ledger[:utilized] >= 0
-
-        Rails.logger.warn("[GatewayPaper] ledger wallet state invalid (utilized=#{ledger[:utilized]}), falling back to legacy")
-      end
-
-      legacy_wallet_snapshot
+      Ledger::WalletReader.snapshot(mode: :paper)
+                          .slice(:cash, :equity, :mtm, :exposure, :utilized, :margin)
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] wallet_snapshot failed: #{e.class} - #{e.message}")
       { cash: 100_000, equity: 100_000, mtm: 0, exposure: 0, utilized: 0, margin: 0 }
-    end
-
-    def legacy_wallet_snapshot
-      cfg = paper_trading_config
-      base = (cfg[:balance] || 100_000).to_f
-      realized = paper_realized_rupees(cfg)
-      deployed = deployed_premium_rupees
-      unrealized = active_unrealized_rupees
-
-      cash_raw = base + realized - deployed
-      cash = [cash_raw, 0.0].max.round(2)
-      mtm = unrealized.round(2)
-      utilized = deployed.round(2)
-      exposure = utilized
-      equity = (cash + utilized + mtm).round(2)
-
-      { cash: cash, equity: equity, mtm: mtm, exposure: exposure, utilized: utilized, margin: 0, source: "legacy" }
     end
 
     def cancel_order(order_id)
@@ -90,13 +66,17 @@ module Orders
       { success: false, order_id: order_id, status: :failed, error: e.message, paper: true }
     end
 
+    def modify_order(order_id, params = {})
+      { success: true, order_id: order_id, status: :modified, paper: true, params: params }
+    end
+
     # Returns unified shape: { qty:, avg_price:, upnl:, rpnl:, last_ltp:, product_type:, exchange_segment:, position_type:, trading_symbol:, status: }
     def position(segment:, security_id:)
       tracker = PositionTracker.paper.active.find_by(segment: segment, security_id: security_id.to_s)
       return nil unless tracker
 
-      is_long = tracker.side.to_s.upcase.start_with?("LONG") || tracker.side.to_s.upcase == "BUY"
-      position_type = is_long ? "LONG" : "SHORT"
+      is_long = tracker.side.to_s.upcase.start_with?('LONG') || tracker.side.to_s.upcase == 'BUY'
+      position_type = is_long ? 'LONG' : 'SHORT'
       ltp = Live::TickQuery.for_security(segment: segment, security_id: security_id.to_s)&.ltp
       upnl = BigDecimal((tracker.current_pnl_rupees || 0).to_s)
 
@@ -116,50 +96,119 @@ module Orders
 
     private
 
-    # Uses the guard-validated LTP (meta[:ltp]) as the primary fill price in paper
-    # mode.  Falls back to tick bid/ask only when meta[:ltp] is unavailable AND the
-    # tick data is provably fresh (so we don't accidentally fill at stale prices).
-    def resolve_fill_price(side, segment, security_id, meta)
-      return meta[:ltp].to_f if meta[:ltp].to_f.positive?
+    def resolve_fresh_tick(segment:, security_id:)
+      tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+      return tick if tick&.ltp&.positive? && tick_fresh?(tick)
 
-      tick = Live::TickQuery.for_security(segment: segment, security_id: security_id.to_s)
-      if tick&.bid.to_f.positive? && tick&.ask.to_f.positive? && tick_fresh?(tick)
-        return side.to_s.downcase == 'buy' ? tick.ask.to_f : tick.bid.to_f
+      fetch_api_tick(segment: segment, security_id: security_id) || tick
+    end
+
+    def tick_fresh?(tick)
+      return true unless tick.respond_to?(:timestamp) && tick.timestamp
+
+      (Time.current - tick.timestamp).abs <= 5.seconds
+    end
+
+    def fetch_api_tick(segment:, security_id:)
+      return nil unless defined?(DhanHQ::Models::MarketFeed)
+
+      segment_enum = segment.to_s.upcase
+      payload = { segment_enum => [security_id.to_i] }
+      response = DhanHQ::Models::MarketFeed.ltp(payload)
+      return nil unless response.is_a?(Hash) && response['status'] == 'success'
+
+      data = response.dig('data', segment_enum, security_id.to_s)
+      price = data&.dig('last_price')
+      return nil unless price&.to_f&.positive?
+
+      MarketTick.new(
+        segment: segment,
+        security_id: security_id,
+        ltp: BigDecimal(price.to_s),
+        timestamp: Time.current,
+        oi: 0,
+        oi_change: 0,
+        bid: price.to_f,
+        ask: price.to_f,
+        volume: 0,
+        prev_close: price.to_f
+      )
+    rescue StandardError => e
+      Rails.logger.debug { "[GatewayPaper] fetch_api_tick failed for #{segment}:#{security_id}: #{e.message}" }
+      nil
+    end
+
+    def resolve_exit_fill(tracker, tick)
+      is_long = tracker.position_side.to_s.downcase.start_with?('long')
+      raw_price = if is_long
+                    # Selling: use bid price (worse for seller)
+                    tick&.bid || tick&.ltp || tracker.entry_price
+                  else
+                    # Buying to cover: use ask price (worse for buyer)
+                    tick&.ask || tick&.ltp || tracker.entry_price
+                  end
+      raw_price ||= tracker.entry_price || 100.0
+      apply_slippage(BigDecimal(raw_price.to_s), is_long ? :sell : :buy)
+    end
+
+    def resolve_entry_fill(side, tick, fallback_ltp)
+      raw_price = if side.to_s.upcase == 'BUY'
+                    # Buying: use ask price (worse for buyer)
+                    tick&.ask || tick&.ltp || fallback_ltp
+                  else
+                    # Selling: use bid price (worse for seller)
+                    tick&.bid || tick&.ltp || fallback_ltp
+                  end
+      raw_price ||= fallback_ltp || 100.0
+
+      apply_slippage(BigDecimal(raw_price.to_s), side.to_s.upcase.to_sym)
+    end
+
+    def apply_slippage(price, side)
+      return price unless slippage_enabled?
+
+      tick_size = BigDecimal('0.05') # Default NSE option tick size
+      ticks = side == :BUY ? slippage_buy_ticks : slippage_sell_ticks
+      adjustment = tick_size * ticks
+
+      side == :BUY ? price + adjustment : price - adjustment
+    end
+
+    def slippage_enabled?
+      if AlgoConfig.respond_to?(:dig)
+        val = AlgoConfig.dig('paper_trading', 'slippage', 'enabled')
+        val = AlgoConfig.dig(:paper_trading, :slippage, :enabled) if val.nil?
+        return val unless val.nil?
       end
 
-      (meta[:price] || 0).to_f
+      slippage_cfg[:enabled] == true || slippage_cfg['enabled'] == true
     end
 
-    def tick_fresh?(tick, max_age_seconds: 2.0)
-      age = Time.current - tick.timestamp
-      age.between?(0, max_age_seconds)
+    def slippage_buy_ticks
+      if AlgoConfig.respond_to?(:dig)
+        val = AlgoConfig.dig('paper_trading', 'slippage', 'market_buy_ticks')
+        val = AlgoConfig.dig(:paper_trading, :slippage, :market_buy_ticks) if val.nil?
+        return val.to_i if val.present?
+      end
+
+      (slippage_cfg[:market_buy_ticks] || slippage_cfg['market_buy_ticks'])&.to_i || 1
+    end
+
+    def slippage_sell_ticks
+      if AlgoConfig.respond_to?(:dig)
+        val = AlgoConfig.dig('paper_trading', 'slippage', 'market_sell_ticks')
+        val = AlgoConfig.dig(:paper_trading, :slippage, :market_sell_ticks) if val.nil?
+        return val.to_i if val.present?
+      end
+
+      (slippage_cfg[:market_sell_ticks] || slippage_cfg['market_sell_ticks'])&.to_i || 1
+    end
+
+    def slippage_cfg
+      cfg = AlgoConfig.fetch
+      cfg[:paper_trading]&.dig(:slippage) || cfg['paper_trading']&.dig('slippage') || {}
     rescue StandardError
-      false
-    end
-
-    def paper_trading_config
-      AlgoConfig.fetch[:paper_trading] || {}
-    end
-
-    def paper_realized_rupees(cfg)
-      scope = cfg[:realized_scope].to_s.strip.downcase
-      rel = PositionTracker.exited_paper
-      rel = rel.where(exited_at: Time.zone.today.all_day) if scope == "daily"
-
-      rel.sum(:last_pnl_rupees).to_f
-    end
-
-    def deployed_premium_rupees
-      sql = "ABS(COALESCE(entry_price, 0) * COALESCE(quantity, 0))"
-      PositionTracker.paper.active.sum(Arel.sql(sql)).to_f
-    end
-
-    def active_unrealized_rupees
-      PositionTracker.paper.active.sum { |t| t.current_pnl_rupees.to_f }
-    end
-
-    def ledger_wallet_enabled?
-      Ledger::Config.paper_enabled?
+      {}
     end
   end
 end

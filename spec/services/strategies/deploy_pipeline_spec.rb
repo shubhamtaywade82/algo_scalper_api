@@ -86,4 +86,26 @@ RSpec.describe Strategies::DeployPipeline do
       expect(result[:scan_report][:blocked_count]).to be >= 1
     end
   end
+
+  describe 'slug validation (path traversal guard)' do
+    it 'rejects directory traversal in the slug' do
+      expect { described_class.call('../../etc') }
+        .to raise_error(Strategies::SlugValidator::InvalidSlug, /Invalid slug/)
+    end
+
+    it 'rejects path separators' do
+      expect { described_class.call('foo/bar') }
+        .to raise_error(Strategies::SlugValidator::InvalidSlug)
+    end
+
+    it 'rejects dots and extensions' do
+      expect { described_class.call('foo.rb') }
+        .to raise_error(Strategies::SlugValidator::InvalidSlug)
+    end
+
+    it 'rejects empty slugs' do
+      expect { described_class.call('') }
+        .to raise_error(Strategies::SlugValidator::InvalidSlug)
+    end
+  end
 end

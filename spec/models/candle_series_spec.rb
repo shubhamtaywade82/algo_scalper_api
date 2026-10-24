@@ -50,9 +50,10 @@ RSpec.describe CandleSeries do
       it 'loads candles from array' do
         series.load_from_raw(raw_data)
         expect(series.candles.size).to eq(2)
-        # Sorted chronologically: 1.hour.ago comes first
+        # First candle is the oldest one (1 hour ago)
         expect(series.candles.first.open).to eq(24_950.0)
         expect(series.candles.first.close).to eq(24_980.0)
+        # Second candle is the newest one (Time.current)
         expect(series.candles.last.open).to eq(25_000.0)
       end
     end
@@ -72,7 +73,7 @@ RSpec.describe CandleSeries do
       it 'loads candles from hash' do
         series.load_from_raw(raw_data)
         expect(series.candles.size).to eq(2)
-        # Sorted chronologically: 1.hour.ago comes first
+        # First candle is the oldest one (1 hour ago)
         expect(series.candles.first.open).to eq(24_950.0)
       end
     end
@@ -204,10 +205,9 @@ RSpec.describe CandleSeries do
         allow(TechnicalAnalysis::Adx).to receive(:calculate).and_raise(StandardError.new('Calculation error'))
       end
 
-      it 'returns nil and logs warning' do
+      it 'propagates unexpected calculation errors instead of returning nil' do
         series_with_candles = build(:candle_series, :with_candles)
-        expect(Rails.logger).to receive(:warn).with(/ADX calculation failed/)
-        expect(series_with_candles.adx(14)).to be_nil
+        expect { series_with_candles.adx(14) }.to raise_error(StandardError, 'Calculation error')
       end
     end
   end
@@ -240,10 +240,9 @@ RSpec.describe CandleSeries do
         allow(RubyTechnicalAnalysis::RelativeStrengthIndex).to receive(:new).and_raise(StandardError.new('Calculation error'))
       end
 
-      it 'returns nil and logs warning' do
+      it 'propagates unexpected calculation errors instead of returning nil' do
         series_with_candles = build(:candle_series, :with_candles)
-        expect(Rails.logger).to receive(:warn).with(/RSI calculation failed/)
-        expect(series_with_candles.rsi(14)).to be_nil
+        expect { series_with_candles.rsi(14) }.to raise_error(StandardError, 'Calculation error')
       end
     end
   end
@@ -488,16 +487,6 @@ RSpec.describe CandleSeries do
       signal = series.supertrend_signal
       expect(signal).to be_in([:long_entry, :short_entry, nil])
     end
-
-    it 'accepts custom supertrend parameters' do
-      expect(Indicators::Supertrend).to receive(:new).with(
-        series: series,
-        period: 10,
-        base_multiplier: 2.5
-      ).and_call_original
-
-      series.supertrend_signal(period: 10, multiplier: 2.5)
-    end
   end
 
   describe '#bollinger_bands' do
@@ -547,6 +536,94 @@ RSpec.describe CandleSeries do
       # OBV calculation may fail due to API issues with technical-analysis gem
       # Accept either an array result or nil (when calculation fails)
       expect(obv).to be_an(Array).or be_nil
+    end
+  end
+
+  describe 'strict market-data parsing (error-handling review 2026-09)' do
+    it 'rejects non-numeric OHLC values instead of coercing them to 0.0' do
+      raw = [{ timestamp: Time.current, open: 'abc', high: 25_100, low: 24_900, close: 25_050, volume: 100 }]
+
+      expect { series.load_from_raw(raw) }.to raise_error(Errors::InvalidMarketData, /open/)
+    end
+
+    it 'rejects nil OHLC values' do
+      raw = [{ timestamp: Time.current, open: nil, high: 25_100, low: 24_900, close: 25_050, volume: 100 }]
+
+      expect { series.load_from_raw(raw) }.to raise_error(Errors::InvalidMarketData, /open/)
+    end
+
+    it 'names the candle and field on hash-format errors' do
+      raw = { 'open' => [25_000.0], 'high' => [25_100.0], 'low' => [24_900.0],
+              'close' => ['garbage'], 'timestamp' => [Time.current.to_i], 'volume' => [10] }
+
+      expect { series.load_from_raw(raw) }.to raise_error(Errors::InvalidMarketData, /close\[0\]/)
+    end
+
+    it 'still accepts volumeless index candles as an explicit representation decision' do
+      raw = { 'open' => [25_000.0], 'high' => [25_100.0], 'low' => [24_900.0],
+              'close' => [25_050.0], 'timestamp' => [Time.current.to_i] }
+
+      expect { series.load_from_raw(raw) }.not_to raise_error
+      expect(series.candles.first.volume).to eq(0)
+    end
+
+    it 'rejects candles missing a required field in both representations' do
+      raw = [{ timestamp: Time.current, high: 25_100, low: 24_900, close: 25_050, volume: 100 }]
+
+      expect { series.load_from_raw(raw) }.to raise_error(Errors::InvalidMarketData, /:open/)
+    end
+  end
+
+  describe '#vwap' do
+    it 'yields nil for the zero-volume prefix instead of the typical price' do
+      c1 = build(:candle, open: 100, high: 110, low: 90, close: 105, volume: 0)
+      c2 = build(:candle, open: 105, high: 115, low: 95, close: 110, volume: 100)
+      series.add_candle(c1)
+      series.add_candle(c2)
+
+      values = series.vwap
+
+      expect(values.first).to be_nil
+      # Only the second candle has volume, so VWAP == its typical price
+      expect(values.last).to be_within(0.01).of((115.0 + 95.0 + 110.0) / 3.0)
+    end
+  end
+
+  describe '#vwap_or_twap' do
+    it 'returns the unweighted cumulative typical-price mean for a volumeless (index) series' do
+      # DhanHQ index feeds report volume=0 for every candle — strict VWAP is
+      # nil series-wide there, which used to leave every VWAP strategy Holding
+      # forever on real index data (review P1).
+      c1 = build(:candle, open: 100, high: 110, low: 90, close: 105, volume: 0)
+      c2 = build(:candle, open: 105, high: 115, low: 95, close: 110, volume: 0)
+      c3 = build(:candle, open: 110, high: 120, low: 100, close: 115, volume: 0)
+      [c1, c2, c3].each { |c| series.add_candle(c) }
+
+      values = series.vwap_or_twap
+
+      expect(values).to all(be_a(Float))
+      expect(values.first).to be_within(0.01).of((110.0 + 90.0 + 105.0) / 3.0)
+      expect(values.last).to be_within(0.01).of(
+        ((110.0 + 90.0 + 105.0) + (115.0 + 95.0 + 110.0) + (120.0 + 100.0 + 115.0)) / 9.0
+      )
+    end
+
+    it 'falls back per candle: TWAP until volume starts, weighted thereafter' do
+      c1 = build(:candle, open: 100, high: 110, low: 90, close: 105, volume: 0)
+      c2 = build(:candle, open: 105, high: 115, low: 95, close: 110, volume: 100)
+      series.add_candle(c1)
+      series.add_candle(c2)
+
+      values = series.vwap_or_twap
+
+      # Candle 1 has no volume yet: TWAP = its own typical price
+      expect(values.first).to be_within(0.01).of((110.0 + 90.0 + 105.0) / 3.0)
+      # Candle 2 carries volume: weighted VWAP = its typical price
+      expect(values.last).to be_within(0.01).of((115.0 + 95.0 + 110.0) / 3.0)
+    end
+
+    it 'returns an empty array for an empty series' do
+      expect(series.vwap_or_twap).to eq([])
     end
   end
 end

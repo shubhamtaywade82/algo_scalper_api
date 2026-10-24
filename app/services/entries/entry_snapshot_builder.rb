@@ -31,13 +31,15 @@ module Entries
         snapshot
       end
 
+      # Index-specific override wins; otherwise the options-buying mode config.
+      # Absent keys already degrade to 0.0 (most-restrictive spread allowance).
+      # No rescue (wave 4): a corrupt mode config used to silently assume a
+      # 1.5% spread allowance the operator never set.
       def spread_guard_pct_for(index_cfg)
         index_override = index_cfg.dig(:execution, :max_bid_ask_spread_pct)
         return index_override.to_f if index_override
 
         OptionsBuying::Mode.config.dig(:execution, :max_bid_ask_spread_pct).to_f
-      rescue StandardError
-        0.015
       end
     end
   end

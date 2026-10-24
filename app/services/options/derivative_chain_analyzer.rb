@@ -1,10 +1,11 @@
 # frozen_string_literal: true
+
 # rubocop:disable Metrics/BlockNesting
 
 module Options
   # Enhanced ChainAnalyzer that uses Derivative records and integrates with existing infrastructure
   # This replaces the need for raw option chain APIs by leveraging existing Derivative models
-  # rubocop:disable Metrics/ClassLength
+  # rubocop:disable-next Metrics/ClassLength
   class DerivativeChainAnalyzer
     def initialize(index_key:, expiry: nil, config: {})
       @index_key = index_key.to_s.upcase
@@ -135,10 +136,9 @@ module Options
 
     def weekly_expiry_in_db?(expiry_date)
       expiry = expiry_date.is_a?(Date) ? expiry_date : Date.parse(expiry_date.to_s)
-      Derivative.where(underlying_symbol: @index_key, expiry_date: expiry)
-                .where("expiry_flag ILIKE 'W%'")
-                .where.not(option_type: [nil, ''])
-                .exists?
+      Instrument.options.where(underlying_symbol: @index_key, expiry_date: expiry)
+               .where("expiry_flag ILIKE 'W%'")
+               .exists?
     rescue StandardError
       false
     end
@@ -149,13 +149,12 @@ module Options
       # Convert expiry_date to Date object if it's a string
       expiry_obj = expiry_date.is_a?(Date) ? expiry_date : Date.parse(expiry_date.to_s)
 
-      # Get all derivatives for this index and expiry
-      # Exclude TEST_ security IDs completely - never use test derivatives
-      derivatives_relation = Derivative.where(
+      # Get all option contracts for this index and expiry from the
+      # consolidated master. Exclude TEST_ security IDs completely.
+      derivatives_relation = Instrument.options.where(
         underlying_symbol: @index_key,
         expiry_date: expiry_obj
-      ).where.not(option_type: [nil, ''])
-                                       .where.not("security_id LIKE 'TEST_%'")
+      ).where.not("security_id LIKE 'TEST_%'")
       derivatives = derivatives_relation
 
       if derivatives.empty?
@@ -185,7 +184,7 @@ module Options
                           api_strikes.include?(strike_bd)
                         end
                         filtered_ids = matching.map(&:id)
-                        Derivative.where(id: filtered_ids)
+                        Instrument.where(id: filtered_ids)
                       end
 
         if derivatives.count < original_count
@@ -229,7 +228,7 @@ module Options
                          target_strikes_bd.include?(strike_bd)
                        end
                        filtered_ids = matching_derivs.map(&:id)
-                       Derivative.where(id: filtered_ids)
+                       Instrument.where(id: filtered_ids)
                      end
 
           filtered_count = filtered.count
@@ -289,8 +288,6 @@ module Options
               oi_change: 0,
               bid: nil,
               ask: nil,
-              bid_qty: 0,
-              ask_qty: 0,
               volume: 0,
               prev_close: nil
             )
@@ -405,7 +402,7 @@ module Options
     end
 
     # Build option data hash from Derivative, API data, and tick
-    # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+    # rubocop:disable-next Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
     def build_option_data(derivative, api_data, tick)
       # Use exchange_segment (NSE_FNO) not segment (derivatives) for API calls
       exchange_seg = derivative.exchange_segment || 'NSE_FNO'
@@ -425,7 +422,7 @@ module Options
       {
         derivative: derivative,
         strike: derivative.strike_price.to_f,
-        type: derivative.option_type.to_s.upcase,
+        type: derivative.option_type,
         expiry: derivative.expiry_date,
         segment: exchange_seg, # Use exchange_segment for consistency
         security_id: derivative.security_id,
@@ -444,7 +441,6 @@ module Options
         vega: api_data&.dig('greeks', 'vega')&.to_f
       }
     end
-    # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
     # Find ATM strike from chain
     def find_atm_strike(chain, spot)
@@ -455,7 +451,7 @@ module Options
     end
 
     # Score chain options based on multiple factors
-    # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+    # rubocop:disable-next Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
     def score_chain(chain, atm, spot, direction, flow_results: nil, gamma_score: 0.0)
       @direction = direction # Store for use in reason_for
       option_type_key = direction == :bullish ? 'CE' : 'PE'
@@ -473,25 +469,20 @@ module Options
       min_iv = (@config[:min_iv] || 5.0).to_f
       max_iv = (@config[:max_iv] || 60.0).to_f
       max_spread_pct = (@config[:max_spread_pct] || 0.03).to_f
-      min_volume = (@config[:min_volume] || 0).to_i
-      top_by_oi_limit = (@config[:top_by_oi_limit] || 0).to_i
 
-      # Only enforce OI/IV/spread gates when this leg has chain enrichment — batch LTP
-      # paths often have price only while a sibling strike carries OI from the API.
+      # Check if we have API data (OI/IV available) - if not, relax filters
       has_api_data = chain.any? { |o| o[:oi].to_i.positive? || o[:iv].to_f.positive? }
 
       unless has_api_data
         Rails.logger.warn("[Options::DerivativeChainAnalyzer] No API data available - relaxing filters for #{@index_key}")
-        min_oi = 0
-        min_iv = 0
-        max_iv = 999.0
+        min_oi = 0 # Allow any OI if API data unavailable
+        min_iv = 0 # Allow any IV if API data unavailable
+        max_iv = 999.0 # Allow any IV if API data unavailable
       end
 
       candidates_with_ltp = 0
       candidates_filtered = 0
       result = chain.select { |o| o[:type] == option_type_key }.filter_map do |option|
-        option_has_api_data = option[:oi].to_i.positive? || option[:iv].to_f.positive?
-
         # Filter criteria
         strike_distance = (option[:strike] - spot).abs
         if strike_distance > max_distance * 2
@@ -509,16 +500,15 @@ module Options
 
         candidates_with_ltp += 1
 
-        if option_has_api_data
-          next if option[:oi].to_i.positive? && option[:oi].to_i < min_oi
-          next if min_volume.positive? && option[:volume].to_i < min_volume
-
-          iv = option[:iv].to_f
-          next if iv.positive? && (iv < min_iv || iv > max_iv)
+        # Only filter by OI/IV if we have API data
+        if has_api_data
+          next if option[:oi].to_i < min_oi
+          next if option[:iv].to_f < min_iv || option[:iv].to_f > max_iv
         end
 
         spread = calc_spread(option[:bid], option[:ask], option[:ltp])
-        next if spread && option_has_api_data && (spread > max_spread_pct)
+        # Only filter by spread if we have bid/ask data
+        next if spread && has_api_data && (spread > max_spread_pct)
 
         # Get flow score for this specific strike
         flow_score = flow_scores[option[:strike].to_f] || 1.0
@@ -539,36 +529,20 @@ module Options
           oi: option[:oi],
           oi_change: option[:oi_change],
           spread: spread,
-          bid: option[:bid],
-          ask: option[:ask],
-          volume: option[:volume],
           delta: option[:delta],
-          gamma: option[:gamma],
-          theta: option[:theta],
-          vega: option[:vega],
           segment: option[:segment],
           security_id: option[:security_id],
           lot_size: option[:lot_size],
           symbol: build_symbol(option[:derivative], option[:strike], option[:type], option[:expiry]),
+          instrument_id: option[:derivative]&.id,
           derivative_id: option[:derivative]&.id,
           reason: reason_for(option, score, atm, spot, direction)
         }
       end
 
       Rails.logger.debug { "[Options::DerivativeChainAnalyzer] Scoring: #{candidates_with_ltp} with LTP, #{candidates_filtered} filtered, #{result.size} scored for #{@index_key}" }
-
-      unless has_api_data
-        Rails.logger.warn("[Options::DerivativeChainAnalyzer] No API data available - skipping OI ranking for #{@index_key}")
-        return result
-      end
-      if top_by_oi_limit.positive? && result.size > top_by_oi_limit
-        ranked = result.sort_by { |r| -(r[:oi] || 0) }
-        result = ranked.first(top_by_oi_limit)
-      end
-
       result
     end
-    # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
     # Calculate bid-ask spread percentage
     def calc_spread(bid, ask, _ltp)
@@ -593,7 +567,7 @@ module Options
     end
 
     # Combined institutional scoring function
-    # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+    # rubocop:disable Metrics/AbcSize
     def combined_score(option, atm, spot, _direction, flow_score: 1.0, gamma_score: 0.0)
       weights = @config[:scoring_weights] || {
         delta: 0.4,
@@ -602,7 +576,13 @@ module Options
       }
 
       # 1. Delta Score (0.40–0.60 ideal)
-      delta = option[:delta]&.to_f&.abs || 0.5
+      delta = option[:delta]&.to_f&.abs || Options::Greeks::Calculator.estimate_delta(
+        spot_price: spot,
+        strike_price: option[:strike],
+        option_type: option[:type],
+        iv_pct: option[:iv],
+        expiry_date: option[:expiry]
+      )
       delta_score = 1.0 - (delta - 0.5).abs
 
       # 2. Liquidity Score (Spread < 1% preferred)
@@ -665,7 +645,6 @@ module Options
       "Score:#{score.round(3)} IV:#{option[:iv]&.round(2)}% OI:#{option[:oi]} " \
         "Spread:#{spread_str} Strike:#{option[:strike]} (#{strike_type}, #{distance_pct}% from spot)"
     end
-    # rubocop:enable Metrics/AbcSize
 
     private
 
@@ -684,5 +663,5 @@ module Options
       oc
     end
   end
-  # rubocop:enable Metrics/ClassLength
 end
+# rubocop:enable Metrics/BlockNesting

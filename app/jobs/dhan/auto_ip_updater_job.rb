@@ -15,10 +15,10 @@ module Dhan
       return unless registered
 
       # Check IPv4 first
-      if v4.present? && v4 != 'Unknown' && ![registered[:primary_ip], registered[:secondary_ip]].include?(v4)
+      if v4.present? && v4 != 'Unknown' && [registered[:primary_ip], registered[:secondary_ip]].exclude?(v4)
         attempt_update(v4, 'v4')
       # Then check IPv6 if it's actually an IPv6 address
-      elsif v6.present? && v6 != 'Unknown' && v6 != 'None' && v6.include?(':') && ![registered[:primary_ip], registered[:secondary_ip]].include?(v6)
+      elsif v6.present? && v6 != 'Unknown' && v6 != 'None' && v6.include?(':') && [registered[:primary_ip], registered[:secondary_ip]].exclude?(v6)
         attempt_update(v6, 'v6')
       end
     end

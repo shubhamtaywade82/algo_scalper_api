@@ -72,25 +72,35 @@ module InstrumentHelpers
 
   # Resolves an actionable LTP for downstream order placement.
   # Priority order:
-  # 1. `meta[:ltp]` if provided
+  # 1. `meta[:ltp]` if provided (validated — see below)
   # 2. WebSocket tick cache via Live::RedisPnlCache (if WS connected and fresh)
   # 3. REST API via instrument/derivative object (fallback when WS unavailable)
   # 4. nil (if all methods fail)
+  #
+  # Error-handling review 2026-09 (wave 2):
+  #   * The meta shortcut used to accept any present value — 0, negative or NaN
+  #     flowed straight into order placement while the WS/API paths enforce
+  #     positivity. The meta path now enforces the same contract and raises
+  #     Errors::InvalidMarketData on garbage (a caller-supplied price that is
+  #     not a positive finite number is corrupt input, not "no price").
+  #   * The blanket rescue is for INFRASTRUCTURE failures only (REST/WS
+  #     outages -> documented nil); domain errors are re-raised.
   #
   # @param segment [String]
   # @param security_id [String, Integer]
   # @param meta [Hash]
   # @param fallback_to_api [Boolean] Whether to fallback to REST API if WS unavailable
   # @return [BigDecimal, nil]
+  # @raise [Errors::InvalidMarketData] when meta[:ltp] is present but not a positive finite number
   def resolve_ltp(segment:, security_id:, meta: {}, fallback_to_api: true)
     ltp_from_meta = meta&.dig(:ltp)
-    return BigDecimal(ltp_from_meta.to_s) if ltp_from_meta.present?
+    return valid_meta_ltp!(ltp_from_meta, segment: segment, security_id: security_id) if ltp_from_meta.present?
 
     # Try WebSocket cache if hub is connected and ticks are fresh
     hub = Live::MarketFeedHub.instance
     if hub.running? && hub.connected?
       tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
-      return tick.ltp if tick&.ltp&.positive?
+      return tick.ltp if tick&.ltp&.positive? && tick.fresh?
     end
 
     # Fallback to REST API when WebSocket unavailable or cache miss
@@ -100,9 +110,30 @@ module InstrumentHelpers
     end
 
     nil
+  rescue Errors::InvalidMarketData
+    raise
   rescue StandardError => e
     Rails.logger.error("Failed to resolve LTP for #{segment}:#{security_id} - #{e.message}")
     nil
+  end
+
+  # The meta LTP is caller-supplied and trusted downstream for order placement,
+  # so it gets the same positivity contract as the WS/API paths.
+  # @raise [Errors::InvalidMarketData]
+  def valid_meta_ltp!(value, segment:, security_id:)
+    parsed = nil
+    begin
+      parsed = BigDecimal(value.to_s)
+    rescue ArgumentError
+      parsed = nil
+    end
+
+    unless parsed&.finite? && parsed.positive?
+      raise Errors::InvalidMarketData,
+            "meta[:ltp] must be a positive number for #{segment}:#{security_id} — got #{value.inspect}"
+    end
+
+    parsed
   end
 
   # Fetches LTP from REST API for a specific segment and security_id
@@ -112,10 +143,34 @@ module InstrumentHelpers
   # @param subscribe [Boolean] If true, subscribe and poll briefly when cache is empty
   # @param skip_tick_cache [Boolean] If true, go straight to REST (used when WS ticks are known stale)
   # @return [Numeric, nil]
-  def fetch_ltp_from_api_for_segment(segment:, security_id:, subscribe: false, skip_tick_cache: false)
-    unless skip_tick_cache
-      cached_ltp = ltp_from_tick_cache_or_subscribe(segment: segment, security_id: security_id, subscribe: subscribe)
-      return cached_ltp if cached_ltp.present?
+  def fetch_ltp_from_api_for_segment(segment:, security_id:, subscribe: false)
+    hub = Live::MarketFeedHub.instance
+
+    # Strategy 1: Check WebSocket TickCache first (fastest, no API rate limits)
+    if hub.running? && hub.connected?
+      cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+      if cached_tick&.ltp&.to_f&.positive? && cached_tick.fresh?
+        Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache for #{segment}:#{security_id}: ₹#{cached_tick.ltp}" }
+        return cached_tick.ltp.to_f
+      end
+
+      if subscribe
+        # If not in cache, try subscribing and waiting briefly for a tick
+        begin
+          hub.subscribe(segment: segment, security_id: security_id)
+          # Wait up to 200ms for tick to arrive
+          4.times do
+            sleep(0.05) # 50ms intervals
+            cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+            if cached_tick&.ltp&.to_f&.positive? && cached_tick.fresh?
+              Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache after subscription for #{segment}:#{security_id}: ₹#{cached_tick.ltp}" }
+              return cached_tick.ltp.to_f
+            end
+          end
+        rescue StandardError => e
+          Rails.logger.debug { "[InstrumentHelpers] WebSocket subscription failed for #{segment}:#{security_id}: #{e.message}, falling back to API" }
+        end
+      end
     end
 
     # Strategy 2: REST API fallback (only if WebSocket unavailable or no tick received)
@@ -163,7 +218,9 @@ module InstrumentHelpers
   end
 
   # Creates a PositionTracker immediately after order placement and primes caches.
-  # @param instrument [Instrument]
+  # @param instrument [Instrument] The TRADED instrument (option/future/equity
+  #   itself). The tracker's `instrument` FK resolves to the underlying for
+  #   derivative trades and to the instrument itself otherwise.
   # @param order_no [String]
   # @param segment [String]
   # @param security_id [String]
@@ -176,8 +233,10 @@ module InstrumentHelpers
   # @return [PositionTracker]
   def after_order_track!(instrument:, order_no:, segment:, security_id:, side:, qty:, entry_price:, symbol:, # rubocop:disable Metrics/ParameterLists
                          index_key: nil, meta: {})
-    # Determine watchable: if self is a Derivative, use self; otherwise use instrument
-    watchable = is_a?(Derivative) ? self : instrument
+    # watchable is always the traded instrument now that the derivative
+    # master is consolidated. Legacy Derivative callers still route through
+    # their consolidated Instrument (see Derivative#buy_option!).
+    watchable = is_a?(Derivative) ? consolidated_instrument || instrument : instrument
 
     # Build base meta with index_key
     base_meta = index_key ? { 'index_key' => index_key.to_s } : {}
@@ -186,7 +245,7 @@ module InstrumentHelpers
 
     tracker = PositionTracker.build_or_average!(
       watchable: watchable,
-      instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
+      instrument: watchable,
       order_no: order_no,
       security_id: security_id.to_s,
       symbol: symbol,
@@ -301,19 +360,22 @@ module InstrumentHelpers
     nil
   end
 
-  def intraday_ohlc(interval: '5', oi: false, from_date: nil, to_date: nil, days: 2) # rubocop:disable Naming/MethodParameterName
-    to_date ||= if defined?(Market::Calendar) && Market::Calendar.respond_to?(:today_or_last_trading_day)
-                  Market::Calendar.today_or_last_trading_day.to_s
+  def intraday_ohlc(interval: '5', oi: false, from_date: nil, to_date: nil, days: 2)
+    # Default to_date to yesterday - DhanHQ API may not have today's data available yet
+    # Only use today if explicitly requested via to_date parameter
+    today = Time.zone.today
+    to_date ||= if defined?(Market::Calendar) && Market::Calendar.respond_to?(:trading_days_ago)
+                  # Use yesterday (1 trading day ago) as default for intraday data
+                  Market::Calendar.trading_days_ago(1).to_s
                 else
-                  (Time.zone.today - 1).to_s
+                  (today - 1).to_s
                 end
 
-    # Use trading days, not calendar days, to avoid weekends/holidays
-    from_date ||= if defined?(Market::Calendar) && Market::Calendar.respond_to?(:trading_days_ago)
-                    Market::Calendar.trading_days_ago(days).to_s
-                  else
-                    (Date.parse(to_date) - days).to_s # Fallback to calendar days
-                  end
+    # Ensure to_date is not in the future
+    to_date_obj = Date.parse(to_date)
+    to_date = [to_date_obj, today].min.to_s if to_date_obj > today
+
+    from_date ||= (Date.parse(to_date) - days).to_s
 
     instrument_code = resolve_instrument_code
     DhanHQ::Models::HistoricalData.intraday(
@@ -322,17 +384,16 @@ module InstrumentHelpers
       instrument: instrument_code,
       interval: interval,
       oi: oi,
-      from_date: from_date || (Time.zone.today - days).to_s,
-      to_date: to_date || (Time.zone.today - 1).to_s
+      from_date: from_date || (today - days).to_s,
+      to_date: to_date || (today - 1).to_s
     )
   rescue StandardError => e
-    params_used = { security_id: security_id, exchange_segment: exchange_segment, instrument: instrument_code,
-                    interval: interval, oi: oi, from_date: from_date, to_date: to_date }
     DhanhqErrorHandler.handle_dhanhq_error(
       e,
-      context: "intraday_ohlc(#{self.class.name} #{security_id}) params=#{params_used}"
+      context: "intraday_ohlc(#{self.class.name} #{security_id})"
     )
-    Rails.logger.error("Failed to fetch Intraday OHLC for #{self.class.name} #{security_id}: #{e.message} | params=#{params_used}")
+    Rails.logger.error("Failed to fetch Intraday OHLC for #{self.class.name} #{security_id}: #{e.message}")
+    Rails.logger.debug { "OHLC fetch params: interval=#{interval}, from_date=#{from_date}, to_date=#{to_date}, days=#{days}" }
     nil
   end
 

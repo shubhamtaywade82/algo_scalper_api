@@ -38,14 +38,12 @@ module Live
     #
     # @param tracker [PositionTracker] The position tracker to exit
     # @param reason [String] The reason for the exit (e.g., 'stop_loss', 'take_profit', 'trailing_stop')
-    # @param operator_retry [Boolean] When true (dashboard manual close only), bypass the
-    #   "fresh exit intent" short-circuit if no broker ack yet so the operator can resubmit.
     # @return [Hash] Result hash with keys:
     #   - :success [Boolean] Whether the exit was successful
     #   - :reason [String] Reason code ('success', 'already_exited', 'invalid_tracker', etc.)
     #   - :exit_price [BigDecimal, nil] The exit price if successful
     #   - :error [Object, nil] Error details if router failed
-    def execute_exit(tracker, reason, operator_retry: false)
+    def execute_exit(tracker, reason)
       # Input validation
       return { success: false, reason: 'invalid_tracker' } unless tracker
       return { success: false, reason: 'invalid_router' } unless @router
@@ -57,58 +55,37 @@ module Live
       # State validation
       return { success: false, reason: 'not_active' } unless tracker.active?
 
-      # Acquire process-wide exit lock to avoid dual intent (per-tick vs 5s loop)
-      unless acquire_exit_lock(tracker.id)
-        Rails.logger.info("[ExitEngine] Exit lock already held for #{tracker.order_no}, skipping duplicate exit request.")
-        return { success: false, reason: 'exit_lock_held' }
+      # DhanHQ rejects sell orders for expired contracts, so a broker round-trip here
+      # would leave the tracker stuck "active" forever. Settle locally instead.
+      if expired_contract?(tracker)
+        Rails.logger.warn(
+          "[ExitEngine] #{tracker.order_no} contract expired (#{tracker.expiry_date}); settling locally without a broker order"
+        )
+        return finalize_exit!(tracker, exit_price: safe_ltp(tracker) || BigDecimal('0'), reason: "#{reason} (EXPIRED_CONTRACT_LOCAL_SETTLE)")
       end
 
-      begin
-        intent_persisted = prepare_exit_intent!(tracker, reason, operator_retry: operator_retry)
-        return { success: true, reason: 'already_exited', exit_price: tracker.exit_price } if tracker.exited?
-        return { success: true, reason: 'exit_already_requested', client_order_id: tracker.exit_coid } unless intent_persisted
+      intent_persisted = prepare_exit_intent!(tracker, reason)
+      return { success: true, reason: 'already_exited', exit_price: tracker.exit_price } if tracker.exited?
+      return { success: true, reason: 'exit_already_requested', client_order_id: tracker.exit_coid } unless intent_persisted
 
-        ltp = safe_ltp(tracker)
+      ltp = safe_ltp(tracker)
+      result = @router.exit_market(tracker, client_order_id: tracker.exit_coid)
+      success = success?(result)
 
-        cmd_result = nil
-        begin
-          cmd_result = Orders::Commands::ExitOrderCommand.new(
-            gateway: @router,
-            tracker: tracker,
-            client_order_id: tracker.exit_coid,
-            reason: reason
-          ).call
-        rescue StandardError => e
-          Rails.logger.error("[ExitEngine] Router exception for #{tracker.order_no}: #{e.class} - #{e.message}")
-          return { success: false, reason: 'router_failed', error: e }
-        end
-
-        unless cmd_result.success?
-          error_detail = cmd_result.error
-          if error_detail.nil? && cmd_result.payload.is_a?(Hash)
-            # Keep payload shape (includes :raw) for consistent caller/logging handling.
-            error_detail = cmd_result.payload
-          end
-          error_detail = cmd_result.payload if error_detail.nil?
-
-          Rails.logger.error("[ExitEngine] Router failed for #{tracker.order_no}: #{cmd_result.reason} (coid: #{tracker.exit_coid})")
-          return { success: false, reason: 'router_failed', error: error_detail }
-        end
-
-        # Extract raw broker response from command payload for downstream helpers
-        result = cmd_result.payload[:raw] || {}
-        persist_broker_ack!(tracker, result)
-
-        # Use exit_price from command payload if available, fallback to LTP
-        exit_price = cmd_result.payload[:exit_price] || ltp
-
-        finalize_exit!(tracker, exit_price: exit_price, reason: reason)
-      rescue StandardError => e
-        Rails.logger.error("[ExitEngine] Failed executing exit for #{tracker&.order_no}: #{e.class} - #{e.message} (coid: #{tracker&.exit_coid})")
-        raise
-      ensure
-        release_exit_lock(tracker.id)
+      unless success
+        Rails.logger.error("[ExitEngine] Router failed for #{tracker.order_no}: #{result.inspect} (coid: #{tracker.exit_coid})")
+        return { success: false, reason: 'router_failed', error: result }
       end
+
+      persist_broker_ack!(tracker, result)
+
+      # Use exit_price from gateway if available, fallback to LTP
+      exit_price = (result.is_a?(Hash) && result[:exit_price]) || ltp
+
+      finalize_exit!(tracker, exit_price: exit_price, reason: reason)
+    rescue StandardError => e
+      Rails.logger.error("[ExitEngine] Failed executing exit for #{tracker&.order_no}: #{e.class} - #{e.message} (coid: #{tracker&.exit_coid})")
+      raise
     end
 
     private
@@ -117,48 +94,34 @@ module Live
     # @param tracker [PositionTracker]
     # @param reason [String]
     # @return [Boolean] true when a new intent was persisted, false when already requested/exited
-    def prepare_exit_intent!(tracker, reason, operator_retry: false)
+    def prepare_exit_intent!(tracker, reason)
       tracker.with_lock do
         tracker.reload
-        return false if tracker.exited?
-        if tracker.exit_sent_at.present? && !operator_may_resubmit_active_exit?(tracker, operator_retry)
-          return false
-        end
-
-        if !operator_retry && tracker.exit_requested_at.present? && !stale_exit_intent?(tracker)
-          return false
-        end
-
-        if operator_retry && tracker.exit_requested_at.present? && !stale_exit_intent?(tracker)
-          Rails.logger.info(
-            "[ExitEngine] Operator manual close retry for #{tracker.order_no} " \
-            '(re-invoking broker; exit_sent_at still blank)'
-          )
-        end
+        return false if tracker.exited? || tracker.exit_sent_at.present?
+        return false if tracker.exit_requested_at.present? && !stale_exit_intent?(tracker)
 
         coid = tracker.exit_coid.presence || deterministic_exit_coid(tracker)
-
-        snapshot = safe_pnl_snapshot(tracker)
-        decision_pnl_pct = if snapshot && snapshot[:pnl_pct]
-                             (snapshot[:pnl_pct].to_f * 100.0).round(2)
-                           end
-
-        decision_meta = (tracker.decision.is_a?(Hash) ? tracker.decision.dup : {})
-        decision_meta['type'] = reason.to_s
-        decision_meta['path'] ||= 'unknown'
-        decision_meta['decided_at'] = Time.current.iso8601
-        decision_meta['pnl_pct_at_decision'] = decision_pnl_pct if decision_pnl_pct
+        metadata = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
+        metadata['exit_reason'] = reason
+        metadata['exit_triggered_at'] = Time.current
 
         tracker.update!(
           exit_requested_at: Time.current,
           exit_coid: coid,
-          exit_reason: reason,
-          exit_triggered_at: Time.current,
-          decision: decision_meta
+          meta: metadata
         )
       end
 
       true
+    end
+
+    # An intent with no broker ack after the retry window means the order never reached
+    # the broker (router failure/crash); the position would otherwise stay open forever.
+    # @param tracker [PositionTracker]
+    # @return [Boolean]
+    def stale_exit_intent?(tracker)
+      tracker.exit_sent_at.blank? &&
+        tracker.exit_requested_at < EXIT_INTENT_RETRY_AFTER_SECONDS.seconds.ago
     end
 
     # Persists broker acknowledgement metadata after successful exit order placement.
@@ -167,11 +130,26 @@ module Live
     # @return [void]
     def persist_broker_ack!(tracker, result)
       order_id = result.is_a?(Hash) ? (result[:order_id] || result['order_id']) : nil
-      tracker.update_columns( # rubocop:disable Rails/SkipsModelValidations
+      tracker.update_columns(
         exit_sent_at: Time.current,
         exit_order_id: order_id,
         updated_at: Time.current
       )
+    end
+
+    # Determine if router result indicates success.
+    # Handles various return formats: boolean true, hash with success: true/1/"true"/"yes".
+    def success?(result)
+      return true if result == true
+      return false unless result.is_a?(Hash)
+
+      success_value = result[:success]
+      return true if success_value == true
+      return true if success_value == 1
+      return true if success_value.to_s.downcase == 'true'
+      return true if success_value.to_s.downcase == 'yes'
+
+      false
     end
 
     # Finalizes tracker state and notifications once broker accepts exit order.
@@ -191,6 +169,8 @@ module Live
         )
       end
 
+      persist_round_trip_charges!(tracker, exit_price: exit_price) unless reason.to_s.include?('EXPIRED_CONTRACT_LOCAL_SETTLE')
+
       tracker.reload
       normalized_reason = normalize_exit_reason_with_final_pnl(tracker, reason)
 
@@ -201,7 +181,7 @@ module Live
         order_no: tracker.order_no,
         reason: normalized_reason,
         exit_price: exit_price,
-        index_key: tracker.index_key
+        index_key: tracker.meta&.dig('index_key') || tracker.index_key
       })
 
       record_trade_telemetry(tracker, exit_price, normalized_reason)
@@ -270,7 +250,8 @@ module Live
         entry_price: tracker.entry_price,
         quantity: tracker.quantity,
         exit_price: tracker.exit_price,
-        is_exited: true
+        is_exited: true,
+        position_side: tracker.position_side
       )
       if priced
         return {
@@ -280,78 +261,33 @@ module Live
       end
 
       final_pnl = tracker.last_pnl_rupees
-      entry_price = tracker.entry_price
-      quantity = tracker.quantity
-      return { pnl: nil, pnl_pct_decimal: nil } unless final_pnl.present? && entry_price.present? &&
-                                                       quantity.present? &&
-                                                       entry_price.to_f.positive? && quantity.to_i.positive?
+      cost_basis = tracker.entry_price.to_f * tracker.quantity.to_i
+      return { pnl: nil, pnl_pct_decimal: nil } if final_pnl.blank? || !cost_basis.positive?
 
-      {
-        pnl: final_pnl,
-        pnl_pct_decimal: (final_pnl.to_f / (entry_price.to_f * quantity.to_i)) * 100.0
-      }
+      { pnl: final_pnl, pnl_pct_decimal: (final_pnl.to_f / cost_basis) * 100.0 }
     end
 
-    def classify_exit(final_pnl_pct_decimal)
-      return 'profit' if final_pnl_pct_decimal.positive?
-      return 'loss' if final_pnl_pct_decimal.negative?
+    # Real per-leg NSE F&O charges (brokerage/STT/GST/stamp duty/SEBI fee) for both the
+    # entry and exit leg, computed once at exit since only then are both prices known.
+    # Skipped by the caller for local settlements (no real broker order was placed).
+    def persist_round_trip_charges!(tracker, exit_price:)
+      return if tracker.entry_price.blank? || tracker.quantity.blank? || exit_price.blank?
 
-      'breakeven'
-    end
-
-    def build_final_reason(reason, execution_meta)
-      final_pct = execution_meta['final_pnl_pct']
-      classification = execution_meta['classified_as']
-      return reason unless final_pct && classification
-
-      "#{reason} (Final: #{final_pct.round(2)}%, #{classification})"
-    end
-
-    def acquire_exit_lock(tracker_id, ttl: 10)
-      key = "exit_lock:#{tracker_id}"
-      @redis ||= Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
-      @redis.set(key, '1', nx: true, ex: ttl)
-    rescue StandardError => e
-      Rails.logger.error("[ExitEngine] acquire_exit_lock failed for tracker=#{tracker_id}: #{e.class} - #{e.message} — failing CLOSED (skipping this exit attempt)")
-      alert_exit_lock_unavailable(tracker_id, e)
-      false # fail closed: Redis outage must not allow a duplicate exit race; DB exit_sent_at is the backstop, next 5s loop retries
-    end
-
-    # Releases Redis exit lock immediately so the next close/exits are not blocked for the TTL window.
-    def release_exit_lock(tracker_id)
-      return if tracker_id.blank?
-      return unless @redis
-
-      @redis.del("exit_lock:#{tracker_id}")
-    rescue StandardError => e
-      Rails.logger.warn("[ExitEngine] release_exit_lock failed tracker=#{tracker_id}: #{e.class} - #{e.message}")
-    end
-
-    def alert_exit_lock_unavailable(tracker_id, error)
-      Notifications::TelegramNotifier.instance.notify_error(
-        "ExitEngine exit lock unavailable (Redis: #{error.message}) for tracker=#{tracker_id} — exit attempt skipped this cycle",
-        context: 'ExitEngine#acquire_exit_lock'
+      entry_charges = Orders::ChargesCalculator.call(
+        side: 'buy', quantity: tracker.quantity, price: tracker.entry_price, segment: tracker.segment
       )
+      exit_charges = Orders::ChargesCalculator.call(
+        side: 'sell', quantity: tracker.quantity, price: exit_price, segment: tracker.segment
+      )
+      tracker.update_column(:charges_rupees, entry_charges + exit_charges)
     rescue StandardError => e
-      Rails.logger.error("[ExitEngine] alert_exit_lock_unavailable failed: #{e.message}")
+      Rails.logger.error("[ExitEngine] Failed to compute charges for #{tracker.order_no}: #{e.class} - #{e.message}")
     end
 
-    def stale_exit_intent?(tracker)
-      return false if tracker.exit_requested_at.blank?
-
-      (Time.current - tracker.exit_requested_at) >= EXIT_INTENT_RETRY_AFTER_SECONDS
-    end
-
-    # Broker ack persisted (exit_sent_at) but tracker still active — dashboard manual
-    # close may resubmit; COID idempotency avoids duplicate live risk where supported.
-    def operator_may_resubmit_active_exit?(tracker, operator_retry)
-      operator_retry && tracker.active?
-    end
-
-    def safe_pnl_snapshot(tracker)
-      Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
-    rescue StandardError
-      nil
+    # @param tracker [PositionTracker]
+    # @return [Boolean] true when the tracker's contract expiry has already passed
+    def expired_contract?(tracker)
+      tracker.expiry_date.present? && tracker.expiry_date < Date.current
     end
 
     # Generates a deterministic, broker-safe correlation id for exits.
@@ -362,10 +298,13 @@ module Live
       "AS-EXIT-#{Digest::SHA256.hexdigest(seed)[0, 20]}"
     end
 
-    # Resolve LTP via the market-data query boundary
+    # Resolve LTP via the market-data query boundary. nil = no usable tick:
+    # an exit is NEVER priced off a fabricated value. The failure is logged
+    # so "broken" is distinguishable from "no tick" (wave 3).
     def safe_ltp(tracker)
       Live::TickQuery.ltp_for(tracker)
-    rescue StandardError
+    rescue StandardError => e
+      Rails.logger.warn("[ExitEngine] LTP resolution failed for #{tracker.order_no}: #{e.class} - #{e.message}")
       nil
     end
 
@@ -430,7 +369,7 @@ module Live
     end
 
     def resolved_entry_tf(tracker)
-      tf = tracker.entry_tf || tracker.meta&.dig('timeframe')
+      tf = (tracker.entry_tf if tracker.respond_to?(:entry_tf)) || tracker.meta&.dig('timeframe') || tracker.meta&.dig('entry_tf')
       return tf if tf.present?
 
       '1m'

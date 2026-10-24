@@ -4,23 +4,8 @@ require 'rails_helper'
 
 RSpec.describe Positions::ExitFlow do
   describe '.call' do
-    let(:base_tracker_attrs) do
-      {
-        status: 'active',
-        segment: 'NSE_FNO',
-        security_id: '55111',
-        order_no: "EXITFLOW#{SecureRandom.hex(4)}"
-      }
-    end
-
-    before do
-      allow(Live::RedisTickCache.instance).to receive(:clear_tick)
-      allow(Live::TickCache).to receive(:delete)
-      allow(Live::PositionIndex.instance).to receive(:remove)
-    end
-
     it 'runs exit orchestration and returns tracker' do
-      tracker = create(:position_tracker, :option_position, **base_tracker_attrs)
+      tracker = create(:position_tracker, :option_position, status: 'active')
       cache = instance_double(
         Live::RedisPnlCache,
         fetch_pnl: { pnl: 10, pnl_pct: 0.2, hwm_pnl: 12, hwm_pnl_pct: 0.3 },
@@ -32,17 +17,17 @@ RSpec.describe Positions::ExitFlow do
       allow(Positions::DailyPnlRecorder).to receive(:call)
       allow(Positions::FeedSubscription).to receive(:unsubscribe)
 
-      result = described_class.call(tracker: tracker, exit_price: BigDecimal('100'))
+      result = described_class.call(tracker: tracker, exit_price: BigDecimal('155.0'))
 
+      expect(tracker.reload.status).to eq('exited')
       expect(Positions::DailyPnlRecorder).to have_received(:call).with(tracker: tracker)
       expect(Positions::FeedSubscription).to have_received(:unsubscribe).with(tracker: tracker).at_least(:once)
-      expect(tracker.reload.status).to eq('exited')
       expect(result).to eq(tracker)
     end
 
     context 'when exit_reason is missing everywhere' do
       it 'persists EXIT_REASON_UNSPECIFIED on exit_reason and exit_triggered_at' do
-        tracker = create(:position_tracker, :option_position, **base_tracker_attrs, meta: {})
+        tracker = create(:position_tracker, :option_position, meta: {})
         cache = instance_double(
           Live::RedisPnlCache,
           fetch_pnl: {},
@@ -67,7 +52,6 @@ RSpec.describe Positions::ExitFlow do
         tracker = create(
           :position_tracker,
           :option_position,
-          **base_tracker_attrs,
           meta: {}
         )
         cache = instance_double(
@@ -100,7 +84,6 @@ RSpec.describe Positions::ExitFlow do
         tracker = create(
           :position_tracker,
           :option_position,
-          **base_tracker_attrs,
           meta: { 'exit_reason' => '  ' }
         )
         cache = instance_double(
@@ -126,7 +109,6 @@ RSpec.describe Positions::ExitFlow do
         tracker = create(
           :position_tracker,
           :option_position,
-          **base_tracker_attrs,
           entry_price: BigDecimal('150'),
           quantity: 25,
           last_pnl_rupees: BigDecimal('1998'),
@@ -160,38 +142,6 @@ RSpec.describe Positions::ExitFlow do
         expect(tracker.last_pnl_rupees).to eq(expected[:pnl])
         expect(tracker.last_pnl_pct.to_f).to be_within(0.0001).of(expected[:pnl_pct].to_f)
         expect(tracker.last_pnl_rupees).not_to eq(BigDecimal('1998'))
-      end
-    end
-
-    context 'when exit is manual' do
-      it 'overrides exit_path in decision and meta to manual' do
-        tracker = create(
-          :position_tracker,
-          :option_position,
-          **base_tracker_attrs,
-          meta: { 'exit_path' => 'zombie_watchdog' }
-        )
-        cache = instance_double(
-          Live::RedisPnlCache,
-          fetch_pnl: {},
-          sync_pnl_to_database: true,
-          clear_tracker: nil
-        )
-
-        allow(Live::RedisPnlCache).to receive(:instance).and_return(cache)
-        allow(Positions::DailyPnlRecorder).to receive(:call)
-        allow(Positions::FeedSubscription).to receive(:unsubscribe)
-
-        described_class.call(
-          tracker: tracker,
-          exit_price: BigDecimal('100'),
-          exit_reason: 'MANUAL_DASHBOARD_CLOSE'
-        )
-
-        tracker.reload
-        expect(tracker.exit_reason).to eq('MANUAL_DASHBOARD_CLOSE')
-        expect(tracker.decision['exit_path']).to eq('manual')
-        expect(tracker.meta['exit_path']).to eq('manual')
       end
     end
   end

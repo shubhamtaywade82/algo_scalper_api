@@ -74,7 +74,8 @@ module Positions
         entry_price: tracker.entry_price,
         quantity: tracker.quantity,
         exit_price: tracker.exit_price,
-        is_exited: true
+        is_exited: true,
+        position_side: tracker.position_side
       )
     end
 

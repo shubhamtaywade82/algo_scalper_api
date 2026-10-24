@@ -1,5 +1,6 @@
 import { createSignal, onMount, onCleanup, Show, For } from 'solid-js'
 import AnimatedNumber from './AnimatedNumber'
+import { dashboardApiHeaders } from '../lib/dashboardApi'
 
 const POLL_MS = 30_000
 
@@ -12,7 +13,7 @@ export default function LedgerWalletPanel() {
 
   async function fetchLedger() {
     try {
-      const res = await fetch('/api/ledger/balance')
+      const res = await fetch('/api/ledger/balance', { headers: dashboardApiHeaders() })
       if (!res.ok) {
         setError(`HTTP ${res.status}`)
         return

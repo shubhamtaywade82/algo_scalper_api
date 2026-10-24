@@ -111,7 +111,7 @@ module OptionsBuying
 
       candidates.filter_map do |candidate|
         delta = candidate[:delta].to_f.abs
-        delta = atm_delta_fallback(candidate[:strike], spot, strike_step) if delta.zero?
+        delta = estimated_delta(candidate, spot, strike_step) if delta.zero?
 
         volume = candidate[:volume].to_i
         liquidity = volume.positive? ? volume : candidate[:oi].to_i
@@ -177,11 +177,17 @@ module OptionsBuying
       spot >= 50_000 ? 100 : 50
     end
 
-    def atm_delta_fallback(strike, spot, strike_step)
-      return 0.0 unless spot&.positive? && strike&.positive? && strike_step.positive?
-
-      atm = (spot / strike_step).round * strike_step
-      (strike.to_f - atm).abs <= (strike_step * 2) ? 0.5 : 0.0
+    # Real BS delta when IV/DTE are available on the candidate, else the
+    # legacy "within 2 strike-steps of ATM" heuristic (see Options::Greeks::Calculator).
+    def estimated_delta(candidate, spot, strike_step)
+      Options::Greeks::Calculator.estimate_delta(
+        spot_price: spot,
+        strike_price: candidate[:strike],
+        option_type: candidate[:type],
+        iv_pct: candidate[:iv],
+        expiry_date: candidate[:expiry],
+        strike_step: strike_step
+      )
     end
   end
 end

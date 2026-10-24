@@ -33,8 +33,8 @@ module Entries
         # Calculate IV Rank (0.0 to 1.0)
         iv_rank = (max_iv - min_iv).zero? ? 0.0 : (current_iv - min_iv) / (max_iv - min_iv)
 
-        max_allowed = max_iv_rank
-        min_allowed = min_iv_rank
+        max_allowed = max_iv_rank(index_cfg)
+        min_allowed = min_iv_rank(index_cfg)
 
         if iv_rank > max_allowed
           return { blocked: "Strike-specific IV Rank (#{(iv_rank * 100).round(1)}%) is too high (max allowed: #{(max_allowed * 100).round(1)}%)" }
@@ -55,14 +55,16 @@ module Entries
         cfg[:enabled] != false
       end
 
-      def self.max_iv_rank
+      def self.max_iv_rank(index_cfg = nil)
         cfg = AlgoConfig.fetch.dig(:risk, :iv_vol_gate) || {}
-        (cfg[:max_iv_rank] || 0.50).to_f
+        sym_max = index_cfg&.dig(:max_iv_rank) || index_cfg&.dig(:iv_vol_gate, :max_iv_rank) || index_cfg&.dig(:risk_model, :max_iv_rank)
+        (sym_max || cfg[:max_iv_rank] || 0.50).to_f
       end
 
-      def self.min_iv_rank
+      def self.min_iv_rank(index_cfg = nil)
         cfg = AlgoConfig.fetch.dig(:risk, :iv_vol_gate) || {}
-        (cfg[:min_iv_rank] || 0.10).to_f
+        sym_min = index_cfg&.dig(:min_iv_rank) || index_cfg&.dig(:iv_vol_gate, :min_iv_rank) || index_cfg&.dig(:risk_model, :min_iv_rank)
+        (sym_min || cfg[:min_iv_rank] || 0.05).to_f
       end
     end
   end

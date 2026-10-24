@@ -35,6 +35,8 @@ module CandleExtension
         # Use trading days, not calendar days, to avoid weekends/holidays
         to_date = if defined?(Market::Calendar) && Market::Calendar.respond_to?(:today_or_last_trading_day)
                     Market::Calendar.today_or_last_trading_day.to_s
+                  elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
+                    MarketCalendar.today_or_last_trading_day.to_s
                   else
                     Time.zone.today.to_s
                   end
@@ -42,6 +44,8 @@ module CandleExtension
         # Get from_date as 2 trading days ago (not 2 calendar days)
         from_date = if defined?(Market::Calendar) && Market::Calendar.respond_to?(:trading_days_ago)
                       Market::Calendar.trading_days_ago(2).to_s
+                    elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:trading_days_ago)
+                      MarketCalendar.trading_days_ago(2).to_s
                     else
                       (Date.parse(to_date) - 2).to_s # Fallback to calendar days
                     end
@@ -70,7 +74,10 @@ module CandleExtension
       freshness_config = AlgoConfig.fetch[:data_freshness] || {}
       cache_duration_minutes = freshness_config[:ohlc_cache_duration_minutes] || 5
 
-      return true unless @last_ohlc_fetched[interval]
+      if @last_ohlc_fetched[interval].nil?
+        @last_ohlc_fetched[interval] = Time.current
+        return true
+      end
 
       is_stale = Time.current - @last_ohlc_fetched[interval] > cache_duration_minutes.minutes
       @last_ohlc_fetched[interval] = Time.current if is_stale

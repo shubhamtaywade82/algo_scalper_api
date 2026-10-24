@@ -11,24 +11,25 @@ module Api
       render json: {
         mode: AlgoConfig.mode,
         balance: safe_wallet_snapshot,
-        today: PositionTracker.trading_stats_with_pct,
+        today: PositionTracker.paper_trading_stats_with_pct,
         indices: formatted_indices,
         subscribed_indices: subscribed_indices_payload,
         public_ipv4: ip_info[:public_ipv4],
         public_ipv6: ip_info[:public_ipv6],
         registered_ips: ip_info[:registered_ips],
-        options_buying: build_options_buying_payload,
         recent_signals: recent_signals_payload,
+        strategies_summary: strategies_summary_payload,
         circuit_breaker: Risk::CircuitBreaker.instance.status,
-        system: Live::SystemStatusCache.instance.all_statuses,
+        system: Live::SystemStatusCache.instance.all_statuses.merge(
+          ws_order_update: Live::OrderUpdateHub.instance.running?,
+          pnl_updater_running: Live::PnlUpdaterService.instance.running?
+        ),
         config: {
           risk: AlgoConfig.fetch[:risk].slice(:sl_pct, :tp_pct, :hard_rupee_sl, :profit_floor, :trailing),
           signals: (AlgoConfig.fetch[:signals] || {}).slice(
             :enable_adx_filter, :adx, :enable_direction_gate,
             :enable_smc_confluence_digest, :enable_smc_confluence_gating, :smc_confluence_intervals
-          ).compact.merge(
-            fast_entry_mode: Signal::FastEntryMode.status
-          ),
+          ).compact,
           time_restrictions: AlgoConfig.fetch[:trading_time_restrictions],
           market_session: {
             current: Live::TimeRegimeService.instance.current_regime,
@@ -42,23 +43,12 @@ module Api
 
     private
 
-    def recent_signals_payload
-      TradingSignal.order(created_at: :desc).limit(10).map do |signal|
-        signal.as_json(methods: [:confidence_level]).merge(
-          'metadata' => signal.effective_metadata
-        )
-      end
-    end
-
     def formatted_indices
       load_indices = sorted_indices_with_strategy
       {
         nifty: load_indices.find { |i| i[:key] == 'NIFTY' }&.dig(:ltp),
         banknifty: load_indices.find { |i| i[:key] == 'BANKNIFTY' }&.dig(:ltp),
-        sensex: load_indices.find { |i| i[:key] == 'SENSEX' }&.dig(:ltp),
-        nifty_prev_close: Live::TickCache.fetch('IDX_I', '13')&.dig(:prev_close),
-        banknifty_prev_close: Live::TickCache.fetch('IDX_I', '25')&.dig(:prev_close),
-        sensex_prev_close: Live::TickCache.fetch('IDX_I', '51')&.dig(:prev_close)
+        sensex: load_indices.find { |i| i[:key] == 'SENSEX' }&.dig(:ltp)
       }
     end
 
@@ -88,45 +78,12 @@ module Api
     end
 
     def subscribed_indices_payload
-      indices = sorted_indices_with_strategy
-      keys = indices.map { |idx| idx[:key].to_s.upcase }
-      expiry_by_key = nearest_listed_option_expiry_batch(keys)
-
-      indices.map do |idx|
+      sorted_indices_with_strategy.map do |idx|
         key = idx[:key].to_s.upcase
-        idx.merge(expiry_by_key[key] || empty_nearest_option_expiry_fields).merge(
+        idx.merge(nearest_listed_option_expiry_fields(key)).merge(
           smc_confluence_ltf: confluence_ltf_from_analysis_store(key)
         )
       end
-    end
-
-    def build_options_buying_payload
-      {
-        nifty: build_options_buying_state('NIFTY'),
-        banknifty: build_options_buying_state('BANKNIFTY'),
-        sensex: build_options_buying_state('SENSEX')
-      }
-    end
-
-    def build_options_buying_state(index_key)
-      direction = if OptionsBuying::StateStore.breakout_ready?(index_key, direction: :bullish)
-                    'BULLISH'
-                  elsif OptionsBuying::StateStore.breakout_ready?(index_key, direction: :bearish)
-                    'BEARISH'
-                  end
-      {
-        regime: OptionsBuying::RegimeClassifier.detect(index_key),
-        breakout_ready: !direction.nil?,
-        direction: direction,
-        compression_armed: OptionsBuying::StateStore.compression_armed?(index_key),
-        support: OptionsBuying::StateStore.support(index_key),
-        resistance: OptionsBuying::StateStore.resistance(index_key),
-        daily_atr: OptionsBuying::StateStore.daily_atr(index_key),
-        radar_strikes: OptionsBuying::StateStore.radar_strikes(index_key)
-      }
-    rescue StandardError => e
-      Rails.logger.warn("[DashboardController] failed to build options_buying state for #{index_key}: #{e.message}")
-      { regime: 'UNKNOWN', breakout_ready: false, direction: nil }
     end
 
     def confluence_ltf_from_analysis_store(index_key)
@@ -143,35 +100,20 @@ module Api
       nil
     end
 
-    def empty_nearest_option_expiry_fields
-      { nearest_expiry: nil, days_to_expiry: nil, expiry_today: false }
-    end
+    def nearest_listed_option_expiry_fields(index_key)
+      sym = index_key.to_s.upcase
+      nearest = Instrument.options
+                          .where(underlying_symbol: sym)
+                          .where(expiry_date: Time.zone.today..)
+                          .minimum(:expiry_date)
+      return { nearest_expiry: nil, days_to_expiry: nil, expiry_today: false } unless nearest
 
-    # One grouped query for all underlyings (avoids N+1 on dashboard).
-    def nearest_listed_option_expiry_batch(symbols)
-      syms = Array(symbols).map { |s| s.to_s.upcase }.uniq
-      return {} if syms.empty?
-
-      mins = Derivative.options
-                       .where(underlying_symbol: syms)
-                       .where(expiry_date: Time.zone.today..)
-                       .group(:underlying_symbol)
-                       .minimum(:expiry_date)
-
-      normalized = mins.transform_keys { |k| k.to_s.upcase }
-      today = Time.zone.today
-
-      syms.index_with do |sym|
-        nearest = normalized[sym]
-        next empty_nearest_option_expiry_fields unless nearest
-
-        days = (nearest - today).to_i
-        {
-          nearest_expiry: nearest.iso8601,
-          days_to_expiry: days,
-          expiry_today: !days.positive?
-        }
-      end
+      days = (nearest - Time.zone.today).to_i
+      {
+        nearest_expiry: nearest.iso8601,
+        days_to_expiry: days,
+        expiry_today: !days.positive?
+      }
     end
 
     def resolve_strategy_name(signals_cfg, index_key)
@@ -188,6 +130,30 @@ module Api
       end
     end
 
+    def safe_wallet_snapshot
+      Orders.config.gateway.wallet_snapshot
+    rescue StandardError
+      { cash: Capital::Allocator.paper_trading_balance.to_f, equity: 0, mtm: 0, exposure: 0 }
+    end
+
+    def recent_signals_payload
+      ::Strategies::Signal.order(emitted_at: :desc).limit(10).map do |s|
+        {
+          timestamp: s.emitted_at&.strftime('%H:%M:%S'),
+          strategy: s.strategy_record&.slug,
+          signal: s.action&.upcase,
+          symbol: s.instrument_key,
+          confidence_level: s.confidence
+        }
+      end
+    end
+
+    def strategies_summary_payload
+      ::Strategies::Record.order(:slug).pluck(:slug, :status).map do |slug, status|
+        { name: slug, status: status == 'running' ? 'Running' : status.to_s.capitalize }
+      end
+    end
+
     def build_market_status
       today = Date.current
       is_trading_day = Market::Calendar.trading_day?(today)
@@ -201,12 +167,6 @@ module Api
         next_trading_day: Market::Calendar.next_trading_day.iso8601,
         session: TradingSession::Service.entry_allowed?
       }
-    end
-
-    def safe_wallet_snapshot
-      Orders.config.gateway.wallet_snapshot
-    rescue StandardError
-      { cash: Capital::Allocator.paper_trading_balance.to_f, equity: 0, mtm: 0, exposure: 0 }
     end
   end
 end

@@ -3,74 +3,94 @@
 module OptionsBuying
   # Service to calculate ATR and check setup compression ratio for options buying setup.
   class ATRCompressionChecker
-    class << self
-      def compressed?(instrument)
-        ratio = setup_ratio(instrument)
-        return false if ratio.nil?
+    DEFAULT_MAX_SETUP_RATIO = 0.30
+    DEFAULT_ATR_PERIOD = 14
 
-        max_ratio = Mode.config.dig(:atr_compression, :max_setup_ratio) || 0.30
-        ratio <= max_ratio
-      end
+    def self.compressed?(instrument)
+      new(instrument).compressed?
+    end
 
-      def setup_ratio(instrument)
-        key = instrument_key(instrument)
-        return nil if key.blank?
+    def self.setup_ratio(instrument)
+      new(instrument).setup_ratio
+    end
 
-        atr = compute_daily_atr_for(instrument)
-        return nil if atr.nil? || atr.zero?
+    def self.compute_daily_atr_for(instrument)
+      new(instrument).compute_daily_atr
+    end
 
-        candles = StateStore.index_candles(key, '15')
-        return nil if candles.blank?
+    def initialize(instrument)
+      @instrument = instrument
+    end
 
-        highs = candles.map { |c| c[:high].to_f }
-        lows = candles.map { |c| c[:low].to_f }
-        setup_range = highs.max - lows.min
-        setup_range / atr.to_f
-      rescue StandardError => e
-        Rails.logger.warn("[ATRCompressionChecker] setup_ratio failed for #{instrument}: #{e.message}")
-        nil
-      end
+    def compressed?
+      return false unless Mode.compression_enabled?
 
-      def compute_daily_atr_for(instrument)
-        key = instrument_key(instrument)
-        return nil if key.blank?
+      ratio = setup_ratio
+      return false unless ratio
 
-        period = Mode.config.dig(:atr_compression, :atr_period) || 14
-        candles = StateStore.index_candles(key, 'D')
-        return nil if candles.blank? || candles.size < period
+      ratio < max_setup_ratio
+    rescue StandardError => e
+      Rails.logger.warn("[ATRCompressionChecker] #{e.class} - #{e.message}")
+      false
+    end
 
-        highs = candles.map { |c| c[:high].to_f }
-        lows = candles.map { |c| c[:low].to_f }
-        closes = candles.map { |c| c[:close].to_f }
+    def setup_ratio
+      atr = daily_atr_baseline
+      range = today_session_range
+      return nil unless atr&.positive? && range&.positive?
 
-        tr_values = Array.new(candles.size)
-        candles.size.times do |i|
-          if i.zero?
-            tr_values[i] = highs[i] - lows[i]
-          else
-            tr_values[i] = [
-              highs[i] - lows[i],
-              (highs[i] - closes[i - 1]).abs,
-              (lows[i] - closes[i - 1]).abs
-            ].max
-          end
-        end
+      range / atr
+    end
 
-        tr_values.last(period).sum / period.to_f
-      rescue StandardError => e
-        Rails.logger.warn("[ATRCompressionChecker] compute_daily_atr_for failed for #{instrument}: #{e.message}")
-        nil
-      end
+    def daily_atr_baseline
+      index_key = index_key_for_instrument
+      cached = StateStore.daily_atr(index_key) if index_key
+      return cached if cached&.positive?
 
-      private
+      compute_daily_atr
+    end
 
-      def instrument_key(instrument)
-        if instrument.respond_to?(:symbol_name)
-          instrument.symbol_name
-        elsif instrument.respond_to?(:to_s)
-          instrument.to_s.upcase
-        end
-      end
+    def compute_daily_atr
+      to_date = Market::Calendar.trading_days_ago(1).to_s
+      from_date = Market::Calendar.trading_days_ago(40).to_s
+      raw = @instrument.historical_ohlc(from_date: from_date, to_date: to_date)
+      return nil if raw.blank?
+
+      series = CandleSeries.new(symbol: @instrument.symbol_name, interval: '1D')
+      series.load_from_raw(raw)
+      series.atr(atr_period)
+    end
+
+    private
+
+    def config
+      Mode.config[:atr_compression] || {}
+    end
+
+    def max_setup_ratio
+      (config[:max_setup_ratio] || DEFAULT_MAX_SETUP_RATIO).to_f
+    end
+
+    def atr_period
+      (config[:atr_period] || DEFAULT_ATR_PERIOD).to_i
+    end
+
+    def today_session_range
+      series = @instrument.candle_series(interval: '5')
+      return nil unless series&.candles&.any?
+
+      today = Time.zone.today
+      today_candles = series.candles.select { |c| c.timestamp.to_date == today }
+      return nil if today_candles.empty?
+
+      today_candles.map(&:high).max - today_candles.map(&:low).min
+    end
+
+    def index_key_for_instrument
+      sid = @instrument.security_id.to_s
+      IndexConfigLoader.load_indices.find { |idx| idx[:sid].to_s == sid }&.dig(:key)
+    rescue StandardError
+      nil
     end
   end
 end

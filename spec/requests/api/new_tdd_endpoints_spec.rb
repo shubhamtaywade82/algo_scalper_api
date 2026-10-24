@@ -12,10 +12,10 @@ RSpec.describe "New Frontend TDD API Endpoints" do
       it "returns mock paper holdings" do
         get "/api/holdings"
         expect(response).to have_http_status(:ok)
+        # Holdings are serialized as a bare array (no success/holdings wrapper).
         body = response.parsed_body
-        expect(body["success"]).to be true
-        expect(body["holdings"]).to be_an(Array)
-        expect(body["holdings"].first["symbol"]).to eq("TATASTEEL")
+        expect(body).to be_an(Array)
+        expect(body.first["symbol"]).to eq("TATASTEEL")
       end
     end
 
@@ -34,10 +34,11 @@ RSpec.describe "New Frontend TDD API Endpoints" do
       it "calls DhanHQ API and serializes live holdings" do
         get "/api/holdings"
         expect(response).to have_http_status(:ok)
+        # Holdings are serialized as a bare array (no success/holdings wrapper).
         body = response.parsed_body
-        expect(body["success"]).to be true
-        expect(body["holdings"].first["symbol"]).to eq("SBIN")
-        expect(body["holdings"].first["quantity"]).to eq(50)
+        expect(body).to be_an(Array)
+        expect(body.first["symbol"]).to eq("SBIN")
+        expect(body.first["quantity"]).to eq(50)
       end
     end
   end
@@ -47,8 +48,8 @@ RSpec.describe "New Frontend TDD API Endpoints" do
       before do
         allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: { enabled: true } })
         allow(Ledger::WalletReader).to receive(:snapshot).and_return({
-          cash: 100000.0,
-          equity: 100000.0,
+          cash: 100_000.0,
+          equity: 100_000.0,
           mtm: 0.0,
           exposure: 0.0,
           utilized: 0.0
@@ -59,7 +60,7 @@ RSpec.describe "New Frontend TDD API Endpoints" do
         get "/api/funds"
         expect(response).to have_http_status(:ok)
         body = response.parsed_body
-        expect(body["cash"]).to eq(100000.0)
+        expect(body["cash"]).to eq(100_000.0)
         expect(body["margin_used"]).to eq(0.0)
       end
     end
@@ -68,11 +69,11 @@ RSpec.describe "New Frontend TDD API Endpoints" do
       before do
         allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: { enabled: false } })
         mock_funds = double(
-          available_balance: 50000.0,
-          sod_limit: 50000.0,
+          available_balance: 50_000.0,
+          sod_limit: 50_000.0,
           collateral_amount: 0.0,
           receiveable_amount: 0.0,
-          utilized_amount: 15000.0
+          utilized_amount: 15_000.0
         )
         allow(DhanHQ::Models::Funds).to receive(:fetch).and_return(mock_funds)
       end
@@ -81,8 +82,8 @@ RSpec.describe "New Frontend TDD API Endpoints" do
         get "/api/funds"
         expect(response).to have_http_status(:ok)
         body = response.parsed_body
-        expect(body["cash"]).to eq(50000.0)
-        expect(body["margin_used"]).to eq(15000.0)
+        expect(body["cash"]).to eq(50_000.0)
+        expect(body["margin_used"]).to eq(15_000.0)
       end
     end
   end
@@ -108,18 +109,24 @@ RSpec.describe "New Frontend TDD API Endpoints" do
       get "/api/logs"
       expect(response).to have_http_status(:ok)
       body = response.parsed_body
-      expect(body["success"]).to be true
+      # Response is { logs:, meta: } — no top-level success flag.
       expect(body["logs"]).to be_an(Array)
+      expect(body["meta"]).to include("total", "page", "per_page", "pages")
     end
   end
 
   describe "GET /api/scheduler/tasks" do
-    it "returns list of tasks from config/recurring.yml" do
+    it "returns the task list serialized from config/recurring.yml" do
       get "/api/scheduler/tasks"
       expect(response).to have_http_status(:ok)
       body = response.parsed_body
-      expect(body["success"]).to be true
-      expect(body["tasks"]).to be_an(Array)
+
+      # Tasks are serialized as a bare array (no success wrapper). The test
+      # env has no recurring.yml section, so the list is empty here.
+      expect(body).to be_an(Array)
+      body.each do |task|
+        expect(task).to include("id", "name", "schedule", "status")
+      end
     end
   end
 end

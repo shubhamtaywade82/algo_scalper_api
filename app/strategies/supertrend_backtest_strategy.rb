@@ -1,31 +1,38 @@
 # frozen_string_literal: true
 
-# Supertrend + ADX Multi-Timeframe backtest strategy.
+# Minimal backtest strategy: Supertrend direction only.
+#
+# Signal at bar +index+ is computed from a PREFIX series (candles 0..index)
+# so the trend is only ever known as of that bar — the full-series form
+# leaked the final trend into every historical entry (lookahead bias).
 class SupertrendBacktestStrategy
-  def initialize(series:, supertrend_cfg: {}, series_5m: nil, adx_min: 20.0)
+  def initialize(series:, supertrend_cfg: {})
     @series = series
     @supertrend_cfg = supertrend_cfg
-    @series_5m = series_5m
-    @adx_min = adx_min
   end
 
-  def generate_signal(_index = nil)
-    st_1m = Indicators::Supertrend.new(series: @series, **@supertrend_cfg).call
-    dir_1m = SupertrendTrend.direction(series: @series, supertrend_result: st_1m)
-    return nil if dir_1m == :none
+  def generate_signal(index = nil)
+    series = series_upto(index)
 
-    if @series.respond_to?(:adx)
-      adx = @series.adx(14)
-      return nil if adx.nil? || adx < @adx_min
+    st = Indicators::Supertrend.new(series: series, **@supertrend_cfg).call
+    direction = SupertrendTrend.direction(series: series, supertrend_result: st)
+    return nil if direction == :none
+
+    { direction: direction == :long ? :buy : :sell, price: series.candles.last.close }
+  end
+
+  private
+
+  # Prefix view of the series as of +index+ (inclusive). +nil+ or an
+  # out-of-range index means "everything currently visible".
+  def series_upto(index)
+    return @series if index.nil?
+
+    last = index.clamp(0, @series.candles.size - 1)
+    return @series if last >= @series.candles.size - 1
+
+    CandleSeries.new(symbol: @series.symbol, interval: @series.interval).tap do |copy|
+      @series.candles[0..last].each { |c| copy.candles << c }
     end
-
-    if @series_5m.present?
-      st_5m = Indicators::Supertrend.new(series: @series_5m, **@supertrend_cfg).call
-      dir_5m = SupertrendTrend.direction(series: @series_5m, supertrend_result: st_5m)
-      return nil unless dir_1m == dir_5m
-    end
-
-    { type: dir_1m == :long ? :ce : :pe, price: @series.candles.last.close }
   end
 end
-

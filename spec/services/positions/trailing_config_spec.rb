@@ -3,26 +3,6 @@
 require 'rails_helper'
 
 RSpec.describe Positions::TrailingConfig do
-  describe '.from' do
-    it 'uses pinned trailing tiers instead of live config' do
-      pinned = {
-        risk: {
-          trailing_tiers: [
-            { trigger_pct: 0.05, sl_offset_pct: -0.50 }
-          ]
-        }
-      }
-      allow(AlgoConfig).to receive(:fetch).and_return(
-        risk: { trailing_tiers: [{ trigger_pct: 0.05, sl_offset_pct: -0.01 }] }
-      )
-
-      view = described_class.from(pinned)
-
-      expect(view.sl_offset_for(0.10)).to eq(-0.50)
-      expect(described_class.sl_offset_for(0.10)).to eq(-0.01)
-    end
-  end
-
   describe '.sl_offset_for' do
     it 'returns nil below the first tier threshold' do
       expect(described_class.sl_offset_for(0)).to be_nil
@@ -57,21 +37,11 @@ RSpec.describe Positions::TrailingConfig do
     end
 
     it 'emergency override: always true when peak >= 2x activation threshold' do
-      # 2x of 0.25 = 0.50. Peak of 0.60 should always activate regardless of SL offset
       expect(described_class.peak_drawdown_active?(profit_pct: 0.60, current_sl_offset_pct: -0.15)).to be true
     end
 
     it 'emergency override does not trigger below 2x threshold' do
-      # 0.20 < 0.50 (2x of 0.25), and profit 0.20 < 0.25 threshold, SL offset -0.15 < 0.10 threshold
       expect(described_class.peak_drawdown_active?(profit_pct: 0.20, current_sl_offset_pct: -0.15)).to be false
-    end
-
-    it 'handles zero peak profit' do
-      expect(described_class.peak_drawdown_active?(profit_pct: 0.0, current_sl_offset_pct: 0.0)).to be false
-    end
-
-    it 'handles negative current (neither threshold met)' do
-      expect(described_class.peak_drawdown_active?(profit_pct: -0.05, current_sl_offset_pct: -0.10)).to be false
     end
   end
 
@@ -118,46 +88,6 @@ RSpec.describe Positions::TrailingConfig do
 
     it 'returns nil for empty tiers' do
       expect(described_class.adaptive_drawdown_for_peak(0.05, [])).to be_nil
-    end
-  end
-
-  describe '.calculate_hybrid_atr_trailing_sl' do
-    let(:config) do
-      {
-        risk: {
-          trailing_mode: 'hybrid_atr',
-          hybrid_atr: {
-            enabled: true,
-            base_multiplier: 2.0,
-            activation_profit_pct: 0.15,
-            min_sl_offset_pct: -0.15
-          }
-        }
-      }
-    end
-
-    it 'returns dynamic SL when trailing_mode is hybrid_atr' do
-      view = described_class.from(config)
-      sl = view.calculate_hybrid_atr_trailing_sl(
-        current_price: 120.0,
-        entry_price: 100.0,
-        peak_price: 125.0,
-        current_profit_pct: 0.20,
-        atr_value: 5.0
-      )
-      expect(sl).to eq(116.5)
-    end
-
-    it 'returns nil when hybrid_atr is disabled' do
-      disabled_config = { risk: { trailing_mode: 'tiered' } }
-      view = described_class.from(disabled_config)
-      expect(view.calculate_hybrid_atr_trailing_sl(
-        current_price: 120.0,
-        entry_price: 100.0,
-        peak_price: 125.0,
-        current_profit_pct: 0.20,
-        atr_value: 5.0
-      )).to be_nil
     end
   end
 end

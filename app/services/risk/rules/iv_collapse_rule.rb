@@ -58,10 +58,10 @@ module Risk
 
       def fetch_current_iv(context)
         tracker = context.tracker
-        instrument = tracker.underlying_instrument
+        instrument = tracker.instrument || tracker.watchable&.instrument
         return nil unless instrument
 
-        expiry_date = tracker.expiry_date || tracker.watchable&.expiry_date
+        expiry_date = tracker.watchable&.expiry_date
         return nil unless expiry_date
 
         # Fetch option chain from the underlying instrument (uses 2-minute cache)

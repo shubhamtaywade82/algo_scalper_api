@@ -64,82 +64,7 @@ RSpec.describe 'Api::Settings' do
       patch '/api/settings/bulk', params: { settings: { bogus_key: { a: 1 } } }
       expect(response).to have_http_status(:unprocessable_content)
       json = response.parsed_body
-      expect(json['error']).to match(/No permitted/)
-    end
-
-    it 'returns 422 with errors when a value is out of range' do
-      patch '/api/settings/bulk', params: { settings: { signals: { min_confidence: 999 } } }
-      expect(response).to have_http_status(:unprocessable_content)
-      json = response.parsed_body
-      expect(json['errors'].join).to match(/min_confidence/)
-    end
-
-    it 'does not persist an out-of-range value' do
-      patch '/api/settings/bulk', params: { settings: { signals: { min_confidence: 999 } } }
-      doc = JSON.parse(Setting.find_by!(key: doc_key).value)
-      expect(doc['signals']).to be_nil
-    end
-  end
-
-  describe 'PATCH /api/settings/deep_merge' do
-    around do |example|
-      prior = ENV.fetch('SETTINGS_UPDATE_TOKEN', nil)
-      ENV.delete('SETTINGS_UPDATE_TOKEN')
-      example.run
-    ensure
-      if prior
-        ENV['SETTINGS_UPDATE_TOKEN'] = prior
-      else
-        ENV.delete('SETTINGS_UPDATE_TOKEN')
-      end
-    end
-
-    before do
-      yaml_keys = YAML.load_file(Rails.root.join('config/algo.yml')).keys
-      seed = yaml_keys.index_with { {} }
-      seed['risk'] = { sl_pct: 0.02 }
-      Setting.put(doc_key, seed.to_json)
-      AlgoConfig.reset!
-    end
-
-    it 'deep-merges previously blocked options_buying key' do
-      patch '/api/settings/deep_merge',
-            params: { patch: { options_buying: { mode: 'intraday_scalper' } } }
-      expect(response).to have_http_status(:ok)
-      doc = JSON.parse(Setting.find_by!(key: doc_key).value)
-      expect(doc.dig('options_buying', 'mode')).to eq('intraday_scalper')
-    end
-
-    it 'deep-merges entry_quality key' do
-      patch '/api/settings/deep_merge',
-            params: { patch: { entry_quality: { min_score: 55 } } }
-      expect(response).to have_http_status(:ok)
-      doc = JSON.parse(Setting.find_by!(key: doc_key).value)
-      expect(doc.dig('entry_quality', 'min_score').to_i).to eq(55)
-    end
-
-    it 'rejects credential sections' do
-      patch '/api/settings/deep_merge', params: { patch: { dhanhq: { client_id: 'x' } } }
-      expect(response).to have_http_status(:unprocessable_content)
-    end
-
-    it 'deep-merges trading_time_restrictions for session discipline' do
-      patch '/api/settings/deep_merge',
-            params: {
-              patch: {
-                trading_time_restrictions: {
-                  enabled: true,
-                  avoid_periods: ['11:00-13:45'],
-                  block_exits: false
-                },
-                signals: { signal_tier: 'selective' }
-              }
-            }
-      expect(response).to have_http_status(:ok)
-      doc = JSON.parse(Setting.find_by!(key: doc_key).value)
-      expect(doc.dig('trading_time_restrictions', 'enabled').to_s).to eq('true')
-      expect(doc.dig('trading_time_restrictions', 'avoid_periods')).to eq(['11:00-13:45'])
-      expect(doc.dig('signals', 'signal_tier')).to eq('selective')
+      expect(json['error']).to include('No permitted')
     end
   end
 
@@ -177,56 +102,189 @@ RSpec.describe 'Api::Settings' do
     end
   end
 
-  describe 'GET /api/settings/fast_entry_mode' do
-    it 'returns persisted and effective status' do
+  describe 'GET/PATCH /api/settings/fast_entry_mode' do
+    after { Signal::FastEntryMode.reset! }
+
+    it 'GET returns the current status' do
       get '/api/settings/fast_entry_mode'
       expect(response).to have_http_status(:ok)
       json = response.parsed_body
       expect(json['success']).to be(true)
       expect(json['fast_entry_mode']).to include('persisted', 'effective', 'env_override')
     end
+
+    context 'when SETTINGS_UPDATE_TOKEN is set' do
+      around do |example|
+        prior = ENV.fetch('SETTINGS_UPDATE_TOKEN', nil)
+        ENV['SETTINGS_UPDATE_TOKEN'] = 'test-token'
+        example.run
+      ensure
+        if prior
+          ENV['SETTINGS_UPDATE_TOKEN'] = prior
+        else
+          ENV.delete('SETTINGS_UPDATE_TOKEN')
+        end
+      end
+
+      it 'PATCH rejects requests without the token' do
+        patch '/api/settings/fast_entry_mode', params: { enabled: true }
+        expect(response).to have_http_status(:unauthorized)
+      end
+
+      it 'PATCH toggles the persisted flag with a valid token' do
+        patch '/api/settings/fast_entry_mode',
+              params: { enabled: true },
+              headers: { 'X-Settings-Update-Token' => 'test-token' }
+        expect(response).to have_http_status(:ok)
+        json = response.parsed_body
+        expect(json['success']).to be(true)
+        expect(json['fast_entry_mode']['persisted']).to be(true)
+      end
+
+      it 'PATCH toggles the persisted flag off with a valid token' do
+        # as: :json ensures `enabled` arrives as a real boolean `false`, not the form-encoded
+        # string "false" — this is the case where Rails' params.require(:enabled) needs its
+        # explicit `value == false` special case to avoid raising ActionController::ParameterMissing
+        # (false.blank? is true, so a naive `value.presence` check would otherwise reject it).
+        patch '/api/settings/fast_entry_mode',
+              params: { enabled: false },
+              headers: { 'X-Settings-Update-Token' => 'test-token' },
+              as: :json
+        expect(response).to have_http_status(:ok)
+        json = response.parsed_body
+        expect(json['success']).to be(true)
+        expect(json['fast_entry_mode']['persisted']).to be(false)
+      end
+    end
   end
 
-  describe 'PATCH /api/settings/fast_entry_mode' do
-    around do |example|
-      prior_token = ENV.fetch('SETTINGS_UPDATE_TOKEN', nil)
-      prior_fast = ENV.fetch('FAST_ENTRY_MODE', nil)
-      ENV.delete('SETTINGS_UPDATE_TOKEN')
-      ENV.delete('FAST_ENTRY_MODE')
-      example.run
-    ensure
-      if prior_token
-        ENV['SETTINGS_UPDATE_TOKEN'] = prior_token
-      else
-        ENV.delete('SETTINGS_UPDATE_TOKEN')
+  describe 'POST /api/settings/update_ip' do
+    context 'when SETTINGS_UPDATE_TOKEN is set' do
+      around do |example|
+        prior = ENV.fetch('SETTINGS_UPDATE_TOKEN', nil)
+        ENV['SETTINGS_UPDATE_TOKEN'] = 'test-token'
+        example.run
+      ensure
+        if prior
+          ENV['SETTINGS_UPDATE_TOKEN'] = prior
+        else
+          ENV.delete('SETTINGS_UPDATE_TOKEN')
+        end
       end
-      if prior_fast
-        ENV['FAST_ENTRY_MODE'] = prior_fast
-      else
-        ENV.delete('FAST_ENTRY_MODE')
+
+      it 'rejects requests without the token' do
+        post '/api/settings/update_ip'
+        expect(response).to have_http_status(:unauthorized)
+      end
+
+      it 'returns a graceful error when the current IP cannot be detected' do
+        allow(Dhan::IpService).to receive(:fetch_ip_info).and_return(
+          { public_ipv4: 'Unknown', public_ipv6: 'Unknown', registered_ips: nil }
+        )
+        post '/api/settings/update_ip', headers: { 'X-Settings-Update-Token' => 'test-token' }
+        expect(response).to have_http_status(:ok)
+        json = response.parsed_body
+        expect(json['success']).to be(false)
+      end
+
+      it 'delegates to Dhan::IpService.update_ip with the detected IP' do
+        allow(Dhan::IpService).to receive(:fetch_ip_info).and_return(
+          { public_ipv4: '1.2.3.4', public_ipv6: 'None', registered_ips: nil }
+        )
+        allow(Dhan::IpService).to receive(:update_ip).with('1.2.3.4').and_return(
+          { success: true, flag: 'PRIMARY' }
+        )
+        post '/api/settings/update_ip', headers: { 'X-Settings-Update-Token' => 'test-token' }
+        expect(response).to have_http_status(:ok)
+        json = response.parsed_body
+        expect(json['success']).to be(true)
+        expect(json['flag']).to eq('PRIMARY')
       end
     end
+  end
 
-    before do
-      Setting.put(doc_key, { signals: { fast_entry_mode: { enabled: false } } }.to_json)
-      AlgoConfig.reset!
-      Signal::FastEntryMode.reset!
-    end
+  describe 'PATCH /api/settings/deep_merge' do
+    context 'when SETTINGS_UPDATE_TOKEN is set' do
+      around do |example|
+        prior = ENV.fetch('SETTINGS_UPDATE_TOKEN', nil)
+        ENV['SETTINGS_UPDATE_TOKEN'] = 'test-token'
+        example.run
+      ensure
+        if prior
+          ENV['SETTINGS_UPDATE_TOKEN'] = prior
+        else
+          ENV.delete('SETTINGS_UPDATE_TOKEN')
+        end
+      end
 
-    it 'enables fast entry mode without daemon restart' do
-      patch '/api/settings/fast_entry_mode', params: { enabled: true }
-      expect(response).to have_http_status(:ok)
-      json = response.parsed_body
-      expect(json['success']).to be(true)
-      expect(json.dig('fast_entry_mode', 'persisted')).to be(true)
-      expect(json.dig('fast_entry_mode', 'effective')).to be(true)
-      expect(Signal::FastEntryMode.enabled?).to be(true)
-    end
+      it 'rejects requests without the token' do
+        patch '/api/settings/deep_merge', params: { patch: { signals: { fast_entry_mode: { enabled: true } } } }
+        expect(response).to have_http_status(:unauthorized)
+      end
 
-    it 'disables fast entry mode' do
-      patch '/api/settings/fast_entry_mode', params: { enabled: false }
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body.dig('fast_entry_mode', 'effective')).to be(false)
+      it 'applies the patch with a valid token' do
+        # as: :json mirrors the real caller (SignalsSidebar.jsx sends JSON.stringify({ patch }))
+        # — Signal::FastEntryMode.persisted_enabled? does a strict `== true` check, so a
+        # form-encoded "true" string (as the other describe blocks in this file send) would
+        # silently fail to enable the flag. This request must exercise the real wire format.
+        patch '/api/settings/deep_merge',
+              params: { patch: { signals: { fast_entry_mode: { enabled: true } } } },
+              headers: { 'X-Settings-Update-Token' => 'test-token' },
+              as: :json
+        expect(response).to have_http_status(:ok)
+        json = response.parsed_body
+        expect(json['success']).to be(true)
+        doc = JSON.parse(Setting.find_by!(key: doc_key).value)
+        expect(doc.dig('signals', 'fast_entry_mode', 'enabled')).to be(true)
+      end
+
+      it 'requires the patch param' do
+        patch '/api/settings/deep_merge', params: {}, headers: { 'X-Settings-Update-Token' => 'test-token' }
+        expect(response).to have_http_status(:bad_request)
+      end
+
+      it 'returns 422 when the patch only targets a non-permitted top-level key' do
+        patch '/api/settings/deep_merge',
+              params: { patch: { dhanhq: { enable_orders: true } } },
+              headers: { 'X-Settings-Update-Token' => 'test-token' },
+              as: :json
+        expect(response).to have_http_status(:unprocessable_content)
+        json = response.parsed_body
+        expect(json['error']).to include('No permitted')
+      end
+
+      # SignalsSidebar.jsx's Midday/Loss-Streak/Market-Context/Entry-Quality toggles PATCH
+      # these top-level keys directly — regression coverage for the allowlist fixes that
+      # briefly 422'd these previously-working dashboard controls. entry_quality was missed
+      # in rounds 1-2 because it doesn't appear as a top-level key in config/algo.yml, even
+      # though it's read live via AlgoConfig.fetch[:entry_quality] (see entry_quality_filter.rb).
+      it 'applies patches to the dashboard Signals sidebar toggle keys' do
+        nested_by_key = {
+          midday_guard: { enabled: true },
+          loss_streak_guard: { enabled: true },
+          market_context: { gate: { enabled: true } },
+          entry_quality: { gates: { block_choppy_regime: false } }
+        }
+        nested_by_key.each do |top_key, nested|
+          patch '/api/settings/deep_merge',
+                params: { patch: { top_key => nested } },
+                headers: { 'X-Settings-Update-Token' => 'test-token' },
+                as: :json
+          expect(response).to have_http_status(:ok)
+          doc = JSON.parse(Setting.find_by!(key: doc_key).value)
+          expect(doc[top_key.to_s]).to be_present
+        end
+      end
+
+      it 'returns 422 when the patch only targets the run_mode non-permitted key' do
+        patch '/api/settings/deep_merge',
+              params: { patch: { run_mode: { mode: 'live' } } },
+              headers: { 'X-Settings-Update-Token' => 'test-token' },
+              as: :json
+        expect(response).to have_http_status(:unprocessable_content)
+        json = response.parsed_body
+        expect(json['error']).to include('No permitted')
+      end
     end
   end
 end

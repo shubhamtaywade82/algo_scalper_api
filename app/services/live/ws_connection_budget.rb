@@ -1,5 +1,13 @@
 # frozen_string_literal: true
 
+# Global WebSocket connection budget manager.
+#
+# Limits concurrent WebSocket connections opened by the app/system to prevent
+# resource exhaustion or hitting upstream broker limits.
+#
+# Default cap: 5 concurrent connections.
+#
+# Status: PRESENT after P12.
 module Live
   module WsConnectionBudget
     class Error < StandardError; end
@@ -23,6 +31,7 @@ module Live
       end
 
       # Attempt to register a new connection.
+      # Returns true if budget allows, false (and logs) if exhausted.
       def acquire!(connection_id)
         raise ArgumentError, 'connection_id required' if connection_id.to_s.strip.empty?
 

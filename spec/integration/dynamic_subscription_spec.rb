@@ -30,7 +30,9 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
            hget: nil,
            hgetall: {},
            hdel: true,
-           incrbyfloat: true,
+           incr: true,
+           incrbyfloat: 0.0,
+           sadd: true,
            ttl: 3600,
            expire: true,
            scan_each: [].each)
@@ -40,8 +42,11 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
     # Reset singletons to avoid state leakage
     Positions::ActivePositionsCache.instance.clear!
     Live::RedisPnlCache.instance.instance_variable_set(:@redis, mock_redis)
+    Live::RedisTickCache.instance.instance_variable_set(:@redis, mock_redis)
+    Positions::ActivePositionsCache.instance.clear!
     Live::MarketFeedHub.instance.instance_variable_set(:@ws_client, nil)
     Live::MarketFeedHub.instance.instance_variable_set(:@running, false)
+    Live::MarketFeedHub.instance.instance_variable_set(:@subscribed_keys, Concurrent::Set.new)
 
     # Mock WebSocket client
     allow(market_feed_hub).to receive(:subscribe)
@@ -64,6 +69,7 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
     allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return('test_access_token')
     allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return('test_access_token')
     allow(ENV).to receive(:[]).with('COLUMNS').and_return('80')
+    allow(ENV).to receive(:[]).with('FORCE_MARKET_OPEN').and_return('false')
 
     # Mock Redis connection
     allow(Redis).to receive(:new).and_return(mock_redis)
@@ -106,7 +112,8 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         allow(market_feed_hub).to receive(:subscribe).and_raise(StandardError, 'Subscription error')
 
         # The subscribe method catches errors and returns nil
-        expect(Rails.logger).to receive(:error).with(/Failed to subscribe/)
+        expect(Rails.logger).to receive(:error)
+          .with(/\[Positions::FeedSubscription\] StandardError - Subscription error/)
         result = position_tracker.subscribe
         expect(result).to be_nil
       end
@@ -189,10 +196,12 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
       end
 
       it 'unsubscribes when position is exited' do
+        # unsubscribe is invoked by ExitFlow directly and again by the
+        # after_update_commit callbacks (cleanup_if_exited / refresh_index_if_relevant)
         expect(market_feed_hub).to receive(:unsubscribe).with(
           segment: 'NSE_FNO',
           security_id: '12345'
-        )
+        ).at_least(:once)
 
         position_tracker.mark_exited!
       end
@@ -366,17 +375,16 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         # Reset last_sync to allow sync to proceed
         position_sync_service.instance_variable_set(:@last_sync, nil)
 
-        # Mock the derivative lookup to return a derivative
-        mock_derivative = double('Derivative')
-        allow(mock_derivative).to receive(:instrument).and_return(double('Instrument'))
-        allow(Derivative).to receive(:find_by).and_return(mock_derivative)
+        # Mock the instrument lookup (consolidated master)
+        mock_instrument = double('Instrument')
+        allow(mock_instrument).to receive_messages(derivative?: true, underlying_instrument: nil)
+        allow(Instrument).to receive(:find_by).and_return(mock_instrument)
 
         # Ensure no existing trackers for this position
         allow(PositionTracker).to receive(:active).and_return(PositionTracker.none)
 
         # Ensure paper trading is disabled so sync_live_positions is called
         allow(position_sync_service).to receive(:paper_trading_enabled?).and_return(false)
-        allow(position_sync_service).to receive(:market_open?).and_return(true)
       end
 
       it 'syncs positions from DhanHQ to database' do
@@ -409,9 +417,13 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         # Mock PositionTracker.active to return the tracker with eager loading
         active_relation = PositionTracker.where(id: tracker.id)
         allow(PositionTracker).to receive(:active).and_return(active_relation)
-        allow(active_relation).to receive(:includes).with(:instrument).and_return([tracker])
 
-        expect(tracker).to receive(:mark_exited!)
+        # Mock the chain of calls
+        paper_false_relation = active_relation.where(paper: false)
+        allow(active_relation).to receive(:where).with(paper: false).and_return(paper_false_relation)
+        allow(paper_false_relation).to receive(:eager_load).with(:instrument).and_return([tracker])
+
+        expect_any_instance_of(PositionTracker).to receive(:mark_exited!)
 
         position_sync_service.sync_positions!
       end
@@ -450,10 +462,10 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
       end
 
       before do
-        # Mock the derivative lookup to return a derivative
-        mock_derivative = double('Derivative')
-        allow(mock_derivative).to receive(:instrument).and_return(double('Instrument'))
-        allow(Derivative).to receive(:find_by).and_return(mock_derivative)
+        # Mock the instrument lookup (consolidated master)
+        mock_instrument = double('Instrument')
+        allow(mock_instrument).to receive_messages(derivative?: true, underlying_instrument: nil)
+        allow(Instrument).to receive(:find_by).and_return(mock_instrument)
       end
 
       it 'creates tracker with correct parameters' do
@@ -479,10 +491,10 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
       end
 
       it 'handles tracker creation errors gracefully' do
-        # Mock the derivative lookup to return a derivative
-        mock_derivative = double('Derivative')
-        allow(mock_derivative).to receive(:instrument).and_return(double('Instrument'))
-        allow(Derivative).to receive(:find_by).and_return(mock_derivative)
+        # Mock the instrument lookup (consolidated master)
+        mock_instrument = double('Instrument')
+        allow(mock_instrument).to receive_messages(derivative?: true, underlying_instrument: nil)
+        allow(Instrument).to receive(:find_by).and_return(mock_instrument)
 
         allow(PositionTracker).to receive(:create!).and_raise(StandardError, 'Database error')
 
@@ -529,7 +541,7 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         allow(market_feed_hub).to receive_messages(enabled?: true, running?: false)
         allow(market_feed_hub).to receive(:build_client).and_raise(StandardError, 'Startup error')
 
-        expect(Rails.logger).to receive(:error).with(/Failed to start DhanHQ market feed/)
+        expect(Rails.logger).to receive(:error).with(/Failed to start DhanHQ market feed/).at_least(:once)
 
         result = market_feed_hub.start!
         expect(result).to be false
@@ -593,7 +605,8 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         allow(market_feed_hub).to receive(:subscribe).and_raise(StandardError, 'WebSocket error')
 
         # The subscribe method catches errors and returns nil
-        expect(Rails.logger).to receive(:error).with(/Failed to subscribe/)
+        expect(Rails.logger).to receive(:error)
+          .with(/\[Positions::FeedSubscription\] StandardError - WebSocket error/)
         result = position_tracker.subscribe
         expect(result).to be_nil
       end
@@ -627,7 +640,8 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         allow(market_feed_hub).to receive(:subscribe).and_raise(Timeout::Error, 'Subscription timeout')
 
         # The subscribe method catches errors and returns nil
-        expect(Rails.logger).to receive(:error).with(/Failed to subscribe/)
+        expect(Rails.logger).to receive(:error)
+          .with(/\[Positions::FeedSubscription\] Timeout::Error - Subscription timeout/)
         result = position_tracker.subscribe
         expect(result).to be_nil
       end
@@ -637,8 +651,11 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
       it 'handles WebSocket disconnection errors' do
         allow(market_feed_hub).to receive(:unsubscribe).and_raise(StandardError, 'WebSocket error')
 
-        # The unsubscribe method should raise the error
-        expect { position_tracker.unsubscribe }.to raise_error(StandardError, 'WebSocket error')
+        # The unsubscribe path now rescues, logs and returns nil instead of raising
+        expect(Rails.logger).to receive(:error)
+          .with(/\[Positions::FeedSubscription\] StandardError - WebSocket error/)
+        result = position_tracker.unsubscribe
+        expect(result).to be_nil
       end
 
       it 'handles hub not running errors' do

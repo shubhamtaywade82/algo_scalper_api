@@ -6,8 +6,7 @@ RSpec.describe Entries::Guards::BreakoutReadyGuard do
   let(:context) { { index_cfg: { key: 'NIFTY' }, direction: :bullish } }
 
   before do
-    allow(OptionsBuying::Mode).to receive(:breakout_enabled?).and_return(true)
-    allow(OptionsBuying::Mode).to receive(:positional_active?).and_return(false)
+    allow(OptionsBuying::Mode).to receive_messages(breakout_enabled?: true, positional_active?: false)
     allow(OptionsBuying::CarryPolicy).to receive(:expiry_day?).and_return(false)
   end
 

@@ -16,12 +16,13 @@ module Entries
       @ltp = context[:ltp]
       @entry_metadata = context[:entry_metadata]
       @bos_context = context[:bos_context]
+      @signal = context[:signal]
     end
 
     def call
       place_cmd = Orders::Commands::PlaceOrderCommand.new(
         gateway: Orders.config.gateway,
-        side: :buy,
+        side: opening_order_side,
         segment: @pick[:segment] || @index_cfg[:segment],
         security_id: @pick[:security_id],
         qty: @quantity,
@@ -39,51 +40,65 @@ module Entries
       order_no = extract_order_no(response)
       return failure('order_no_missing') unless order_no
 
-      fill_price = response[:fill_price] || @ltp
-
-      tracker = create_tracker(response, order_no, fill_price)
+      tracker = create_tracker(response, order_no)
       return failure('tracker_creation_failed') unless tracker
 
-      post_ledger_entry!(tracker, response, fill_price)
+      record_execution!(response, tracker, order_no)
+      post_ledger_entry!(response, tracker, order_no) if response.is_a?(Hash) && response[:paper]
       mark_bos_consumed! if @bos_context
       tracker
     end
 
     private
 
+    # Selling opens with a SELL order (sell-to-open); buying opens with BUY as before.
+    def opening_order_side
+      @side.to_s.start_with?('short') ? :sell : :buy
+    end
+
     def build_client_order_id
-      Entries::EntryGuard.build_client_order_id(index_cfg: @index_cfg, pick: @pick)
+      Entries::EntryGuard.build_client_order_id(index_cfg: @index_cfg, pick: @pick, signal: @signal)
     end
 
     def extract_order_no(response)
-      Ledger::OrderResponse.extract_order_id(response) || Entries::EntryGuard.extract_order_no(response)
+      Entries::EntryGuard.extract_order_no(response)
     end
 
-    def post_ledger_entry!(tracker, response, fill_price)
-      return unless response.is_a?(Hash) ? response[:paper] : Ledger::OrderResponse.paper?(response)
-
-      Ledger::EntryPoster.post!(
-        tracker: tracker,
-        fill_price: fill_price,
-        quantity: @quantity,
-        order_no: tracker.order_no
-      )
-    end
-
-    def create_tracker(response, order_no, fill_price)
+    def create_tracker(response, order_no)
       if response.is_a?(Hash) && response[:paper]
         Entries::EntryGuard.create_paper_tracker!(
           instrument: @instrument, pick: @pick, side: @side, quantity: @quantity,
-          index_cfg: @index_cfg, ltp: fill_price, order_no: order_no,
+          index_cfg: @index_cfg, ltp: @ltp, order_no: order_no,
           entry_metadata: @entry_metadata, bos_context: @bos_context
         )
       else
         Entries::EntryGuard.create_tracker!(
           instrument: @instrument, order_no: order_no, pick: @pick, side: @side,
-          quantity: @quantity, index_cfg: @index_cfg, ltp: fill_price,
+          quantity: @quantity, index_cfg: @index_cfg, ltp: @ltp,
           entry_metadata: @entry_metadata, bos_context: @bos_context
         )
       end
+    end
+
+    # Both paper and live paths produce the same Execution record so the
+    # downstream (ledger, analytics, reconciliation) sees one event shape.
+    def record_execution!(response, tracker, _order_no)
+      instrument = tracker.watchable.is_a?(Instrument) ? tracker.watchable : @instrument
+      Execution.record_from_order!(
+        order: response, instrument: instrument, side: opening_order_side,
+        quantity: @quantity, purpose: :entry, position_tracker: tracker,
+        requested_price: @ltp
+      )
+    end
+
+    def post_ledger_entry!(response, tracker, order_no)
+      # Book the SIMULATED fill (bid/ask + slippage) when the paper gateway
+      # provides one — falling back to LTP only for legacy responses.
+      fill_price = (response.is_a?(Hash) ? response[:fill_price] : nil).presence || @ltp
+      result = Ledger::EntryPoster.post!(
+        tracker: tracker, fill_price: fill_price, quantity: @quantity, order_no: order_no
+      )
+      result if result.rejected? || result.failed? # surfaced for callers/logs; never nil
     end
 
     def mark_bos_consumed!

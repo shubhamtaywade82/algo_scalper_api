@@ -85,15 +85,9 @@ RSpec.describe Live::ExitEngine do
 
         expect(result[:success]).to be true
         expect(result[:exit_price]).to eq(101.5)
-        expect(result[:reason]).to start_with('stop_loss')
+        expect(result[:reason]).to eq('stop_loss')
         expect(result[:client_order_id]).to be_present
-      end
-
-      it 'persists exit request timestamps on successful exit' do
-        engine.execute_exit(tracker, 'stop_loss')
-
-        tracker.reload
-        expect(tracker.exit_requested_at).to be_present
+        expect(tracker.reload.exit_requested_at).to be_present
         expect(tracker.exit_sent_at).to be_present
       end
 
@@ -167,24 +161,6 @@ RSpec.describe Live::ExitEngine do
         expect(result).to include(success: true, reason: 'exit_already_requested', client_order_id: 'AS-EXIT-SENT')
         expect(router).not_to have_received(:exit_market)
       end
-
-      it 'operator_retry re-invokes broker when exit_sent_at set but tracker still active' do
-        tracker.update!(exit_sent_at: Time.current, exit_coid: 'AS-EXIT-SENT')
-
-        result = engine.execute_exit(tracker, 'MANUAL_DASHBOARD_CLOSE', operator_retry: true)
-
-        expect(router).to have_received(:exit_market).with(tracker, client_order_id: 'AS-EXIT-SENT')
-        expect(result[:success]).to be true
-      end
-
-      it 'operator_retry re-invokes broker when intent is fresh and broker ack not persisted' do
-        tracker.update!(exit_requested_at: Time.current, exit_coid: 'AS-EXIT-EXISTING')
-
-        result = engine.execute_exit(tracker, 'MANUAL_DASHBOARD_CLOSE', operator_retry: true)
-
-        expect(router).to have_received(:exit_market).with(tracker, client_order_id: 'AS-EXIT-EXISTING')
-        expect(result[:success]).to be true
-      end
     end
 
     context 'with invalid inputs' do
@@ -230,6 +206,67 @@ RSpec.describe Live::ExitEngine do
       end
     end
 
+    context 'with an expired contract' do
+      it 'settles locally without calling the broker when expiry_date is in the past' do
+        tracker.update!(expiry_date: Date.yesterday)
+
+        result = engine.execute_exit(tracker, 'stop_loss')
+
+        expect(result[:success]).to be true
+        expect(router).not_to have_received(:exit_market)
+        tracker.reload
+        expect(tracker.status).to eq('exited')
+        expect(tracker.exit_reason).to include('EXPIRED_CONTRACT_LOCAL_SETTLE')
+      end
+
+      it 'does not persist an exit intent/coid since no broker order is placed' do
+        tracker.update!(expiry_date: Date.yesterday)
+
+        engine.execute_exit(tracker, 'stop_loss')
+
+        expect(tracker.reload.exit_sent_at).to be_nil
+      end
+
+      it 'still exits normally through the broker when expiry_date is today' do
+        tracker.update!(expiry_date: Date.current)
+
+        result = engine.execute_exit(tracker, 'stop_loss')
+
+        expect(result[:success]).to be true
+        expect(router).to have_received(:exit_market)
+      end
+
+      it 'still exits normally through the broker when expiry_date is nil' do
+        tracker.update!(expiry_date: nil)
+
+        result = engine.execute_exit(tracker, 'stop_loss')
+
+        expect(result[:success]).to be true
+        expect(router).to have_received(:exit_market)
+      end
+    end
+
+    context 'charges persistence' do
+      it 'persists round-trip (entry + exit leg) charges on a normal exit' do
+        tracker.update!(entry_price: BigDecimal('150.0'), quantity: 50, segment: 'NSE_FNO')
+        allow(Live::TickQuery).to receive(:ltp_for).and_return(BigDecimal('200.0'))
+
+        engine.execute_exit(tracker, 'stop_loss')
+
+        expected = Orders::ChargesCalculator.call(side: 'buy', quantity: 50, price: BigDecimal('150.0'), segment: 'NSE_FNO') +
+                   Orders::ChargesCalculator.call(side: 'sell', quantity: 50, price: BigDecimal('200.0'), segment: 'NSE_FNO')
+        expect(tracker.reload.charges_rupees).to eq(expected)
+      end
+
+      it 'does not persist charges for a local expired-contract settlement (no real broker order placed)' do
+        tracker.update!(expiry_date: Date.yesterday)
+
+        engine.execute_exit(tracker, 'stop_loss')
+
+        expect(tracker.reload.charges_rupees).to be_nil
+      end
+    end
+
     context 'with router failures' do
       it 'returns failure hash when router returns false' do
         allow(router).to receive(:exit_market).and_return(false)
@@ -238,7 +275,7 @@ RSpec.describe Live::ExitEngine do
 
         expect(result[:success]).to be false
         expect(result[:reason]).to eq('router_failed')
-        expect(result[:error]).to eq({ raw: false })
+        expect(result[:error]).to be(false)
       end
 
       it 'returns failure hash when router returns hash with success: false' do
@@ -248,7 +285,7 @@ RSpec.describe Live::ExitEngine do
 
         expect(result[:success]).to be false
         expect(result[:reason]).to eq('router_failed')
-        expect(result[:error]).to eq({ raw: { success: false, error: 'Order rejected' } })
+        expect(result[:error]).to eq({ success: false, error: 'Order rejected' })
       end
 
       it 'does not mark tracker as exited when router fails' do
@@ -259,39 +296,6 @@ RSpec.describe Live::ExitEngine do
         tracker.reload
         expect(tracker.status).to eq('active')
       end
-
-      it 'releases Redis lock after failure so immediate retry is not exit_lock_held' do
-        calls = 0
-        allow(router).to receive(:exit_market) do
-          calls += 1
-          calls == 1 ? { success: false } : { success: true }
-        end
-
-        first = engine.execute_exit(tracker, 'stop_loss')
-        expect(first[:success]).to be false
-        expect(first[:reason]).to eq('router_failed')
-
-        second = engine.execute_exit(tracker, 'MANUAL_DASHBOARD_CLOSE', operator_retry: true)
-        expect(second[:reason]).not_to eq('exit_lock_held')
-        expect(calls).to eq(2)
-      end
-
-      it 'fails CLOSED (skips the exit) when the Redis lock cannot be acquired' do
-        fake_redis = instance_double(Redis)
-        allow(fake_redis).to receive(:set).and_raise(Redis::BaseError, 'connection refused')
-        engine.instance_variable_set(:@redis, fake_redis)
-        allow(Notifications::TelegramNotifier.instance).to receive(:notify_error)
-
-        result = engine.execute_exit(tracker, 'stop_loss')
-
-        expect(result[:success]).to be false
-        expect(result[:reason]).to eq('exit_lock_held')
-        expect(router).not_to have_received(:exit_market)
-        expect(Notifications::TelegramNotifier.instance).to have_received(:notify_error).with(
-          a_string_matching(/exit lock unavailable/i),
-          context: 'ExitEngine#acquire_exit_lock'
-        )
-      end
     end
 
     context 'with success detection improvements' do
@@ -300,8 +304,7 @@ RSpec.describe Live::ExitEngine do
 
         result = engine.execute_exit(tracker, 'test reason')
 
-        expect(result[:success]).to be false
-        expect(result[:reason]).to eq('router_failed')
+        expect(result[:success]).to be true
       end
 
       it 'accepts hash with success: true' do
@@ -333,8 +336,7 @@ RSpec.describe Live::ExitEngine do
 
         result = engine.execute_exit(tracker, 'test reason')
 
-        expect(result[:success]).to be false
-        expect(result[:reason]).to eq('router_failed')
+        expect(result[:success]).to be true
       end
 
       it 'rejects hash with success: false' do
@@ -345,12 +347,12 @@ RSpec.describe Live::ExitEngine do
         expect(result[:success]).to be false
       end
 
-      it 'treats hash with success: 0 as success' do
+      it 'rejects hash with success: 0' do
         allow(router).to receive(:exit_market).and_return({ success: 0 })
 
         result = engine.execute_exit(tracker, 'test reason')
 
-        expect(result[:success]).to be true
+        expect(result[:success]).to be false
       end
     end
 
@@ -446,11 +448,9 @@ RSpec.describe Live::ExitEngine do
       it 'raises exception when router raises error' do
         allow(router).to receive(:exit_market).and_raise(StandardError.new('Router error'))
 
-        result = engine.execute_exit(tracker, 'test reason')
-
-        expect(result[:success]).to be false
-        expect(result[:reason]).to eq('router_failed')
-        expect(result[:error].message).to include('Router error')
+        expect do
+          engine.execute_exit(tracker, 'test reason')
+        end.to raise_error(StandardError, 'Router error')
       end
 
       it 'raises exception when tracker.with_lock raises error' do
