@@ -33,8 +33,6 @@ RSpec.describe Entries::Guards::ExpiryWeekPowerTrendGuard do
     allow(AlgoConfig).to receive(:fetch).and_return(enabled_config)
   end
 
-  after { travel_back }
-
   # Freeze ALL time sources (Time.current AND Time.zone.today), not just
   # Time.current: the guard's expiry-week check reads Time.zone.today for
   # the last-Thursday fallback, so a Time.current-only stub left the test
