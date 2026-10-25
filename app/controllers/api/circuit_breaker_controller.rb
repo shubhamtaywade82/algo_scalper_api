@@ -4,7 +4,9 @@ module Api
   # Emergency circuit breaker API.
   #
   # All mutating endpoints require the X-Circuit-Breaker-Token header to match
-  # the CIRCUIT_BREAKER_TOKEN environment variable.
+  # the CIRCUIT_BREAKER_TOKEN environment variable. The token is accepted ONLY
+  # via header (never via query param) so it does not leak into access logs,
+  # browser history, or proxy Referer headers.
   #
   # GET    /api/circuit_breaker        → current status
   # POST   /api/circuit_breaker/trip   → trip the breaker (blocks entries, force-closes positions)
@@ -33,7 +35,7 @@ module Api
 
     def authenticate!
       expected = ENV['CIRCUIT_BREAKER_TOKEN'].presence
-      provided = request.headers['X-Circuit-Breaker-Token'].presence || params[:token].presence
+      provided = request.headers['X-Circuit-Breaker-Token'].presence
 
       return if expected && provided && ActiveSupport::SecurityUtils.secure_compare(provided, expected)
 
