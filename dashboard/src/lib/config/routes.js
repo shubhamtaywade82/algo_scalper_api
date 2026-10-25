@@ -13,6 +13,7 @@ export const ROUTES = {
   MARKET_DATA: '/market-data/:symbol',
 
   // Portfolio
+  PORTFOLIO: '/portfolio',
   POSITIONS: '/positions',
   ORDERS: '/orders',
   HOLDINGS: '/holdings',
@@ -50,8 +51,8 @@ export const ROUTES = {
 export const NAV_SECTIONS = {
   MAIN: { id: 'main', label: 'Main' },
   MARKET: { id: 'market', label: 'Market' },
+  STRATEGIES: { id: 'strategies', label: 'Strategies' },
   PORTFOLIO: { id: 'portfolio', label: 'Portfolio' },
-  ANALYTICS: { id: 'analytics', label: 'Analytics' },
   SYSTEM: { id: 'system', label: 'System' },
 }
 
@@ -60,39 +61,34 @@ export const navigationConfig = [
     section: NAV_SECTIONS.MAIN,
     items: [
       { id: 'dashboard', label: 'Dashboard', href: ROUTES.DASHBOARD, icon: 'dashboard', end: true },
-      { id: 'signals', label: 'Signals', href: ROUTES.SIGNALS, icon: 'signals' },
-      { id: 'alpha', label: 'Alpha', href: ROUTES.ALPHA, icon: 'alpha' },
-      { id: 'analysis', label: 'Analysis', href: ROUTES.ANALYSIS, icon: 'analysis' },
-      { id: 'strategies', label: 'Strategies', href: ROUTES.STRATEGIES, icon: 'strategies' },
-      { id: 'option-scalper', label: 'Option Scalper', href: ROUTES.OPTION_SCALPER, icon: 'optionScalper' },
-      { id: 'backtester', label: 'Backtester', href: ROUTES.BACKTESTER, icon: 'strategies' },
-      { id: 'replay', label: 'Replay', href: ROUTES.REPLAY, icon: 'alpha' },
       { id: 'reports', label: 'Reports', href: ROUTES.REPORTS, icon: 'reports' }
     ],
   },
   {
     section: NAV_SECTIONS.MARKET,
     items: [
+      { id: 'option-chain', label: 'Option Chain', href: ROUTES.OPTION_CHAIN, icon: 'optionChain' },
       { id: 'market-watch', label: 'Market Watch', href: ROUTES.MARKET_WATCH, icon: 'marketWatch' },
-      { id: 'option-chain', label: 'Option Chain', href: ROUTES.OPTION_CHAIN, icon: 'optionChain' }, // Maps to option chain
-      { id: 'market-data', label: 'Market Data', href: ROUTES.CHARTS, icon: 'charts' } // Maps to charts
+      { id: 'analysis', label: 'Analysis', href: ROUTES.ANALYSIS, icon: 'analysis' },
+      { id: 'market-data', label: 'Market Data', href: ROUTES.CHARTS, icon: 'charts' }
+    ],
+  },
+  {
+    section: NAV_SECTIONS.STRATEGIES,
+    items: [
+      { id: 'strategies', label: 'Strategies', href: ROUTES.STRATEGIES, icon: 'strategies' },
+      { id: 'signals', label: 'Signals', href: ROUTES.SIGNALS, icon: 'signals' }
     ],
   },
   {
     section: NAV_SECTIONS.PORTFOLIO,
     items: [
-      { id: 'positions', label: 'Positions', href: ROUTES.POSITIONS, icon: 'positions' },
-      { id: 'orders', label: 'Orders', href: ROUTES.LEDGER, icon: 'ledger' }, // Ledger acts as orders or trades log
-      { id: 'holdings', label: 'Holdings', href: ROUTES.HOLDINGS, icon: 'holdings' },
-      { id: 'funds', label: 'Funds', href: ROUTES.FUNDS, icon: 'funds' }
+      { id: 'portfolio', label: 'Portfolio', href: ROUTES.PORTFOLIO, icon: 'portfolio' }
     ],
   },
   {
     section: NAV_SECTIONS.SYSTEM,
     items: [
-      { id: 'logs', label: 'Logs', href: ROUTES.LOGS, icon: 'logs' },
-      { id: 'alerts', label: 'Alerts', href: ROUTES.ALERTS, icon: 'alerts' },
-      { id: 'scheduler', label: 'Scheduler', href: ROUTES.SCHEDULER, icon: 'scheduler' },
       { id: 'settings', label: 'Settings', href: ROUTES.SETTINGS, icon: 'settings' }
     ],
   },
