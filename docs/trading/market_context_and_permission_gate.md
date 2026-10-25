@@ -1,123 +1,78 @@
-# Market Context and Permission Gate
+# Market Context (Regime Snapshot)
 
-Optional **alpha-layer** filters that run **after** strike qualification and **before** `EntryGuard.try_enter` / `BosEntryEngine`. They do not replace `MarketRegimeDetector` or `Options::ChainAnalyzer`; they compose and gate on top of them.
+> **Note (2026-10-25):** This document was rewritten as part of audit S-001.
+> The previous version described a `MarketPermissionGate` +
+> `StrategyProfileSelector` + `ChainSignalExtractor` pipeline that has been
+> removed as dead code. Only `MarketContext::RegimeComposer` remains, and
+> it is consumed by AI/agent paths, not by `Signal::Engine` directly.
 
-**Configuration:** `config/algo.yml` → `market_context:` (master `enabled`, `gate`, `regime_scoring`, `chain_signal_extractor`, `strategy_profiles`).
+## What remains
 
-**Default:** `market_context.enabled: false` — no extra CPU or behavior until turned on.
+`MarketContext::RegimeComposer` builds a `RegimeSnapshot` value object from
+a candle series + index key. It is used by:
 
----
+- `Ai::Agents::MarketAnalysisAgent` — advisory multi-agent pipeline
+- `Ai::DynamicConfig::ContextBuilder` — LLM-driven config experiments
+- `OptionsBuying::TradeScoringEngine` — live trade scoring
 
-## Flow
+The composer delegates to three component analyzers:
 
-1. `Signal::Engine` already fetches `chain_data` via `instrument.fetch_option_chain(expiry_date)` (same object used for gamma analysis).
-2. After `Options::ChainAnalyzer.pick_strikes_with_qualification` returns non-empty `picks`, if `market_context.enabled` is true:
-   - `MarketContext::RegimeComposer` builds a `RegimeSnapshot` from `primary_series` + `MarketRegimeDetector`.
-   - `Options::ChainSignalExtractor` reads chain flow/PCR/premium vs `FlowAnalyzer` cache.
-   - `Trading::StrategyProfileSelector` sets `strategy_profile` for metadata.
-3. If `market_context.gate.enabled` is true, `Trading::MarketPermissionGate` may block; on block, `Signal::Engine` logs and returns (no entry).
+| Component | File | Role |
+|-----------|------|------|
+| `MarketContext::RegimeComposer` | `app/services/market_context/regime_composer.rb` | Orchestrates analyzers, weights sub-scores into `conviction_score` |
+| `MarketContext::StructureAnalyzer` | `app/services/market_context/structure_analyzer.rb` | Price structure (trending / ranging / choppy) |
+| `MarketContext::VolatilityAnalyzer` | `app/services/market_context/volatility_analyzer.rb` | Volatility state (high / normal / low) |
+| `MarketContext::ParticipationAnalyzer` | `app/services/market_context/participation_analyzer.rb` | Volume / participation assessment |
 
-**Implementation:** `app/services/signal/engine.rb` (`evaluate_market_context_for_entry`).
+Output value object: `MarketContext::RegimeSnapshot`
+(`app/services/market_context/regime_snapshot.rb`).
 
----
-
-## Regime Snapshot
-
-**Type:** `MarketContext::RegimeSnapshot` (`app/services/market_context/regime_snapshot.rb`).
-
-Fields include: `structure`, `strength`, `volatility_state`, `participation`, `conviction_score`, `displacement`, legacy regime strings from `MarketRegimeDetector`, and `raw` diagnostics.
-
-**Composer:** `app/services/market_context/regime_composer.rb`
-
-Component analyzers:
-- `MarketContext::StructureAnalyzer` — price structure (trending/ranging/choppy)
-- `MarketContext::VolatilityAnalyzer` — volatility state (high/normal/low)
-- `MarketContext::ParticipationAnalyzer` — volume/participation assessment
-
-Weights for `conviction_score` come from `config/algo.yml` → `market_context.regime_scoring`.
-
----
-
-## Chain Signals
-
-**Class:** `Options::ChainSignalExtractor` — `app/services/options/chain_signal_extractor.rb`.
-
-Uses `Options::FlowAnalyzer` for strike-level history; aggregates PCR from CE/PE OI in `chain_data[:oc]`. Near-expiry confidence penalty is configurable (`chain_signal_extractor.near_expiry_penalty` in `market_context` config).
-
-Output fields: `pcr`, `flow_score`, `premium_expansion`, `confidence`.
-
----
-
-## Permission Gate
-
-**Class:** `Trading::MarketPermissionGate` — `app/services/trading/market_permission_gate.rb`.
-
-Enforces thresholds from `market_context.gate`:
-- `min_conviction` — minimum conviction score from `RegimeSnapshot`
-- `min_chain_confidence` — minimum chain signal confidence
-- `min_participation` — minimum participation level
-- `require_premium_expansion` (optional) — require bullish premium expansion
-
-Logs via `Observability::StructuredLog` with `event: 'entry_blocked'`, `stage: 'market_permission_gate'` when blocking.
-
----
-
-## Strategy Profiles
-
-**Class:** `Trading::StrategyProfileSelector` — `app/services/trading/strategy_profile_selector.rb`.
-
-Maps `RegimeSnapshot` → `strategy_profile` symbol (e.g., `:trending_expansion`, `:ranging_decay`). Profile is stored in:
-- `entry_metadata[:strategy_profile]`
-- `PositionTracker.meta['strategy_profile']`
-
-**Trailing overrides:** `Trading::TrailingEngine#config_for_symbol` merges `risk.institutional_trailing.profiles.<strategy_profile>` overrides when `tracker.meta['strategy_profile']` is set.
-
-**Implementation:** `app/services/trading/trailing_engine.rb` (`merge_strategy_profile_override!`).
-
----
-
-## Position Metadata and Trailing
-
-`strategy_profile` and market/chain keys are copied into `entry_metadata` and merged into `PositionTracker.meta` by `Entries::EntryGuard` (`merge_diagnostic_metadata!`).
-
-This enables per-trade trailing behavior based on regime context at entry time.
-
----
-
-## Day-Level Profit Protection
-
-Do **not** duplicate a second profit floor at the market-context layer. Portfolio locking remains **`Portfolio::ProfitLockEngine`** + **`Portfolio::DrawdownGuard`** (`app/services/portfolio/`). Tune `profit_lock` in `config/algo.yml` instead of adding a parallel `Trade::ProfitProtector`.
-
----
+Fields include: `structure`, `strength`, `volatility_state`,
+`participation`, `conviction_score`, `displacement`, legacy regime strings
+from `MarketRegimeDetector`, and `raw` diagnostics.
 
 ## Configuration
 
 ```yaml
+# config/algo.yml
 market_context:
-  enabled: false                    # Master switch — no behavior when false
+  enabled: false                    # Master switch
   regime_scoring:
-    structure_weight: 0.4
-    volatility_weight: 0.3
-    participation_weight: 0.3
-  chain_signal_extractor:
-    near_expiry_penalty: 0.1
-  gate:
-    enabled: false                  # Hard block gate
-    min_conviction: 0.6
-    min_chain_confidence: 0.5
-    min_participation: 0.4
-    require_premium_expansion: false
-  strategy_profiles:
-    trending_expansion:
-      # trailing overrides...
-    ranging_decay:
-      # trailing overrides...
+    weights:
+      trending_structure: 20
+      displacement: 20
+      vwap_not_chop: 15
+      strong_strength: 15
+      volatility_ok: 10
+      participation_high: 10
+      legacy_confidence: 10
 ```
 
----
+The `regime_scoring.weights` block is read by `RegimeComposer` to compute
+`conviction_score` as a weighted sum of sub-scores.
 
-## Related Docs
+## What was removed (audit S-001, 2026-10-25)
+
+The following components were deleted as dead code (zero live callers
+outside their own specs):
+
+- `Options::ChainSignalExtractor` — chain-side PCR / flow / premium analysis
+- `Trading::MarketPermissionGate` — hard block gate on conviction / chain
+- `Trading::StrategyProfileSelector` — maps `RegimeSnapshot` → profile symbol
+
+Their config blocks (`market_context.gate`, `market_context.strategy_profiles`,
+`market_context.chain_signal_extractor`) were also removed from
+`config/algo.yml` as orphaned.
+
+The `TrailingEngine#merge_strategy_profile_override!` method remains in
+`app/services/trading/trailing_engine.rb` but is now a no-op: it reads
+`@tracker.strategy_profile`, which was only ever set by the deleted
+`StrategyProfileSelector`. Removing the no-op method is left as a
+follow-up cleanup — it is harmless and the trailing-override mechanism
+could be re-wired in the future without resurrecting the full selector.
+
+## Related docs
 
 - Signal pipeline overview: `docs/services/signal_services.md`
+- AI subsystems analysis: `docs/architecture/ai_subsystems_analysis.md`
 - Entry guard order: `docs/trading/entry_and_exit_rules.md`
-- Institutional trailing defaults: `config/algo.yml` → `risk.institutional_trailing`

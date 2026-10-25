@@ -109,15 +109,16 @@ Per-tick (`UnifiedExitChecker`): early_trend_failure → stop_loss → take_prof
   - `lib/services/ai/technical_analysis_agent/` — agent components (executor, tools, prompts)
 - **Provider**: Ollama (local LLM) via `ollama-client` gem (`~> 1.1`). OpenAI removed.
 
-### 10. Market Context (Optional Alpha)
-- **Responsibility**: Optional signal enrichment and hard gate before entry.
+### 10. Market Context (Regime Snapshot)
+- **Responsibility**: Builds `RegimeSnapshot` (structure + volatility + participation → conviction_score) for AI/agent and trade-scoring paths.
 - **Key Files**:
-  - `app/services/market_context/regime_composer.rb` — builds `RegimeSnapshot`
+  - `app/services/market_context/regime_composer.rb` — orchestrates analyzers, weights sub-scores
   - `app/services/market_context/regime_snapshot.rb` — conviction score value object
-  - `app/services/options/chain_signal_extractor.rb` — chain-side confirmation
-  - `app/services/trading/market_permission_gate.rb` — optional hard block
-  - `app/services/trading/strategy_profile_selector.rb` — maps snapshot to trailing profile
-- **Default**: `market_context.enabled: false` — no behavior until enabled.
+  - `app/services/market_context/structure_analyzer.rb` — price structure
+  - `app/services/market_context/volatility_analyzer.rb` — volatility state
+  - `app/services/market_context/participation_analyzer.rb` — volume/participation
+- **Consumers**: `Ai::Agents::MarketAnalysisAgent`, `Ai::DynamicConfig::ContextBuilder`, `OptionsBuying::TradeScoringEngine`
+- **Note**: The previous `MarketPermissionGate` / `StrategyProfileSelector` / `ChainSignalExtractor` pipeline was removed as dead code in audit S-001 (2026-10-25). See `docs/trading/market_context_and_permission_gate.md`.
 
 ---
 

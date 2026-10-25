@@ -560,16 +560,6 @@ market_context:
       volatility_ok: 10
       participation_high: 10
       legacy_confidence: 10
-  gate:
-    enabled: false
-    min_conviction_score: 70
-    min_chain_confidence: 40
-    allow_normal_participation: true
-    require_premium_expansion: false
-    require_smc_alignment: false
-  strategy_profiles:
-    aggressive_min_score: 80
-    controlled_min_score: 60
 signals:
   entry_strategy:
     primary: adaptive_supertrend_knn
