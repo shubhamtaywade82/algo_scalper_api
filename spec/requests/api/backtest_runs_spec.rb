@@ -5,13 +5,12 @@ require 'rails_helper'
 RSpec.describe 'Api::BacktestRuns' do
   describe 'POST /api/backtest_runs' do
     it 'creates a pending run and enqueues the job, returning 202 immediately' do
-      allow(BacktestRunJob).to receive(:perform_later)
-
-      post '/api/backtest_runs', params: { symbol: 'niftY', days_back: 45, params: { stop_loss_pct: 0.4 } }
+      expect do
+        post '/api/backtest_runs', params: { symbol: 'niftY', days_back: 45, params: { stop_loss_pct: 0.4 } }
+      end.to have_enqueued_job(BacktestRunJob)
 
       expect(response).to have_http_status(:accepted)
       run = BacktestRun.last
-      expect(BacktestRunJob).to have_received(:perform_later).with(run.id)
       expect(run.symbol).to eq('NIFTY')
       expect(run.days_back).to eq(45)
       expect(run.params).to eq('stop_loss_pct' => 0.4)

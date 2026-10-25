@@ -205,8 +205,6 @@ class ArchScanner
 
     def scan_ai_subsystems
       dirs = [
-        { p: 'app/services/ai/trading_bot', n: 'Trading Bot', d: 'Semi-autonomous scan-analyze-trade loop (Ollama-backed polling)', s: 'active' },
-        { p: 'app/services/ai/trading_agent', n: 'Trading Agent', d: 'LLM tool-calling agent with REPL and audit trace', s: 'active' },
         { p: 'app/services/ai/calibration', n: 'AI Calibration', d: 'Weekly automated indicator calibration via LLM', s: 'active' },
         { p: 'app/services/ai/autonomous', n: 'Autonomous', d: 'LLM experiment runner with Observe-Think-Act loop', s: 'experimental' },
         { p: 'app/services/auto_exp', n: 'AutoExp', d: 'LLM-driven automated config experiments: plan - backtest - evaluate - apply', s: 'new' },

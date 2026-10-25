@@ -167,7 +167,7 @@ module Api
       expected = ENV['SETTINGS_UPDATE_TOKEN'].presence
       return if expected.nil?
 
-      provided = request.headers['X-Settings-Update-Token'].presence || params[:token].presence
+      provided = request.headers['X-Settings-Update-Token'].presence
       return if provided && ActiveSupport::SecurityUtils.secure_compare(provided, expected)
 
       render json: { error: 'unauthorized' }, status: :unauthorized

@@ -50,14 +50,22 @@ The core signal generation brain. Analyzes technical indicators (Supertrend, ADX
 
 ### Market Context (Optional)
 
-When `market_context.enabled: true`, after qualified picks exist, `Signal::Engine` calls `evaluate_market_context_for_entry`:
+When `market_context.enabled: true`, `MarketContext::RegimeComposer` builds a
+`RegimeSnapshot` from the primary candle series. The snapshot is consumed by
+AI/agent paths (`Ai::Agents::MarketAnalysisAgent`,
+`Ai::DynamicConfig::ContextBuilder`, `OptionsBuying::TradeScoringEngine`),
+not by `Signal::Engine` directly.
+
+> **Note (2026-10-25):** The previous version of this section described a
+> `Signal::Engine#evaluate_market_context_for_entry` flow that wired
+> `ChainSignalExtractor`, `MarketPermissionGate`, and
+> `StrategyProfileSelector` into the entry pipeline. Those components were
+> removed as dead code in audit S-001 — see
+> `docs/trading/market_context_and_permission_gate.md` for details.
 
 | Component | File | Role |
 |-----------|------|------|
-| `MarketContext::RegimeComposer` | `app/services/market_context/regime_composer.rb` | Builds `RegimeSnapshot` |
-| `Options::ChainSignalExtractor` | `app/services/options/chain_signal_extractor.rb` | Chain-side confirmation |
-| `Trading::MarketPermissionGate` | `app/services/trading/market_permission_gate.rb` | Optional hard gate |
-| `Trading::StrategyProfileSelector` | `app/services/trading/strategy_profile_selector.rb` | Maps snapshot to trailing profile |
+| `MarketContext::RegimeComposer` | `app/services/market_context/regime_composer.rb` | Builds `RegimeSnapshot` (structure + volatility + participation → conviction_score) |
 
 **Docs:** `docs/trading/market_context_and_permission_gate.md`
 

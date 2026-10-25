@@ -30,6 +30,10 @@ VCR.configure do |config|
     config.filter_sensitive_data("<#{key}>") { val } if val.present?
   end
 
+  # Filter PIN and TOTP secrets specifically
+  config.filter_sensitive_data('<PIN>') { ENV['DHAN_PIN'] } if ENV['DHAN_PIN'].present?
+  config.filter_sensitive_data('<TOTP_SECRET>') { ENV['DHAN_TOTP_SECRET'] } if ENV['DHAN_TOTP_SECRET'].present?
+
   # Mask the Trader API base URL specifically if it's set
   if ENV['TRADER_API_BASE_URL'].present?
     config.filter_sensitive_data('<TRADER_API_BASE_URL>') { ENV['TRADER_API_BASE_URL'] }
@@ -106,13 +110,32 @@ VCR.configure do |config|
     end
   end
 
+  # Redact PIN and OTP query params from Dhan auth requests before recording
+  config.before_record do |interaction|
+    if interaction.request.uri&.include?('auth.dhan.co/app/generateAccessToken')
+      interaction.request.uri = interaction.request.uri
+                                           .gsub(/([?&]pin=)[^&]+/, '\1<PIN>')
+                                           .gsub(/([?&]totp=)[^&]+/, '\1<OTP>')
+    end
+  end
+
   # Allow localhost connections (Capybara or Rails server)
   config.ignore_localhost = true
+
+  # Custom URI matcher that normalizes volatile pin and totp query parameters
+  config.register_request_matcher :normalized_uri do |req1, req2|
+    normalize = lambda do |u|
+      u.to_s
+       .gsub(/([?&]pin=)[^&]+/, '\1<PIN>')
+       .gsub(/([?&]totp=)[^&]+/, '\1<OTP>')
+    end
+    normalize.call(req1.uri) == normalize.call(req2.uri)
+  end
 
   # Default to :once mode (use cassette if exists, record if missing)
   config.default_cassette_options = {
     record: ENV.fetch('VCR_MODE', :once).to_sym,
-    match_requests_on: %i[method uri body],
+    match_requests_on: %i[method normalized_uri body],
     allow_playback_repeats: true
   }
 

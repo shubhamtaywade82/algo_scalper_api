@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
 # Adaptive Supertrend + KNN — ML adaptive volatility Supertrend filtered by
-# K-Nearest-Neighbors pattern classification. Adapted from the backtest
-# implementation (app/strategies/adaptive_supertrend_knn_strategy.rb) to the
-# platform plugin contract (call(context) -> Signals::*).
+# K-Nearest-Neighbors pattern classification. Implements the platform plugin
+# contract (call(context) -> Signals::*).
 class AdaptiveSupertrendKnn < Strategies::Base
   # Explicit indicator allowlist instead of `send` — dynamic dispatch would
   # trip the platform SecurityScanner (correctly: send bypasses every

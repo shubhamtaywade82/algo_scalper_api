@@ -57,13 +57,24 @@ module Dhan
 
           if response['status'] == 'error'
             msg = response['message'] || ''
-            if too_many_attempts?(msg) && env_token.present?
-              @totp_refresh_cooldown_until = TOTP_COOLDOWN_HOURS.hours.from_now
-              cache_token(env_token, @totp_refresh_cooldown_until)
-              Rails.logger.warn(
-                "[DHAN] TOTP rate-limited (Too many attempts); using ENV token for next #{TOTP_COOLDOWN_HOURS} hours"
-              )
-              return env_token
+            if too_many_attempts?(msg)
+              cooldown_until = TOTP_COOLDOWN_HOURS.hours.from_now
+              @totp_refresh_cooldown_until = cooldown_until
+              write_cooldown_cache(cooldown_until)
+
+              if env_token.present?
+                cache_token(env_token, cooldown_until)
+                Rails.logger.warn(
+                  "[DHAN] TOTP rate-limited (Too many attempts); using ENV token for next #{TOTP_COOLDOWN_HOURS} hours"
+                )
+                return env_token
+              else
+                Rails.logger.warn(
+                  "[DHAN] TOTP rate-limited ('Too many attempts'); backoff cooldown active until #{cooldown_until}. " \
+                  "Set ENV['DHAN_ACCESS_TOKEN'] to continue trading during cooldown."
+                )
+                return nil
+              end
             end
             Rails.logger.error("[DHAN] Token refresh failed: #{msg.presence || response.inspect}")
             return nil
@@ -97,6 +108,11 @@ module Dhan
           @cached_token = nil
           @cached_at = nil
           @totp_refresh_cooldown_until = nil
+          begin
+            Rails.cache.delete('dhan:totp_cooldown_until')
+          rescue StandardError
+            nil
+          end
           DhanAccessToken.delete_all
         end
         true
@@ -237,9 +253,22 @@ module Dhan
       end
 
       def totp_cooldown_active?
-        return false unless @totp_refresh_cooldown_until
+        cooldown = @totp_refresh_cooldown_until || read_cooldown_cache
+        return false unless cooldown
 
-        Time.current < @totp_refresh_cooldown_until
+        Time.current < cooldown
+      end
+
+      def write_cooldown_cache(cooldown_until)
+        Rails.cache.write('dhan:totp_cooldown_until', cooldown_until, expires_in: TOTP_COOLDOWN_HOURS.hours)
+      rescue StandardError => e
+        Rails.logger.warn("[DHAN] Failed to cache TOTP cooldown: #{e.message}")
+      end
+
+      def read_cooldown_cache
+        Rails.cache.read('dhan:totp_cooldown_until')
+      rescue StandardError
+        nil
       end
 
       def broadcast_token_to_redis(access_token, expiry_time)

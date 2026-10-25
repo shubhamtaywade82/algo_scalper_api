@@ -19,11 +19,16 @@ module Research
 
       dates = db_candles.unscope(:order).pluck("DISTINCT(ts::date)").sort
 
-      # If we don't have enough days in db, try to read from today_market_data.json
+      # If we don't have enough days in db, try to read from a local
+      # market-data snapshot. Preferred location: data/today_market_data.json
+      # (gitignored, environment-specific). Legacy fallback: today_market_data.json
+      # at repo root (also gitignored). The file is OPTIONAL — production
+      # deployments rely on the candles table; this is a dev/bootstrap aid.
       json_days = {}
-      if File.exist?("today_market_data.json")
+      snapshot_path = %w[data/today_market_data.json today_market_data.json].find { |p| File.exist?(p) }
+      if snapshot_path
         begin
-          raw_json = JSON.parse(File.read("today_market_data.json"))
+          raw_json = JSON.parse(File.read(snapshot_path))
           key = symbol.downcase
           if raw_json[key] && raw_json[key][interval]
             raw_json[key][interval].group_by { |c| Date.parse(c["t"]) }.each do |date, candles|
@@ -40,7 +45,7 @@ module Research
             end
           end
         rescue StandardError => e
-          Rails.logger.warn("[Research::MarketDataFetcher] Failed to parse today_market_data.json: #{e.message}")
+          Rails.logger.warn("[Research::MarketDataFetcher] Failed to parse #{snapshot_path}: #{e.message}")
         end
       end
 

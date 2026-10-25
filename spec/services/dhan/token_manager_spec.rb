@@ -52,6 +52,7 @@ RSpec.describe Dhan::TokenManager do
         token = described_class.refresh!(force: true)
 
         expect(token).to be_nil
+        expect(described_class.send(:totp_cooldown_active?)).to be true
       end
 
       it 'sets 12h cooldown and returns ENV token when Too many attempts and ENV token present' do

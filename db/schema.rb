@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_24_165849) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_25_140000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -398,36 +398,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_24_165849) do
     t.index ["index_key"], name: "index_options_buying_signal_events_on_index_key"
     t.index ["metadata"], name: "index_options_buying_signal_events_on_metadata", using: :gin
     t.index ["occurred_at"], name: "index_options_buying_signal_events_on_occurred_at"
-  end
-
-  create_table "order_intents", force: :cascade do |t|
-    t.bigint "instrument_id", null: false
-    t.string "strategy_name", null: false
-    t.string "side", null: false
-    t.integer "quantity", null: false
-    t.string "order_type", default: "MARKET", null: false
-    t.string "product_type", default: "INTRADAY", null: false
-    t.string "validity", default: "DAY", null: false
-    t.decimal "limit_price", precision: 12, scale: 4
-    t.decimal "trigger_price", precision: 12, scale: 4
-    t.decimal "stop_loss", precision: 12, scale: 4
-    t.decimal "target", precision: 12, scale: 4
-    t.boolean "risk_approved", default: false, null: false
-    t.boolean "margin_approved", default: false, null: false
-    t.string "status", default: "created", null: false
-    t.string "correlation_id"
-    t.string "rejection_reason"
-    t.jsonb "meta", default: {}, null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.integer "lock_version", default: 0, null: false
-    t.string "aasm_state", default: "created", null: false
-    t.index ["aasm_state"], name: "index_order_intents_on_aasm_state"
-    t.index ["correlation_id"], name: "index_order_intents_on_correlation_id", unique: true, where: "(correlation_id IS NOT NULL)"
-    t.index ["instrument_id", "status"], name: "index_order_intents_on_instrument_id_and_status"
-    t.index ["instrument_id"], name: "index_order_intents_on_instrument_id"
-    t.index ["status"], name: "index_order_intents_on_status"
-    t.index ["strategy_name"], name: "index_order_intents_on_strategy_name"
   end
 
   create_table "paper_daily_wallets", force: :cascade do |t|
@@ -1025,24 +995,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_24_165849) do
     t.index ["underlying_symbol", "signal_timestamp"], name: "index_research_signals_on_symbol_and_ts"
   end
 
-  create_table "risk_events", force: :cascade do |t|
-    t.string "event_type", null: false
-    t.string "severity", default: "warning", null: false
-    t.string "source", null: false
-    t.text "description"
-    t.bigint "instrument_id"
-    t.bigint "position_tracker_id"
-    t.jsonb "context", default: {}, null: false
-    t.string "action_taken"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["created_at"], name: "index_risk_events_on_created_at"
-    t.index ["event_type"], name: "index_risk_events_on_event_type"
-    t.index ["instrument_id"], name: "index_risk_events_on_instrument_id"
-    t.index ["position_tracker_id"], name: "index_risk_events_on_position_tracker_id"
-    t.index ["severity"], name: "index_risk_events_on_severity"
-  end
-
   create_table "ruby_llm_agents_execution_details", force: :cascade do |t|
     t.bigint "execution_id", null: false
     t.text "error_message"
@@ -1382,40 +1334,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_24_165849) do
     t.index ["position_tracker_id"], name: "index_trade_analytics_on_position_tracker_id"
   end
 
-  create_table "trade_journals", force: :cascade do |t|
-    t.bigint "position_tracker_id", null: false
-    t.bigint "instrument_id", null: false
-    t.string "strategy_name"
-    t.string "side", null: false
-    t.integer "quantity", null: false
-    t.decimal "entry_price", precision: 12, scale: 4, null: false
-    t.decimal "exit_price", precision: 12, scale: 4
-    t.datetime "entry_time", null: false
-    t.datetime "exit_time"
-    t.integer "hold_duration_seconds"
-    t.decimal "gross_pnl", precision: 12, scale: 4
-    t.decimal "fees", precision: 12, scale: 4
-    t.decimal "net_pnl", precision: 12, scale: 4
-    t.decimal "pnl_percent", precision: 8, scale: 4
-    t.decimal "max_favorable_excursion", precision: 12, scale: 4
-    t.decimal "max_adverse_excursion", precision: 12, scale: 4
-    t.string "exit_reason"
-    t.string "market_regime"
-    t.text "notes"
-    t.jsonb "entry_context", default: {}
-    t.jsonb "exit_context", default: {}
-    t.jsonb "meta", default: {}
-    t.boolean "paper", default: false, null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["created_at"], name: "index_trade_journals_on_created_at"
-    t.index ["instrument_id"], name: "index_trade_journals_on_instrument_id"
-    t.index ["paper", "created_at"], name: "index_trade_journals_on_paper_and_created_at"
-    t.index ["paper"], name: "index_trade_journals_on_paper"
-    t.index ["position_tracker_id"], name: "index_trade_journals_on_position_tracker_id"
-    t.index ["strategy_name"], name: "index_trade_journals_on_strategy_name"
-  end
-
   create_table "trade_memories", force: :cascade do |t|
     t.bigint "position_tracker_id", null: false
     t.bigint "trade_analytic_id"
@@ -1574,7 +1492,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_24_165849) do
   add_foreign_key "ledger_postings", "ledger_accounts"
   add_foreign_key "ledger_postings", "ledger_journal_entries"
   add_foreign_key "leg_groups", "instruments"
-  add_foreign_key "order_intents", "instruments"
   add_foreign_key "paper_orders", "instruments"
   add_foreign_key "paper_positions", "instruments"
   add_foreign_key "paper_positions", "paper_orders"
@@ -1585,8 +1502,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_24_165849) do
   add_foreign_key "reconciliation_discrepancies", "reconciliation_runs"
   add_foreign_key "research_option_bars", "research_raw_fetches"
   add_foreign_key "research_option_candidates", "research_signals"
-  add_foreign_key "risk_events", "instruments"
-  add_foreign_key "risk_events", "position_trackers"
   add_foreign_key "ruby_llm_agents_execution_details", "ruby_llm_agents_executions", column: "execution_id", on_delete: :cascade
   add_foreign_key "ruby_llm_agents_executions", "ruby_llm_agents_executions", column: "parent_execution_id", on_delete: :nullify
   add_foreign_key "ruby_llm_agents_executions", "ruby_llm_agents_executions", column: "root_execution_id", on_delete: :nullify
@@ -1599,8 +1514,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_24_165849) do
   add_foreign_key "solid_queue_recurring_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "trade_analytics", "position_trackers"
-  add_foreign_key "trade_journals", "instruments"
-  add_foreign_key "trade_journals", "position_trackers"
   add_foreign_key "trade_memories", "position_trackers"
   add_foreign_key "trade_memories", "trade_analytics"
   add_foreign_key "trade_telemetry", "position_trackers", column: "tracker_id"

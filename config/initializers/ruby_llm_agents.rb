@@ -231,7 +231,7 @@ RubyLLM::Agents.configure do |config|
   # config.persist_responses = true
 
   # Default retry configuration — Ollama calls can time out under load; without
-  # this a single slow request kills the whole TradingOrchestrator pipeline run.
+  # this a single slow request kills the whole Ai::Agents::Orchestrator pipeline run.
   config.default_retries = {
     max: 2,
     backoff: :exponential,

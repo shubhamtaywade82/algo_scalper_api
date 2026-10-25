@@ -151,7 +151,7 @@ def fetch_authority_token!
 
     if token_url.present? && authority_token.present?
       begin
-        response = Faraday.get(token_url) do |req|
+        response = Faraday.new(url: token_url, request: { timeout: 5, open_timeout: 3 }).get do |req|
           req.headers["Authorization"] = "Bearer #{authority_token}"
         end
 
