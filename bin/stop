@@ -41,6 +41,7 @@ stop_project_processes() {
 }
 
 for pattern in \
+  "rails server" \
   "rake trading:daemon" \
   "bin/jobs" \
   "dashboard/node_modules/.bin/vite"
@@ -63,6 +64,7 @@ force_stop_project_processes() {
 }
 
 for pattern in \
+  "rails server" \
   "rake trading:daemon" \
   "bin/jobs" \
   "dashboard/node_modules/.bin/vite"

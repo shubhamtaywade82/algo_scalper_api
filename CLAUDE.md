@@ -36,10 +36,10 @@ ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon  # trading daemon s
 
 | Process | Command | Purpose |
 |---------|---------|---------|
-| `web` | `bin/rails server -p 3001` | Rails API server |
+| `web` | `bin/rails server -p 3011` | Rails API server |
 | `trading` | `ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon` | Trading brain (11 services in threads) |
 | `jobs` | `bin/jobs` | Solid Queue worker (recurring tasks) |
-| `dashboard` | `cd dashboard && npm run dev` | SolidJS + Vite frontend (dev server on :5181, proxies `/api` and `/cable` to :3001) |
+| `dashboard` | `cd dashboard && npm run dev` | SolidJS + Vite frontend (dev server on :5181, proxies `/api` and `/cable` to :3011) |
 
 Web and trading are separate OS processes sharing PostgreSQL and Redis — no shared in-process objects.
 

@@ -34,7 +34,7 @@
 
 ## Process Architecture
 - `bin/dev` starts 4 processes via `Procfile.dev`:
-  - `web` — Rails API server on port 3001
+  - `web` — Rails API server on port 3011
   - `trading` — Trading daemon (11 services in Ruby threads, managed by `TradingSystem::Supervisor`)
   - `jobs` — Solid Queue worker (recurring tasks: instrument sync, SMC scanner, AI analysis)
   - `dashboard` — Next.js frontend

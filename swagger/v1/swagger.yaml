@@ -496,7 +496,7 @@ paths:
                 required:
                 - error
 servers:
-- url: http://localhost:3001
+- url: http://localhost:3011
   description: Local web (see Procfile.dev / bin/rails server)
 - url: "/"
   description: Same origin

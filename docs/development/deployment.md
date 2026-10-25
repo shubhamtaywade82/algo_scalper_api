@@ -129,7 +129,7 @@ docker compose logs -f web jobs trading
 
 ```bash
 # Web server
-bin/rails server -p 3001
+bin/rails server -p 3011
 
 # Trading daemon
 ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon

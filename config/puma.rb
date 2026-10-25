@@ -17,8 +17,8 @@ threads min_threads, max_threads
 # Environment setup
 environment ENV.fetch("RAILS_ENV", "development")
 
-# Bind to PORT=3000 inside Docker
-port ENV.fetch("PORT", 3000)
+# Bind to PORT=3011 inside Docker / development
+port ENV.fetch("PORT", 3011)
 
 # Allow `rails restart`
 plugin :tmp_restart

@@ -49,7 +49,7 @@ Deployable runnables and shared data stores. Aligned with `Procfile.dev` and dep
 flowchart TB
     subgraph Host["Single host (e.g. bin/dev)"]
         subgraph Processes["OS processes"]
-            Web["Web<br/>Rails API :3001"]
+            Web["Web<br/>Rails API :3011"]
             Daemon["Trading Daemon<br/>11 services in threads"]
             Jobs["Jobs<br/>Solid Queue worker"]
             Dashboard["Dashboard<br/>Next.js"]
@@ -241,12 +241,12 @@ What `./bin/dev` (Procfile.dev) starts. Web and Trading are separate OS processe
 ├────────────────┬────────────────┬────────────────┬─────────────────────┤
 │ web             │ trading        │ jobs           │ dashboard           │
 │ bin/rails       │ ENABLE_...=true│ bin/jobs       │ cd dashboard        │
-│ server -p 3001  │ rake           │                │ npm run dev         │
+│ server -p 3011  │ rake           │                │ npm run dev         │
 │                 │ trading:daemon │                │                     │
 ├─────────────────┼────────────────┼────────────────┼─────────────────────┤
 │ Rails API       │ Supervisor     │ Solid Queue    │ Next.js             │
 │ ActionCable     │ 11 services    │ recurring      │ frontend            │
-│ port 3001      │ in threads     │ tasks          │                     │
+│ port 3011      │ in threads     │ tasks          │                     │
 └────────┬────────┴───────┬────────┴───────┬────────┴─────────────────────┘
          │                │                │
          └────────────────┼────────────────┘
