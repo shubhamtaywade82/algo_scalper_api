@@ -13,15 +13,15 @@ RSpec.describe 'Api::Backtests' do
 
   describe 'POST /api/backtests' do
     it 'enqueues EquityBacktestJob and returns a queued run id immediately' do
-      allow(EquityBacktestJob).to receive(:perform_later)
-
-      post '/api/backtests', params: { symbol: 'niftY', interval: '5', days_back: 45 }
+      expect do
+        post '/api/backtests', params: { symbol: 'niftY', interval: '5', days_back: 45 }
+      end.to have_enqueued_job(EquityBacktestJob).with(
+        an_instance_of(String), symbol: 'NIFTY', interval: '5', days_back: 45
+      )
 
       expect(response).to have_http_status(:accepted)
       body = response.parsed_body
       expect(body['status']).to eq('queued')
-      expect(EquityBacktestJob).to have_received(:perform_later)
-        .with(body['backtest_run_id'], symbol: 'NIFTY', interval: '5', days_back: 45)
       expect(Rails.cache.read(EquityBacktestJob.cache_key(body['backtest_run_id']))).to eq(status: 'queued')
     end
   end

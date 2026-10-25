@@ -326,6 +326,7 @@ RSpec.describe 'WebSocket Data Feed Integration', :vcr, type: :integration do
 
         # Clear any existing callbacks
         market_feed_hub.instance_variable_set(:@callbacks, [])
+        allow(market_feed_hub).to receive(:running?).and_return(true)
 
         callback_invoked = false
         security_ids_received = []
@@ -353,6 +354,7 @@ RSpec.describe 'WebSocket Data Feed Integration', :vcr, type: :integration do
         cached_tick = tick_cache.fetch('NSE_FNO', '12345')
         expect(cached_tick).to be_present
         expect(cached_tick[:security_id]).to eq('12345')
+        expect(callback_invoked).to be true
       end
     end
   end

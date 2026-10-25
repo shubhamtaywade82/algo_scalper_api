@@ -49,9 +49,9 @@ RSpec.describe OptionsBuying::BreakoutEvaluator do
       bucket = 1_700_000_000
       allow(OptionsBuying::StateStore).to receive(:minute_ticks).with(option_sid, bucket).and_return(option_ticks)
       allow(OptionsBuying::StateStore).to receive(:cache_snapshot).with(index_sid).and_return({ ltp: 24_520.0 })
-      expect(OptionsBuying::TelemetrySinkJob).not_to receive(:perform_later)
-
-      described_class.evaluate!(index_key: 'NIFTY', security_id: option_sid, bucket: bucket)
+      expect do
+        described_class.evaluate!(index_key: 'NIFTY', security_id: option_sid, bucket: bucket)
+      end.not_to have_enqueued_job(OptionsBuying::TelemetrySinkJob)
     end
   end
 

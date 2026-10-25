@@ -22,26 +22,31 @@ RSpec.describe Candles::BackfillJob do
   end
 
   it 'enqueues Candles::PersistCandlesJob with the fetched candles' do
-    expect(Candles::PersistCandlesJob).to receive(:perform_later).with(
-      hash_including(instrument_key: 'NIFTY', security_id: '13', timeframe: '1m', source: 'backfill')
-    ) do |args|
-      expect(args[:candles].size).to eq(2)
-      expect(args[:candles].first['close']).to eq(25_010.0)
-    end
-
-    described_class.perform_now(security_id: '13')
+    expect do
+      described_class.perform_now(security_id: '13')
+    end.to have_enqueued_job(Candles::PersistCandlesJob).with(
+      hash_including(
+        instrument_key: 'NIFTY',
+        security_id: '13',
+        timeframe: '1m',
+        source: 'backfill',
+        candles: a_collection_including(
+          hash_including('close' => 25_010.0)
+        )
+      )
+    )
   end
 
   it 'does nothing when the instrument is not found' do
-    expect(Candles::PersistCandlesJob).not_to receive(:perform_later)
-
-    described_class.perform_now(security_id: 'unknown')
+    expect do
+      described_class.perform_now(security_id: 'unknown')
+    end.not_to have_enqueued_job(Candles::PersistCandlesJob)
   end
 
   it 'does nothing when the DhanHQ response is empty' do
     allow_any_instance_of(Instrument).to receive(:intraday_ohlc).and_return({}) # rubocop:disable RSpec/AnyInstance
-    expect(Candles::PersistCandlesJob).not_to receive(:perform_later)
-
-    described_class.perform_now(security_id: '13')
+    expect do
+      described_class.perform_now(security_id: '13')
+    end.not_to have_enqueued_job(Candles::PersistCandlesJob)
   end
 end

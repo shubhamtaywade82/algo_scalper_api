@@ -33,7 +33,9 @@ RSpec.describe Candles::Persister do
 
   describe '.enqueue' do
     it 'enqueues Candles::PersistCandlesJob with normalized string-keyed candles for a persistable instrument' do
-      expect(Candles::PersistCandlesJob).to receive(:perform_later).with(
+      expect do
+        described_class.enqueue(instrument: index_instrument, interval: 1, candles: candles)
+      end.to have_enqueued_job(Candles::PersistCandlesJob).with(
         instrument_key: 'NIFTY',
         exchange_segment: 'IDX_I',
         security_id: '13',
@@ -44,20 +46,18 @@ RSpec.describe Candles::Persister do
             'low' => 24_980.0, 'close' => 25_020.0, 'volume' => 1_000, 'oi' => 0 }
         ]
       )
-
-      described_class.enqueue(instrument: index_instrument, interval: 1, candles: candles)
     end
 
     it 'does not enqueue for a non-persistable instrument/interval combo' do
-      expect(Candles::PersistCandlesJob).not_to receive(:perform_later)
-
-      described_class.enqueue(instrument: strike_instrument, interval: 1, candles: candles)
+      expect do
+        described_class.enqueue(instrument: strike_instrument, interval: 1, candles: candles)
+      end.not_to have_enqueued_job(Candles::PersistCandlesJob)
     end
 
     it 'does not enqueue when candles is blank' do
-      expect(Candles::PersistCandlesJob).not_to receive(:perform_later)
-
-      described_class.enqueue(instrument: index_instrument, interval: 1, candles: [])
+      expect do
+        described_class.enqueue(instrument: index_instrument, interval: 1, candles: [])
+      end.not_to have_enqueued_job(Candles::PersistCandlesJob)
     end
   end
 end

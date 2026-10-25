@@ -178,13 +178,11 @@ module Options
         ]
 
         strike_data = nil
-        found_key = nil
 
         possible_keys.each do |key|
           next unless option_chain.key?(key)
 
           strike_data = option_chain[key]
-          found_key = key
           break
         end
 
@@ -196,7 +194,6 @@ module Options
             next unless (key_float - strike_float).abs < 0.01 # Within 0.01 tolerance
 
             strike_data = option_chain[key]
-            found_key = key
             break
           end
         end
