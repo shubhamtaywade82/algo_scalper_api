@@ -560,9 +560,6 @@ market_context:
       volatility_ok: 10
       participation_high: 10
       legacy_confidence: 10
-  chain_signal_extractor:
-    premium_move_pct_threshold: 3.0
-    near_expiry_penalty_days: 1
   gate:
     enabled: false
     min_conviction_score: 70
