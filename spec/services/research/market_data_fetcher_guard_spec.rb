@@ -7,6 +7,7 @@ RSpec.describe Research::MarketDataFetcher do
     it "raises SyntheticDataError instead of generating a synthetic underlying dataset" do
       allow(Candles::Record).to receive(:where).and_return(Candles::Record.none)
       allow(File).to receive(:exist?).with("today_market_data.json").and_return(false)
+      allow(File).to receive(:exist?).with("data/today_market_data.json").and_return(false)
 
       expect do
         described_class.run(symbol: "NO_SUCH_SYMBOL", lookback_days: 5, strict: true)

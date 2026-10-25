@@ -38,3 +38,10 @@ graphify-out/
 # Legacy algo_trading_system artifacts (expired-credential .env + generated result JSONs removed 2026-09)
 lib/trading_system/algo_trading_system/
 .bundle/
+
+# Local-only market-data fallback for Research::MarketDataFetcher.
+# Drop a real snapshot at data/today_market_data.json (preferred) or
+# today_market_data.json (root, legacy) when bootstrapping a fresh env.
+# Do not commit — contents are environment-specific and go stale fast.
+/today_market_data.json
+/data/today_market_data.json
