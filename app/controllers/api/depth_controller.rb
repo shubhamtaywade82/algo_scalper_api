@@ -32,8 +32,12 @@ module Api
 
     # Index symbols quote the ATM CE option contract (the tradable
     # instrument) instead of the index row itself.
+    # NOTE: `::Options` — the bare `Options::` reference resolves to
+    # ActionController::ParamsWrapper::Options through the controller's
+    # ancestor chain (a real Rails constant collision) and raises
+    # NameError; the top-level namespace must be explicit here.
     def atm_ce_depth(symbol)
-      analyzer = Options::DerivativeChainAnalyzer.new(index_key: symbol.upcase)
+      analyzer = ::Options::DerivativeChainAnalyzer.new(index_key: symbol.upcase)
       spot = analyzer.spot_ltp
       expiry = analyzer.find_nearest_expiry
       return nil unless spot&.positive? && expiry
