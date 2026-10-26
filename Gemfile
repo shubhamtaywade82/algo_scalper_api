@@ -69,7 +69,7 @@ gem 'prometheus_exporter', '~> 2.3'
 # NameError RubyLLM::Model::Info) — this is what PR #266 (1.16.0 -> 2.0.0)
 # inadvertently did to develop. Re-apply the 2.x bump only after
 # ruby_llm-agents ships a release that supports it.
-gem 'ruby_llm', '~> 1.16'
+gem 'ruby_llm', '~> 2.1'
 gem 'ruby_llm-agents', '~> 3.16'
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
