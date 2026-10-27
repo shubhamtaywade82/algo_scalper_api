@@ -4,18 +4,24 @@ module Reports
   module MarketBrief
     # Realtime view for the Market Mood / Market Brief page.
     #
-    # Facts are rebuilt on every poll from the same cross-process sources the
-    # persisted brief uses (cached for CACHE_TTL so several open tabs share one
-    # build). The LLM is NEVER called here: AI commentary is attached from the most
-    # recent persisted report whose analysis passed validation, together with
-    # explicit staleness signals so old commentary is never mistaken for an
-    # interpretation of the current facts.
+    # One payload shape serves three callers: the live endpoint (rebuilds facts per
+    # poll, cached briefly), the watcher's event frames and the generator's report
+    # frames (both pass the snapshot they already built). The LLM is never called
+    # here. AI commentary is the latest validated analysis for the trading date,
+    # with explicit staleness and decision-change flags so old commentary is never
+    # shown as an interpretation of the current facts.
     class LiveBrief
       CACHE_TTL = 3.seconds
       STALE_AI_AFTER = 20.minutes
 
-      def self.call(mode: AlgoConfig.mode, now: Time.current)
-        new(mode: mode, now: now).call
+      class << self
+        def call(mode: AlgoConfig.mode, now: Time.current)
+          new(mode: mode, now: now).call
+        end
+
+        def payload_for(snapshot:, mode: AlgoConfig.mode, now: Time.current)
+          new(mode: mode, now: now).payload_for(snapshot)
+        end
       end
 
       def initialize(mode:, now:)
@@ -24,7 +30,10 @@ module Reports
       end
 
       def call
-        snapshot = cached_snapshot
+        payload_for(cached_snapshot)
+      end
+
+      def payload_for(snapshot)
         trading_date = snapshot['trading_date']
         analysis_report = MarketBriefReport.for_mode(@mode).where(ai_status: 'completed', trading_date: trading_date)
                                            .latest_first.first
@@ -38,7 +47,8 @@ module Reports
           snapshot: snapshot,
           snapshot_digest: SnapshotBuilder.digest(snapshot),
           ai: ai_block(snapshot, analysis_report, latest_attempt),
-          in_progress: in_flight && { id: in_flight.id, status: in_flight.status, created_at: in_flight.created_at.iso8601 }
+          in_progress: in_flight && in_progress_block(in_flight),
+          events: EventLog.recent(@mode, today: trading_date_for(trading_date))
         }
       end
 
@@ -54,8 +64,24 @@ module Reports
         SnapshotBuilder.call(now: @now)
       end
 
-      # status/analysis describe the commentary on screen; latest_attempt_* describe
-      # the most recent generation attempt (which may have failed after a success).
+      def trading_date_for(iso_date)
+        Date.parse(iso_date.to_s)
+      rescue Date::Error
+        @now.in_time_zone(TradingSession::Service::IST_TIMEZONE).to_date
+      end
+
+      def in_progress_block(report)
+        {
+          id: report.id,
+          status: report.status,
+          trigger: report.trigger,
+          reasons: report.trigger_reasons,
+          created_at: report.created_at.iso8601
+        }
+      end
+
+      # status/analysis describe the commentary on screen; latest_attempt describes the
+      # most recent generation attempt (which may have failed after a success).
       def ai_block(snapshot, analysis_report, latest_attempt)
         attempt = latest_attempt && {
           report_id: latest_attempt.id,
@@ -81,6 +107,8 @@ module Reports
           model: analysis_report.ai_model,
           generated_at: analysis_report.ai_generated_at&.iso8601,
           report_id: analysis_report.id,
+          trigger: analysis_report.trigger,
+          trigger_reasons: analysis_report.trigger_reasons,
           based_on_snapshot_at: based_on&.iso8601,
           age_seconds: age,
           stale: age.nil? || age > STALE_AI_AFTER.to_i,

@@ -105,8 +105,12 @@ app/services/
     setup_selector.rb              # QUALIFIED / NO_TRADE / BLOCKED from guard-approved signals only
     ai_prompt_builder.rb           # stage 2: compact fact projection → OllamaClient chat
     ai_response_validator.rb       # grounds AI output (source keys, numbers, decision lock)
-    generator.rb                   # orchestration, AI gate/backoff/digest reuse
-    live_brief.rb                  # realtime view: facts per poll (3s cache) + latest validated AI, never calls the LLM
+    generator.rb                   # orchestration, AI gate/backoff/digest reuse; pushes report frames
+    live_brief.rb                  # realtime payload (facts + latest validated AI + events); never calls the LLM
+    event_detector.rb              # snapshot-to-snapshot state changes and level crosses (hysteresis band); pure
+    watcher.rb                     # trading daemon: 10s cash-session cycle; events → push, material → one event run
+    broadcaster.rb                 # MarketBriefChannel frames (event / report), only when something happened
+    event_log.rb                   # today's events per mode (timeline)
 
 app/jobs/
   instruments_import_job.rb        # daily DhanHQ CSV sync
@@ -137,6 +141,7 @@ Registered in `lib/trading_system/bootstrap.rb`, started by `supervisor.start_al
 | 9 | `:reconciliation` | `Live::ReconciliationService` | 30s |
 | 10 | `:stats_notifier` | `Live::StatsNotifierService` | At market close |
 | 11 | `:smc_scanner` | `Smc::Scanner` | 5 min |
+| 12 | `:market_brief_watcher` | `Reports::MarketBrief::Watcher` | 10s in the cash session (idle 15s); enqueues LLM work, never calls it |
 
 ## Recurring Jobs (Solid Queue — `config/recurring.yml`)
 
@@ -146,7 +151,7 @@ Registered in `lib/trading_system/bootstrap.rb`, started by `supervisor.start_al
 | `SmcScannerJob` | Every 15 min (market hours) | SMC + AVRZ pattern detection |
 | `AiTechnicalAnalysisJob` (NIFTY) | Every 15 min (market hours) | AI-powered analysis |
 | `AiTechnicalAnalysisJob` (SENSEX) | Every 15 min (market hours) | AI-powered analysis |
-| `Reports::MarketBriefJob` | Every 15 min, 9:00–15:45 IST weekdays (job skips outside the cash session) | Market Brief AI commentary refresh; live facts via `GET /api/reports/market_brief/live`, dashboard `/market-mood` |
+| `Reports::MarketBriefJob` | Every 15 min, 9:00–15:45 IST weekdays (job skips outside the cash session) | Market Brief AI refresh (heartbeat); event-driven runs come from the daemon watcher |
 
 Run `rails solid_queue:load_recurring` to populate the schedule after config changes.
 

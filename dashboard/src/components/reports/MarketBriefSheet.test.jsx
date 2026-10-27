@@ -87,4 +87,53 @@ describe('MarketBriefSheet', () => {
     expect(container.querySelector('img')).toBeNull()
     expect(screen.getByText(/<img src=x onerror=alert\(1\)>Trend intact/)).toBeTruthy()
   })
+
+  describe('live events', () => {
+    const now = new Date().toISOString()
+    const withEvents = () => {
+      const b = clone(maxText)
+      b.live = true
+      b.fetched_at = now
+      b.events = [
+        { kind: 'quote_state_changed', at: now, ai_trigger: false, message: 'NIFTY quote live → stale' },
+        { kind: 'level_crossed', at: now, ai_trigger: true, message: 'NIFTY crossed LTF swing high 24,520.00 upward (LTP 24,530.00)' }
+      ]
+      return b
+    }
+
+    it('lists the day\'s events newest first on the screen view, marking the AI-triggering ones', () => {
+      render(() => <MarketBriefSheet brief={withEvents()} variant="screen" />)
+      const items = screen.getByTestId('event-list').querySelectorAll('li')
+      expect(items).toHaveLength(2)
+      expect(items[0].textContent).toMatch(/crossed LTF swing high/)
+      expect(items[0].textContent).toMatch(/AI run/)
+      expect(items[1].textContent).not.toMatch(/AI run/)
+    })
+
+    it('keeps the event timeline out of the printed copy', () => {
+      render(() => <MarketBriefSheet brief={withEvents()} />)
+      expect(screen.queryByTestId('event-list')).toBeNull()
+    })
+
+    it('shows the in-flight run and why it was started', () => {
+      const b = withEvents()
+      b.in_progress = { id: 9, status: 'building', trigger: 'event', reasons: ['NIFTY crossed LTF swing high'] }
+      render(() => <MarketBriefSheet brief={b} variant="screen" />)
+      expect(screen.getByTestId('ai-in-progress').textContent).toMatch(/AI analysis running · triggered by NIFTY crossed LTF swing high/)
+    })
+
+    it('states which change the displayed commentary was written for', () => {
+      const b = withEvents()
+      b.ai = { ...b.ai, trigger: 'event', trigger_reasons: ['NIFTY crossed LTF swing high'], report_id: 4 }
+      render(() => <MarketBriefSheet brief={b} variant="screen" />)
+      expect(screen.getByTestId('ai-trigger').textContent).toMatch(/Triggered by: NIFTY crossed LTF swing high/)
+    })
+
+    it('shows an empty timeline message before the first change of the session', () => {
+      const b = clone(maxText)
+      b.events = []
+      render(() => <MarketBriefSheet brief={b} variant="screen" />)
+      expect(screen.getByText('No state changes yet this session.')).toBeTruthy()
+    })
+  })
 })

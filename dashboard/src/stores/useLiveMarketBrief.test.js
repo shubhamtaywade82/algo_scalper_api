@@ -9,6 +9,9 @@ vi.mock('../lib/api/endpoints', () => ({
   endpoints: { reports: { marketBrief: '/reports/market_brief', marketBriefLive: '/reports/market_brief/live' } }
 }))
 
+const cableMock = vi.hoisted(() => ({ create: vi.fn(), unsubscribe: vi.fn(), handlers: null }))
+vi.mock('../cable', () => ({ default: { subscriptions: { create: (...args) => cableMock.create(...args) } } }))
+
 import { apiClient } from '../lib/api'
 import { useLiveMarketBrief, nextDelay, LIVE_POLL_MS } from './useLiveMarketBrief'
 
@@ -25,6 +28,12 @@ describe('useLiveMarketBrief', () => {
   beforeEach(() => {
     apiClient.get.mockReset()
     apiClient.post.mockReset()
+    cableMock.create.mockReset()
+    cableMock.unsubscribe.mockReset()
+    cableMock.create.mockImplementation((name, handlers) => {
+      cableMock.handlers = handlers
+      return { unsubscribe: cableMock.unsubscribe }
+    })
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => false })
   })
   afterEach(() => vi.useRealTimers())
@@ -92,5 +101,69 @@ describe('useLiveMarketBrief', () => {
     const calls = apiClient.get.mock.calls.length
     await new Promise((r) => setTimeout(r, 40))
     expect(apiClient.get.mock.calls.length).toBe(calls)
+  })
+
+  describe('MarketBriefChannel', () => {
+    beforeEach(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }) // keep the poll out of these tests
+    })
+
+    it('subscribes on start and reports streaming while connected', () => {
+      apiClient.get.mockResolvedValue({ data: {} })
+      const { api, dispose } = mount({ pollMs: 1000 })
+      api.start()
+
+      expect(cableMock.create).toHaveBeenCalledWith('MarketBriefChannel', expect.any(Object))
+      expect(api.streaming()).toBe(false)
+      cableMock.handlers.connected()
+      expect(api.streaming()).toBe(true)
+      cableMock.handlers.disconnected()
+      expect(api.streaming()).toBe(false)
+      dispose()
+    })
+
+    it('applies a pushed live frame without waiting for a poll', async () => {
+      const { api, dispose } = mount({ pollMs: 1000 })
+      api.start()
+
+      cableMock.handlers.received({ type: 'event', events: [{ kind: 'level_crossed' }], live: { live: true, fetched_at: 'pushed' } })
+
+      expect(api.brief().fetched_at).toBe('pushed')
+      expect(api.error()).toBeNull()
+      expect(apiClient.get).not.toHaveBeenCalled()
+      dispose()
+    })
+
+    it('does not let a poll answered before the last pushed frame overwrite it', async () => {
+      apiClient.get.mockResolvedValue({ data: { live: true, fetched_at: '2026-10-27T10:30:00+05:30', ai: { status: 'pending' } } })
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => false })
+      const { api, dispose } = mount({ pollMs: 1000 })
+      api.start()
+      await flush()
+
+      cableMock.handlers.received({ live: { live: true, fetched_at: '2026-10-27T10:30:05+05:30', ai: { status: 'completed' } } })
+      await api.refreshNow()
+
+      expect(api.brief().ai.status).toBe('completed')
+      dispose()
+    })
+
+    it('ignores frames without a live payload', () => {
+      const { api, dispose } = mount({ pollMs: 1000 })
+      api.start()
+
+      cableMock.handlers.received({ type: 'report', report_id: 3 })
+
+      expect(api.brief()).toBeNull()
+      dispose()
+    })
+
+    it('unsubscribes when the view is cleaned up', () => {
+      const { api, dispose } = mount({ pollMs: 1000 })
+      api.start()
+      dispose()
+
+      expect(cableMock.unsubscribe).toHaveBeenCalledTimes(1)
+    })
   })
 })

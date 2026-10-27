@@ -29,8 +29,8 @@ module Reports
         end
       end
 
-      def initialize(snapshot)
-        @facts = AiPromptBuilder.facts(snapshot)
+      def initialize(snapshot, trigger: [])
+        @facts = AiPromptBuilder.facts(snapshot, trigger: trigger)
         @index_keys = @facts['indices'].keys
         @decision = @facts.dig('setup', 'decision')
         @allowed_numbers = Set.new

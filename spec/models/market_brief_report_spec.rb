@@ -74,4 +74,36 @@ RSpec.describe MarketBriefReport do
       expect(report.as_api_json[:ai]).to include(status: 'invalid', analysis: nil)
     end
   end
+
+  describe 'event trigger' do
+    it 'creates a separate report for each event, even within the same millisecond' do
+      first, created_first = described_class.request!(mode: :paper, trigger: 'event', now: now, reasons: ['a'])
+      second, created_second = described_class.request!(mode: :paper, trigger: 'event', now: now, reasons: ['b'])
+
+      expect([created_first, created_second]).to eq([true, true])
+      expect(second.id).not_to eq(first.id)
+      expect(second.report_key).to start_with('2026-10-27:paper:e')
+    end
+
+    it 'stores the change descriptions, bounded in count and length' do
+      reasons = Array.new(10) { |i| "change #{i} #{'x' * 400}" }
+      report, = described_class.request!(mode: :paper, trigger: 'event', now: now, reasons: reasons)
+
+      expect(report.trigger_reasons.size).to eq(described_class::MAX_TRIGGER_REASONS)
+      expect(report.trigger_reasons.first.length).to be <= 240
+    end
+
+    it 'exposes the reasons through the API representation' do
+      report, = described_class.request!(mode: :paper, trigger: 'event', now: now, reasons: ['NIFTY regime changed'])
+      expect(report.as_api_json).to include(trigger: 'event', trigger_reasons: ['NIFTY regime changed'])
+    end
+
+    it 'keeps scheduled and manual keys unchanged' do
+      scheduled, = described_class.request!(mode: :paper, trigger: 'scheduled', now: now)
+      manual, = described_class.request!(mode: :paper, trigger: 'manual', now: now)
+
+      expect(scheduled.report_key).to end_with(":s#{now.to_i / 900 * 900}")
+      expect(manual.report_key).to end_with(":m#{now.to_i / 300 * 300}")
+    end
+  end
 end

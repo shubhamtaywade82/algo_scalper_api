@@ -130,4 +130,58 @@ RSpec.describe Reports::MarketBrief::Generator do
   it 'never places orders or creates positions' do
     expect { described_class.call(report) }.not_to change(PositionTracker, :count)
   end
+
+  describe 'event-driven runs' do
+    let(:event_report) do
+      MarketBriefReport.request!(mode: :paper, trigger: 'event', reasons: ['NIFTY crossed LTF swing high 24,520.00 upward'],
+                                 now: Time.current).first
+    end
+
+    it 'sends the trigger reasons to the model so the commentary can explain what changed' do
+      described_class.call(event_report)
+
+      expect(client).to have_received(:chat) do |messages:, **|
+        expect(messages.last[:content]).to include('"trigger":{"reasons":["NIFTY crossed LTF swing high 24,520.00 upward"]}')
+      end
+    end
+
+    it 'lets the commentary quote a number that appears in the trigger reasons' do
+      json = JSON.parse(valid_ai_json).merge('executive_summary' => 'Price crossed 24,520.00 upward, a level in the facts.')
+      allow(client).to receive(:chat).and_return(JSON.generate(json))
+
+      described_class.call(event_report)
+      expect(event_report.reload.ai_status).to eq('completed')
+    end
+
+    it 'pushes the finished report to open pages' do
+      expect(Reports::MarketBrief::Broadcaster).to receive(:report).with(event_report)
+
+      described_class.call(event_report)
+    end
+
+    it 'still completes the build when the push fails' do
+      allow(ActionCable.server).to receive(:broadcast).and_raise(StandardError, 'cable down')
+
+      described_class.call(event_report)
+      expect(event_report.reload).to have_attributes(status: 'ready', ai_status: 'completed')
+    end
+
+    it 'does not reuse commentary written for different trigger reasons' do
+      described_class.call(report)
+
+      described_class.call(event_report)
+
+      expect(client).to have_received(:chat).twice
+    end
+
+    it 'reuses commentary for identical facts and identical reasons' do
+      described_class.call(event_report)
+      twin = MarketBriefReport.request!(mode: :paper, trigger: 'event', now: 1.second.from_now,
+                                        reasons: event_report.trigger_reasons).first
+      described_class.call(twin)
+
+      expect(client).to have_received(:chat).once
+      expect(twin.reload.ai_status).to eq('completed')
+    end
+  end
 end

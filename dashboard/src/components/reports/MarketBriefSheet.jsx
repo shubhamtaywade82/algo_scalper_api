@@ -222,14 +222,41 @@ function SetupPanel(props) {
   )
 }
 
+// Live view only: the day's state changes and level crosses, newest first.
+function EventsPanel(props) {
+  const events = () => (props.events || []).slice().reverse().slice(0, 12)
+  return (
+    <Section title="Market events today" class="mb-events" badge={<span class="mb-muted">state changes and level crosses · AI runs on the material ones</span>}>
+      <Show when={events().length > 0} fallback={<div class="mb-muted">No state changes yet this session.</div>}>
+        <ul class="mb-event-list" data-testid="event-list">
+          <For each={events()}>
+            {(e) => (
+              <li class="mb-event">
+                <span class="mb-muted">{fmtTime(e.at)}</span>
+                <Pill status={e.ai_trigger ? 'warn' : 'muted'} tone={e.ai_trigger ? 'warn' : 'muted'} label={humanize(e.kind)} />
+                <span>{e.message}</span>
+                <Show when={e.ai_trigger}><span class="mb-muted">· AI run</span></Show>
+              </li>
+            )}
+          </For>
+        </ul>
+      </Show>
+    </Section>
+  )
+}
+
 // Live view only: where the commentary came from and whether it still matches the facts.
 function AiProvenance(props) {
   const ai = () => props.ai || {}
   const attempt = () => ai().latest_attempt
   const newerFailure = () => attempt() && attempt().report_id !== ai().report_id && attempt().status !== 'completed'
+  const reasons = () => ai().trigger_reasons || []
   return (
-    <Show when={ai().based_on_snapshot_at || newerFailure()}>
+    <Show when={ai().based_on_snapshot_at || newerFailure() || reasons().length > 0}>
       <div class="mb-ai-provenance" data-testid="ai-provenance">
+        <Show when={reasons().length > 0}>
+          <span class="mb-muted" data-testid="ai-trigger">Triggered by: {reasons().join('; ')}</span>
+        </Show>
         <Show when={ai().based_on_snapshot_at}>
           <span class="mb-muted">
             Commentary from report #{ai().report_id} · facts as of {fmtTime(ai().based_on_snapshot_at)} IST ({fmtAge(ai().age_seconds)}){ai().model ? ` · ${ai().model}` : ''}
@@ -362,6 +389,10 @@ export default function MarketBriefSheet(props) {
         </Section>
       </div>
 
+      <Show when={props.variant === 'screen'}>
+        <EventsPanel events={brief().events} />
+      </Show>
+
       <div class="mb-lower">
         <Section title="Market context">
           <KV label="India VIX">{fmtNum(vix().value)} <Pill status={vix().status || 'unavailable'} /></KV>
@@ -395,7 +426,15 @@ export default function MarketBriefSheet(props) {
       </div>
 
       <Section title="AI interpretation" class="mb-ai" badge={<span class="mb-muted">analysis of the facts above · not a trading signal · cannot change the setup decision</span>}>
-        <AiPanel ai={brief().ai} liveDecision={snap().setup?.decision} decisionChanged={brief().ai?.decision_changed === true} />
+        <Show when={brief().in_progress}>
+        <div class="mb-chips" data-testid="ai-in-progress">
+          <span class="mb-chip mb-tone-warn">
+            AI analysis running · {brief().in_progress.trigger === 'event' ? 'triggered by' : 'started by'}{' '}
+            {(brief().in_progress.reasons || []).join('; ') || brief().in_progress.trigger}
+          </span>
+        </div>
+      </Show>
+      <AiPanel ai={brief().ai} liveDecision={snap().setup?.decision} decisionChanged={brief().ai?.decision_changed === true} />
       </Section>
 
       <footer class="mb-footer">

@@ -49,4 +49,10 @@ RSpec.describe TradingSystem::Bootstrap do
       end
     end
   end
+
+  describe '.build_supervisor' do
+    it 'registers the event-driven Market Brief watcher with the trading daemon' do
+      expect(described_class.build_supervisor.services).to include(:market_brief_watcher)
+    end
+  end
 end

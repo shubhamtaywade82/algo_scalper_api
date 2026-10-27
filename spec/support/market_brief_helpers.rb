@@ -32,7 +32,9 @@ module MarketBriefHelpers
     frame = lambda do |interval|
       { interval: interval,
         context: { trend: trend, phase: :expansion,
-                   swing_structure: { trend: trend, last_bos: { type: trend, price: 24_480.5, index: 42 } },
+                   swing_structure: { trend: trend, last_bos: { type: trend, price: 24_480.5, index: 42 },
+                                      last_swing_high: { type: :high, price: 24_520.0, index: 40 },
+                                      last_swing_low: { type: :low, price: 24_300.0, index: 30 } },
                    liquidity: { sweep: true, sweep_direction: :sell_side },
                    fvg: { active: [{ low: 1, high: 2 }] },
                    order_blocks: { active: [] },
