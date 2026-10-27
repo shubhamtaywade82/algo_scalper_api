@@ -3,6 +3,8 @@ import { render, screen, waitFor } from '@solidjs/testing-library'
 import fixture from '../../scripts/fixtures/market_brief_degraded.json'
 
 vi.mock('../lib/api', () => ({ apiClient: { get: vi.fn(), post: vi.fn() }, endpoints: {} }))
+const cableMock = vi.hoisted(() => ({ create: vi.fn() }))
+vi.mock('../cable', () => ({ default: { subscriptions: { create: (...args) => cableMock.create(...args) } } }))
 vi.mock('../lib/api/endpoints', () => ({
   endpoints: { reports: { marketBrief: '/reports/market_brief', marketBriefLive: '/reports/market_brief/live' } }
 }))
@@ -12,6 +14,8 @@ import MarketBrief from './MarketBrief'
 
 describe('MarketBrief (Market Mood) view', () => {
   beforeEach(() => {
+    cableMock.create.mockReset()
+    cableMock.create.mockReturnValue({ unsubscribe: vi.fn() })
     apiClient.get.mockReset()
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => false })
   })
@@ -23,7 +27,7 @@ describe('MarketBrief (Market Mood) view', () => {
     await waitFor(() => expect(screen.getAllByTestId('market-brief-sheet').length).toBe(2))
     expect(document.querySelector('.mb-sheet--screen')).toBeTruthy()
     expect(document.querySelector('.mb-print-portal .mb-sheet')).toBeTruthy()
-    expect(screen.getByTestId('poll-status').textContent).toMatch(/Live · updated/)
+    expect(screen.getByTestId('poll-status').textContent).toMatch(/Polling · updated/) // no socket in this test
   })
 
   it('shows an explicit error when the first load fails', async () => {

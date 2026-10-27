@@ -38,6 +38,16 @@ RSpec.describe Reports::MarketBrief::SnapshotBuilder do
                                   'mtf_alignment' => 'ALIGNED_BULLISH', 'agreement' => 'AGREE')
     end
 
+    it 'exposes swing high and low prices per timeframe as watchable levels' do
+      expect(index('NIFTY').dig('smc', 'timeframes', 'ltf')).to include('swing_high' => 24_520.0, 'swing_low' => 24_300.0,
+                                                                        'last_bos' => include('price' => 24_480.5))
+    end
+
+    it 'shows the watcher heartbeat without degrading health when it is not running' do
+      expect(snapshot.dig('health', 'components', 'market_brief_watcher')).to include('status' => 'not_required')
+      expect(snapshot['warnings']).not_to include('market_brief_watcher_down')
+    end
+
     it 'never fabricates a Supertrend value it has no cross-process source for' do
       expect(index('NIFTY')['supertrend']).to eq('status' => 'unavailable',
                                                  'reason' => 'no_cross_process_supertrend_snapshot')

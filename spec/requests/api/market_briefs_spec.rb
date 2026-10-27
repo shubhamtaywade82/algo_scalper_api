@@ -113,4 +113,20 @@ RSpec.describe 'Api::MarketBriefs' do
       expect { post '/api/reports/market_brief' }.not_to change(PositionTracker, :count)
     end
   end
+
+  describe 'GET /api/reports/market_brief/live with market events' do
+    it 'returns today\'s event timeline and the trigger reasons of an in-flight run' do
+      memory_cache = ActiveSupport::Cache::MemoryStore.new
+      allow(Rails).to receive(:cache).and_return(memory_cache)
+      Reports::MarketBrief::EventLog.append('paper', [{ 'kind' => 'level_crossed', 'at' => Time.current.iso8601,
+                                                        'message' => 'NIFTY crossed swing high', 'ai_trigger' => true }])
+      MarketBriefReport.request!(mode: :paper, trigger: 'event', reasons: ['NIFTY crossed swing high'])
+
+      get '/api/reports/market_brief/live'
+
+      body = response.parsed_body
+      expect(body['events'].pluck('kind')).to eq(['level_crossed'])
+      expect(body['in_progress']).to include('trigger' => 'event', 'reasons' => ['NIFTY crossed swing high'])
+    end
+  end
 end

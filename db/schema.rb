@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_27_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_27_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -394,7 +394,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_100000) do
     t.string "error"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.jsonb "trigger_reasons", default: [], null: false
     t.index ["mode", "status", "created_at"], name: "index_market_brief_reports_on_mode_and_status_and_created_at"
+    t.index ["mode", "trigger", "created_at"], name: "index_market_brief_reports_on_mode_and_trigger_and_created_at"
     t.index ["report_key"], name: "index_market_brief_reports_on_report_key", unique: true
   end
 

@@ -36,6 +36,7 @@ module Reports
           return @report
         end
 
+        @claimed = true
         build_snapshot!
         run_ai!
         @report
@@ -47,6 +48,9 @@ module Reports
           @report.update!(status: 'failed', error: e.class.name)
         end
         @report
+      ensure
+        # Push the finished report to open pages, whether it succeeded or not.
+        Reports::MarketBrief::Broadcaster.report(@report) if @claimed
       end
 
       private
@@ -77,7 +81,7 @@ module Reports
 
         started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         raw = Timeout.timeout(AI_TIMEOUT) do
-          client.chat(messages: AiPromptBuilder.build(@report.snapshot), temperature: 0.1,
+          client.chat(messages: AiPromptBuilder.build(@report.snapshot, trigger: @report.trigger_reasons), temperature: 0.1,
                       log_context: 'market_brief')
         end
         model = client.selected_model.presence || ENV.fetch('OLLAMA_MODEL', nil)
@@ -91,7 +95,7 @@ module Reports
           return finish_ai('unavailable', model: model, error: reason)
         end
 
-        result = AiResponseValidator.new(@report.snapshot).call(raw)
+        result = AiResponseValidator.new(@report.snapshot, trigger: @report.trigger_reasons).call(raw)
         if result.valid?
           finish_ai('completed', model: model, analysis: result.analysis)
         else
@@ -103,9 +107,11 @@ module Reports
         finish_ai('unavailable', error: "timeout_after_#{AI_TIMEOUT.to_i}s")
       end
 
-      # Identical facts → identical interpretation; avoid a second model call.
+      # Identical facts and identical trigger → identical interpretation; avoid a second model call.
       def reuse_previous_analysis!
+        # Explicit jsonb equality: an array passed to where() would become an IN clause.
         previous = MarketBriefReport.where(snapshot_digest: @report.snapshot_digest, ai_status: 'completed')
+                                    .where('trigger_reasons = ?::jsonb', @report.trigger_reasons.to_json)
                                     .where.not(id: @report.id)
                                     .latest_first.first
         return false unless previous

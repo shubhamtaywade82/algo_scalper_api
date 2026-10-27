@@ -31,6 +31,9 @@ module Reports
         5. Every evidence item must cite a source_key that is an exact dotted path into <facts>
            (for example "indices.NIFTY.regime.adx" or "market_context.vix.value").
         6. Respond with a single JSON object only. No markdown, no code fences, no prose outside JSON.
+        7. <facts>.trigger.reasons lists what changed to start this run (empty for scheduled or manual
+           runs). When it is not empty, the executive_summary must open with those changes, cite them
+           by their trigger.reasons index, and say whether they change any index bias.
 
         JSON shape:
         {
@@ -53,7 +56,7 @@ module Reports
         }
       PROMPT
 
-      def self.facts(snapshot)
+      def self.facts(snapshot, trigger: [])
         snapshot = snapshot.deep_stringify_keys
         indices = Array(snapshot['indices']).each_with_object({}) do |idx, memo|
           key = idx['index_key']
@@ -72,12 +75,13 @@ module Reports
           'setup' => snapshot['setup'],
           'risk' => risk,
           'health' => snapshot['health'],
-          'warnings' => snapshot['warnings']
+          'warnings' => snapshot['warnings'],
+          'trigger' => { 'reasons' => Array(trigger).map(&:to_s) }
         }
       end
 
-      def self.build(snapshot)
-        payload = JSON.generate(facts(snapshot))
+      def self.build(snapshot, trigger: [])
+        payload = JSON.generate(facts(snapshot, trigger: trigger))
         [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: "<facts>\n#{payload}\n</facts>\n\nReturn the JSON object now." }

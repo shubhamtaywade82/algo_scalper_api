@@ -3,9 +3,9 @@ import { Portal } from 'solid-js/web'
 import { useLiveMarketBrief, LIVE_POLL_MS } from '../stores/useLiveMarketBrief'
 import MarketBriefSheet from '../components/reports/MarketBriefSheet'
 
-// Market Mood: realtime Market Brief. Facts refresh every few seconds from
-// GET /api/reports/market_brief/live (never calls the LLM); AI commentary is the
-// latest validated analysis, refreshed every 15 min in market hours or on demand.
+// Market Mood: realtime Market Brief. Events and finished analyses arrive over
+// MarketBriefChannel as they happen; facts are polled from GET /api/reports/market_brief/live
+// (which never calls the LLM) as the fallback and for the freshness clock.
 export default function MarketBrief() {
   const live = useLiveMarketBrief()
   onMount(() => live.start())
@@ -32,7 +32,7 @@ export default function MarketBrief() {
               ? 'Connecting…'
               : live.interrupted()
                 ? `Updates interrupted · last ${secondsSince()}s ago`
-                : `Live · updated ${secondsSince()}s ago`}
+                : `${live.streaming() ? 'Streaming' : 'Polling'} · updated ${secondsSince()}s ago`}
           </span>
           <Show when={aiBusy()}>
             <span class="text-[10px] font-bold uppercase tracking-wider text-amber-400 animate-pulse">AI analysis running…</span>

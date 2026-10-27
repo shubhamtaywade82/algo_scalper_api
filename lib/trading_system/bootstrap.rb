@@ -65,6 +65,8 @@ module TradingSystem
       supervisor.register(:strategy_manager, Strategies::Manager.new)
       supervisor.register(:pnl_updater, Live::PnlUpdaterService.instance)
       supervisor.register(:candle_poller, Live::CandlePollerService.new)
+      # Event-driven Market Brief: reads cached state each cycle and enqueues LLM work.
+      supervisor.register(:market_brief_watcher, Reports::MarketBrief::Watcher.new)
 
       register_chain_watch_services(supervisor)
 

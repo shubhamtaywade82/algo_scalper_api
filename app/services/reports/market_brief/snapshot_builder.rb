@@ -260,6 +260,8 @@ module Reports
           trend: direction_label(ctx['trend'] || swing['trend']),
           phase: ctx['phase']&.to_s,
           last_bos: scalar_slice(swing['last_bos']),
+          swing_high: price_of(swing['last_swing_high']),
+          swing_low: price_of(swing['last_swing_low']),
           liquidity_sweep: liquidity.key?('sweep') ? liquidity['sweep'] == true : nil,
           sweep_direction: liquidity['sweep_direction']&.to_s,
           active_fvg_count: count_of(stringify(ctx['fvg'])&.dig('active')),
@@ -440,7 +442,8 @@ module Reports
             status: feed || scheduler ? 'ok' : 'not_observed',
             evidence: 'derived from market_feed and signal_scheduler Redis heartbeats'
           },
-          reconciliation: reconciliation[:component]
+          reconciliation: reconciliation[:component],
+          market_brief_watcher: heartbeat_component(status_cache.running?(:market_brief_watcher), required: false)
         }
         components.each { |name, c| @warnings << "#{name}_#{c[:status]}" unless HEALTHY_COMPONENT.include?(c[:status]) }
 
@@ -554,6 +557,11 @@ module Reports
         hash.select { |_, v| v.is_a?(String) || v.is_a?(Numeric) || v.is_a?(Symbol) || v == true || v == false }
             .transform_values { |v| v.is_a?(Symbol) ? v.to_s : v }
             .first(6).to_h
+      end
+
+      def price_of(point)
+        price = stringify(point)&.dig('price')
+        price.is_a?(Numeric) && price.positive? ? price.to_f.round(2) : nil
       end
 
       def count_of(value)
