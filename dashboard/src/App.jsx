@@ -89,7 +89,7 @@ function AppShell(props) {
             sidebarCollapsed={sidebarCollapsed()}
           />
           <main class="flex-1 pt-1 pb-20">
-            <div class="px-8 pt-3 pb-6 w-full">
+            <div class="px-3 md:px-8 pt-3 pb-6 w-full">
               {props.children}
 
               <Show when={lastUpdated()}>
@@ -135,7 +135,8 @@ export default function App() {
         <Route path="/funds" component={() => <Portfolio defaultTab="funds" />} />
         <Route path="/market-watch" component={MarketWatch} />
         <Route path="/reports" component={Reports} />
-        <Route path="/market-brief" component={MarketBrief} />
+        <Route path="/market-mood" component={MarketBrief} />
+        <Route path="/market-brief" component={() => <Navigate href="/market-mood" />} />
         <Route path="/system" component={System} />
         <Route path="/settings" component={() => <System defaultTab="settings" />} />
         <Route path="/scheduler" component={() => <System defaultTab="scheduler" />} />

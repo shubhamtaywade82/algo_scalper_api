@@ -22,6 +22,7 @@ export const ROUTES = {
   // Analytics
   REPORTS: '/reports',
   MARKET_BRIEF: '/market-brief',
+  MARKET_MOOD: '/market-mood',
   PERFORMANCE: '/performance',
   TRADE_LOG: '/trade-log',
 
@@ -63,7 +64,7 @@ export const navigationConfig = [
     items: [
       { id: 'dashboard', label: 'Dashboard', href: ROUTES.DASHBOARD, icon: 'dashboard', end: true },
       { id: 'reports', label: 'Reports', href: ROUTES.REPORTS, icon: 'reports' },
-      { id: 'market-brief', label: 'Market Brief', href: ROUTES.MARKET_BRIEF, icon: 'reports' }
+      { id: 'market-mood', label: 'Market Mood', href: ROUTES.MARKET_MOOD, icon: 'analysis' }
     ],
   },
   {

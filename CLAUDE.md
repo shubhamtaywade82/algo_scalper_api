@@ -105,6 +105,7 @@ app/services/
     ai_prompt_builder.rb           # stage 2: compact fact projection → OllamaClient chat
     ai_response_validator.rb       # grounds AI output (source keys, numbers, decision lock)
     generator.rb                   # orchestration, AI gate/backoff/digest reuse
+    live_brief.rb                  # realtime view: facts per poll (3s cache) + latest validated AI, never calls the LLM
 
 app/jobs/
   instruments_import_job.rb        # daily DhanHQ CSV sync
@@ -144,7 +145,7 @@ Registered in `lib/trading_system/bootstrap.rb`, started by `supervisor.start_al
 | `SmcScannerJob` | Every 15 min (market hours) | SMC + AVRZ pattern detection |
 | `AiTechnicalAnalysisJob` (NIFTY) | Every 15 min (market hours) | AI-powered analysis |
 | `AiTechnicalAnalysisJob` (SENSEX) | Every 15 min (market hours) | AI-powered analysis |
-| `Reports::MarketBriefJob` | 9:35 AM trading days | One-page Market Brief (`GET/POST /api/reports/market_brief`, dashboard `/market-brief`) |
+| `Reports::MarketBriefJob` | Every 15 min, 9:00–15:45 IST weekdays (job skips outside the cash session) | Market Brief AI commentary refresh; live facts via `GET /api/reports/market_brief/live`, dashboard `/market-mood` |
 
 Run `rails solid_queue:load_recurring` to populate the schedule after config changes.
 

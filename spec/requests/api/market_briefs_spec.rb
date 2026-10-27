@@ -57,6 +57,26 @@ RSpec.describe 'Api::MarketBriefs' do
     end
   end
 
+  describe 'GET /api/reports/market_brief/live' do
+    it 'returns realtime facts plus AI status without enqueuing or calling the model' do
+      allow(Reports::MarketBrief::LiveBrief).to receive(:call).and_call_original
+      expect(Services::Ai::OllamaClient).not_to receive(:instance)
+
+      expect { get '/api/reports/market_brief/live' }.not_to have_enqueued_job(Reports::MarketBriefJob)
+      expect(response).to have_http_status(:ok)
+      body = response.parsed_body
+      expect(body).to include('success' => true, 'live' => true, 'mode' => 'paper')
+      expect(body['snapshot']).to include('schema_version' => 1, 'setup' => hash_including('decision'))
+      expect(body['ai']).to include('status')
+    end
+
+    it 'requires the dashboard token when configured' do
+      stub_const('ENV', ENV.to_h.merge('API_DASHBOARD_TOKEN' => 'dash-secret'))
+      get '/api/reports/market_brief/live'
+      expect(response).to have_http_status(:unauthorized)
+    end
+  end
+
   describe 'POST /api/reports/market_brief' do
     it 'accepts the request and enqueues one build' do
       expect do

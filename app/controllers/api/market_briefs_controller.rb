@@ -3,6 +3,7 @@
 module Api
   # One-page Market Brief.
   #
+  #   GET  /api/reports/market_brief/live   realtime facts (rebuilt per poll, 3s cache) + latest validated AI commentary
   #   GET  /api/reports/market_brief        latest ready brief for the current mode (+ in-flight build, if any)
   #   GET  /api/reports/market_brief?id=42  a specific brief (used while polling a build)
   #   POST /api/reports/market_brief        request a build; returns 202 immediately
@@ -16,6 +17,11 @@ module Api
 
     before_action :authenticate_dashboard_token!
     before_action :authenticate_operator_token!, only: :create, if: -> { force_ai? }
+
+    # Never calls the LLM — safe to poll every few seconds.
+    def live
+      render json: { success: true, **Reports::MarketBrief::LiveBrief.call(mode: AlgoConfig.mode) }
+    end
 
     def show
       mode = AlgoConfig.mode.to_s

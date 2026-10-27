@@ -61,7 +61,7 @@ function fmtDateTime(iso) {
   return d.toLocaleString('en-IN', { timeZone: IST, hour12: false, day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-function fmtAge(seconds) {
+export function fmtAge(seconds) {
   if (seconds === null || seconds === undefined) return ''
   if (seconds < 90) return `${seconds}s ago`
   if (seconds < 5400) return `${Math.round(seconds / 60)}m ago`
@@ -222,6 +222,35 @@ function SetupPanel(props) {
   )
 }
 
+// Live view only: where the commentary came from and whether it still matches the facts.
+function AiProvenance(props) {
+  const ai = () => props.ai || {}
+  const attempt = () => ai().latest_attempt
+  const newerFailure = () => attempt() && attempt().report_id !== ai().report_id && attempt().status !== 'completed'
+  return (
+    <Show when={ai().based_on_snapshot_at || newerFailure()}>
+      <div class="mb-ai-provenance" data-testid="ai-provenance">
+        <Show when={ai().based_on_snapshot_at}>
+          <span class="mb-muted">
+            Commentary from report #{ai().report_id} · facts as of {fmtTime(ai().based_on_snapshot_at)} IST ({fmtAge(ai().age_seconds)}){ai().model ? ` · ${ai().model}` : ''}
+          </span>
+        </Show>
+        <Show when={ai().decision_changed}>
+          <span class="mb-chip mb-tone-bad" data-testid="ai-decision-changed">
+            Setup decision changed since this analysis (was {humanize(ai().decision_at_analysis)}, now {humanize(props.liveDecision)}) — commentary may not reflect the current decision
+          </span>
+        </Show>
+        <Show when={ai().stale && !ai().decision_changed}>
+          <span class="mb-chip mb-tone-warn" data-testid="ai-stale">Commentary is older than 20 min — facts above are current</span>
+        </Show>
+        <Show when={newerFailure()}>
+          <span class="mb-chip mb-tone-warn">Latest AI refresh: {AI_STATUS_TEXT[attempt().status] || humanize(attempt().status)}{attempt().error ? ` (${humanize(attempt().error)})` : ''}</span>
+        </Show>
+      </div>
+    </Show>
+  )
+}
+
 function AiPanel(props) {
   const ai = () => props.ai || {}
   const analysis = () => ai().analysis
@@ -237,9 +266,11 @@ function AiPanel(props) {
           <strong>{AI_STATUS_TEXT[ai().status] || 'AI ANALYSIS UNAVAILABLE'}</strong>
           <Show when={ai().error}><span class="mb-muted"> ({humanize(ai().error)})</span></Show>
           <div class="mb-muted">Deterministic market, setup, risk and health data above are unaffected.</div>
+          <AiProvenance ai={ai()} liveDecision={props.liveDecision} />
         </div>
       }
     >
+      <AiProvenance ai={ai()} liveDecision={props.liveDecision} />
       <p class="mb-ai-summary mb-clamp-3">{analysis().executive_summary}</p>
       <Show when={(analysis().disagreements || []).length > 0}>
         <div class="mb-disagree">
@@ -263,7 +294,7 @@ function AiPanel(props) {
         </For>
         <div class="mb-ai-index">
           <Show when={analysis().setup_explanation || analysis().no_trade_explanation}>
-            <div class="mb-clamp-3"><b>{analysis().setup_explanation ? 'Why it qualified:' : 'Why no trade:'}</b> {analysis().setup_explanation || analysis().no_trade_explanation}</div>
+            <div class="mb-clamp-3"><b>{props.decisionChanged ? 'At analysis time, ' : ''}{(props.decisionChanged ? (analysis().setup_explanation ? 'why it qualified:' : 'why no trade:') : (analysis().setup_explanation ? 'Why it qualified:' : 'Why no trade:'))}</b> {analysis().setup_explanation || analysis().no_trade_explanation}</div>
           </Show>
           <Show when={(analysis().key_risks || []).length > 0}>
             <div class="mb-strong">Key risks</div>
@@ -294,7 +325,7 @@ export default function MarketBriefSheet(props) {
   const modeLabel = () => (snap().mode || brief().mode || '').toUpperCase()
 
   return (
-    <article class="mb-sheet" data-testid="market-brief-sheet">
+    <article class={`mb-sheet ${props.variant === 'screen' ? 'mb-sheet--screen' : ''}`} data-testid="market-brief-sheet">
       <header class="mb-header">
         <div>
           <h1>Algo Scalper Market Brief</h1>
@@ -302,6 +333,11 @@ export default function MarketBriefSheet(props) {
         </div>
         <div class="mb-header-meta">
           <span class={`mb-mode mb-mode-${(snap().mode || 'paper')}`}>{modeLabel() || '—'}</span>
+          <Show when={brief().live}>
+            <span class={`mb-pill ${props.interrupted ? 'mb-tone-bad' : 'mb-tone-ok'}`} data-testid="live-badge">
+              {props.interrupted ? 'LIVE UPDATES INTERRUPTED' : 'LIVE'} · {fmtTime(brief().fetched_at)}
+            </span>
+          </Show>
           <KV label="Trading date">{snap().trading_date || brief().trading_date || '—'} ({snap().timezone || IST})</KV>
           <KV label="Generated">{fmtDateTime(snap().generated_at)} IST</KV>
           <KV label="Session"><Pill status={snap().session?.status || 'unavailable'} /></KV>
@@ -359,11 +395,13 @@ export default function MarketBriefSheet(props) {
       </div>
 
       <Section title="AI interpretation" class="mb-ai" badge={<span class="mb-muted">analysis of the facts above · not a trading signal · cannot change the setup decision</span>}>
-        <AiPanel ai={brief().ai} />
+        <AiPanel ai={brief().ai} liveDecision={snap().setup?.decision} decisionChanged={brief().ai?.decision_changed === true} />
       </Section>
 
       <footer class="mb-footer">
-        <span>Report #{brief().id ?? '—'} · schema v{snap().schema_version ?? brief().schema_version ?? '—'} · digest {(brief().snapshot_digest || '').slice(0, 12) || '—'}</span>
+        <span>
+          {brief().live ? `Live facts · fetched ${fmtTime(brief().fetched_at)} IST` : `Report #${brief().id ?? '—'}`} · schema v{snap().schema_version ?? brief().schema_version ?? '—'} · digest {(brief().snapshot_digest || '').slice(0, 12) || '—'}
+        </span>
         <span>Generated from cached authoritative sources; "—" / NO DATA means the value was unavailable, never zero. Not investment advice.</span>
       </footer>
     </article>

@@ -68,14 +68,15 @@ async function main() {
       const page = await browser.newPage({ viewport: { width: 1600, height: 1100 } })
       await page.route('**/api/**', route => {
         const url = route.request().url()
-        if (url.includes('/api/reports/market_brief')) {
-          return route.fulfill({ json: { success: true, mode: brief.mode, brief, in_progress: null } })
+        if (url.includes('/api/reports/market_brief/live')) {
+          // The live endpoint returns the brief's fields at the top level.
+          return route.fulfill({ json: { success: true, ...brief, in_progress: null } })
         }
         return route.fulfill({ json: {} })
       })
       await page.routeWebSocket?.('**/cable', ws => ws.close())
 
-      await page.goto(`http://localhost:${PORT}/market-brief`)
+      await page.goto(`http://localhost:${PORT}/market-mood`)
       await page.waitForSelector('.mb-print-portal [data-testid="market-brief-sheet"]', { state: 'attached', timeout: 15000 })
       await page.emulateMedia({ media: 'print' })
 

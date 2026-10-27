@@ -20,6 +20,8 @@ class MarketBriefReport < ApplicationRecord
   # Manual refreshes inside the same slot reuse one report — bounds LLM spend
   # to one call per mode per slot no matter how often the button is pressed.
   MANUAL_SLOT_SECONDS = 5.minutes.to_i
+  # Scheduled AI refreshes (recurring.yml, market hours) get one report per 15-min slot.
+  SCHEDULED_SLOT_SECONDS = 15.minutes.to_i
   # A build that never left `building` (worker crash) may be retried after this.
   BUILDING_TIMEOUT = 10.minutes
 
@@ -61,7 +63,7 @@ class MarketBriefReport < ApplicationRecord
     def report_key_for(mode:, trigger:, now:)
       ist = now.in_time_zone(TradingSession::Service::IST_TIMEZONE)
       slot = if trigger.to_s == 'scheduled'
-               'scheduled'
+               "s#{(ist.to_i / SCHEDULED_SLOT_SECONDS) * SCHEDULED_SLOT_SECONDS}"
              else
                "m#{(ist.to_i / MANUAL_SLOT_SECONDS) * MANUAL_SLOT_SECONDS}"
              end

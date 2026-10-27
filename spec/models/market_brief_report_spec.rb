@@ -25,9 +25,14 @@ RSpec.describe MarketBriefReport do
       expect([next_slot.id, live.id]).not_to include(first.id)
     end
 
-    it 'uses one scheduled report per trading date and mode' do
-      key = described_class.request!(mode: :paper, trigger: 'scheduled', now: now).first.report_key
-      expect(key).to eq('2026-10-27:paper:scheduled')
+    it 'uses one scheduled report per 15-minute slot and mode' do
+      first, = described_class.request!(mode: :paper, trigger: 'scheduled', now: now)
+      same, = described_class.request!(mode: :paper, trigger: 'scheduled', now: now + 10.minutes)
+      later, = described_class.request!(mode: :paper, trigger: 'scheduled', now: now + 16.minutes)
+
+      expect(first.report_key).to start_with('2026-10-27:paper:s')
+      expect(same.id).to eq(first.id)
+      expect(later.id).not_to eq(first.id)
     end
 
     it 'resolves a unique-index race to the winning row' do

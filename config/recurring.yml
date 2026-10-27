@@ -45,13 +45,15 @@ development:
     priority: 8
     description: "Multi-Agent AI cycle (Market Analysis, Risk Management, Strategy Selection, Calibration)"
 
-  market_brief_opening:
+  market_brief_refresh:
     class: Reports::MarketBriefJob
     args: [null, "scheduled"]
-    schedule: at 9:35am every day
+    # Explicit cron: Fugit parses "every N minutes between X and Y" as a single time, which
+    # Solid Queue rejects. The job itself skips runs outside the cash session.
+    schedule: "*/15 9-15 * * * Asia/Kolkata"
     queue_name: background
     priority: 9
-    description: "One-page Market Brief (deterministic snapshot + validated AI commentary) after the opening range; skips non-trading days"
+    description: "Market Brief AI commentary refresh (one report per 15-min slot, digest-deduped); live facts are served per-poll without the LLM; skips non-trading days"
 
   ai_technical_analysis_nifty:
     class: AiTechnicalAnalysisJob
@@ -159,13 +161,14 @@ production:
     priority: 8
     description: "Multi-Agent AI cycle (Market Analysis, Risk Management, Strategy Selection, Calibration)"
 
-  market_brief_opening:
+  market_brief_refresh:
     class: Reports::MarketBriefJob
     args: [null, "scheduled"]
-    schedule: at 9:35am every weekday
+    # Explicit cron (see development note); the job skips runs outside the cash session.
+    schedule: "*/15 9-15 * * 1-5 Asia/Kolkata"
     queue_name: background
     priority: 9
-    description: "One-page Market Brief (deterministic snapshot + validated AI commentary) after the opening range; skips non-trading days"
+    description: "Market Brief AI commentary refresh (one report per 15-min slot, digest-deduped); live facts are served per-poll without the LLM; skips non-trading days"
 
   ai_technical_analysis_nifty:
     class: AiTechnicalAnalysisJob

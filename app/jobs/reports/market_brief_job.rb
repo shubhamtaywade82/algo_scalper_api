@@ -35,6 +35,10 @@ module Reports
         Rails.logger.info("[Reports::MarketBriefJob] #{today} is not a trading day; no scheduled brief")
         return nil
       end
+      unless TradingSession::Service.market_open?
+        Rails.logger.info('[Reports::MarketBriefJob] outside the cash session; no scheduled AI refresh')
+        return nil
+      end
 
       report, = MarketBriefReport.request!(mode: AlgoConfig.mode, trigger: trigger)
       report
