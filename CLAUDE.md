@@ -99,6 +99,12 @@ app/services/
     token_manager.rb               # 3-tier token: authority server → TOTP → static ENV
   adapters/
     option_chain/dhan_adapter.rb   # live option chain fetch (always wired, even in paper mode)
+  reports/market_brief/            # one-page Market Brief (read-only; never touches orders)
+    snapshot_builder.rb            # stage 1: deterministic snapshot from cross-process sources
+    setup_selector.rb              # QUALIFIED / NO_TRADE / BLOCKED from guard-approved signals only
+    ai_prompt_builder.rb           # stage 2: compact fact projection → OllamaClient chat
+    ai_response_validator.rb       # grounds AI output (source keys, numbers, decision lock)
+    generator.rb                   # orchestration, AI gate/backoff/digest reuse
 
 app/jobs/
   instruments_import_job.rb        # daily DhanHQ CSV sync
@@ -138,6 +144,7 @@ Registered in `lib/trading_system/bootstrap.rb`, started by `supervisor.start_al
 | `SmcScannerJob` | Every 15 min (market hours) | SMC + AVRZ pattern detection |
 | `AiTechnicalAnalysisJob` (NIFTY) | Every 15 min (market hours) | AI-powered analysis |
 | `AiTechnicalAnalysisJob` (SENSEX) | Every 15 min (market hours) | AI-powered analysis |
+| `Reports::MarketBriefJob` | 9:35 AM trading days | One-page Market Brief (`GET/POST /api/reports/market_brief`, dashboard `/market-brief`) |
 
 Run `rails solid_queue:load_recurring` to populate the schedule after config changes.
 

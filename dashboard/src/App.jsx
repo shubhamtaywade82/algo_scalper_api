@@ -30,6 +30,7 @@ const Positions = lazy(() => import('./views/Positions'))
 const Holdings = lazy(() => import('./views/Holdings'))
 const Funds = lazy(() => import('./views/Funds'))
 const Reports = lazy(() => import('./views/Reports'))
+const MarketBrief = lazy(() => import('./views/MarketBrief'))
 const Alerts = lazy(() => import('./views/Alerts'))
 const Scheduler = lazy(() => import('./views/Scheduler'))
 const Logs = lazy(() => import('./views/Logs'))
@@ -134,6 +135,7 @@ export default function App() {
         <Route path="/funds" component={() => <Portfolio defaultTab="funds" />} />
         <Route path="/market-watch" component={MarketWatch} />
         <Route path="/reports" component={Reports} />
+        <Route path="/market-brief" component={MarketBrief} />
         <Route path="/system" component={System} />
         <Route path="/settings" component={() => <System defaultTab="settings" />} />
         <Route path="/scheduler" component={() => <System defaultTab="scheduler" />} />

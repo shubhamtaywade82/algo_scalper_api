@@ -21,6 +21,7 @@ export const ROUTES = {
 
   // Analytics
   REPORTS: '/reports',
+  MARKET_BRIEF: '/market-brief',
   PERFORMANCE: '/performance',
   TRADE_LOG: '/trade-log',
 
@@ -61,7 +62,8 @@ export const navigationConfig = [
     section: NAV_SECTIONS.MAIN,
     items: [
       { id: 'dashboard', label: 'Dashboard', href: ROUTES.DASHBOARD, icon: 'dashboard', end: true },
-      { id: 'reports', label: 'Reports', href: ROUTES.REPORTS, icon: 'reports' }
+      { id: 'reports', label: 'Reports', href: ROUTES.REPORTS, icon: 'reports' },
+      { id: 'market-brief', label: 'Market Brief', href: ROUTES.MARKET_BRIEF, icon: 'reports' }
     ],
   },
   {

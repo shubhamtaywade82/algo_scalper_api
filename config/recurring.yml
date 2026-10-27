@@ -45,6 +45,14 @@ development:
     priority: 8
     description: "Multi-Agent AI cycle (Market Analysis, Risk Management, Strategy Selection, Calibration)"
 
+  market_brief_opening:
+    class: Reports::MarketBriefJob
+    args: [null, "scheduled"]
+    schedule: at 9:35am every day
+    queue_name: background
+    priority: 9
+    description: "One-page Market Brief (deterministic snapshot + validated AI commentary) after the opening range; skips non-trading days"
+
   ai_technical_analysis_nifty:
     class: AiTechnicalAnalysisJob
     args: ["NIFTY"]
@@ -150,6 +158,14 @@ production:
     queue_name: background
     priority: 8
     description: "Multi-Agent AI cycle (Market Analysis, Risk Management, Strategy Selection, Calibration)"
+
+  market_brief_opening:
+    class: Reports::MarketBriefJob
+    args: [null, "scheduled"]
+    schedule: at 9:35am every weekday
+    queue_name: background
+    priority: 9
+    description: "One-page Market Brief (deterministic snapshot + validated AI commentary) after the opening range; skips non-trading days"
 
   ai_technical_analysis_nifty:
     class: AiTechnicalAnalysisJob

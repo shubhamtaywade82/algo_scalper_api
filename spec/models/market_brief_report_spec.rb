@@ -1,0 +1,72 @@
+# frozen_string_literal: true
+
+require 'rails_helper'
+
+RSpec.describe MarketBriefReport do
+  let(:now) { Time.find_zone('Asia/Kolkata').local(2026, 10, 27, 10, 31, 20) }
+
+  describe '.request!' do
+    it 'collapses repeated manual requests in one slot onto one report' do
+      first, created = described_class.request!(mode: :paper, now: now)
+      again, created_again = described_class.request!(mode: :paper, now: now + 2.minutes)
+
+      expect(created).to be(true)
+      expect(created_again).to be(false)
+      expect(again.id).to eq(first.id)
+      expect(first).to have_attributes(status: 'pending', ai_status: 'pending', trading_date: Date.new(2026, 10, 27),
+                                       schema_version: 1)
+    end
+
+    it 'opens a new report in the next slot and keeps modes separate' do
+      first, = described_class.request!(mode: :paper, now: now)
+      next_slot, = described_class.request!(mode: :paper, now: now + 6.minutes)
+      live, = described_class.request!(mode: :live, now: now)
+
+      expect([next_slot.id, live.id]).not_to include(first.id)
+    end
+
+    it 'uses one scheduled report per trading date and mode' do
+      key = described_class.request!(mode: :paper, trigger: 'scheduled', now: now).first.report_key
+      expect(key).to eq('2026-10-27:paper:scheduled')
+    end
+
+    it 'resolves a unique-index race to the winning row' do
+      winner, = described_class.request!(mode: :paper, now: now)
+      allow(described_class).to receive(:create!).and_raise(ActiveRecord::RecordNotUnique)
+      allow(described_class).to receive_messages(find_by: nil, find_by!: winner)
+
+      expect(described_class.request!(mode: :paper, now: now)).to eq([winner, false])
+    end
+  end
+
+  describe '#claim_for_build!' do
+    it 'lets exactly one caller claim a pending report' do
+      report, = described_class.request!(mode: :paper, now: now)
+      other = described_class.find(report.id)
+
+      expect(report.claim_for_build!).to be(true)
+      expect(other.claim_for_build!).to be(false)
+      expect(report.reload.status).to eq('building')
+    end
+
+    it 'allows reclaiming a build stuck past the timeout' do
+      report, = described_class.request!(mode: :paper, now: now)
+      report.update_columns(status: 'building', updated_at: 11.minutes.ago) # rubocop:disable Rails/SkipsModelValidations
+      expect(report.claim_for_build!).to be(true)
+    end
+
+    it 'never reclaims a ready report' do
+      report, = described_class.request!(mode: :paper, now: now)
+      report.update!(status: 'ready')
+      expect(report.claim_for_build!).to be(false)
+    end
+  end
+
+  describe '#as_api_json' do
+    it 'hides AI analysis unless the AI stage completed' do
+      report, = described_class.request!(mode: :paper, now: now)
+      report.update!(ai_status: 'invalid', ai_analysis: { 'executive_summary' => 'x' })
+      expect(report.as_api_json[:ai]).to include(status: 'invalid', analysis: nil)
+    end
+  end
+end
