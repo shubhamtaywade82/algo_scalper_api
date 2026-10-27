@@ -1,40 +1,36 @@
 # frozen_string_literal: true
 
 require 'rails_helper'
-require 'yaml'
 
-# rubocop:disable-next RSpec/DescribeClass
-RSpec.describe 'recurring schedule config' do
-  let(:config) { YAML.load_file(Rails.root.join('config/recurring.yml')) }
+# Every recurring task must be a schedule Solid Queue can parse. An invalid entry
+# is silently absent from the scheduler, so a regression here would stop a job
+# (e.g. cancel_stuck_orders) without any error at runtime.
+RSpec.describe 'config/recurring.yml' do # rubocop:disable RSpec/DescribeClass
+  let(:config) { YAML.load_file(Rails.root.join('config/recurring.yml'), aliases: true) }
 
-  # History: the 2026-04 "event-driven intraday analysis" change (#163) moved
-  # every scanner/AI job to post-close 4pm and locked it in with a spec. The
-  # refactor/smc-scanner-chat-with-tools merge later restored the SMC scanner
-  # to an intraday 15-minute cadence on purpose ("aligns with 15m MTF
-  # candles"), and 4606bc51 added the multi-agent AI cycle every 15 minutes
-  # during market hours. Heavy AI technical analysis stays post-close.
-  it 'schedules the SMC scanner every 15 minutes to align with 15m MTF candles' do
-    expect(config.dig('development', 'smc_scanner', 'schedule')).to eq('every 15 minutes')
-    # Production is scoped to market hours on weekdays.
-    expect(config.dig('production', 'smc_scanner', 'schedule'))
-      .to eq('every 15 minutes between 9:15am and 3:30pm on weekdays')
-  end
+  %w[development production].each do |env|
+    it "has only valid schedules in #{env}" do
+      invalid = config.fetch(env).filter_map do |key, options|
+        task = SolidQueue::RecurringTask.from_configuration(key, **options.symbolize_keys)
+        "#{key}: #{task.errors.full_messages.to_sentence}" unless task.valid?
+      end
 
-  it 'runs the multi-agent AI cycle every 15 minutes' do
-    expect(config.dig('development', 'ai_agents_cycle', 'schedule')).to eq('every 15 minutes')
-    expect(config.dig('production', 'ai_agents_cycle', 'schedule'))
-      .to eq('every 15 minutes between 9:15am and 3:30pm on weekdays')
-  end
-
-  it 'keeps heavy AI technical analysis post-close instead of intraday' do
-    %w[development production].each do |env|
-      nifty_schedule = config.dig(env, 'ai_technical_analysis_nifty', 'schedule')
-      sensex_schedule = config.dig(env, 'ai_technical_analysis_sensex', 'schedule')
-
-      expect(nifty_schedule).to include('at 4:00pm')
-      expect(sensex_schedule).to include('at 4:00pm')
-      expect(nifty_schedule).not_to include('every 15 minutes')
-      expect(sensex_schedule).not_to include('every 15 minutes')
+      expect(invalid).to be_empty
     end
+  end
+
+  it 'keeps the four cash-session jobs on their intended cadence in production' do
+    production = config.fetch('production')
+    schedules = %w[smc_scanner ai_agents_cycle cancel_stuck_orders tick_staleness_sampler].index_with do |key|
+      SolidQueue::RecurringTask.from_configuration(key, **production.fetch(key).symbolize_keys)
+                               .then { |t| t.send(:parsed_schedule).original }
+    end
+
+    expect(schedules).to eq(
+      'smc_scanner' => '*/15 9-15 * * 1-5 Asia/Kolkata',
+      'ai_agents_cycle' => '*/15 9-15 * * 1-5 Asia/Kolkata',
+      'cancel_stuck_orders' => '* 9-15 * * 1-5 Asia/Kolkata',
+      'tick_staleness_sampler' => '* 9-15 * * 1-5 Asia/Kolkata'
+    )
   end
 end

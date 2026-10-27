@@ -12,6 +12,7 @@ Rails 8 API backend for **fully autonomous** intraday options scalping on Indian
 - Solid Cache (Rails.cache backend in production; development uses `:redis_cache_store`)
 - DhanHQ v2 via `dhanhq` gem (broker API + WebSocket)
 - Optional: OpenAI for AI technical analysis
+- RubyLLM 2.x (`ruby_llm ~> 2.1`): native `RubyLLM::Agent` / `RubyLLM::Tool` classes in `app/agents`, `app/tools` (Ollama or Ollama Cloud via `LLMSettings`, configured in `config/initializers/ruby_llm.rb`); advisory only, not in the order path
 - Optional: Telegram Bot for notifications
 
 ## Commands
@@ -99,6 +100,13 @@ app/services/
     token_manager.rb               # 3-tier token: authority server → TOTP → static ENV
   adapters/
     option_chain/dhan_adapter.rb   # live option chain fetch (always wired, even in paper mode)
+  reports/market_brief/            # one-page Market Brief (read-only; never touches orders)
+    snapshot_builder.rb            # stage 1: deterministic snapshot from cross-process sources
+    setup_selector.rb              # QUALIFIED / NO_TRADE / BLOCKED from guard-approved signals only
+    ai_prompt_builder.rb           # stage 2: compact fact projection → OllamaClient chat
+    ai_response_validator.rb       # grounds AI output (source keys, numbers, decision lock)
+    generator.rb                   # orchestration, AI gate/backoff/digest reuse
+    live_brief.rb                  # realtime view: facts per poll (3s cache) + latest validated AI, never calls the LLM
 
 app/jobs/
   instruments_import_job.rb        # daily DhanHQ CSV sync
@@ -138,6 +146,7 @@ Registered in `lib/trading_system/bootstrap.rb`, started by `supervisor.start_al
 | `SmcScannerJob` | Every 15 min (market hours) | SMC + AVRZ pattern detection |
 | `AiTechnicalAnalysisJob` (NIFTY) | Every 15 min (market hours) | AI-powered analysis |
 | `AiTechnicalAnalysisJob` (SENSEX) | Every 15 min (market hours) | AI-powered analysis |
+| `Reports::MarketBriefJob` | Every 15 min, 9:00–15:45 IST weekdays (job skips outside the cash session) | Market Brief AI commentary refresh; live facts via `GET /api/reports/market_brief/live`, dashboard `/market-mood` |
 
 Run `rails solid_queue:load_recurring` to populate the schedule after config changes.
 

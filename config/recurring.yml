@@ -45,6 +45,16 @@ development:
     priority: 8
     description: "Multi-Agent AI cycle (Market Analysis, Risk Management, Strategy Selection, Calibration)"
 
+  market_brief_refresh:
+    class: Reports::MarketBriefJob
+    args: [null, "scheduled"]
+    # Explicit cron: Fugit parses "every N minutes between X and Y" as a single time, which
+    # Solid Queue rejects. The job itself skips runs outside the cash session.
+    schedule: "*/15 9-15 * * * Asia/Kolkata"
+    queue_name: background
+    priority: 9
+    description: "Market Brief AI commentary refresh (one report per 15-min slot, digest-deduped); live facts are served per-poll without the LLM; skips non-trading days"
+
   ai_technical_analysis_nifty:
     class: AiTechnicalAnalysisJob
     args: ["NIFTY"]
@@ -139,17 +149,26 @@ production:
 
   smc_scanner:
     class: SmcScannerJob
-    schedule: every 15 minutes between 9:15am and 3:30pm on weekdays
+    schedule: "*/15 9-15 * * 1-5 Asia/Kolkata"
     queue_name: default
     priority: 10
-    description: "SMC + AVRZ scanner - market hours only, runs every 15 minutes (aligns with 15m MTF candles)"
+    description: "SMC + AVRZ scanner every 15 minutes in the cash session (cron 9:00-15:45 weekdays; the 9:00 and 15:45 edge runs are accepted)"
 
   ai_agents_cycle:
     class: Ai::AgentsCycleJob
-    schedule: every 15 minutes between 9:15am and 3:30pm on weekdays
+    schedule: "*/15 9-15 * * 1-5 Asia/Kolkata"
     queue_name: background
     priority: 8
-    description: "Multi-Agent AI cycle (Market Analysis, Risk Management, Strategy Selection, Calibration)"
+    description: "Multi-Agent AI cycle every 15 minutes in the cash session (cron 9:00-15:45 weekdays; the 9:00 and 15:45 edge runs are accepted)"
+
+  market_brief_refresh:
+    class: Reports::MarketBriefJob
+    args: [null, "scheduled"]
+    # Explicit cron (see development note); the job skips runs outside the cash session.
+    schedule: "*/15 9-15 * * 1-5 Asia/Kolkata"
+    queue_name: background
+    priority: 9
+    description: "Market Brief AI commentary refresh (one report per 15-min slot, digest-deduped); live facts are served per-poll without the LLM; skips non-trading days"
 
   ai_technical_analysis_nifty:
     class: AiTechnicalAnalysisJob
@@ -190,7 +209,7 @@ production:
 
   cancel_stuck_orders:
     class: Live::CancelStuckOrdersJob
-    schedule: every 1 minute between 9:15am and 3:30pm on weekdays
+    schedule: "* 9-15 * * 1-5 Asia/Kolkata"
     queue_name: background
     priority: 4
     description: "Cancels live entry orders DhanHQ never confirmed filled/rejected within the check window"
@@ -212,10 +231,10 @@ production:
 
   tick_staleness_sampler:
     class: DataQuality::TickStalenessSamplerJob
-    schedule: every 1 minute between 9:15am and 3:30pm on weekdays
+    schedule: "* 9-15 * * 1-5 Asia/Kolkata"
     queue_name: background
     priority: 15
-    description: "Samples Live::FeedHealthService's tick-staleness check once a minute to accumulate a daily rate"
+    description: "Samples Live::FeedHealthService's tick-staleness check once a minute in the cash session (guarded in-job to 9:20-15:30 IST); accumulates a daily rate"
 
   data_quality_daily_check:
     class: DataQuality::DailyCheckJob

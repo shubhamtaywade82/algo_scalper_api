@@ -1,12 +1,13 @@
 # frozen_string_literal: true
 
+# Formulates a trading strategy based on market analysis, defining directional
+# bias, target zones, entry triggers, SL, and TP. Advisory only: nothing in the
+# live entry path calls this agent; orders are sized and guarded by the
+# deterministic pipeline (EntryGuard, Capital::Allocator).
 class StrategyAgent < ApplicationAgent
-  description "Formulates a trading strategy based on market analysis, defining directional bias, target zones, entry triggers, SL, and TP."
+  inputs :index_key, :market_analysis
 
-  param :index_key, required: true
-  param :market_analysis, required: true
-
-  system <<~PROMPT
+  instructions <<~PROMPT
     You are the Strategy Agent for an options trading bot.
     Your job is to formulate a clear, actionable trading strategy for the index based on the Market Analyst's report.
     Use the following rules:
@@ -23,15 +24,15 @@ class StrategyAgent < ApplicationAgent
     6. Trailing Rules: Guidelines on trailing the stop loss to lock in profits.
   PROMPT
 
-  user "Formulate a strategy for {index_key} based on the market analysis: {market_analysis}"
+  user_prompt 'Formulate a strategy for %<index_key>s based on the market analysis: %<market_analysis>s'
 
-  returns do
-    string :action, description: "Trading action: BUY_CALL, BUY_PUT, or NO_TRADE"
-    string :entry_trigger, description: "Condition or price level to enter the trade"
-    number :stop_loss, description: "Stop loss price level (absolute index price)"
-    number :take_profit, description: "Take profit price level (absolute index price)"
-    string :max_holding_time, description: "Maximum time limit or exit conditions (to guard against Theta decay)"
-    string :trailing_rules, description: "Rules for trailing the stop loss"
-    string :rationale, description: "Short explanation for this strategy"
+  schema do
+    string :action, description: 'Trading action: BUY_CALL, BUY_PUT, or NO_TRADE'
+    string :entry_trigger, description: 'Condition or price level to enter the trade'
+    number :stop_loss, description: 'Stop loss price level (absolute index price)'
+    number :take_profit, description: 'Take profit price level (absolute index price)'
+    string :max_holding_time, description: 'Maximum time limit or exit conditions (to guard against Theta decay)'
+    string :trailing_rules, description: 'Rules for trailing the stop loss'
+    string :rationale, description: 'Short explanation for this strategy'
   end
 end

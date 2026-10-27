@@ -3,9 +3,9 @@
 class GetOptionChainTool < RubyLLM::Tool
   description "Fetches the current option chain contracts (CE/PE), strike prices, current premiums (LTP), bid/ask spreads, Greeks (Delta, Gamma, Theta, Vega), Implied Volatility (IV), and Open Interest (OI) for a given index based on a trading bias (bullish/bearish)."
 
-  param :index_key, type: :string, description: "The index symbol (e.g., NIFTY, BANKNIFTY, SENSEX)", required: true
-  param :direction, type: :string, description: "Trading bias to filter candidates ('bullish' or 'bearish')", required: false
-  param :limit, type: :integer, description: "Maximum number of option candidate contracts to return", required: false
+  parameter :index_key, type: :string, description: "The index symbol (e.g., NIFTY, BANKNIFTY, SENSEX)", required: true
+  parameter :direction, type: :string, description: "Trading bias to filter candidates ('bullish' or 'bearish')", required: false
+  parameter :limit, type: :integer, description: "Maximum number of option candidate contracts to return", required: false
 
   def execute(index_key:, direction: "bullish", limit: 5)
     index_key = index_key.to_s.upcase

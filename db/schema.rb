@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_25_140000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_27_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -374,6 +374,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_25_140000) do
     t.index ["instrument_id"], name: "index_leg_groups_on_instrument_id"
     t.index ["status", "strategy_type"], name: "index_leg_groups_on_status_and_strategy_type"
     t.index ["underlying_symbol"], name: "index_leg_groups_on_underlying_symbol"
+  end
+
+  create_table "market_brief_reports", force: :cascade do |t|
+    t.string "report_key", null: false
+    t.date "trading_date", null: false
+    t.string "mode", null: false
+    t.string "trigger", default: "manual", null: false
+    t.string "status", default: "pending", null: false
+    t.integer "schema_version", null: false
+    t.jsonb "snapshot", default: {}, null: false
+    t.string "snapshot_digest"
+    t.datetime "snapshot_generated_at"
+    t.string "ai_status", default: "pending", null: false
+    t.jsonb "ai_analysis"
+    t.string "ai_model"
+    t.string "ai_error"
+    t.datetime "ai_generated_at"
+    t.string "error"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["mode", "status", "created_at"], name: "index_market_brief_reports_on_mode_and_status_and_created_at"
+    t.index ["report_key"], name: "index_market_brief_reports_on_report_key", unique: true
   end
 
   create_table "market_holidays", force: :cascade do |t|

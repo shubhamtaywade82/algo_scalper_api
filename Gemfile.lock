@@ -506,11 +506,6 @@ GEM
       marcel (>= 1.0, < 3)
       schematist (~> 1.1)
       zeitwerk (~> 2)
-    ruby_llm-agents (3.16.0)
-      csv
-      ostruct
-      rails (>= 7.0)
-      ruby_llm (>= 1.16.0)
     ruby_parser (3.22.0)
       racc (~> 1.5)
       sexp_processor (~> 4.16)
@@ -664,7 +659,6 @@ DEPENDENCIES
   rubocop-rspec_rails
   ruby-technical-analysis
   ruby_llm (~> 2.1)
-  ruby_llm-agents (~> 3.16)
   rubycritic
   shoulda-matchers
   simplecov
