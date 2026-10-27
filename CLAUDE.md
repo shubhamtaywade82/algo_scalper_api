@@ -12,6 +12,7 @@ Rails 8 API backend for **fully autonomous** intraday options scalping on Indian
 - Solid Cache (Rails.cache backend in production; development uses `:redis_cache_store`)
 - DhanHQ v2 via `dhanhq` gem (broker API + WebSocket)
 - Optional: OpenAI for AI technical analysis
+- RubyLLM 2.x (`ruby_llm ~> 2.1`): native `RubyLLM::Agent` / `RubyLLM::Tool` classes in `app/agents`, `app/tools` (Ollama or Ollama Cloud via `LLMSettings`, configured in `config/initializers/ruby_llm.rb`); advisory only, not in the order path
 - Optional: Telegram Bot for notifications
 
 ## Commands

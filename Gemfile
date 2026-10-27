@@ -61,16 +61,11 @@ gem 'telegram-bot-ruby', '~> 2.8'
 gem 'aasm', '~> 6.0'
 gem 'ollama-client', '~> 1.4'
 gem 'prometheus_exporter', '~> 2.3'
-# ruby_llm is PINNED to 1.x: ruby_llm-agents (all published 3.x) requires
-# "ruby_llm/schema" and RubyLLM::Model::Info — both only exist in ruby_llm
-# 1.x (1.x pulls ruby_llm-schema transitively; 2.x replaced it with
-# schematist and restructured the model registry). Bundling ruby_llm 2.x
-# with ruby_llm-agents 3.x fails at boot (LoadError ruby_llm/schema, then
-# NameError RubyLLM::Model::Info) — this is what PR #266 (1.16.0 -> 2.0.0)
-# inadvertently did to develop. Re-apply the 2.x bump only after
-# ruby_llm-agents ships a release that supports it.
-gem 'ruby_llm', '~> 1.16'
-gem 'ruby_llm-agents', '~> 3.16'
+# RubyLLM 2.x (https://rubyllm.com). Agents and tools use RubyLLM's native
+# RubyLLM::Agent / RubyLLM::Tool APIs. ruby_llm-agents was removed: every 3.x
+# release requires ruby_llm/schema and RubyLLM::Model::Info, which 2.x replaced
+# (Schematist, RubyLLM::Model), and its only caller was deleted in #296.
+gem 'ruby_llm', '~> 2.1'
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 # gem "image_processing", "~> 1.2"

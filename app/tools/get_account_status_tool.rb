@@ -3,7 +3,7 @@
 class GetAccountStatusTool < RubyLLM::Tool
   description "Fetches the current account funds, available margin, paper/live trading stats (win rate, realized and unrealized PnL), and active open positions."
 
-  def execute(_ = nil)
+  def execute
     is_live         = !AlgoConfig.paper_trading_enabled?
     available_cash  = Capital::Allocator.available_cash.to_f
     stats           = PositionTracker.paper_trading_stats_with_pct(date: Time.zone.today)

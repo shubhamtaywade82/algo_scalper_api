@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Be sure to restart your server when you modify this file.
 
 # Add new inflection rules using the following format. Inflections
@@ -14,4 +16,8 @@
 ActiveSupport::Inflector.inflections(:en) do |inflect|
   inflect.acronym 'ATR'
   inflect.acronym 'VWAP'
+  # Previously registered globally by the ruby_llm-agents gem; app constants
+  # depend on it (AutoExp::LLMPlanner, LLMSettings). Without it Zeitwerk
+  # expects "Llm…" and eager loading (production) fails.
+  inflect.acronym 'LLM'
 end
