@@ -1,0 +1,91 @@
+---
+# Investing domain configuration — see docs/investing/TECHNICAL_DESIGN.md §5.
+# Loaded by config/initializers/investing_config.rb into Investing::Config.
+# NOTE: all percentages are numbers, not fractions (25 == 25%).
+default: &default
+  execution:
+    mode: paper                  # paper | live (live gated on Phase 4 rails — §11.8/§19.2)
+    require_manual_approval: true
+    max_order_value_inr: 500000  # single-order hard ceiling (risk backstop)
+    max_orders_per_day: 12
+    market_open: "09:15"
+    market_close: "15:30"
+    no_trade_first_minutes: 15
+    no_trade_last_minutes: 10
+
+  # Asset-class note: `infra` is classified as its own real-assets class, NOT
+  # equity. The source report's 50-60% equity band brackets the pure-equity
+  # target of 55% (large 25 + mid/small 10 + global 10 + thematic 10) exactly;
+  # counting infra (7%) would put the target at 62% - outside its own band.
+  # If infra should count as equity, widen the band here - never in code.
+
+  mandates:
+    balanced_v1:
+      description: "FY2026-27 strategic allocation (illustrative default)"
+      rebalance_band_pct: [50, 60]
+      sleeves:
+        - key: large_cap_core
+          name: "Large-Cap Core (Nifty 100)"
+          asset_class: equity
+          target_weight_pct: 25
+        - key: mid_small_cap
+          name: "Mid & Small Cap Growth"
+          asset_class: equity
+          target_weight_pct: 10
+        - key: global_equity
+          name: "Global Equity (international funds/ETFs)"
+          asset_class: equity
+          target_weight_pct: 10
+        - key: thematic_tech_clean
+          name: "Tech & Clean Energy"
+          asset_class: equity
+          target_weight_pct: 10
+        - key: govt_aaa_bonds
+          name: "Govt/AAA Bonds (G-Sec + SDL + AAA corp)"
+          asset_class: debt
+          target_weight_pct: 15
+        - key: short_duration_debt
+          name: "Short-Duration Debt / Liquid"
+          asset_class: debt
+          target_weight_pct: 10
+        - key: reit_invit
+          name: "REITs & InvITs"
+          asset_class: reit
+          target_weight_pct: 5
+        - key: infra
+          name: "Infrastructure"
+          asset_class: infra
+          target_weight_pct: 7
+        - key: cash
+          name: "Cash & Equivalents"
+          asset_class: cash
+          target_weight_pct: 5
+        - key: gold_silver
+          name: "Gold & Silver"
+          asset_class: gold
+          target_weight_pct: 3
+
+      constraints:
+        max_single_stock_pct: 2.5
+        max_sector_pct: 12
+        max_illiquid_pct: 25
+        min_sleeve_holdings: 3
+
+      rebalancing:
+        review_cadence: quarterly
+        drift_threshold_pct: 5
+        equity_band_pct: [50, 60]
+
+      deployment:
+        equity_tranches: 3
+        tranche_spacing_weeks: 4
+        midcap_stp_months: 6
+
+test:
+  <<: *default
+
+development:
+  <<: *default
+
+production:
+  <<: *default
