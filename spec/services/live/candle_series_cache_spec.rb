@@ -362,4 +362,30 @@ RSpec.describe Live::CandleSeriesCache do
       end
     end
   end
+
+  describe '.poll_candle_closure' do
+    let(:closed_ts) { 3.minutes.ago.beginning_of_minute }
+    let(:forming_ts) { Time.current.beginning_of_minute }
+
+    before do
+      allow(redis_double).to receive_messages(get: nil, set: true)
+      allow(Core::EventBus.instance).to receive(:publish)
+      allow(Candles::Persister).to receive(:enqueue)
+      allow(described_class).to receive(:normalize_ohlc).and_return(
+        [closed_ts, forming_ts].map do |ts|
+          { timestamp: ts, open: 1.0, high: 2.0, low: 0.5, close: 1.5, volume: 10, oi: 0 }
+        end
+      )
+      allow(instrument).to receive(:intraday_ohlc).and_return({ 'open' => [1.0] })
+    end
+
+    it 'enqueues only closed candles for durable persistence' do
+      described_class.poll_candle_closure(instrument: instrument, interval: 1)
+
+      expect(Candles::Persister).to have_received(:enqueue).with(
+        instrument: instrument, interval: 1, source: 'live',
+        candles: [hash_including('timestamp' => closed_ts)]
+      )
+    end
+  end
 end

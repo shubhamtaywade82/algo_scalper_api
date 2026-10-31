@@ -1599,7 +1599,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_080000) do
     t.jsonb "parameters", default: []
     t.jsonb "instruments", default: []
     t.jsonb "tags", default: []
-    t.jsonb "checks", default: {"risk"=>"not_run", "logic"=>"not_run", "syntax"=>"not_run", "backtest"=>"not_run"}
+    t.jsonb "checks", default: {"risk" => "not_run", "logic" => "not_run", "syntax" => "not_run", "backtest" => "not_run"}
     t.jsonb "backtest_results", default: {}
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false

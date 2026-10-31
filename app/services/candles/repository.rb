@@ -78,7 +78,7 @@ module Candles
       end
 
       def find_instrument(instrument_key)
-        Instrument.find_by(symbol_name: instrument_key)
+        Instrument.segment_index.find_by(symbol_name: instrument_key)
       rescue StandardError
         nil
       end
