@@ -82,9 +82,9 @@ RSpec.describe Investing::Portfolios::LotReducer do
       it "raises InsufficientQuantity when selling more than available (t1 excluded)" do
         holding.update!(quantity: 110, available_quantity: 100, t1_quantity: 10)
 
-        expect {
+        expect do
           reducer.consume_fifo!(holding, quantity: 105, trade_date: trade_date)
-        }.to raise_error(Investing::InsufficientQuantity, /t1_quantity .* is not yet sellable/)
+        end.to raise_error(Investing::InsufficientQuantity, /t1_quantity .* is not yet sellable/)
       end
 
       it "allows selling exactly the available quantity" do
@@ -109,11 +109,9 @@ RSpec.describe Investing::Portfolios::LotReducer do
       end
 
       it "never raises bare StandardError for business rejections" do
-        begin
           reducer.consume_fifo!(holding, quantity: 1_000, trade_date: trade_date)
-        rescue StandardError => e
+      rescue StandardError => e
           expect(e).to be_a(Investing::InsufficientQuantity)
-        end
       end
     end
 
@@ -123,9 +121,9 @@ RSpec.describe Investing::Portfolios::LotReducer do
         # check must fire rather than silently under-consume.
         create(:investment_lot, investment_holding: holding, quantity: 30,
                                 remaining_quantity: 30, acquired_on: 5.days.ago)
-        expect {
+        expect do
           reducer.consume_fifo!(holding, quantity: 100, trade_date: trade_date)
-        }.to raise_error(Investing::InsufficientQuantity, /lot inconsistency/)
+        end.to raise_error(Investing::InsufficientQuantity, /lot inconsistency/)
       end
     end
   end

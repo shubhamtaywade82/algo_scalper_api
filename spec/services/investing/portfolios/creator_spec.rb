@@ -29,10 +29,10 @@ RSpec.describe Investing::Portfolios::Creator do
       end
 
       it "records the opening deposit transaction and one audit event" do
-        expect {
+        expect do
           creator.call(name: "audited", mandate: "balanced_v1", initial_cash: 250_000)
-        }.to change(InvestmentTransaction, :count).by(1)
-          .and change(AuditLog.where(event_type: "investing_portfolio_created"), :count).by(1)
+        end.to change(InvestmentTransaction, :count).by(1)
+                                                    .and change(AuditLog.where(event_type: "investing_portfolio_created"), :count).by(1)
 
         deposit = InvestmentTransaction.order(:id).last
         expect(deposit.txn_type).to eq("deposit")
@@ -57,28 +57,28 @@ RSpec.describe Investing::Portfolios::Creator do
       before { creator.call(name: "taken", mandate: "balanced_v1", initial_cash: 100) }
 
       it "refuses a duplicate portfolio name with a typed error" do
-        expect {
+        expect do
           creator.call(name: "taken", mandate: "balanced_v1", initial_cash: 100)
-        }.to raise_error(Investing::ValidationError, /name already taken/)
+        end.to raise_error(Investing::ValidationError, /name already taken/)
       end
 
       it "refuses an unknown mandate with a typed error" do
-        expect {
+        expect do
           creator.call(name: "fresh", mandate: "aggressive_v9", initial_cash: 100)
-        }.to raise_error(Investing::ValidationError, /unknown investing mandate/)
+        end.to raise_error(Investing::ValidationError, /unknown investing mandate/)
       end
 
       it "refuses negative initial cash" do
-        expect {
+        expect do
           creator.call(name: "negative", mandate: "balanced_v1", initial_cash: -1)
-        }.to raise_error(Investing::ValidationError, /initial_cash must be >= 0/)
+        end.to raise_error(Investing::ValidationError, /initial_cash must be >= 0/)
       end
 
       it "refuses live mode while the Phase-4 gate is closed" do
-        expect {
+        expect do
           creator.call(name: "live-too-early", mode: :live,
                        mandate: "balanced_v1", initial_cash: 100)
-        }.to raise_error(Investing::ValidationError, /INVESTING_LIVE_CONFIRMED/)
+        end.to raise_error(Investing::ValidationError, /INVESTING_LIVE_CONFIRMED/)
       end
     end
 
@@ -96,9 +96,9 @@ RSpec.describe Investing::Portfolios::Creator do
                                  constraints_for: { "max_single_stock_pct" => 2.5 },
                                  equity_band_for: [BigDecimal("50"), BigDecimal("60")])
         creator = described_class.new(config: config)
-        expect {
+        expect do
           creator.call(name: "rolled-back", mandate: "balanced_v1", initial_cash: 5)
-        }.to raise_error(ActiveRecord::RecordInvalid)
+        end.to raise_error(ActiveRecord::RecordInvalid)
 
         expect(InvestmentPortfolio.exists?(name: "rolled-back")).to be(false)
         expect(AuditLog.where(event_type: "investing_portfolio_created").count).to eq(0)

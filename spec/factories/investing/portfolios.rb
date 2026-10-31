@@ -27,7 +27,7 @@ FactoryBot.define do
   end
 
   factory :investment_policy do
-    association :investment_portfolio, factory: :investment_portfolio
+    investment_portfolio
     mandate_version { "balanced_v1" }
     status { "draft" }
     constraints { { "max_single_stock_pct" => 2.5 } }
@@ -65,7 +65,7 @@ FactoryBot.define do
   end
 
   factory :allocation_sleeve do
-    association :investment_policy, factory: :investment_policy
+    investment_policy
     sleeve_key { "large_cap_core" }
     sleeve_name { "Large-Cap Core (Nifty 100)" }
     asset_class { "equity" }
@@ -74,7 +74,7 @@ FactoryBot.define do
   end
 
   factory :investment_holding do
-    association :investment_portfolio, factory: :investment_portfolio
+    investment_portfolio
     instrument factory: :equity_instrument
     sleeve_key { "large_cap_core" }
     quantity { "100" }
@@ -98,7 +98,7 @@ FactoryBot.define do
   end
 
   factory :investment_lot do
-    association :investment_holding, factory: :investment_holding
+    investment_holding
     quantity { "60" }
     remaining_quantity { "60" }
     buy_price { "1450.0000" }
@@ -121,7 +121,7 @@ FactoryBot.define do
   end
 
   factory :investment_snapshot do
-    association :investment_portfolio, factory: :investment_portfolio
+    investment_portfolio
     as_of_date { Time.current.in_time_zone("Asia/Kolkata").to_date }
     total_value { "100000.00" }
     cash_balance { "100000.00" }
@@ -130,7 +130,7 @@ FactoryBot.define do
   end
 
   factory :investment_transaction do
-    association :investment_portfolio, factory: :investment_portfolio
+    investment_portfolio
     txn_type { "deposit" }
     amount { "100000.00" }
     quantity_delta { 0 }

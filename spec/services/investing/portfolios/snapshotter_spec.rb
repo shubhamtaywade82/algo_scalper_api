@@ -13,11 +13,10 @@ RSpec.describe Investing::Portfolios::Snapshotter do
 
   describe "#snapshot!" do
     it "creates a snapshot carrying the valuation numbers" do
-      holding = create(:investment_holding, investment_portfolio: portfolio,
-                                            quantity: 10, last_price: 1500,
-                                            average_cost_price: 1400,
-                                            sleeve_key: "large_cap_core")
-      holding # instantiate
+      create(:investment_holding, investment_portfolio: portfolio,
+                                  quantity: 10, last_price: 1500,
+                                  average_cost_price: 1400,
+                                  sleeve_key: "large_cap_core") # instantiate
       snapshot = snapshotter.snapshot!(portfolio, date: date)
 
       expect(snapshot).to be_persisted

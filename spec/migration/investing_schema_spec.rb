@@ -7,23 +7,23 @@ require "rails_helper"
 # Migration classes are NOT autoloaded — load the file directly.
 require_relative "../../db/migrate/20261031080000_create_investment_tables"
 
-RSpec.describe "investing schema (CreateInvestmentTables)" do
-  INVESTING_TABLES = %w[
-    investment_portfolios
-    investment_policies
-    allocation_sleeves
-    investment_holdings
-    investment_rebalances
-    investment_orders
-    investment_lots
-    investment_fills
-    investment_transactions
-    investment_snapshots
-  ].freeze
+INVESTING_TABLES = %w[
+  investment_portfolios
+  investment_policies
+  allocation_sleeves
+  investment_holdings
+  investment_rebalances
+  investment_orders
+  investment_lots
+  investment_fills
+  investment_transactions
+  investment_snapshots
+].freeze
 
-  def connection
-    ActiveRecord::Base.connection
-  end
+# The subject is a DB migration, not a class.
+# rubocop:disable RSpec/DescribeClass -- migration tests describe a string
+RSpec.describe "investing schema (CreateInvestmentTables)" do
+  delegate :connection, to: :'ActiveRecord::Base'
 
   def run_migration(direction)
     CreateInvestmentTables.new.migrate(direction)
@@ -49,7 +49,7 @@ RSpec.describe "investing schema (CreateInvestmentTables)" do
     expect(connection.index_exists?(:investment_fills, :broker_trade_id, unique: true)).to be(true)
     # one active policy per portfolio (partial unique index)
     idx = connection.indexes(:investment_policies)
-                 .find { |i| i.unique && i.columns.include?("investment_portfolio_id") }
+                    .find { |i| i.unique && i.columns.include?("investment_portfolio_id") }
     expect(idx).not_to be_nil, "expected a partial unique index enforcing one active policy"
     # snapshot idempotency: one per (portfolio, as_of_date)
     expect(connection.index_exists?(:investment_snapshots,
@@ -77,3 +77,5 @@ RSpec.describe "investing schema (CreateInvestmentTables)" do
     end
   end
 end
+
+# rubocop:enable RSpec/DescribeClass

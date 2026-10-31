@@ -26,7 +26,7 @@ module Investing
       # @param initial_cash [Numeric, String] BigDecimal-coerced, >= 0
       # @return [InvestmentPortfolio] persisted, with active policy + sleeves
       # @raise [Investing::ValidationError]
-      def call(name:, mode: :paper, mandate:, initial_cash:)
+      def call(name:, mandate:, initial_cash:, mode: :paper)
         mode_s = mode.to_s
         cash = BigDecimal(initial_cash.to_s)
         mandate_name = mandate.to_s
@@ -39,7 +39,7 @@ module Investing
         raise ValidationError, "portfolio name already taken: #{name}" if
           InvestmentPortfolio.exists?(name: name.to_s)
 
-        mandate_cfg = fetch_mandate(mandate_name)
+        fetch_mandate(mandate_name)
 
         portfolio = nil
         ActiveRecord::Base.transaction do
