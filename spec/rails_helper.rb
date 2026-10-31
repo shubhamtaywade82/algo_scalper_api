@@ -10,17 +10,17 @@ if ENV['COVERAGE'] != 'false'
   require_relative 'support/simplecov_dead_code_filter'
   SimpleCov.start 'rails' do
     minimum_coverage 0
-    add_filter '/spec/'
-    add_filter '/config/'
-    add_filter '/vendor/'
-    add_filter '/db/'
-    add_filter '/lib/tasks/'
-    add_filter '/tmp/'
+    group '/spec/'
+    group '/config/'
+    group '/vendor/'
+    group '/db/'
+    group '/lib/tasks/'
+    group '/tmp/'
     # Exclude audit-confirmed dead code from coverage measurement.
     # See spec/support/simplecov_dead_code_filter.rb for the source list.
     # String-substring match (SimpleCov resolves against absolute paths;
     # these rel paths are unique enough that substring match is unambiguous).
-    DEAD_CODE_PATHS.each { |rel| add_filter rel }
+    DEAD_CODE_PATHS.each { |rel| group rel }
     add_group 'Models', 'app/models'
     add_group 'Controllers', 'app/controllers'
     add_group 'Services', 'app/services'
