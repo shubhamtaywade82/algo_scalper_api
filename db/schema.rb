@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_27_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_31_080000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -41,6 +41,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_120000) do
     t.datetime "updated_at", null: false
     t.index ["created_at"], name: "index_algo_config_change_logs_on_created_at"
     t.index ["source"], name: "index_algo_config_change_logs_on_source"
+  end
+
+  create_table "allocation_sleeves", force: :cascade do |t|
+    t.bigint "investment_policy_id", null: false
+    t.string "sleeve_key", null: false
+    t.string "sleeve_name", null: false
+    t.string "asset_class", null: false
+    t.decimal "target_weight_pct", precision: 8, scale: 4, null: false
+    t.jsonb "instruments", default: [], null: false
+    t.integer "display_order", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["investment_policy_id", "sleeve_key"], name: "idx_on_investment_policy_id_sleeve_key_898068d799", unique: true
+    t.index ["investment_policy_id"], name: "index_allocation_sleeves_on_investment_policy_id"
   end
 
   create_table "alpha_signals", force: :cascade do |t|
@@ -305,6 +319,153 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_120000) do
     t.index ["symbol_name"], name: "index_instruments_on_symbol_name"
     t.index ["underlying_instrument_id"], name: "index_instruments_on_underlying_instrument_id"
     t.index ["underlying_symbol", "expiry_date"], name: "index_instruments_on_underlying_symbol_and_expiry_date", where: "(underlying_symbol IS NOT NULL)"
+  end
+
+  create_table "investment_fills", force: :cascade do |t|
+    t.bigint "investment_order_id", null: false
+    t.string "broker_trade_id", null: false
+    t.decimal "quantity", precision: 18, scale: 4, null: false
+    t.decimal "price", precision: 18, scale: 4, null: false
+    t.jsonb "broker_payload", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["broker_trade_id"], name: "index_investment_fills_on_broker_trade_id", unique: true
+    t.index ["investment_order_id"], name: "index_investment_fills_on_investment_order_id"
+  end
+
+  create_table "investment_holdings", force: :cascade do |t|
+    t.bigint "investment_portfolio_id", null: false
+    t.bigint "instrument_id", null: false
+    t.string "sleeve_key", null: false
+    t.decimal "quantity", precision: 18, scale: 4, default: "0.0", null: false
+    t.decimal "available_quantity", precision: 18, scale: 4, default: "0.0", null: false
+    t.decimal "t1_quantity", precision: 18, scale: 4, default: "0.0", null: false
+    t.decimal "average_cost_price", precision: 18, scale: 4, default: "0.0", null: false
+    t.decimal "last_price", precision: 18, scale: 4, default: "0.0", null: false
+    t.boolean "is_illiquid", default: false, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["instrument_id"], name: "index_investment_holdings_on_instrument_id"
+    t.index ["investment_portfolio_id", "instrument_id"], name: "idx_on_investment_portfolio_id_instrument_id_1863667131", unique: true
+    t.index ["investment_portfolio_id", "sleeve_key"], name: "idx_on_investment_portfolio_id_sleeve_key_536cd3af03"
+    t.index ["investment_portfolio_id"], name: "index_investment_holdings_on_investment_portfolio_id"
+  end
+
+  create_table "investment_lots", force: :cascade do |t|
+    t.bigint "investment_holding_id", null: false
+    t.bigint "investment_order_id"
+    t.decimal "quantity", precision: 18, scale: 4, null: false
+    t.decimal "remaining_quantity", precision: 18, scale: 4, null: false
+    t.decimal "buy_price", precision: 18, scale: 4, null: false
+    t.date "acquired_on", null: false
+    t.string "lot_source", default: "order", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["investment_holding_id", "acquired_on"], name: "index_investment_lots_on_investment_holding_id_and_acquired_on"
+    t.index ["investment_holding_id"], name: "index_investment_lots_on_investment_holding_id"
+    t.index ["investment_order_id"], name: "index_investment_lots_on_investment_order_id"
+  end
+
+  create_table "investment_orders", force: :cascade do |t|
+    t.bigint "investment_portfolio_id", null: false
+    t.bigint "investment_rebalance_id"
+    t.bigint "instrument_id", null: false
+    t.string "side", null: false
+    t.string "order_type", default: "market", null: false
+    t.decimal "quantity", precision: 18, scale: 4, null: false
+    t.decimal "limit_price", precision: 18, scale: 4
+    t.string "product_type", default: "CNC", null: false
+    t.string "status", default: "draft", null: false
+    t.string "correlation_id", null: false
+    t.string "broker_order_id"
+    t.decimal "filled_quantity", precision: 18, scale: 4, default: "0.0", null: false
+    t.decimal "average_fill_price", precision: 18, scale: 4, default: "0.0", null: false
+    t.string "rejection_reason"
+    t.jsonb "broker_payload", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["broker_order_id"], name: "index_investment_orders_on_broker_order_id"
+    t.index ["correlation_id"], name: "index_investment_orders_on_correlation_id", unique: true
+    t.index ["instrument_id"], name: "index_investment_orders_on_instrument_id"
+    t.index ["investment_portfolio_id", "status"], name: "index_investment_orders_on_investment_portfolio_id_and_status"
+    t.index ["investment_portfolio_id"], name: "index_investment_orders_on_investment_portfolio_id"
+    t.index ["investment_rebalance_id"], name: "index_investment_orders_on_investment_rebalance_id"
+    t.index ["updated_at"], name: "index_investment_orders_on_updated_at"
+  end
+
+  create_table "investment_policies", force: :cascade do |t|
+    t.bigint "investment_portfolio_id", null: false
+    t.string "mandate_version", null: false
+    t.string "status", default: "draft", null: false
+    t.jsonb "constraints", default: {}, null: false
+    t.decimal "rebalance_band_min_pct", precision: 8, scale: 4, default: "50.0", null: false
+    t.decimal "rebalance_band_max_pct", precision: 8, scale: 4, default: "60.0", null: false
+    t.date "effective_from"
+    t.date "effective_to"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["investment_portfolio_id", "status"], name: "idx_on_investment_portfolio_id_status_6463236d10"
+    t.index ["investment_portfolio_id"], name: "idx_investment_policies_one_active_per_portfolio", unique: true, where: "((status)::text = 'active'::text)"
+    t.index ["investment_portfolio_id"], name: "index_investment_policies_on_investment_portfolio_id"
+  end
+
+  create_table "investment_portfolios", force: :cascade do |t|
+    t.string "name", null: false
+    t.string "mode", default: "paper", null: false
+    t.string "base_currency", default: "INR", null: false
+    t.decimal "cash_balance", precision: 18, scale: 2, default: "0.0", null: false
+    t.decimal "invested_amount", precision: 18, scale: 2, default: "0.0", null: false
+    t.datetime "active_policy_changed_at"
+    t.jsonb "meta", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["mode"], name: "index_investment_portfolios_on_mode"
+    t.index ["name"], name: "index_investment_portfolios_on_name", unique: true
+  end
+
+  create_table "investment_rebalances", force: :cascade do |t|
+    t.bigint "investment_portfolio_id", null: false
+    t.bigint "investment_policy_id", null: false
+    t.string "trigger", null: false
+    t.jsonb "proposed_trades", default: [], null: false
+    t.jsonb "drift_report", default: {}, null: false
+    t.string "status", default: "proposed", null: false
+    t.bigint "approved_by"
+    t.datetime "approved_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["investment_policy_id"], name: "index_investment_rebalances_on_investment_policy_id"
+    t.index ["investment_portfolio_id", "status"], name: "idx_on_investment_portfolio_id_status_de89999aaa"
+    t.index ["investment_portfolio_id"], name: "index_investment_rebalances_on_investment_portfolio_id"
+  end
+
+  create_table "investment_snapshots", force: :cascade do |t|
+    t.bigint "investment_portfolio_id", null: false
+    t.date "as_of_date", null: false
+    t.decimal "total_value", precision: 18, scale: 2, null: false
+    t.decimal "cash_balance", precision: 18, scale: 2, null: false
+    t.decimal "invested_value", precision: 18, scale: 2, null: false
+    t.jsonb "sleeve_weights", default: {}, null: false
+    t.decimal "xirr", precision: 10, scale: 6
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["investment_portfolio_id", "as_of_date"], name: "idx_on_investment_portfolio_id_as_of_date_1e3e6fa8f2", unique: true
+    t.index ["investment_portfolio_id"], name: "index_investment_snapshots_on_investment_portfolio_id"
+  end
+
+  create_table "investment_transactions", force: :cascade do |t|
+    t.bigint "investment_portfolio_id", null: false
+    t.bigint "investment_order_id"
+    t.string "txn_type", null: false
+    t.decimal "amount", precision: 18, scale: 2, null: false
+    t.decimal "quantity_delta", precision: 18, scale: 4, default: "0.0", null: false
+    t.string "external_ref"
+    t.jsonb "meta", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["investment_order_id"], name: "index_investment_transactions_on_investment_order_id"
+    t.index ["investment_portfolio_id", "created_at"], name: "idx_on_investment_portfolio_id_created_at_a57ffce928"
+    t.index ["investment_portfolio_id"], name: "index_investment_transactions_on_investment_portfolio_id"
   end
 
   create_table "iv_snapshots", force: :cascade do |t|
@@ -1438,7 +1599,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_120000) do
     t.jsonb "parameters", default: []
     t.jsonb "instruments", default: []
     t.jsonb "tags", default: []
-    t.jsonb "checks", default: {"risk" => "not_run", "logic" => "not_run", "syntax" => "not_run", "backtest" => "not_run"}
+    t.jsonb "checks", default: {"risk"=>"not_run", "logic"=>"not_run", "syntax"=>"not_run", "backtest"=>"not_run"}
     t.jsonb "backtest_results", default: {}
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
@@ -1507,12 +1668,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_120000) do
     t.index ["unit_type"], name: "index_woods_units_on_unit_type"
   end
 
+  add_foreign_key "allocation_sleeves", "investment_policies"
   add_foreign_key "backtest_runs", "strategy_versions"
   add_foreign_key "best_indicator_params", "instruments"
   add_foreign_key "derivatives", "instruments"
   add_foreign_key "executions", "instruments"
   add_foreign_key "executions", "position_trackers"
   add_foreign_key "instruments", "instruments", column: "underlying_instrument_id", on_delete: :nullify
+  add_foreign_key "investment_fills", "investment_orders"
+  add_foreign_key "investment_holdings", "instruments"
+  add_foreign_key "investment_holdings", "investment_portfolios"
+  add_foreign_key "investment_lots", "investment_holdings"
+  add_foreign_key "investment_lots", "investment_orders"
+  add_foreign_key "investment_orders", "instruments"
+  add_foreign_key "investment_orders", "investment_portfolios"
+  add_foreign_key "investment_orders", "investment_rebalances"
+  add_foreign_key "investment_policies", "investment_portfolios"
+  add_foreign_key "investment_rebalances", "investment_policies"
+  add_foreign_key "investment_rebalances", "investment_portfolios"
+  add_foreign_key "investment_snapshots", "investment_portfolios"
+  add_foreign_key "investment_transactions", "investment_orders"
+  add_foreign_key "investment_transactions", "investment_portfolios"
   add_foreign_key "ledger_postings", "ledger_accounts"
   add_foreign_key "ledger_postings", "ledger_journal_entries"
   add_foreign_key "leg_groups", "instruments"
