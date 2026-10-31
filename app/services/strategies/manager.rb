@@ -254,7 +254,9 @@ module Strategies
 
     def handle_event(state, slug, event)
       instrument_key = event[:instrument_key]
-      instrument = Instrument.find_by(symbol_name: instrument_key)
+      # NIFTY futures share symbol_name "NIFTY"; an unscoped lookup can return a
+      # future whose security_id has no candles, starving every strategy.
+      instrument = Instrument.segment_index.find_by(symbol_name: instrument_key)
       return unless instrument
 
       # Check circuit breaker

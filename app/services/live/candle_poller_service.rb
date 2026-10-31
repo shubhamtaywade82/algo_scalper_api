@@ -35,6 +35,7 @@ module Live
     private
 
     def poll_loop
+      enqueue_warmup_backfill
       while @running
         poll_indices
         sleep POLL_INTERVAL
@@ -42,6 +43,20 @@ module Live
     rescue StandardError => e
       Rails.logger.error("[CandlePollerService] poll loop crashed: #{e.class} - #{e.message}")
       @running = false
+    end
+
+    # Polling only covers the last few minutes, so without this the strategies
+    # start each session with no history and every indicator reports
+    # insufficient data. to_date is explicit because intraday_ohlc defaults to
+    # yesterday.
+    def enqueue_warmup_backfill
+      to_date = Time.current.strftime("%Y-%m-%d %H:%M:%S")
+      IndexConfigLoader.load_indices.each do |idx|
+        instrument = IndexInstrumentCache.instance.get_or_fetch(idx)
+        Candles::BackfillJob.perform_later(security_id: instrument.security_id.to_s, to_date: to_date) if instrument
+      end
+    rescue StandardError => e
+      Rails.logger.error("[CandlePollerService] warmup backfill enqueue failed: #{e.class} - #{e.message}")
     end
 
     def poll_indices
