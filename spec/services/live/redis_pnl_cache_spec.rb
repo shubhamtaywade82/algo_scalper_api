@@ -16,10 +16,9 @@ RSpec.describe Live::RedisPnlCache do
   before do
     allow(redis).to receive(:hset)
     allow(redis).to receive(:expire)
-    allow(redis).to receive(:ttl).and_return(0)
     allow(redis).to receive(:del)
     allow(redis).to receive(:scan_each)
-    allow(redis).to receive(:ping).and_return('PONG')
+    allow(redis).to receive_messages(ttl: 0, ping: 'PONG')
     allow(Rails.logger).to receive(:error)
     allow(Rails.logger).to receive(:info)
     allow(Rails.logger).to receive(:debug)

@@ -64,8 +64,7 @@ RSpec.describe Live::EdgeFailureDetector do
           { 'pnl' => -700,  'exit_time' => Time.current.to_i }.to_json,
           { 'pnl' => -500,  'exit_time' => Time.current.to_i }.to_json
         ]
-        allow(redis).to receive(:lrange).and_return(trades)
-        allow(redis).to receive(:get).and_return(nil) # No existing pause
+        allow(redis).to receive_messages(lrange: trades, get: nil) # No existing pause
       end
 
       it 'pauses with rolling_pnl_window reason' do
@@ -86,8 +85,7 @@ RSpec.describe Live::EdgeFailureDetector do
           { 'pnl' => -100, 'exit_time' => Time.current.to_i }.to_json,
           { 'pnl' => 300,  'exit_time' => Time.current.to_i }.to_json
         ]
-        allow(redis).to receive(:lrange).and_return(trades)
-        allow(redis).to receive(:get).and_return(nil)
+        allow(redis).to receive_messages(lrange: trades, get: nil)
       end
 
       it 'does not pause' do
@@ -98,10 +96,9 @@ RSpec.describe Live::EdgeFailureDetector do
 
     context 'when fewer than window_size trades have occurred' do
       before do
-        allow(redis).to receive(:lrange).and_return([
-          { 'pnl' => -10_000, 'exit_time' => Time.current.to_i }.to_json
-        ])
-        allow(redis).to receive(:get).and_return(nil)
+        allow(redis).to receive_messages(lrange: [
+                                           { 'pnl' => -10_000, 'exit_time' => Time.current.to_i }.to_json
+                                         ], get: nil)
       end
 
       it 'does not pause (insufficient sample)' do
@@ -132,7 +129,7 @@ RSpec.describe Live::EdgeFailureDetector do
         allow(redis).to receive(:lrange).and_return(trades)
         existing_pause = {
           'reason' => 'rolling_pnl_window',
-          'resume_at' => (Time.current + 30.minutes).to_i,
+          'resume_at' => 30.minutes.from_now.to_i,
           'paused_at' => Time.current.to_i,
           'details' => { 'net_pnl' => -10_000 }
         }.to_json
@@ -156,8 +153,8 @@ RSpec.describe Live::EdgeFailureDetector do
         allow(redis).to receive(:lrange).and_return(trades)
         expired_pause = {
           'reason' => 'rolling_pnl_window',
-          'resume_at' => (Time.current - 10.minutes).to_i,
-          'paused_at' => (Time.current - 70.minutes).to_i,
+          'resume_at' => 10.minutes.ago.to_i,
+          'paused_at' => 70.minutes.ago.to_i,
           'details' => {}
         }.to_json
         allow(redis).to receive(:get).with('edge_failure:pause:NIFTY:rolling_pnl_window').and_return(expired_pause)
@@ -246,7 +243,7 @@ RSpec.describe Live::EdgeFailureDetector do
             enabled: true,
             rolling_window_size: 5,
             rolling_window_threshold_rupees: -3000,
-            max_consecutive_sls: 5,           # high so consecutive breaker doesn't fire first
+            max_consecutive_sls: 5, # high so consecutive breaker doesn't fire first
             pause_duration_minutes: 60,
             session_based_pause: true,
             s3_max_consecutive_sls: 2,

@@ -3,7 +3,16 @@
 require "rails_helper"
 
 RSpec.describe Investing::Config do
-  after { described_class.reset! }
+  after do
+    described_class.reset!
+    # Restore the app-wide memoized instance: other spec files (Creator,
+    # services) depend on Investing::Config.fetch behaving as it does after
+    # the real initializer ran — a bare reset! leaves them with a boot-bug
+    # state (cross-file pollution).
+    described_class.load!
+  rescue described_class::Error
+    nil
+  end
 
   # Build a minimal valid config as a Ruby hash and dump to YAML — avoids
   # heredoc indentation pitfalls. Sleeve weights sum to exactly 100.
