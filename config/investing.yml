@@ -1,0 +1,75 @@
+# Investing domain configuration (TDD §5).
+#
+# DELIBERATELY SEPARATE from config/algo.yml (intraday trading risk) —
+# different schema, different loader (Investing::Config), different accessors.
+# Flipping investing.execution.mode can never flip the trading paper/live
+# switch and vice versa (hard boundary #2, spec/services/investing/config_spec.rb).
+#
+# The balanced_v1 mandate seeds the FY2026-27 strategy review's POLICY
+# STRUCTURE only — its prices, targets and projections are illustrative
+# placeholders and are NOT execution inputs (TDD §1.3).
+default: &default
+  enabled: false            # master switch for the whole Investing domain
+
+  execution:
+    mode: paper             # paper | live (live additionally requires INVESTING_LIVE_CONFIRMED env)
+    require_approval: true  # orders NEVER submit without explicit approval
+    automatic_execution: false
+    allow_margin: false     # hard-locked: CNC delivery only
+    allow_derivatives: false
+    max_order_value_inr: 500000
+    max_orders_per_day: 20
+    price_staleness_seconds: 120
+
+  dhan:
+    enabled: true
+    product_type: CNC
+    exchange_segment: NSE_EQ
+
+  mandates:
+    balanced_v1:
+      description: "Balanced multi-asset mandate (FY2026-27 review template)"
+      base_currency: INR
+      investment_horizon_years: 10
+      risk_profile: balanced
+      allocation:
+        indian_large_cap:        { group: equity,            target_pct: 25 }
+        indian_mid_small_cap:    { group: equity,            target_pct: 10 }
+        global_equity:           { group: equity,            target_pct: 10 }
+        technology_clean_energy: { group: equity,            target_pct: 10 }
+        government_aaa_bonds:    { group: fixed_income,      target_pct: 15 }
+        short_duration_debt:     { group: fixed_income,      target_pct: 10 }
+        reits_invits:            { group: real_assets,       target_pct: 5 }
+        infrastructure_funds:    { group: real_assets,       target_pct: 7 }
+        cash_liquid_funds:       { group: cash_alternatives, target_pct: 5 }
+        gold_silver_etfs:        { group: cash_alternatives, target_pct: 3 }
+      constraints:
+        max_single_stock_pct: 2.5
+        max_sector_pct: 12
+        max_illiquid_pct: 25
+        min_instruments: 12
+      rebalancing:
+        bands:                        # group-level drift bands
+          equity:            { lower_pct: 50, upper_pct: 60 }
+          fixed_income:      { lower_pct: 20, upper_pct: 30 }
+          real_assets:       { lower_pct: 8,  upper_pct: 16 }
+          cash_alternatives: { lower_pct: 3,  upper_pct: 12 }
+        threshold_to_act_pct: 1.0     # per-sleeve drift (pp) below which no order is proposed
+        review_frequency: quarterly
+        proposal_expiry_market_days: 7
+      deployment:
+        equity_tranches: 3
+        deployment_weeks: 12
+        midcap_stp_months: 6
+
+development:
+  <<: *default
+  enabled: true
+
+test:
+  <<: *default
+  enabled: true
+
+production:
+  <<: *default
+  enabled: false            # opt-in flip after Phase 4 review

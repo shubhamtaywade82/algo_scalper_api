@@ -53,6 +53,7 @@ RSpec/DescribeClass:
     - "spec/smoke/**/*"
     - "spec/requests/**/*"
     - "spec/architecture/regression_spec.rb"
+    - "spec/architecture/investing_isolation_spec.rb"
     - "spec/services/entries/entry_guard_integration_spec.rb"
     - "spec/services/live/demand_driven_services_spec.rb"
     - "spec/services/live/market_feed_hub_integration_spec.rb"

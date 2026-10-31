@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_27_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_31_000005) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -305,6 +305,76 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_120000) do
     t.index ["symbol_name"], name: "index_instruments_on_symbol_name"
     t.index ["underlying_instrument_id"], name: "index_instruments_on_underlying_instrument_id"
     t.index ["underlying_symbol", "expiry_date"], name: "index_instruments_on_underlying_symbol_and_expiry_date", where: "(underlying_symbol IS NOT NULL)"
+  end
+
+  create_table "investment_holdings", force: :cascade do |t|
+    t.bigint "investment_portfolio_id", null: false
+    t.integer "instrument_id", null: false
+    t.string "sleeve_key", limit: 64
+    t.string "source", default: "manual", null: false
+    t.decimal "quantity", precision: 20, scale: 4, default: "0.0", null: false
+    t.decimal "average_cost", precision: 15, scale: 4
+    t.decimal "last_price", precision: 15, scale: 4
+    t.datetime "last_valued_at"
+    t.boolean "externally_held", default: false, null: false
+    t.jsonb "broker_raw", default: {}, null: false
+    t.datetime "synced_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["instrument_id"], name: "index_investment_holdings_on_instrument_id"
+    t.index ["investment_portfolio_id", "instrument_id"], name: "idx_on_investment_portfolio_id_instrument_id_1863667131", unique: true
+    t.index ["investment_portfolio_id"], name: "index_investment_holdings_on_investment_portfolio_id"
+    t.index ["sleeve_key"], name: "index_investment_holdings_on_sleeve_key"
+    t.index ["source"], name: "index_investment_holdings_on_source"
+    t.check_constraint "quantity >= 0::numeric", name: "chk_inv_holdings_nonneg_quantity"
+  end
+
+  create_table "investment_policies", force: :cascade do |t|
+    t.bigint "investment_portfolio_id", null: false
+    t.integer "version", default: 1, null: false
+    t.string "status", default: "draft", null: false
+    t.date "effective_from", null: false
+    t.date "effective_until"
+    t.jsonb "constraints", default: {}, null: false
+    t.jsonb "rebalancing", default: {}, null: false
+    t.jsonb "deployment", default: {}, null: false
+    t.string "mandate_key"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["investment_portfolio_id", "version"], name: "idx_on_investment_portfolio_id_version_413ccf1afc", unique: true
+    t.index ["investment_portfolio_id"], name: "idx_inv_policies_one_active_per_portfolio", unique: true, where: "((status)::text = 'active'::text)"
+    t.index ["status"], name: "index_investment_policies_on_status"
+  end
+
+  create_table "investment_policy_sleeves", force: :cascade do |t|
+    t.bigint "investment_policy_id", null: false
+    t.string "sleeve_key", limit: 64, null: false
+    t.string "group_key", limit: 64, null: false
+    t.decimal "target_pct", precision: 7, scale: 4, null: false
+    t.jsonb "instrument_filter", default: {}, null: false
+    t.integer "position", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["group_key"], name: "index_investment_policy_sleeves_on_group_key"
+    t.index ["investment_policy_id", "sleeve_key"], name: "idx_on_investment_policy_id_sleeve_key_f12c9a4cac", unique: true
+    t.check_constraint "target_pct > 0::numeric AND target_pct <= 100::numeric", name: "chk_inv_sleeve_target_pct_range"
+  end
+
+  create_table "investment_portfolios", force: :cascade do |t|
+    t.string "name", null: false
+    t.string "base_currency", limit: 3, default: "INR", null: false
+    t.integer "investment_horizon_years", default: 10, null: false
+    t.string "risk_profile", default: "balanced", null: false
+    t.string "status", default: "active", null: false
+    t.string "broker_linkage", default: "manual", null: false
+    t.jsonb "external_ref", default: {}, null: false
+    t.datetime "archived_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index "((external_ref ->> 'dhan_client_id'::text))", name: "idx_inv_portfolios_on_dhan_client_id", unique: true, where: "((broker_linkage)::text = 'dhan'::text)"
+    t.index ["broker_linkage"], name: "index_investment_portfolios_on_broker_linkage"
+    t.index ["name"], name: "index_investment_portfolios_on_name", unique: true
+    t.index ["status"], name: "index_investment_portfolios_on_status"
   end
 
   create_table "iv_snapshots", force: :cascade do |t|
@@ -1438,7 +1508,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_120000) do
     t.jsonb "parameters", default: []
     t.jsonb "instruments", default: []
     t.jsonb "tags", default: []
-    t.jsonb "checks", default: {"risk" => "not_run", "logic" => "not_run", "syntax" => "not_run", "backtest" => "not_run"}
+    t.jsonb "checks", default: {"risk"=>"not_run", "logic"=>"not_run", "syntax"=>"not_run", "backtest"=>"not_run"}
     t.jsonb "backtest_results", default: {}
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
@@ -1513,6 +1583,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_120000) do
   add_foreign_key "executions", "instruments"
   add_foreign_key "executions", "position_trackers"
   add_foreign_key "instruments", "instruments", column: "underlying_instrument_id", on_delete: :nullify
+  add_foreign_key "investment_holdings", "instruments", on_delete: :restrict
+  add_foreign_key "investment_holdings", "investment_portfolios", on_delete: :cascade
+  add_foreign_key "investment_policies", "investment_portfolios", on_delete: :cascade
+  add_foreign_key "investment_policy_sleeves", "investment_policies", on_delete: :cascade
   add_foreign_key "ledger_postings", "ledger_accounts"
   add_foreign_key "ledger_postings", "ledger_journal_entries"
   add_foreign_key "leg_groups", "instruments"
