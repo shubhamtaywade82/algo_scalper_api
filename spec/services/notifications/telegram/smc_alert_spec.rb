@@ -32,8 +32,7 @@ RSpec.describe Notifications::Telegram::SmcAlert do
     allow(Rails.logger).to receive(:debug)
     allow(Rails.logger).to receive(:info)
     allow(Rails.logger).to receive(:warn)
-    allow(Rails.cache).to receive(:read).and_return(nil)
-    allow(Rails.cache).to receive(:write).and_return(true)
+    allow(Rails.cache).to receive_messages(read: nil, write: true)
     allow(signal).to receive(:valid?).and_return(true)
   end
 
@@ -106,7 +105,7 @@ RSpec.describe Notifications::Telegram::SmcAlert do
         )
         # Cooldown check: same data above — 1 hour ago, so cooldown passes
         # Session check: 2 prior :call alerts (max is 2)
-        allow(Rails.cache).to receive(:read).with('smc:session:NIFTY:' + Time.zone.today.to_s).and_return(
+        allow(Rails.cache).to receive(:read).with("smc:session:NIFTY:#{Time.zone.today}").and_return(
           [
             { decision: :call, price: 24_000.0, sent_at: (Time.current - 7200).to_i },
             { decision: :call, price: 24_200.0, sent_at: (Time.current - 5400).to_i }
@@ -163,9 +162,7 @@ RSpec.describe Notifications::Telegram::SmcAlert do
 
     context 'with no_trade decision and ai_analysis' do
       before do
-        allow(signal).to receive(:decision).and_return(:no_trade)
-        allow(signal).to receive(:ai_analysis).and_return('No clear edge in current regime.')
-        allow(signal).to receive(:valid?).and_return(true)
+        allow(signal).to receive_messages(decision: :no_trade, ai_analysis: 'No clear edge in current regime.', valid?: true)
       end
 
       it 'uses ANALYSIS label instead of SIGNAL' do
@@ -195,17 +192,14 @@ RSpec.describe Notifications::Telegram::SmcAlert do
     context 'with instrument that exposes an option chain' do
       before do
         allow(instrument).to receive(:respond_to?).with(:fetch_option_chain).and_return(true)
-        allow(instrument).to receive(:fetch_option_chain).and_return(
-          last_price: 25_000.0,
-          oc: {
+        allow(instrument).to receive_messages(fetch_option_chain: { last_price: 25_000.0,
+                                                                    oc: {
             '25000.000000' => { 'ce' => { 'last_price' => 120.0, 'implied_volatility' => 0.15, 'oi' => 1_000_000 }, 'pe' => { 'last_price' => 110.0, 'implied_volatility' => 0.14, 'oi' => 900_000 } },
             '25050.000000' => { 'ce' => { 'last_price' => 95.0,  'implied_volatility' => 0.16, 'oi' => 800_000 }, 'pe' => { 'last_price' => 130.0, 'implied_volatility' => 0.15, 'oi' => 850_000 } }
-          }
-        )
-        allow(instrument).to receive(:lot_size_from_derivatives).and_return(nil)
+          } }, lot_size_from_derivatives: nil)
         allow(IndexConfigLoader).to receive(:load_indices).and_return([
-          { key: 'NIFTY', lot_size: 75 }
-        ])
+                                                                        { key: 'NIFTY', lot_size: 75 }
+                                                                      ])
       end
 
       it 'includes strikes section with ATM, CALL, PUT, Suggested Qty' do
@@ -249,7 +243,7 @@ RSpec.describe Notifications::Telegram::SmcAlert do
         hash_including(expires_in: 45.minutes)
       )
       expect(Rails.cache).to receive(:write).with(
-        'smc:session:NIFTY:' + Time.zone.today.to_s,
+        "smc:session:NIFTY:#{Time.zone.today}",
         anything,
         hash_including(expires_at: Time.zone.tomorrow.beginning_of_day)
       )

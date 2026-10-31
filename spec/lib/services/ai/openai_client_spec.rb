@@ -141,7 +141,7 @@ RSpec.describe Services::Ai::OpenaiClient do
       client.instance_variable_set(:@provider, :ollama)
       client.instance_variable_set(:@last_request_time, nil)
       result = nil
-      expect(described_class::REQUEST_MUTEX).to receive(:synchronize).and_wrap_original do |m, &block|
+      expect(described_class::REQUEST_MUTEX).to receive(:synchronize).and_wrap_original do |_m, &block|
         result = block.call
       end
       client.with_request_serialization { :serialized }
