@@ -114,6 +114,7 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
       context 'when instrument is found' do
         it 'fetches OHLC data from DhanHQ API via VCR for both timeframes' do
           # VCR will record/playback actual API calls for 1m and 5m OHLC
+          allow(nifty_instrument).to receive(:candle_series).and_call_original
           expect(nifty_instrument).to receive(:candle_series).with(interval: '1').and_call_original.at_least(:once)
           expect(nifty_instrument).to receive(:candle_series).with(interval: '5').and_call_original.at_least(:once)
 
@@ -122,6 +123,7 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
 
         it 'calls intraday_ohlc via candle_series which uses VCR cassettes' do
           # Verify that candle_series triggers API calls (via VCR)
+          allow(nifty_instrument).to receive(:intraday_ohlc).and_call_original
           expect(nifty_instrument).to receive(:intraday_ohlc).with(hash_including(interval: '1')).and_call_original.at_least(:once)
           expect(nifty_instrument).to receive(:intraday_ohlc).with(hash_including(interval: '5')).and_call_original.at_least(:once)
 
