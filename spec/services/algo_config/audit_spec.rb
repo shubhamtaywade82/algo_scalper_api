@@ -5,7 +5,7 @@ require 'rails_helper'
 RSpec.describe AlgoConfig::Audit do
   let(:doc_key) { AlgoConfig::DocumentStore::DOCUMENT_KEY }
 
-  after do
+  def clean_audit_state!
     Setting.where(key: doc_key).delete_all
     Setting.where(key: described_class::LEGACY_OVERRIDES_KEY).delete_all
     Setting.where(key: described_class::LEGACY_ARCHIVED_KEY).delete_all
@@ -14,6 +14,9 @@ RSpec.describe AlgoConfig::Audit do
     AlgoConfigChangeLog.delete_all
     AlgoConfig.reset!
   end
+
+  before { clean_audit_state! }
+  after  { clean_audit_state! }
 
   describe '.run' do
     it 'reports missing document when not bootstrapped' do

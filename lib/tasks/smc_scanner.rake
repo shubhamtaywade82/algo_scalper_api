@@ -3,8 +3,8 @@
 require_relative '../telegram_notifier'
 
 # Delay between API calls to avoid rate limits (DH-904)
-DELAY_BETWEEN_INSTRUMENTS = 2.0 # seconds
-DELAY_BETWEEN_CANDLE_FETCHES = 1.0 # seconds
+DELAY_BETWEEN_INSTRUMENTS = 2.0 unless defined?(DELAY_BETWEEN_INSTRUMENTS) # seconds
+DELAY_BETWEEN_CANDLE_FETCHES = 1.0 unless defined?(DELAY_BETWEEN_CANDLE_FETCHES) # seconds
 
 namespace :smc do
   desc 'Run SMC/AVRZ analysis for all configured indices (or specific index if INDEX_KEY is provided)'

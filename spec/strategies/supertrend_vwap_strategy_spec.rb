@@ -10,7 +10,7 @@ RSpec.describe 'SupertrendVwapStrategy', type: :strategy_plugin do
 
   def series_from(prices, open_offset:, high_offset:, low_offset:, volume: 100_000)
     candles = prices.each_with_index.map do |close, i|
-      t = Time.zone.parse("2026-08-24 09:15:00 #{tz}") + (i * 5).minutes
+      t = Time.zone.parse("2026-08-24 07:00:00 #{tz}") + (i * 5).minutes
       # With volume the strategy uses the weighted VWAP; zero-volume (the DhanHQ
       # index-feed reality) rides the unweighted fallback added in the P1 fix.
       build_plugin_candle(t, open: close + open_offset, high: close + high_offset, low: close + low_offset, close: close, volume: volume)
