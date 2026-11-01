@@ -60,11 +60,24 @@ RSpec.describe 'Api::Settings' do
       expect(response).to have_http_status(:bad_request)
     end
 
-    it 'returns 422 when all settings keys are filtered out' do
-      patch '/api/settings/bulk', params: { settings: { bogus_key: { a: 1 } } }
+    it 'rejects read-only sections instead of silently dropping them' do
+      patch '/api/settings/bulk', params: { settings: { risk: { sl_pct: 0.03 }, dhanhq: { enable_orders: true } } }
       expect(response).to have_http_status(:unprocessable_content)
-      json = response.parsed_body
-      expect(json['error']).to include('No permitted')
+      expect(response.parsed_body['error']).to include('dhanhq')
+      expect(JSON.parse(Setting.find_by!(key: doc_key).value).dig('risk', 'sl_pct').to_f).to eq(0.02)
+    end
+
+    it 'persists sections that previously were silently discarded' do
+      patch '/api/settings/bulk', params: { settings: { profit_lock: { enabled: 'false' } } }
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(Setting.find_by!(key: doc_key).value)).to have_key('profit_lock')
+    end
+
+    it 'rejects values the config validator forbids' do
+      patch '/api/settings/bulk', params: { settings: { risk: { sl_pct: 5 } } }
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body['error']).to include('sl_pct')
+      expect(JSON.parse(Setting.find_by!(key: doc_key).value).dig('risk', 'sl_pct').to_f).to eq(0.02)
     end
   end
 
@@ -92,6 +105,13 @@ RSpec.describe 'Api::Settings' do
       get '/api/settings/change_logs', params: { limit: 10 }
       json = response.parsed_body
       expect(json['change_logs'].first['source']).to eq('test')
+    end
+
+    it 'requires the dashboard token when one is configured' do
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('API_DASHBOARD_TOKEN', nil).and_return('secret')
+      get '/api/settings/change_logs'
+      expect(response).to have_http_status(:unauthorized)
     end
 
     it 'clamps limit to valid range' do
