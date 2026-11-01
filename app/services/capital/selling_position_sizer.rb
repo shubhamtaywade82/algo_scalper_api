@@ -15,10 +15,12 @@ module Capital
     end
 
     def calculate
+      # Unknown lot (instrument master not imported) must block, not guess 50.
       lot_size = begin
-                   Trading::LotCalculator.lot_size_for(@index_key)
-      rescue StandardError
-                   50
+        Trading::LotCalculator.lot_size_for(@index_key)
+      rescue Trading::LotCalculator::UnsupportedInstrumentError => e
+        Rails.logger.error("[SellingPositionSizer] #{e.message}")
+        return 0
       end
       max_loss_per_lot = (@spread_width - @net_premium) * lot_size
       return 1 if max_loss_per_lot <= 0

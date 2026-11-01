@@ -325,7 +325,7 @@ module Options
       config[:delta_filter] = config[:configure_delta_filter]
 
       # Add index-specific metadata
-      config[:lot_size] = @index_cfg[:lot]&.to_i || 50
+      config[:lot_size] = Trading::LotCalculator.lot_size_for(@index_cfg[:key])
       config[:point_value] = @index_cfg[:point_value]&.to_f || 25.0
 
       config
@@ -1271,10 +1271,8 @@ module Options
           derivative_segment ||= instrument.exchange_segment if instrument.respond_to?(:exchange_segment)
           derivative_segment ||= index_cfg[:segment]
 
-          fallback_lot_size = index_cfg[:lot].to_i
-          fallback_lot_size = 50 if fallback_lot_size <= 0
           derivative_lot_size = derivative&.lot_size.to_i
-          resolved_lot_size = derivative_lot_size.positive? ? derivative_lot_size : fallback_lot_size
+          resolved_lot_size = derivative_lot_size.positive? ? derivative_lot_size : Trading::LotCalculator.lot_size_for(index_cfg[:key])
 
           legs << {
             segment: derivative_segment,

@@ -6,8 +6,9 @@ RSpec.describe Options::IndexRules::Nifty do
   let(:rules) { described_class.new }
 
   describe '#lot_size' do
-    it 'returns 75' do
-      expect(rules.lot_size).to eq(75)
+    it 'delegates to the instrument-master lot size' do
+      allow(Trading::LotCalculator).to receive(:lot_size_for).with('NIFTY').and_return(65)
+      expect(rules.lot_size).to eq(65)
     end
   end
 

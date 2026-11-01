@@ -59,9 +59,9 @@ RSpec.describe IndexConfigLoader do
         indices = described_class.load_indices
 
         expect(indices).to contain_exactly(
-          include(key: 'NIFTY', segment: 'IDX_I', sid: '13', lot: 65),
-          include(key: 'BANKNIFTY', segment: 'IDX_I', sid: '25', lot: 30),
-          include(key: 'SENSEX', segment: 'IDX_I', sid: '51', lot: 20)
+          include(key: 'NIFTY', segment: 'IDX_I', sid: '13'),
+          include(key: 'BANKNIFTY', segment: 'IDX_I', sid: '25'),
+          include(key: 'SENSEX', segment: 'IDX_I', sid: '51')
         )
       end
 

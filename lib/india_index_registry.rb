@@ -43,7 +43,6 @@ class IndiaIndexRegistry
       merged[:sid] = base[:sid].to_s
       merged[:exchange] = base[:exchange] if base[:exchange]
       merged[:fno_segment] = base[:fno_segment] if base[:fno_segment]
-      merged[:lot] ||= base[:lot]
       merged[:strike_step] ||= base[:strike_step]
     end
 

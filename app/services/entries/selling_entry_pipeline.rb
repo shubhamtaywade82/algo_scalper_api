@@ -45,6 +45,7 @@ module Entries
         net_premium: net_premium,
         mode: mode
       )
+      return { success: false, reason: :sizing_unavailable } unless quantity.to_i.positive?
 
       strategy = Strategies::CreditSpreadStrategy.new(
         index_key: @index_cfg[:key],

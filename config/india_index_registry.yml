@@ -1,7 +1,8 @@
 # Canonical identity, instrument, and execution defaults for Indian index options.
 # Strategy overlays (capital, premium_band, strategies, etc.) live in config/algo.yml
 # indices[] and are merged at runtime by IndiaIndexRegistry.
-# Lots must match the exchange (instruments.lot_size); checked 2026-11-02: 65 / 30 / 20.
+# Lot sizes are not configured here: Trading::LotCalculator reads them from the
+# instrument master (exchange-revised several times a year).
 
 version: 1
 
@@ -12,7 +13,6 @@ indices:
     segment: IDX_I
     sid: "13"
     fno_segment: NSE_FNO
-    lot: 65
     strike_step: 50
     execution:
       max_bid_ask_spread_pct: 0.015
@@ -24,7 +24,6 @@ indices:
     segment: IDX_I
     sid: "25"
     fno_segment: NSE_FNO
-    lot: 30
     strike_step: 100
     execution:
       max_bid_ask_spread_pct: 0.015
@@ -36,7 +35,6 @@ indices:
     segment: IDX_I
     sid: "51"
     fno_segment: BSE_FNO
-    lot: 20
     strike_step: 100
     execution:
       max_bid_ask_spread_pct: 0.025

@@ -17,7 +17,7 @@ RSpec.describe IndiaIndexRegistry do
       expect(merged[:segment]).to eq('IDX_I')
       expect(merged[:sid]).to eq('51')
       expect(merged[:fno_segment]).to eq('BSE_FNO')
-      expect(merged[:lot]).to eq(20)
+      expect(merged).not_to have_key(:lot) # lot comes from the instrument master
       expect(merged[:execution][:max_bid_ask_spread_pct]).to eq(0.025)
       expect(merged[:execution][:earliest_entry_time]).to eq('09:30')
       expect(merged[:capital_alloc_pct]).to eq(0.30)
@@ -45,7 +45,6 @@ RSpec.describe IndiaIndexRegistry do
       entry = merged.first
 
       expect(entry[:sid]).to eq('25')
-      expect(entry[:lot]).to eq(30)
       expect(entry[:direction]).to eq(:bullish)
     end
   end

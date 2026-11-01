@@ -13,7 +13,7 @@ module Options
       end
 
       def lot_size
-        10
+        Trading::LotCalculator.lot_size_for('SENSEX')
       end
 
       def atm(spot)
