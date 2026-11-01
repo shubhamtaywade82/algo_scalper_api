@@ -9,7 +9,10 @@ BaseStrategy = Strategies::Base unless defined?(BaseStrategy)
 # architecture instead: an ATR-based underlying stop (1.5-2x ATR) rather than a fixed-%
 # premium stop, with a 2:1 target off that same ATR distance.
 class EmaCrossoverStrategy < BaseStrategy
-  IST = 'Asia/Kolkata'
+  IST = 'Asia/Kolkata' unless defined?(IST)
+  MIDDAY_START = '11:00' unless defined?(MIDDAY_START)
+  MIDDAY_END   = '13:00' unless defined?(MIDDAY_END)
+  LATE_ENTRY_CUTOFF = '15:15' unless defined?(LATE_ENTRY_CUTOFF)
 
   class << self
     # Mirrors strategies/ema-crossover/manifest.yml so specs and tooling can read
@@ -46,6 +49,11 @@ class EmaCrossoverStrategy < BaseStrategy
 
     current = candles.last
     now = current.timestamp.in_time_zone(IST)
+    clock = now.strftime('%H:%M')
+
+    return Signals::Hold.new(reason: 'midday_dead_zone') if clock >= MIDDAY_START && clock < MIDDAY_END
+    return Signals::Hold.new(reason: 'late_entry') if clock >= LATE_ENTRY_CUTOFF
+
     today = now.to_date
 
     day_candles = candles.select { |c| c.timestamp.in_time_zone(IST).to_date == today }

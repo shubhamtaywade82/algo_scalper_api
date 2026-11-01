@@ -30,7 +30,6 @@ RSpec.describe Smc::SmcPermissionResolver do
     end
 
     it 'returns :scale_ready when trend + BOS + displacement and AVRZ expanding_early' do
-      skip 'Resolver scale_ready branch is covered by PermissionResolver integration; hand-built hash normalization can differ'
       smc = {
         structure_state: :trend,
         bos_recent: true,

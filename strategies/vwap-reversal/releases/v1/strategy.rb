@@ -10,10 +10,10 @@ BaseStrategy = Strategies::Base unless defined?(BaseStrategy)
 # block 11:00-13:30 (the midday theta/chop dead-zone every strategy in the doc is told to
 # avoid), no entries before 09:30 (VWAP needs time to establish a slope after the open).
 class VwapReversalStrategy < BaseStrategy
-  IST = 'Asia/Kolkata'
-  NO_TRADE_START = '11:00'
-  NO_TRADE_END   = '13:30'
-  SESSION_ENTRY_START = '09:30'
+  IST = 'Asia/Kolkata' unless defined?(IST)
+  NO_TRADE_START = '11:00' unless defined?(NO_TRADE_START)
+  NO_TRADE_END   = '13:30' unless defined?(NO_TRADE_END)
+  SESSION_ENTRY_START = '09:30' unless defined?(SESSION_ENTRY_START)
 
   def call(context)
     series = context.candles.call('3m')
