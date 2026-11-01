@@ -24,7 +24,7 @@ end
 # Mirrors scripts/scan_architecture.rb (standalone, no Rails). Keep both in sync.
 class ArchScanner
   class << self
-    REPO_ROOT = File.expand_path('../..', __dir__)
+    REPO_ROOT = File.expand_path('../..', __dir__) unless defined?(REPO_ROOT)
 
     def scan
       svcs = scan_services

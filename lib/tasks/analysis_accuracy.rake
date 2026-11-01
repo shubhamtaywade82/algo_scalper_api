@@ -136,7 +136,7 @@ namespace :analysis do
 
       # Enqueued at timestamp
       enqueued_at: /"enqueued_at":"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/
-    }.freeze
+    }.freeze unless defined?(PATTERNS)
 
     def initialize(log_file, symbol)
       @log_file = log_file

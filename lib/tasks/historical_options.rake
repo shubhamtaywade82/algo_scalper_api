@@ -21,9 +21,9 @@ namespace :options do
       'Morning'   => (9 * 60 + 15)..(11 * 60),           # 09:15 – 11:00
       'Midday'    => (11 * 60 + 1)..(13 * 60),            # 11:01 – 13:00
       'Afternoon' => (13 * 60 + 1)..(15 * 60 + 30)        # 13:01 – 15:30
-    }.freeze
+    }.freeze unless defined?(SESSIONS)
 
-    DOW = %w[Sun Mon Tue Wed Thu Fri Sat].freeze
+    DOW = %w[Sun Mon Tue Wed Thu Fri Sat].freeze unless defined?(DOW)
 
     puts "\n#{'=' * 110}"
     puts "📊 INTRADAY OPTIONS BEHAVIOUR ANALYSIS"
@@ -208,11 +208,11 @@ namespace :options do
 
     # ── print helpers ───────────────────────────────────────────────────────────
 
-    G = "\e[32m".freeze
-    R = "\e[31m".freeze
-    Z = "\e[0m".freeze
-    B = "\e[1m".freeze
-    Y = "\e[33m".freeze
+    G = "\e[32m".freeze unless defined?(G)
+    R = "\e[31m".freeze unless defined?(R)
+    Z = "\e[0m".freeze unless defined?(Z)
+    B = "\e[1m".freeze unless defined?(B)
+    Y = "\e[33m".freeze unless defined?(Y)
 
     def clr_val(v)
       v >= 0 ? "#{G}%+.2f%%%#{Z}" : "#{R}%+.2f%%%#{Z}"

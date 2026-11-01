@@ -11,9 +11,9 @@
 TIMESTAMP_LABELS = {
   created_at: 'created_at',
   signal_timestamp: 'signal_timestamp'
-}.freeze
+}.freeze unless defined?(TIMESTAMP_LABELS)
 
-META_ENTRY_AT_KEY = 'entry_at'
+META_ENTRY_AT_KEY = 'entry_at' unless defined?(META_ENTRY_AT_KEY)
 
 namespace :trading do
   desc 'Validate position entry prices against 1m OHLCV candles'
