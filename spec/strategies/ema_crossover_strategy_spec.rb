@@ -18,7 +18,12 @@ RSpec.describe 'EmaCrossoverStrategy', type: :strategy_plugin do
 
   def series_from(prices, count: prices.size)
     candles = prices.first(count).each_with_index.map do |close, i|
-      t = Time.zone.parse("2026-08-24 09:15:00 #{tz}") + (i * 5).minutes
+      # First 25 bars are warmup history from previous session; bars from 25 on are today starting at 09:15 AM
+      t = if i < 25
+            Time.zone.parse("2026-08-21 13:00:00 #{tz}") + (i * 5).minutes
+          else
+            Time.zone.parse("2026-08-24 09:15:00 #{tz}") + ((i - 25) * 5).minutes
+          end
       build_plugin_candle(t, open: close - 1.0, high: close + 2.0, low: close - 4.0, close: close)
     end
     build_plugin_series(candles)
