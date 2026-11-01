@@ -29,7 +29,7 @@ module Api
       scope = apply_pagination(scope)
 
       render json: {
-        signals: scope.map { |sig| serialize(sig) },
+        signals: scope.includes(:strategy_record, :strategy_version).map { |sig| serialize(sig) },
         meta: {
           total: total,
           page: current_page,

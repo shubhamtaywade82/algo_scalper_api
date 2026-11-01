@@ -41,8 +41,9 @@ RSpec.describe Reports::MarketBrief::Generator do
     described_class.call(report)
     expect(client).to have_received(:chat) do |messages:, **|
       content = messages.last[:content]
+      token = ENV['DHAN_ACCESS_TOKEN'].presence || 'zzz-no-token'
       expect(content).to include('"indices":{"NIFTY"')
-      expect(content).not_to include('active_positions"', 'order_no', ENV.fetch('DHAN_ACCESS_TOKEN', 'zzz-no-token'))
+      expect(content).not_to include('active_positions"', 'order_no', token)
     end
   end
 

@@ -122,9 +122,10 @@ module Options
       return nil if future.empty?
 
       # Weekly expiry only (hard rule) for NIFTY/SENSEX.
-      # Prefer expiry dates that have WEEK derivatives in DB.
+      # Query once for all candidates to avoid N+1 exists queries in a loop.
       if %w[NIFTY SENSEX].include?(@index_key)
-        weekly = future.find { |d| weekly_expiry_in_db?(d) }
+        weekly_dates = weekly_expiries_in_db(future)
+        weekly = future.find { |d| weekly_dates.include?(d) }
         return weekly.strftime('%Y-%m-%d') if weekly
       end
 
@@ -133,6 +134,25 @@ module Options
 
     # Public alias for find_nearest_expiry
     alias nearest_expiry find_nearest_expiry
+
+    def weekly_expiries_in_db(expiry_dates)
+      dates = expiry_dates.filter_map do |d|
+        next d if d.is_a?(Date)
+
+        Date.parse(d.to_s)
+      rescue ArgumentError, TypeError
+        nil
+      end
+      return Set.new if dates.empty?
+
+      Instrument.options.where(underlying_symbol: @index_key, expiry_date: dates)
+                .where("expiry_flag ILIKE 'W%'")
+                .distinct
+                .pluck(:expiry_date)
+                .to_set
+    rescue StandardError
+      Set.new
+    end
 
     def weekly_expiry_in_db?(expiry_date)
       expiry = expiry_date.is_a?(Date) ? expiry_date : Date.parse(expiry_date.to_s)

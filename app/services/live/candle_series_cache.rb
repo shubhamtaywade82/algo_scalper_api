@@ -230,7 +230,7 @@ module Live
         candles = normalize_ohlc(ohlc_data)
         return { published: 0, error: "no candles" } if candles.empty?
 
-        published = 0
+        closed = []
         max_ts = nil
 
         candles.each do |candle|
@@ -246,13 +246,18 @@ module Live
                                           o: candle[:open], h: candle[:high],
                                           l: candle[:low], c: candle[:close],
                                           v: candle[:volume])
-          published += 1
+          closed << candle
           max_ts = candle_ts if max_ts.nil? || candle_ts > max_ts
         rescue StandardError => e
           Rails.logger.error("[CandleSeriesCache] poll_candle_closure publish error: #{e.class} - #{e.message}")
         end
 
+        published = closed.size
         redis.set(pub_key, max_ts.utc.iso8601(3), ex: 86_400) if published.positive? && max_ts
+        # append_tick (the original DB writer) is never fed ticks, so the poller
+        # is the only live source of closed bars for Candles::Repository.
+        Candles::Persister.enqueue(instrument: instrument, interval: interval,
+                                   candles: closed.map(&:stringify_keys), source: "live")
 
         store_candles(security_id: security_id, interval: interval, candles: candles)
 
