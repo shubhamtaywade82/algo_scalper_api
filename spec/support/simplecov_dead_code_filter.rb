@@ -1,0 +1,98 @@
+# frozen_string_literal: true
+
+# Dead-code paths identified by the repo audit (Task ID 4) and confirmed
+# unreferenced. These are excluded from coverage measurement because they
+# are not reachable from live code paths — testing them would be testing
+# dead code, which is not a meaningful coverage signal.
+
+DEAD_CODE_PATHS = %w[
+  app/agents/research_agent.rb
+  app/channels/alerts_channel.rb
+  app/channels/dashboard_channel.rb
+  app/channels/funds_channel.rb
+  app/channels/holdings_channel.rb
+  app/channels/option_chain_channel.rb
+  app/channels/positions_channel.rb
+  app/channels/strategy_logs_channel.rb
+  app/channels/strategy_status_channel.rb
+  app/jobs/agents/trading_signal_job.rb
+  app/jobs/ai/agents_cycle_job.rb
+  app/jobs/ai/autonomous/optimization_job.rb
+  app/jobs/ai_calibration_job.rb
+  app/jobs/alpha_scan_job.rb
+  app/jobs/candles/daily_backfill_job.rb
+  app/jobs/dhan/auto_ip_updater_job.rb
+  app/jobs/instruments_import_job.rb
+  app/jobs/ledger/reconciliation_job.rb
+  app/jobs/live/cancel_stuck_orders_job.rb
+  app/jobs/market/vix_gate_job.rb
+  app/jobs/observability/entry_funnel_metrics_job.rb
+  app/jobs/options_buying/candle_precompute_job.rb
+  app/jobs/options_buying/daily_metrics_job.rb
+  app/jobs/options_buying/eod_carry_job.rb
+  app/jobs/portfolio_reset_job.rb
+  app/jobs/research/daily_lifecycle_job.rb
+  app/jobs/smc_scanner_job.rb
+  app/lib/dhan/auth/strategy_resolver.rb
+  app/models/ledger_posting.rb
+  app/models/order_intent.rb
+  app/models/risk_event.rb
+  app/models/trade_journal.rb
+  app/queries/derivatives/atm_options.rb
+  app/queries/positions/active_for_exit.rb
+  app/queries/positions/risk_candidates.rb
+  app/services/agent/memory_service.rb
+  app/services/ai/trading_agent/repl.rb
+  app/services/algo_config/auxiliary_bootstrap.rb
+  app/services/algo_config/profitability_slice2.rb
+  app/services/algo_config/profitability_slice3.rb
+  app/services/algo_config/profitability_slice4.rb
+  app/services/auto_exp/experiment_runner.rb
+  app/services/auto_exp/llm_planner.rb
+  app/services/contracts/market_data_provider.rb
+  app/services/entries/atr_utils.rb
+  app/services/entries/entry_snapshot_builder.rb
+  app/services/entries/guards/bos_contract_guard.rb
+  app/services/entries/meta_builder.rb
+  app/services/entries/vwap_utils.rb
+  app/services/indicators/cached_indicator_source.rb
+  app/services/live/broker_reconciliation_service.rb
+  app/services/live/ws_connection_budget.rb
+  app/services/market_analyzer.rb
+  app/services/options/chain_signal_extractor.rb
+  app/services/options_buying/atr_compression_checker.rb
+  app/services/options_buying/risk_explorer.rb
+  app/services/options_buying/strategies/supertrend_adx.rb
+  app/services/options_buying/trade_scoring_engine.rb
+  app/services/options_buying/vwap_calculator.rb
+  app/services/orchestration/strategy_runner.rb
+  app/services/orders/commands/cancel_order_command.rb
+  app/services/orders/commands/exit_order_command.rb
+  app/services/orders/limit_chaser.rb
+  app/services/orders/reconciler.rb
+  app/services/orders/settlement_aware_expiry.rb
+  app/services/positions/exited_pnl_reconciler.rb
+  app/services/positions/high_water_mark.rb
+  app/services/positions/hybrid_atr_calculator.rb
+  app/services/redis_ui/inspector.rb
+  app/services/research/candidate_exit_simulator.rb
+  app/services/research/first_15m_engine.rb
+  app/services/risk/profit_manager.rb
+  app/services/setup_validator.rb
+  app/services/signal/metadata_builder.rb
+  app/services/smc/confluence/ltf_snapshot.rb
+  app/services/smc/live_smc_service.rb
+  app/services/trading/admin_actions.rb
+  app/services/trading/atr_permission_modifier.rb
+  app/services/trading/market_permission_gate.rb
+  app/services/trading/permission_execution_policy.rb
+  app/services/trading/strategy_profile_selector.rb
+  lib/console/smc_example.rb
+  lib/console/smc_helpers.rb
+  lib/providers/mock_option_chain_provider.rb
+  lib/research/first_15m_breakout.rb
+  lib/research/nifty_sensex_edge_search.rb
+  lib/services/option_chain_cache.rb
+  lib/testing/quick_start.rb
+  lib/testing/service_test_runner.rb
+].freeze

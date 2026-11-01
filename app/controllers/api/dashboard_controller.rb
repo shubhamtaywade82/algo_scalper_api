@@ -137,7 +137,7 @@ module Api
     end
 
     def recent_signals_payload
-      ::Strategies::Signal.order(emitted_at: :desc).limit(10).map do |s|
+      ::Strategies::Signal.includes(:strategy_record).order(emitted_at: :desc).limit(10).map do |s|
         {
           timestamp: s.emitted_at&.strftime('%H:%M:%S'),
           strategy: s.strategy_record&.slug,

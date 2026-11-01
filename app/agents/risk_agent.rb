@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
+# Assesses risk for a proposed strategy against active positions, margins,
+# account funds, and portfolio risk limits.
 class RiskAgent < ApplicationAgent
-  description "Assesses risk for a proposed strategy against active positions, margins, account funds, and portfolio risk limits."
-
   tools GetAccountStatusTool
 
-  param :strategy_details, required: true
+  inputs :strategy_details
 
-  system <<~PROMPT
+  instructions <<~PROMPT
     You are the Risk Agent for an options trading bot.
     Your job is to assess the risk of a proposed trading strategy against the current account status.
     Use the `GetAccountStatusTool` tool to retrieve the current available capital, daily stats, and active positions.
@@ -20,12 +20,12 @@ class RiskAgent < ApplicationAgent
        (0.0-1.0) only; it is not the final quantity.
   PROMPT
 
-  user "Assess risk for the proposed strategy: {strategy_details}"
+  user_prompt 'Assess risk for the proposed strategy: %<strategy_details>s'
 
-  returns do
-    string :verdict, description: "Risk verdict: APPROVED or REJECTED"
-    number :max_risk_rupees, description: "Maximum risk allowed in Rupees"
-    number :position_size_multiplier, description: "Size multiplier (0.0 to 1.0) based on risk environment"
-    string :notes, description: "Risk notes and rationale"
+  schema do
+    string :verdict, description: 'Risk verdict: APPROVED or REJECTED'
+    number :max_risk_rupees, description: 'Maximum risk allowed in Rupees'
+    number :position_size_multiplier, description: 'Size multiplier (0.0 to 1.0) based on risk environment'
+    string :notes, description: 'Risk notes and rationale'
   end
 end

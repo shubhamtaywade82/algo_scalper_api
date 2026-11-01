@@ -3,8 +3,8 @@
 class GetMarketContextTool < RubyLLM::Tool
   description "Fetches current price, daily OHLC, standard technical indicators (RSI, MACD, ADX, Supertrend, ATR, Bollinger Bands), and SMC market structure (Order Blocks, Fair Value Gaps, Premium/Discount zones, Liquidity pools) for a given index (e.g., NIFTY, BANKNIFTY, SENSEX)."
 
-  param :index_key, type: :string, description: "The index symbol (e.g., NIFTY, BANKNIFTY, SENSEX)", required: true
-  param :interval,  type: :string, description: "Candle interval in minutes (e.g., 1, 5, 15, 60)",   required: false
+  parameter :index_key, type: :string, description: "The index symbol (e.g., NIFTY, BANKNIFTY, SENSEX)", required: true
+  parameter :interval,  type: :string, description: "Candle interval in minutes (e.g., 1, 5, 15, 60)",   required: false
 
   def execute(index_key:, interval: "5")
     index_key           = index_key.to_s.upcase

@@ -21,7 +21,11 @@ RSpec.describe TradingSystem::PositionHeartbeat do
     context 'when market is closed and no active positions' do
       before do
         allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
-        allow(PositionTracker).to receive_message_chain(:active, :count).and_return(0)
+        allow(PositionTracker).to receive(:active).and_return(
+          double('ActiveRelation', count: 0,
+                                 includes: double('IncRelation', to_a: []),
+                                 find_each: nil)
+        )
         allow(Live::PositionIndex.instance).to receive(:bulk_load_active!)
         allow(Live::PositionTrackerPruner).to receive(:call)
       end

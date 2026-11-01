@@ -77,6 +77,9 @@ Rails.application.routes.draw do
     get 'reports/pnl_by_strategy', to: 'reports#pnl_by_strategy'
     get 'reports/pnl_by_instrument', to: 'reports#pnl_by_instrument'
     get 'reports/export', to: 'reports#export'
+    get  'reports/market_brief', to: 'market_briefs#show'
+    get  'reports/market_brief/live', to: 'market_briefs#live'
+    post 'reports/market_brief', to: 'market_briefs#create'
 
     get  'scheduler/tasks', to: 'scheduler#index'
     post 'scheduler/tasks/:id/execute', to: 'scheduler#execute'

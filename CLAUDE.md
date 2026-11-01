@@ -12,6 +12,7 @@ Rails 8 API backend for **fully autonomous** intraday options scalping on Indian
 - Solid Cache (Rails.cache backend in production; development uses `:redis_cache_store`)
 - DhanHQ v2 via `dhanhq` gem (broker API + WebSocket)
 - Optional: OpenAI for AI technical analysis
+- RubyLLM 2.x (`ruby_llm ~> 2.1`): native `RubyLLM::Agent` / `RubyLLM::Tool` classes in `app/agents`, `app/tools` (Ollama or Ollama Cloud via `LLMSettings`, configured in `config/initializers/ruby_llm.rb`); advisory only, not in the order path
 - Optional: Telegram Bot for notifications
 
 ## Commands
@@ -99,6 +100,17 @@ app/services/
     token_manager.rb               # 3-tier token: authority server → TOTP → static ENV
   adapters/
     option_chain/dhan_adapter.rb   # live option chain fetch (always wired, even in paper mode)
+  reports/market_brief/            # one-page Market Brief (read-only; never touches orders)
+    snapshot_builder.rb            # stage 1: deterministic snapshot from cross-process sources
+    setup_selector.rb              # QUALIFIED / NO_TRADE / BLOCKED from guard-approved signals only
+    ai_prompt_builder.rb           # stage 2: compact fact projection → OllamaClient chat
+    ai_response_validator.rb       # grounds AI output (source keys, numbers, decision lock)
+    generator.rb                   # orchestration, AI gate/backoff/digest reuse; pushes report frames
+    live_brief.rb                  # realtime payload (facts + latest validated AI + events); never calls the LLM
+    event_detector.rb              # snapshot-to-snapshot state changes and level crosses (hysteresis band); pure
+    watcher.rb                     # trading daemon: 10s cash-session cycle; events → push, material → one event run
+    broadcaster.rb                 # MarketBriefChannel frames (event / report), only when something happened
+    event_log.rb                   # today's events per mode (timeline)
 
 app/jobs/
   instruments_import_job.rb        # daily DhanHQ CSV sync
@@ -129,6 +141,7 @@ Registered in `lib/trading_system/bootstrap.rb`, started by `supervisor.start_al
 | 9 | `:reconciliation` | `Live::ReconciliationService` | 30s |
 | 10 | `:stats_notifier` | `Live::StatsNotifierService` | At market close |
 | 11 | `:smc_scanner` | `Smc::Scanner` | 5 min |
+| 12 | `:market_brief_watcher` | `Reports::MarketBrief::Watcher` | 10s in the cash session (idle 15s); enqueues LLM work, never calls it |
 
 ## Recurring Jobs (Solid Queue — `config/recurring.yml`)
 
@@ -138,6 +151,7 @@ Registered in `lib/trading_system/bootstrap.rb`, started by `supervisor.start_al
 | `SmcScannerJob` | Every 15 min (market hours) | SMC + AVRZ pattern detection |
 | `AiTechnicalAnalysisJob` (NIFTY) | Every 15 min (market hours) | AI-powered analysis |
 | `AiTechnicalAnalysisJob` (SENSEX) | Every 15 min (market hours) | AI-powered analysis |
+| `Reports::MarketBriefJob` | Every 15 min, 9:00–15:45 IST weekdays (job skips outside the cash session) | Market Brief AI refresh (heartbeat); event-driven runs come from the daemon watcher |
 
 Run `rails solid_queue:load_recurring` to populate the schedule after config changes.
 

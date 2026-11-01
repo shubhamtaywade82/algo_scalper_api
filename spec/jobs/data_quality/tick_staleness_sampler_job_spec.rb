@@ -9,7 +9,20 @@ RSpec.describe DataQuality::TickStalenessSamplerJob do
   let(:real_cache) { ActiveSupport::Cache::MemoryStore.new }
   let(:keys) { described_class.cache_keys_for(Date.current) }
 
-  before { allow(Rails).to receive(:cache).and_return(real_cache) }
+  before do
+    allow(Rails).to receive(:cache).and_return(real_cache)
+    allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
+  end
+
+  it 'takes no samples while the cash session is closed' do
+    allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
+    allow(Live::FeedHealthService.instance).to receive(:stale?).with(:ticks).and_return(true)
+
+    described_class.new.perform
+
+    expect(real_cache.read(keys[:total])).to be_nil
+    expect(real_cache.read(keys[:stale])).to be_nil
+  end
 
   it 'increments total every run, and stale only when the ticks feed is stale' do
     allow(Live::FeedHealthService.instance).to receive(:stale?).with(:ticks).and_return(true)

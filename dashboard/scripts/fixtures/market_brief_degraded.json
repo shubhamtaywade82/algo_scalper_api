@@ -1,0 +1,464 @@
+{
+  "id": 37,
+  "report_key": "FIXTURE:degraded",
+  "trading_date": "2026-10-27",
+  "mode": "paper",
+  "trigger": "manual",
+  "status": "ready",
+  "schema_version": 1,
+  "snapshot_generated_at": "2026-10-27T10:30:00+05:30",
+  "snapshot_digest": "755ac7e975abc0adfd9eb3eb16818f5745a1fa204a1dcb51465761ab4bf23cc0",
+  "snapshot": {
+    "mode": "paper",
+    "risk": {
+      "pnl": {
+        "losers": 0,
+        "winners": 0,
+        "total_rupees": 2500.0,
+        "closed_trades": 0,
+        "realized_rupees": 0,
+        "unrealized_rupees": 2500.0
+      },
+      "status": "ok",
+      "daily_loss": {
+        "basis": "realized_only",
+        "utilization_pct": 0.0,
+        "global_limit_pct": 0.04,
+        "global_limit_rupees": 4000.0,
+        "realized_loss_rupees": 0.0
+      },
+      "circuit_breaker": {
+        "at": "2026-10-27 10:30:00 +0530",
+        "reason": "manual",
+        "tripped": true
+      },
+      "exposure_rupees": 8880.0,
+      "active_positions": [
+        {
+          "id": 5,
+          "ltp": 25000.0,
+          "pnl": 2500.0,
+          "side": "long_ce",
+          "symbol": "NIFTY-Oct2026-24500-CE",
+          "pnl_pct": 28.15,
+          "quantity": 75,
+          "sl_price": 104.2,
+          "tp_price": 124.32,
+          "index_key": null,
+          "entry_price": 118.4
+        }
+      ],
+      "capital_available": 100000.0,
+      "active_positions_count": 1,
+      "exposure_pct_of_capital": 8.88,
+      "reconciliation_discrepancies": {
+        "run_id": 2,
+        "unresolved_count": 0
+      }
+    },
+    "setup": {
+      "status": "ok",
+      "message": "NO TRADE — No setup satisfies the current qualification and risk requirements.",
+      "blockers": [
+        "circuit_breaker_tripped",
+        "market_feed_down",
+        "no_live_index_quotes"
+      ],
+      "decision": "BLOCKED",
+      "candidate": {
+        "trade": {
+          "expiry": "2026-10-28",
+          "strike": 24500.0,
+          "symbol": "NIFTY-Oct2026-24500-CE",
+          "target": 124.32,
+          "quantity": 75,
+          "stop_loss": 104.2,
+          "entry_price": 118.4,
+          "exit_reason": null,
+          "reward_to_risk": 0.42,
+          "position_status": "active",
+          "capital_required": 8880.0,
+          "spread_guard_pct": null,
+          "position_tracker_id": 5
+        },
+        "strategy": "strategy_1",
+        "index_key": "NIFTY",
+        "signal_id": 13,
+        "emitted_at": "2026-10-27T10:18:00+05:30",
+        "age_seconds": 720,
+        "option_type": "CE",
+        "strategy_reason": "st_flip adx_28.4",
+        "trade_link_status": "linked"
+      },
+      "approved_count": 1,
+      "ranking_policy": "latest_guard_approved_signal_today",
+      "evaluated_count": 5,
+      "rejection_reasons": [
+        {
+          "count": 3,
+          "reason": "spread_too_wide"
+        },
+        {
+          "count": 1,
+          "reason": "adx_below_threshold"
+        }
+      ]
+    },
+    "health": {
+      "status": "degraded",
+      "components": {
+        "market_feed": {
+          "status": "down",
+          "evidence": "redis heartbeat (ttl 30s)",
+          "last_tick_at": "2026-10-27T10:26:00+05:30",
+          "last_tick_age_seconds": 240
+        },
+        "reconciliation": {
+          "status": "ok",
+          "age_seconds": 40,
+          "completed_at": "2026-10-27T10:29:20+05:30",
+          "last_run_status": "passed",
+          "discrepancies_found": 0
+        },
+        "trading_daemon": {
+          "status": "ok",
+          "evidence": "derived from market_feed and signal_scheduler Redis heartbeats"
+        },
+        "signal_scheduler": {
+          "status": "ok",
+          "evidence": "redis heartbeat (ttl 30s)"
+        },
+        "order_update_feed": {
+          "status": "not_required",
+          "evidence": "redis heartbeat (ttl 30s)"
+        }
+      }
+    },
+    "indices": [
+      {
+        "smc": {
+          "status": "stale",
+          "decision": "CALL",
+          "timeframes": {
+            "htf": {
+              "zone": "DISCOUNT",
+              "phase": "expansion",
+              "trend": "BULLISH",
+              "status": "ok",
+              "interval": "60",
+              "last_bos": {
+                "type": "bullish",
+                "index": 42,
+                "price": 24480.5
+              },
+              "liquidity_sweep": true,
+              "sweep_direction": "sell_side",
+              "active_fvg_count": 1,
+              "active_order_block_count": 0
+            },
+            "ltf": {
+              "zone": "DISCOUNT",
+              "phase": "expansion",
+              "trend": "BULLISH",
+              "status": "ok",
+              "interval": "5",
+              "last_bos": {
+                "type": "bullish",
+                "index": 42,
+                "price": 24480.5
+              },
+              "liquidity_sweep": true,
+              "sweep_direction": "sell_side",
+              "active_fvg_count": 1,
+              "active_order_block_count": 0
+            },
+            "mtf": {
+              "zone": "DISCOUNT",
+              "phase": "expansion",
+              "trend": "BULLISH",
+              "status": "ok",
+              "interval": "15",
+              "last_bos": {
+                "type": "bullish",
+                "index": 42,
+                "price": 24480.5
+              },
+              "liquidity_sweep": true,
+              "sweep_direction": "sell_side",
+              "active_fvg_count": 1,
+              "active_order_block_count": 0
+            }
+          },
+          "age_seconds": 120,
+          "computed_at": "2026-10-27T10:28:00+05:30"
+        },
+        "bias": {
+          "smc": "BULLISH",
+          "agreement": "AGREE",
+          "technical": "BULLISH",
+          "mtf_alignment": "ALIGNED_BULLISH"
+        },
+        "quote": {
+          "ltp": 51020.0,
+          "status": "stale",
+          "change_pct": -0.55,
+          "prev_close": 51300.0,
+          "age_seconds": 240,
+          "observed_at": "2026-10-27T10:26:00+05:30"
+        },
+        "expiry": {
+          "status": "unavailable"
+        },
+        "regime": {
+          "adx": 31.42,
+          "label": "TRENDING_UP",
+          "status": "stale",
+          "age_seconds": 60,
+          "atr_percent": 0.0042,
+          "bb_breakout": false,
+          "computed_at": "2026-10-27T10:29:00+05:30",
+          "timeframe_minutes": 5,
+          "volatility_regime": "normal"
+        },
+        "index_key": "NIFTY",
+        "supertrend": {
+          "reason": "no_cross_process_supertrend_snapshot",
+          "status": "unavailable"
+        }
+      },
+      {
+        "smc": {
+          "status": "stale",
+          "decision": "CALL",
+          "timeframes": {
+            "htf": {
+              "zone": "DISCOUNT",
+              "phase": "expansion",
+              "trend": "BULLISH",
+              "status": "ok",
+              "interval": "60",
+              "last_bos": {
+                "type": "bullish",
+                "index": 42,
+                "price": 24480.5
+              },
+              "liquidity_sweep": true,
+              "sweep_direction": "sell_side",
+              "active_fvg_count": 1,
+              "active_order_block_count": 0
+            },
+            "ltf": {
+              "zone": "DISCOUNT",
+              "phase": "expansion",
+              "trend": "BULLISH",
+              "status": "ok",
+              "interval": "5",
+              "last_bos": {
+                "type": "bullish",
+                "index": 42,
+                "price": 24480.5
+              },
+              "liquidity_sweep": true,
+              "sweep_direction": "sell_side",
+              "active_fvg_count": 1,
+              "active_order_block_count": 0
+            },
+            "mtf": {
+              "zone": "DISCOUNT",
+              "phase": "expansion",
+              "trend": "BULLISH",
+              "status": "ok",
+              "interval": "15",
+              "last_bos": {
+                "type": "bullish",
+                "index": 42,
+                "price": 24480.5
+              },
+              "liquidity_sweep": true,
+              "sweep_direction": "sell_side",
+              "active_fvg_count": 1,
+              "active_order_block_count": 0
+            }
+          },
+          "age_seconds": 120,
+          "computed_at": "2026-10-27T10:28:00+05:30"
+        },
+        "bias": {
+          "smc": "BULLISH",
+          "agreement": "AGREE",
+          "technical": "BULLISH",
+          "mtf_alignment": "ALIGNED_BULLISH"
+        },
+        "quote": {
+          "ltp": 51020.0,
+          "status": "stale",
+          "change_pct": -0.55,
+          "prev_close": 51300.0,
+          "age_seconds": 240,
+          "observed_at": "2026-10-27T10:26:00+05:30"
+        },
+        "expiry": {
+          "status": "unavailable"
+        },
+        "regime": {
+          "adx": 31.42,
+          "label": "TRENDING_UP",
+          "status": "stale",
+          "age_seconds": 60,
+          "atr_percent": 0.0042,
+          "bb_breakout": false,
+          "computed_at": "2026-10-27T10:29:00+05:30",
+          "timeframe_minutes": 5,
+          "volatility_regime": "normal"
+        },
+        "index_key": "BANKNIFTY",
+        "supertrend": {
+          "reason": "no_cross_process_supertrend_snapshot",
+          "status": "unavailable"
+        }
+      },
+      {
+        "smc": {
+          "status": "stale",
+          "decision": "CALL",
+          "timeframes": {
+            "htf": {
+              "zone": "DISCOUNT",
+              "phase": "expansion",
+              "trend": "BULLISH",
+              "status": "ok",
+              "interval": "60",
+              "last_bos": {
+                "type": "bullish",
+                "index": 42,
+                "price": 24480.5
+              },
+              "liquidity_sweep": true,
+              "sweep_direction": "sell_side",
+              "active_fvg_count": 1,
+              "active_order_block_count": 0
+            },
+            "ltf": {
+              "zone": "DISCOUNT",
+              "phase": "expansion",
+              "trend": "BULLISH",
+              "status": "ok",
+              "interval": "5",
+              "last_bos": {
+                "type": "bullish",
+                "index": 42,
+                "price": 24480.5
+              },
+              "liquidity_sweep": true,
+              "sweep_direction": "sell_side",
+              "active_fvg_count": 1,
+              "active_order_block_count": 0
+            },
+            "mtf": {
+              "zone": "DISCOUNT",
+              "phase": "expansion",
+              "trend": "BULLISH",
+              "status": "ok",
+              "interval": "15",
+              "last_bos": {
+                "type": "bullish",
+                "index": 42,
+                "price": 24480.5
+              },
+              "liquidity_sweep": true,
+              "sweep_direction": "sell_side",
+              "active_fvg_count": 1,
+              "active_order_block_count": 0
+            }
+          },
+          "age_seconds": 120,
+          "computed_at": "2026-10-27T10:28:00+05:30"
+        },
+        "bias": {
+          "smc": "BULLISH",
+          "agreement": "AGREE",
+          "technical": "BULLISH",
+          "mtf_alignment": "ALIGNED_BULLISH"
+        },
+        "quote": {
+          "status": "unavailable"
+        },
+        "expiry": {
+          "status": "unavailable"
+        },
+        "regime": {
+          "adx": 31.42,
+          "label": "TRENDING_UP",
+          "status": "stale",
+          "age_seconds": 60,
+          "atr_percent": 0.0042,
+          "bb_breakout": false,
+          "computed_at": "2026-10-27T10:29:00+05:30",
+          "timeframe_minutes": 5,
+          "volatility_regime": "normal"
+        },
+        "index_key": "SENSEX",
+        "supertrend": {
+          "reason": "no_cross_process_supertrend_snapshot",
+          "status": "unavailable"
+        }
+      }
+    ],
+    "session": {
+      "status": "open",
+      "holiday_name": null,
+      "is_trading_day": true,
+      "next_trading_day": "2026-10-28",
+      "entry_window_open": true,
+      "entry_window_reason": "Entry allowed (current time: 10:30 IST)"
+    },
+    "timezone": "Asia/Kolkata",
+    "warnings": [
+      "NIFTY_regime_stale",
+      "NIFTY_smc_stale",
+      "NIFTY_quote_stale",
+      "BANKNIFTY_regime_stale",
+      "BANKNIFTY_smc_stale",
+      "BANKNIFTY_quote_stale",
+      "SENSEX_regime_stale",
+      "SENSEX_smc_stale",
+      "SENSEX_quote_unavailable",
+      "market_feed_down"
+    ],
+    "freshness": {
+      "state": "partial",
+      "warning_count": 10
+    },
+    "generated_at": "2026-10-27T10:30:00+05:30",
+    "trading_date": "2026-10-27",
+    "market_context": {
+      "vix": {
+        "value": null,
+        "status": "unavailable",
+        "evaluated": false,
+        "age_seconds": null,
+        "observed_at": null,
+        "entry_allowed": true,
+        "force_exit_active": false
+      },
+      "unavailable": [
+        "market_breadth",
+        "fii_dii_flows",
+        "sector_performance",
+        "global_indices",
+        "news"
+      ]
+    },
+    "schema_version": 1
+  },
+  "ai": {
+    "status": "unavailable",
+    "model": null,
+    "generated_at": null,
+    "error": "timeout_after_90s",
+    "analysis": null
+  },
+  "error": null,
+  "created_at": "2026-10-27T10:30:00+05:30",
+  "updated_at": "2026-10-27T10:30:00+05:30"
+}

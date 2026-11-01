@@ -45,3 +45,4 @@ lib/trading_system/algo_trading_system/
 # Do not commit — contents are environment-specific and go stale fast.
 /today_market_data.json
 /data/today_market_data.json
+/dump.rdb

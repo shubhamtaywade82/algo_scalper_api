@@ -16,6 +16,10 @@ module DataQuality
     end
 
     def perform
+      # The schedule's cron window is coarser than the cash session; samples outside
+      # it would count quiet pre-open / post-close ticks as staleness.
+      return if TradingSession::Service.market_closed?
+
       keys = self.class.cache_keys_for(Date.current)
 
       bump!(keys[:total])
