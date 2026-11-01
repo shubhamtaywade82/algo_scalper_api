@@ -15,13 +15,8 @@ module Capital
     end
 
     def calculate
-      # Unknown lot (instrument master not imported) must block, not guess 50.
-      lot_size = begin
-        Trading::LotCalculator.lot_size_for(@index_key)
-      rescue Trading::LotCalculator::UnsupportedInstrumentError => e
-        Rails.logger.error("[SellingPositionSizer] #{e.message}")
-        return 0
-      end
+      lot_size = lot_size_or_nil
+      return 0 unless lot_size
       max_loss_per_lot = (@spread_width - @net_premium) * lot_size
       return 1 if max_loss_per_lot <= 0
 
@@ -39,6 +34,14 @@ module Capital
     end
 
     private
+
+    # Unknown lot (instrument master not imported) must block the entry, not guess 50.
+    def lot_size_or_nil
+      Trading::LotCalculator.lot_size_for(@index_key)
+    rescue Trading::LotCalculator::UnsupportedInstrumentError => e
+      Rails.logger.error("[SellingPositionSizer] #{e.message}")
+      nil
+    end
 
     def max_risk_per_trade_pct
       (AlgoConfig.fetch.dig(:risk, :max_trade_risk_pct) || 0.01).to_f

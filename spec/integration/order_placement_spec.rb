@@ -6,9 +6,6 @@ require 'rails_helper'
 # rubocop:disable RSpec/MessageSpies
 # rubocop:disable RSpec/StubbedMock
 RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
-  # Lot sizes come from the instrument master, which these specs don't seed.
-  before { allow(Trading::LotCalculator).to receive(:lot_size_for).and_return(65) }
-
   let(:order_placer) { Orders::Placer }
   # Removed: Trading::TradingService (redundant legacy implementation)
   let(:entry_guard) { Entries::EntryGuard }
@@ -18,6 +15,8 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
   let(:instrument) { create(:instrument, :nifty_future, security_id: '12345') }
 
   before do
+    # Lot sizes come from the instrument master, which these specs don't seed.
+    allow(Trading::LotCalculator).to receive(:lot_size_for).and_return(65)
     # Mock DhanHQ order creation with WebMock
     stub_request(:post, /.*dhan.*orders/)
       .to_return(
