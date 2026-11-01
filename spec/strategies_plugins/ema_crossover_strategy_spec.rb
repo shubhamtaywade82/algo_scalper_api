@@ -66,10 +66,6 @@ RSpec.describe EmaCrossoverStrategy do
       end
 
       it 'returns Hold with midday_dead_zone' do
-        pending "the doc's 11:00-13:00 midday dead-zone gate is not implemented for " \
-               'EmaCrossoverStrategy yet (VwapReversalStrategy has it); it currently ' \
-               'evaluates crossovers through midday'
-
         # 5m * index: index 35 = 9:15 + 175 = 12:10 PM (dead zone and >= 30 warmup bars)
         cutoff = series.candles[35].timestamp
         context = build_context(series: series, cutoff: cutoff)
@@ -91,9 +87,6 @@ RSpec.describe EmaCrossoverStrategy do
       end
 
       it 'returns Hold with late_entry' do
-        pending "the doc's after-15:15 late-entry gate is not implemented for " \
-               'EmaCrossoverStrategy yet; it currently evaluates crossovers until close'
-
         # 5m * 73 = 365 min from 9:15 = 15:20 = 3:20 PM → late
         cutoff = series.candles[73].timestamp
         context = build_context(series: series, cutoff: cutoff)
