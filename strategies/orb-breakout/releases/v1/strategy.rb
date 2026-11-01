@@ -9,6 +9,8 @@ BaseStrategy = Strategies::Base unless defined?(BaseStrategy)
 # one signal per direction per day (so at most 2 trades/day: one CE break, one PE break).
 class OrbBreakoutStrategy < BaseStrategy
   IST = 'Asia/Kolkata' unless defined?(IST)
+  MIDDAY_START = '11:00' unless defined?(MIDDAY_START)
+  MIDDAY_END   = '13:00' unless defined?(MIDDAY_END)
 
   class << self
     # Mirrors strategies/orb-breakout/manifest.yml so specs and tooling can read
@@ -53,6 +55,12 @@ class OrbBreakoutStrategy < BaseStrategy
 
     day_candles = candles.select { |c| c.timestamp.in_time_zone(IST).to_date == today }
     return Signals::Hold.new(reason: 'no_day_candles') if day_candles.empty?
+
+    clock = now.strftime('%H:%M')
+    return Signals::Hold.new(reason: 'midday_dead_zone') if clock >= MIDDAY_START && clock < MIDDAY_END
+
+    force_time = format('%<hour>02d:%<min>02d', hour: force_hour, min: force_minute)
+    return Signals::Hold.new(reason: 'past_force_exit_time') if clock >= force_time
 
     # Hardcode the NSE/BSE cash-session open rather than deriving it from day_candles.first:
     # the context's 6h trailing window can clip the very first candle on late-afternoon

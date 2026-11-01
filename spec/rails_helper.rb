@@ -52,6 +52,7 @@ end
 Rails.root.glob('spec/support/**/*.rb').each { |f| require f }
 
 RSpec.configure do |config|
+  config.filter_run_excluding :manual
   config.before(:each) do
     # Ensure tests run in a valid time regime by default
     allow(Live::TimeRegimeService.instance).to receive(:allow_new_trades?).and_return(true)

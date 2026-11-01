@@ -62,16 +62,8 @@ RSpec.describe 'analysis:accuracy rake task' do
     end
 
     it 'parses the correct number of analysis entries' do
-      # Access parser through the rake namespace
-      parser_class = begin
-        Analysis.const_get(:AnalysisLogParser)
-      rescue StandardError
-        nil
-      end
-
-      # Skip if class not accessible
-      skip 'AnalysisLogParser not directly accessible' unless parser_class
-
+      # Access parser defined by rake file at top-level Object
+      parser_class = defined?(AnalysisLogParser) ? AnalysisLogParser : nil
       parser = parser_class.new(temp_log_file.path, 'NIFTY')
       analyses = parser.parse
 

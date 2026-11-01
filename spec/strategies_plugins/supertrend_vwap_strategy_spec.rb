@@ -65,9 +65,6 @@ RSpec.describe SupertrendVwapStrategy do
       end
 
       it 'returns Hold with midday_dead_zone' do
-        pending "the doc's 11:00-13:00 midday dead-zone gate is not implemented for " \
-               'SupertrendVwapStrategy yet; it currently evaluates through midday'
-
         cutoff = series.candles[24].timestamp
         context = build_context(series: series, cutoff: cutoff)
         result = strategy.call(context)
@@ -88,9 +85,6 @@ RSpec.describe SupertrendVwapStrategy do
       end
 
       it 'returns Hold with late_entry_theta_risk' do
-        pending "the doc's after-14:30 late-entry theta-risk gate is not implemented " \
-               'for SupertrendVwapStrategy yet; it currently evaluates until close'
-
         # 5m * 67 = 335 min from 9:15 = 14:50 → late
         cutoff = series.candles[67].timestamp
         context = build_context(series: series, cutoff: cutoff)

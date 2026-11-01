@@ -213,9 +213,6 @@ RSpec.describe OrbBreakoutStrategy do
       end
 
       it 'returns Hold with midday_dead_zone reason at 11:30 AM' do
-        pending "the doc's 11:00-13:00 midday dead-zone gate is not implemented for " \
-               'OrbBreakoutStrategy yet; it currently evaluates breakouts through midday'
-
         # 11:30 AM = 135 min after 9:15 = index 135 (but we only have 120 candles, so use index 110 = ~10:45)
         # Actually let me check: index 105 = 9:15 + 105 min = 11:00. Index 115 = 11:10
         dead_zone_candle = series.candles[115]
@@ -239,10 +236,6 @@ RSpec.describe OrbBreakoutStrategy do
       end
 
       it 'returns Hold with past_force_exit_time reason after 14:30' do
-        pending 'a past-force-exit-time entry gate is not implemented for ' \
-               'OrbBreakoutStrategy yet; force_exit_hour/minute currently only build ' \
-               'the exit_rules metadata, they do not suppress entries'
-
         # 14:30 = 9:15 + 315 min = index 315
         cutoff = series.candles[315].timestamp
         context = build_context(series: series, cutoff: cutoff)

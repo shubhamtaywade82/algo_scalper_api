@@ -10,6 +10,10 @@ BaseStrategy = Strategies::Base unless defined?(BaseStrategy)
 # line value at entry (frozen, not recomputed bar-by-bar); target is the prior swing extreme,
 # extended to meet a minimum 1.5:1 if the raw swing distance falls short.
 class SupertrendVwapStrategy < BaseStrategy
+  IST = 'Asia/Kolkata' unless defined?(IST)
+  MIDDAY_START = '11:00' unless defined?(MIDDAY_START)
+  MIDDAY_END   = '13:00' unless defined?(MIDDAY_END)
+  LATE_ENTRY_CUTOFF = '14:30' unless defined?(LATE_ENTRY_CUTOFF)
   class << self
     # Mirrors strategies/supertrend-vwap/manifest.yml so specs and tooling can read
     # the deployment contract off the class itself.
@@ -30,6 +34,14 @@ class SupertrendVwapStrategy < BaseStrategy
   def call(context)
     series = context.candles.call('5m')
     return Signals::Hold.new(reason: 'no_candle_data') unless series&.candles&.any?
+
+    candles = series.candles
+    current = candles.last
+    now = current.timestamp.in_time_zone(IST)
+    clock = now.strftime('%H:%M')
+
+    return Signals::Hold.new(reason: 'midday_dead_zone') if clock >= MIDDAY_START && clock < MIDDAY_END
+    return Signals::Hold.new(reason: 'late_entry_theta_risk') if clock >= LATE_ENTRY_CUTOFF
 
     st_period = (params[:supertrend_period] || 10).to_i
     st_multiplier = (params[:supertrend_multiplier] || 3.0).to_f

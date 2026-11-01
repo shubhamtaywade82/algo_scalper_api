@@ -6,7 +6,7 @@ require 'rails_helper'
 # Run with: bundle exec rspec spec/integration/vcr_cassette_generation_spec.rb
 # Make sure to set CLIENT_ID and DHAN_ACCESS_TOKEN environment variables
 
-RSpec.describe 'VCR Cassette Generation', :vcr, type: :integration do
+RSpec.describe 'VCR Cassette Generation', :manual, :vcr, type: :integration do
   before do
     # Ensure credentials from environment are available inside the test
     # Some test helpers might be clearing the ENV
