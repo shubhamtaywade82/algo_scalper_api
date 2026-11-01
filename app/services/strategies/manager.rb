@@ -132,13 +132,14 @@ module Strategies
     def heartbeat_runners
       now = Time.current.to_i
       @mutex.synchronize do
-        @runners.each do |slug, state|
+        @runners.each_value do |state|
           next unless state[:thread]&.alive?
           next if (now - (state[:last_heartbeat] || 0)) < HEARTBEAT_INTERVAL
 
           state[:last_heartbeat] = now
+          # Persist only: periodic broadcasts were ~70% of all ActionCable traffic and no
+          # dashboard client subscribes to strategy_status. Transitions still broadcast.
           state[:run]&.update_column(:stats, state[:run].stats.merge(last_heartbeat: now)) # rubocop:disable Rails/SkipsModelValidations
-          broadcast_heartbeat(slug, "running")
         end
       end
     end
