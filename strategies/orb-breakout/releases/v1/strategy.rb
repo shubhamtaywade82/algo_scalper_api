@@ -8,7 +8,7 @@ BaseStrategy = Strategies::Base unless defined?(BaseStrategy)
 # range edge, 2:1 target projected off the range width, forced exit mid-afternoon, capped at
 # one signal per direction per day (so at most 2 trades/day: one CE break, one PE break).
 class OrbBreakoutStrategy < BaseStrategy
-  IST = 'Asia/Kolkata'
+  IST = 'Asia/Kolkata' unless defined?(IST)
 
   class << self
     # Mirrors strategies/orb-breakout/manifest.yml so specs and tooling can read

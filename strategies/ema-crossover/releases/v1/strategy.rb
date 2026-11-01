@@ -9,7 +9,7 @@ BaseStrategy = Strategies::Base unless defined?(BaseStrategy)
 # architecture instead: an ATR-based underlying stop (1.5-2x ATR) rather than a fixed-%
 # premium stop, with a 2:1 target off that same ATR distance.
 class EmaCrossoverStrategy < BaseStrategy
-  IST = 'Asia/Kolkata'
+  IST = 'Asia/Kolkata' unless defined?(IST)
 
   class << self
     # Mirrors strategies/ema-crossover/manifest.yml so specs and tooling can read
