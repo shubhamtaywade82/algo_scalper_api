@@ -11,6 +11,15 @@ module Api
     DEFAULT_PER_PAGE = 50
     MAX_PER_PAGE = 200
 
+    # ActiveRecord query/trace lines, ActionCable heartbeat broadcasts and hex payload
+    # dumps are ~90% of the dev log and bury the app events the page exists to show.
+    LOG_NOISE = Regexp.union(
+      /\A(↳ |CACHE |TRANSACTION \(|SQL \()/,
+      /\A[\w:]+ (Load|Create|Update|Destroy|Exists\?|Count|Sum|Pluck|Insert|Upsert|Bulk Insert|Insert All|Delete All|Update All)\b.*\(\d+\.\d+ms\)/,
+      /\A\[ActionCable\] Broadcasting to strategy_status/,
+      /\A\h{40,}/
+    )
+
     def index
       log_file = Rails.root.join("log", "#{Rails.env}.log")
       all_logs = []
@@ -59,13 +68,17 @@ module Api
 
     private
 
+    def log_noise?(line)
+      line.match?(LOG_NOISE)
+    end
+
     def parse_log_lines(raw)
       lines = raw.split("\n").last(MAX_LINES)
       id = 0
 
       lines.filter_map do |line|
         clean_line = line.gsub(/\e\[[0-9;]*[mK]/, "").strip
-        next if clean_line.blank?
+        next if clean_line.blank? || log_noise?(clean_line)
 
         level = "info"
         level = "error" if clean_line.downcase.include?("error") || clean_line.include?("FATAL")

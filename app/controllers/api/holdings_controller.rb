@@ -14,30 +14,8 @@ module Api
       end
 
       if paper_mode
-        # Simulating a default mock paper holding for demonstration/testing in paper mode
-        mock_holdings = [
-          {
-            id: "paper_tatasteel",
-            symbol: "TATASTEEL",
-            quantity: 100,
-            avg_price: 150.50,
-            ltp: 152.30,
-            pnl: 180.00,
-            pnl_pct: 1.20,
-            segment: "NSE_EQ"
-          },
-          {
-            id: "paper_reliance",
-            symbol: "RELIANCE",
-            quantity: 10,
-            avg_price: 2450.00,
-            ltp: 2435.00,
-            pnl: -150.00,
-            pnl_pct: -0.61,
-            segment: "NSE_EQ"
-          }
-        ]
-        render json: mock_holdings
+        # Paper mode trades intraday options only; it has no equity holdings to show.
+        render json: []
       else
         begin
           holdings = DhanHQ::Models::Holding.all.map.with_index(1) do |h, i|

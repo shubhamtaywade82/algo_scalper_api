@@ -24,4 +24,16 @@ RSpec.describe 'Api::Reports' do
       expect(response.parsed_body['summary']['total_brokerage']).to eq(0.0)
     end
   end
+
+  describe 'GET /api/reports/performance' do
+    it 'computes profit factor as gross profit over gross loss' do
+      create(:position_tracker, :exited, last_pnl_rupees: 300)
+      create(:position_tracker, :exited, last_pnl_rupees: -100)
+      create(:position_tracker, :exited, last_pnl_rupees: -100)
+
+      get '/api/reports/performance'
+
+      expect(response.parsed_body['summary']['profit_factor']).to eq(1.5)
+    end
+  end
 end

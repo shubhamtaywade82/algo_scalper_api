@@ -15,9 +15,11 @@ module Api
 
       render json: state
     end
+
     def create
       symbol = params[:symbol].to_s.upcase.presence || 'NIFTY'
-      days_back = [params[:days_back].to_i.clamp(1, MAX_DAYS_BACK), DEFAULT_DAYS].max
+      requested_days = params[:days_back].to_i
+      days_back = requested_days.positive? ? requested_days.clamp(1, MAX_DAYS_BACK) : DEFAULT_DAYS
       interval = params[:interval].presence || '5'
 
       run_id = SecureRandom.uuid

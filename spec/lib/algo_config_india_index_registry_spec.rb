@@ -31,7 +31,7 @@ RSpec.describe AlgoConfig do
       merged = IndiaIndexRegistry.merge_into(key: 'NIFTY', capital_alloc_pct: 0.30)
       expect(merged[:sid]).to eq('13')
       expect(merged[:segment]).to eq('IDX_I')
-      expect(merged[:lot]).to eq(75)
+      expect(merged[:lot]).to eq(65)
       expect(merged[:execution][:earliest_entry_time]).to eq('09:30')
       expect(merged[:capital_alloc_pct]).to eq(0.30)
     end

@@ -18,7 +18,10 @@ class LedgerAccount < ApplicationRecord
 
   def apply_posting!(debit:, credit:)
     delta = debit_amount_delta(debit: debit, credit: credit)
-    update!(balance_cache: balance_cache.to_d + delta)
+    # SQL-side increment: read-modify-write lost concurrent postings from the
+    # trading daemon's threads (cash cache drifted ₹26k below its postings).
+    self.class.update_counters(id, balance_cache: delta) # rubocop:disable Rails/SkipsModelValidations
+    self.balance_cache = balance_cache.to_d + delta
   end
 
   private

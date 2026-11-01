@@ -31,9 +31,22 @@ namespace :ledger do
     puts "\nBackfill complete."
   end
 
-  desc 'Print ledger vs legacy wallet reconciliation'
+  desc 'Print ledger balance cache vs postings reconciliation'
   task reconcile: :environment do
     result = Ledger::BalanceChecker.compare_paper_wallet
     puts result.inspect
+  end
+
+  desc 'Recompute every account balance_cache from its postings (repairs cache drift)'
+  task rebuild_balance_cache: :environment do
+    LedgerAccount.transaction do
+      LedgerAccount.lock.find_each do |account|
+        debits = account.ledger_postings.sum(:debit).to_d
+        credits = account.ledger_postings.sum(:credit).to_d
+        balance = %w[asset expense].include?(account.account_type) ? debits - credits : credits - debits
+        puts "#{account.code}: #{account.balance_cache.to_d.to_s('F')} -> #{balance.to_s('F')}"
+        account.update!(balance_cache: balance)
+      end
+    end
   end
 end

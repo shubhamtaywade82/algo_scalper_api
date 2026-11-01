@@ -5,9 +5,9 @@ module Trading
     class UnsupportedInstrumentError < StandardError; end
 
     LOT_SIZES = {
-      'NIFTY' => 75,
-      'BANKNIFTY' => 15,
-      'SENSEX' => 10
+      'NIFTY' => 65,
+      'BANKNIFTY' => 30,
+      'SENSEX' => 20
     }.freeze
 
     class << self

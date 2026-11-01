@@ -83,11 +83,11 @@ module Api
       max_win = scope.maximum(:last_pnl_rupees).to_f
       max_loss = scope.minimum(:last_pnl_rupees).to_f
 
-      profit_factor = if avg_loss.negative?
-                        (avg_win / avg_loss.abs).round(2)
-                      else
-                        0.0
-                      end
+      # Profit factor is gross profit / gross loss; avg_win / avg_loss is the payoff
+      # ratio and overstated PF (2.33 vs a true ~1.01 on the paper history).
+      gross_loss = scope.where("last_pnl_rupees < 0").sum(:last_pnl_rupees).to_f.abs
+      gross_profit = scope.where("last_pnl_rupees > 0").sum(:last_pnl_rupees).to_f
+      profit_factor = gross_loss.positive? ? (gross_profit / gross_loss).round(2) : 0.0
 
       daily = scope.group(Arel.sql("DATE(exited_at)"))
                    .pluck(Arel.sql("DATE(exited_at)"), Arel.sql("SUM(last_pnl_rupees)"))

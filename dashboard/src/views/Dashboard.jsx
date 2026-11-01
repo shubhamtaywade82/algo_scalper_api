@@ -118,6 +118,8 @@ export default function Dashboard() {
     ]
   })
 
+  const isSystemHealthy = () => systemHealth().every(h => h.class.includes('emerald'))
+
   const openPositionsList = createMemo(() => open() || [])
   const closedPositionsList = createMemo(() => closed() || [])
 
@@ -459,7 +461,11 @@ export default function Dashboard() {
         <div class="glass p-5 rounded-2xl flex flex-col justify-between">
           <div class="flex items-center justify-between border-b border-white/5 pb-3">
             <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">System Health</span>
-            <span class="text-[8px] font-black uppercase text-emerald-400 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Operational</span>
+            <Show when={isSystemHealthy()} fallback={
+              <span class="text-[8px] font-black uppercase text-amber-400 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-400" /> Degraded</span>
+            }>
+              <span class="text-[8px] font-black uppercase text-emerald-400 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Operational</span>
+            </Show>
           </div>
           <div class="flex-1 overflow-y-auto max-h-[220px] mt-2 divide-y divide-white/5">
             <For each={systemHealth()}>

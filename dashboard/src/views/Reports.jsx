@@ -5,6 +5,25 @@ import EquityCurve from '../components/charts/EquityCurve'
 import DrawdownChart from '../components/charts/DrawdownChart'
 import AnimatedNumber from '../components/AnimatedNumber'
 
+const TRADE_TIME_FORMAT = { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }
+
+function CalendarCell(props) {
+  const cell = () => props.cell
+  if (!cell()) return <div />
+  if (cell().pnl === undefined) {
+    return <div class="p-1.5 rounded-lg border border-white/5 min-h-[44px] text-[7px] text-gray-600 font-mono">{cell().day}</div>
+  }
+  const isGain = cell().pnl >= 0
+  return (
+    <div class={`p-1.5 rounded-lg border flex flex-col items-center justify-between min-h-[44px] ${
+      isGain ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/5 border-rose-500/20 text-rose-400'
+    }`}>
+      <span class="text-[7px] text-gray-400 font-mono self-start">{cell().day}</span>
+      <span class="text-[9px] font-black text-data">{isGain ? '+' : ''}{cell().pnl.toFixed(0)}</span>
+    </div>
+  )
+}
+
 export default function Reports() {
   const [activeTab, setActiveTab] = createSignal('summary')
   const [sinceDate, setSinceDate] = createSignal('')
@@ -23,13 +42,32 @@ export default function Reports() {
     if (!s) return []
     return [
       { label: 'Net P&L', val: s.net_pnl || 0, isPositive: (s.net_pnl || 0) >= 0, isCurrency: true },
-      { label: 'Total Trades', val: s.total_trades || 0, isPositive: true },
+      { label: 'Total Trades', val: s.total_trades || 0, isPositive: true, decimals: 0 },
       { label: 'Win Rate', val: s.win_rate_percent || 0, suffix: '%', isPositive: true },
-      { label: 'Wins', val: s.winning_trades || 0, isPositive: true },
+      { label: 'Wins', val: s.winning_trades || 0, isPositive: true, decimals: 0 },
       { label: 'Profit Factor', val: s.profit_factor || 0, isPositive: true },
       { label: 'Avg Win', val: s.avg_win || 0, isPositive: true, isCurrency: true },
       { label: 'Expectancy', val: s.expectancy || 0, isPositive: (s.expectancy || 0) >= 0, isCurrency: true }
     ]
+  })
+
+  // Latest month only, laid out Mon–Fri with blanks so each day sits under its weekday.
+  const calendarMonth = createMemo(() => {
+    const days = daily()
+    if (days.length === 0) return { label: '—', cells: [] }
+    const latest = days.map(d => d.date).sort().at(-1)
+    const [year, month] = latest.split('-').map(Number)
+    const pnlByDay = Object.fromEntries(days.filter(d => d.date.startsWith(latest.slice(0, 7))).map(d => [Number(d.date.slice(8, 10)), d.pnl]))
+    const cells = []
+    const lastDay = new Date(year, month, 0).getDate()
+    for (let day = 1; day <= lastDay; day++) {
+      const weekday = new Date(year, month - 1, day).getDay()
+      if (weekday === 0 || weekday === 6) continue
+      if (cells.length === 0) for (let i = 1; i < weekday; i++) cells.push(null)
+      cells.push({ day, pnl: pnlByDay[day] })
+    }
+    const label = new Date(year, month - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+    return { label, cells }
   })
 
   const topWinners = createMemo(() => {
@@ -155,7 +193,7 @@ export default function Reports() {
                   <div>
                     <span class="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">{m.label}</span>
                     <div class={`text-base font-black text-data ${m.isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      <AnimatedNumber value={m.val} currency={m.isCurrency} decimals={m.isCurrency ? 0 : 2} suffix={m.suffix} showSign={m.isCurrency ? true : false} />
+                      <AnimatedNumber value={m.val} currency={m.isCurrency} decimals={m.decimals ?? (m.isCurrency ? 0 : 2)} suffix={m.suffix} showSign={m.isCurrency ? true : false} />
                     </div>
                   </div>
                 </div>
@@ -238,7 +276,7 @@ export default function Reports() {
                     <For each={reportTrades()}>
                       {(t) => (
                         <tr class="border-b border-white/5 hover:bg-white/[0.01]">
-                          <td class="py-2.5 text-gray-500 font-mono">{t.exited_at ? new Date(t.exited_at).toLocaleString('en-IN') : '—'}</td>
+                          <td class="py-2.5 text-gray-500 font-mono">{t.exited_at ? new Date(t.exited_at).toLocaleString('en-IN', TRADE_TIME_FORMAT) : '—'}</td>
                           <td class="py-2.5 font-bold text-white max-w-[150px] truncate">{t.symbol}</td>
                           <td class="py-2.5 text-center">
                             <span class={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
@@ -260,7 +298,7 @@ export default function Reports() {
           <div class="lg:col-span-4 glass p-5 rounded-2xl flex flex-col justify-between">
             <div class="flex items-center justify-between border-b border-white/5 pb-2 text-[10px]">
               <span class="font-black text-gray-400 uppercase tracking-widest">Daily P&L Calendar</span>
-              <span class="text-gray-500 font-mono">{daily().length > 0 ? new Date(daily()[0].date).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) : '—'}</span>
+              <span class="text-gray-500 font-mono">{calendarMonth().label}</span>
             </div>
             <div class="grid grid-cols-5 gap-2 mt-3 text-[10px]">
               <div class="text-center font-black text-gray-600 uppercase text-[8px]">Mon</div>
@@ -271,15 +309,8 @@ export default function Reports() {
               <Show when={daily().length > 0} fallback={
                 <div class="col-span-5 text-center py-8 text-[10px] text-gray-600 font-bold uppercase tracking-wider">No daily data</div>
               }>
-                <For each={daily()}>
-                  {(day) => (
-                    <div class={`p-1.5 rounded-lg border flex flex-col items-center justify-between min-h-[44px] ${
-                      day.pnl >= 0 ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/5 border-rose-500/20 text-rose-400'
-                    }`}>
-                      <span class="text-[7px] text-gray-400 font-mono self-start">{new Date(day.date).getDate()}</span>
-                      <span class="text-[9px] font-black text-data">{day.pnl >= 0 ? '+' : ''}{day.pnl.toFixed(0)}</span>
-                    </div>
-                  )}
+                <For each={calendarMonth().cells}>
+                  {(cell) => <CalendarCell cell={cell} />}
                 </For>
               </Show>
             </div>
@@ -526,15 +557,8 @@ export default function Reports() {
                 <div class="text-center font-black text-gray-600 uppercase text-[8px]">Wed</div>
                 <div class="text-center font-black text-gray-600 uppercase text-[8px]">Thu</div>
                 <div class="text-center font-black text-gray-600 uppercase text-[8px]">Fri</div>
-                <For each={daily()}>
-                  {(day) => (
-                    <div class={`p-1.5 rounded-lg border flex flex-col items-center justify-between min-h-[44px] ${
-                      day.pnl >= 0 ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/5 border-rose-500/20 text-rose-400'
-                    }`}>
-                      <span class="text-[7px] text-gray-400 font-mono self-start">{new Date(day.date).getDate()}</span>
-                      <span class="text-[9px] font-black text-data">{day.pnl >= 0 ? '+' : ''}{day.pnl.toFixed(0)}</span>
-                    </div>
-                  )}
+                <For each={calendarMonth().cells}>
+                  {(cell) => <CalendarCell cell={cell} />}
                 </For>
               </div>
             </Show>

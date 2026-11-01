@@ -9,13 +9,11 @@ RSpec.describe "New Frontend TDD API Endpoints" do
         allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: { enabled: true } })
       end
 
-      it "returns mock paper holdings" do
+      it "returns no holdings instead of fabricated ones" do
         get "/api/holdings"
         expect(response).to have_http_status(:ok)
         # Holdings are serialized as a bare array (no success/holdings wrapper).
-        body = response.parsed_body
-        expect(body).to be_an(Array)
-        expect(body.first["symbol"]).to eq("TATASTEEL")
+        expect(response.parsed_body).to eq([])
       end
     end
 
