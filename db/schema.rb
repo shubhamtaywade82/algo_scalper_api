@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_31_080000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_02_111227) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1631,43 +1631,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_080000) do
     t.index ["watchable_type", "watchable_id"], name: "index_watchlist_items_on_watchable_type_and_watchable_id"
   end
 
-  create_table "woods_edges", force: :cascade do |t|
-    t.bigint "source_id", null: false
-    t.bigint "target_id", null: false
-    t.string "relationship", null: false
-    t.string "via"
-    t.datetime "created_at", null: false
-    t.index ["source_id", "target_id", "relationship"], name: "idx_woods_edges_unique", unique: true
-    t.index ["source_id"], name: "index_woods_edges_on_source_id"
-    t.index ["target_id"], name: "index_woods_edges_on_target_id"
-  end
-
-  create_table "woods_embeddings", force: :cascade do |t|
-    t.bigint "unit_id", null: false
-    t.string "chunk_type"
-    t.text "embedding", null: false
-    t.string "content_hash", null: false
-    t.integer "dimensions", null: false
-    t.datetime "created_at", null: false
-    t.index ["content_hash"], name: "index_woods_embeddings_on_content_hash"
-    t.index ["unit_id"], name: "index_woods_embeddings_on_unit_id"
-  end
-
-  create_table "woods_units", force: :cascade do |t|
-    t.string "unit_type", null: false
-    t.string "identifier", null: false
-    t.string "namespace"
-    t.string "file_path", null: false
-    t.text "source_code"
-    t.string "source_hash"
-    t.json "metadata"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["file_path"], name: "index_woods_units_on_file_path"
-    t.index ["identifier"], name: "index_woods_units_on_identifier", unique: true
-    t.index ["unit_type"], name: "index_woods_units_on_unit_type"
-  end
-
   add_foreign_key "allocation_sleeves", "investment_policies"
   add_foreign_key "backtest_runs", "strategy_versions"
   add_foreign_key "best_indicator_params", "instruments"
@@ -1717,7 +1680,4 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_080000) do
   add_foreign_key "trade_memories", "position_trackers"
   add_foreign_key "trade_memories", "trade_analytics"
   add_foreign_key "trade_telemetry", "position_trackers", column: "tracker_id"
-  add_foreign_key "woods_edges", "woods_units", column: "source_id"
-  add_foreign_key "woods_edges", "woods_units", column: "target_id"
-  add_foreign_key "woods_embeddings", "woods_units", column: "unit_id"
 end

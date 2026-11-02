@@ -278,8 +278,6 @@ GEM
       net-pop
       net-smtp
     marcel (1.2.1)
-    mcp (1.6.1)
-      json_schemer (>= 2.4)
     mini_mime (1.1.5)
     minitest (6.0.6)
       drb (~> 2.0)
@@ -601,12 +599,6 @@ GEM
     websocket-extensions (0.1.5)
     whenever (1.1.4)
       chronic (>= 0.6.3)
-    woods (2.1.0)
-      json (>= 2.19.9, < 3)
-      mcp (>= 1.2, < 2.0)
-      msgpack (>= 1.8.2, < 2)
-      prism (~> 1.4)
-      railties (>= 6.0, < 9)
     zeitwerk (2.8.3)
 
 PLATFORMS
@@ -673,7 +665,6 @@ DEPENDENCIES
   vcr
   webmock
   whenever
-  woods
 
 BUNDLED WITH
   4.0.6

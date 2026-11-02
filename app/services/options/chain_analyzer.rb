@@ -336,9 +336,7 @@ module Options
     end
 
     def calculate_strike_interval
-      return 50 unless @sorted_strikes&.size&.>= 2
-
-      @sorted_strikes[1] - @sorted_strikes[0]
+      self.class.strike_interval(@sorted_strikes || [])
     end
 
     def find_atm_strike(spot, interval)
@@ -564,6 +562,17 @@ module Options
 
     # Class methods (backward compatible)
     class << self
+      # Smallest gap between listed strikes. The first two strikes are NOT the step:
+      # far wings are listed wider (BANKNIFTY: 500 in the wings vs 100 near ATM), which
+      # made ATM round to the nearest 500 and picked strikes 5-11 steps OTM.
+      #
+      # @param strikes [Array<Numeric>] listed strikes (any order)
+      # @return [Float] strike step, 50.0 when it cannot be determined
+      def strike_interval(strikes)
+        gaps = strikes.map(&:to_f).uniq.sort.each_cons(2).map { |low, high| high - low }
+        gaps.min || 50.0
+      end
+
       def pick_strikes(index_cfg:, direction:)
         # Rails.logger.info("[Options] Starting strike selection for #{index_cfg[:key]} #{direction}")
 
@@ -969,11 +978,7 @@ module Options
         # Calculate strike interval dynamically from available strikes
         strikes = option_chain_data.keys.map(&:to_f).sort
 
-        strike_interval = if strikes.size >= 2
-                            strikes[1] - strikes[0]
-                          else
-                            50 # fallback
-                          end
+        strike_interval = self.strike_interval(strikes)
 
         atm_strike = (atm / strike_interval).round * strike_interval
 

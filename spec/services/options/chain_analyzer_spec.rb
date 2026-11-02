@@ -719,4 +719,16 @@ RSpec.describe Options::ChainAnalyzer do
       end
     end
   end
+
+  describe '.strike_interval' do
+    it 'uses the smallest listed gap, not the wider wing spacing at the start of the chain' do
+      wings = [46_500, 47_000, 47_500, 48_000]
+      near_atm = (54_000..56_000).step(100).to_a
+      expect(described_class.strike_interval(wings + near_atm)).to eq(100.0)
+    end
+
+    it 'falls back to 50 when fewer than two strikes are listed' do
+      expect(described_class.strike_interval([23_300])).to eq(50.0)
+    end
+  end
 end

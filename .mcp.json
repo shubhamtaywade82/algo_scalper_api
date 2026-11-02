@@ -1,9 +1,5 @@
 {
   "mcpServers": {
-    "woods": {
-      "command": "woods-mcp",
-      "args": ["./tmp/woods"]
-    },
     "railsforge": {
       "command": "node",
       "args": [
