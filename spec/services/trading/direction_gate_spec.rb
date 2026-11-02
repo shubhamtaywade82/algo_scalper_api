@@ -115,6 +115,16 @@ RSpec.describe Trading::DirectionGate do
   describe 'integration with Signal::Engine', :integration do
     let(:index_cfg) { { key: 'NIFTY', segment: 'IDX_I' } }
 
+    # The engine runs IndexTechnicalAnalyzer for diagnostics. Whether it reaches the DhanHQ
+    # API depends on the process-global DhanHQ client config, which other examples (the
+    # TradingSystem::Bootstrap VIX example) leave configured, so the outcome changed with
+    # example order. Pin it: these examples are about the direction gate, not Index TA.
+    before do
+      analyzer = instance_double(IndexTechnicalAnalyzer, success?: false, error: 'DhanHQ credentials not configured')
+      allow(analyzer).to receive(:call).and_return(success: false, error: 'DhanHQ credentials not configured')
+      allow(IndexTechnicalAnalyzer).to receive(:new).and_return(analyzer)
+    end
+
     context 'when regime is bearish and direction is bullish (CE trade)' do
       let(:mock_instrument) { instance_double(Instrument) }
       let(:mock_15m_series) { instance_double(CandleSeries) }

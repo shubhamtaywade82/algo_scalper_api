@@ -311,6 +311,9 @@ module Strategies
       index_cfg = IndexConfigLoader.load_indices.find { |c| c[:key].to_s.upcase == instrument_key.to_s.upcase }
       return record.update!(outcome: "blocked_by_guard", reason: "no_index_cfg") unless index_cfg
 
+      # Same rule as Signal::Scheduler; without it the runners bought a 21-day BANKNIFTY monthly.
+      return record.update!(outcome: "blocked_by_guard", reason: "expiry_beyond_entry_window") if ::Signal::ExpiryGate.beyond_entry_window?(index_cfg)
+
       direction = DIRECTION_BY_ACTION.fetch(action)
       picks = Options::ChainAnalyzer.pick_strikes(index_cfg: index_cfg, direction: direction)
       return record.update!(outcome: "blocked_by_guard", reason: "no_strikes") if picks.blank?

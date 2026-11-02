@@ -31,11 +31,6 @@ module Reports
           []
         end
 
-        def event_count(mode)
-          recent(mode)
-          evnts.size
-        end
-
         private
 
         def key(mode)
