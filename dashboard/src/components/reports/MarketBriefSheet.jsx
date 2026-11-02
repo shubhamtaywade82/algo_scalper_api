@@ -380,9 +380,9 @@ export default function MarketBriefSheet(props) {
       </div>
 
       <div class="mb-middle">
-        <Section title="Technical & SMC confluence" class="mb-confluence" badge={<span class="mb-muted">observations · SMC from AnalysisStore, regime 5m</span>}>
+        <Section title="Technical & SMC confluence" class="mb-confluence" badge={<span class="mb-muted">observations · SMC, regime & Supertrend from AnalysisStore (5m)</span>}>
           <ConfluenceTable indices={indices()} />
-          <div class="mb-muted">▲ bullish · ▼ bearish · ■ range · — unavailable. Supertrend is not shown: no cross-process Supertrend snapshot exists.</div>
+          <div class="mb-muted">▲ bullish · ▼ bearish · ■ range · — unavailable. Supertrend (5m, signal-engine params) is on each index card.</div>
         </Section>
         <Section title="Best qualified options setup" class="mb-setup-section" badge={<span class="mb-muted">deterministic pipeline</span>}>
           <SetupPanel setup={snap().setup} />

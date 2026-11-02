@@ -116,7 +116,7 @@ app/jobs/
   instruments_import_job.rb        # daily DhanHQ CSV sync
   smc_scanner_job.rb               # SMC + AVRZ pattern detection
   ai_technical_analysis_job.rb     # AI analysis (NIFTY, SENSEX)
-  analysis_job.rb                  # on-demand analysis (async adapter, not Solid Queue)
+  analysis_job.rb                  # regime/SMC/Supertrend (+AI on demand) → AnalysisStore; recurring every 2 min without AI
 
 lib/trading_system/
   daemon.rb                        # trading process lifecycle
@@ -149,6 +149,7 @@ Registered in `lib/trading_system/bootstrap.rb`, started by `supervisor.start_al
 |-----|---------|---------|
 | `InstrumentsImportJob` | Daily 8:45 AM | DhanHQ instrument master CSV sync |
 | `SmcScannerJob` | Every 15 min (market hours) | SMC + AVRZ pattern detection |
+| `AnalysisJob` (`smc`, `regime`) | Every 2 min, 9:00–15:59 IST weekdays | Keeps AnalysisStore regime/SMC/Supertrend fresh for Market Brief + Analysis page; no LLM |
 | `AiTechnicalAnalysisJob` (NIFTY) | Every 15 min (market hours) | AI-powered analysis |
 | `AiTechnicalAnalysisJob` (SENSEX) | Every 15 min (market hours) | AI-powered analysis |
 | `Reports::MarketBriefJob` | Every 15 min, 9:00–15:45 IST weekdays (job skips outside the cash session) | Market Brief AI refresh (heartbeat); event-driven runs come from the daemon watcher |

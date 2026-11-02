@@ -48,9 +48,18 @@ RSpec.describe Reports::MarketBrief::SnapshotBuilder do
       expect(snapshot['warnings']).not_to include('market_brief_watcher_down')
     end
 
-    it 'never fabricates a Supertrend value it has no cross-process source for' do
-      expect(index('NIFTY')['supertrend']).to eq('status' => 'unavailable',
-                                                 'reason' => 'no_cross_process_supertrend_snapshot')
+    it 'reports the Supertrend AnalysisJob stored with the regime, sharing its freshness' do
+      expect(index('NIFTY')['supertrend']).to eq('status' => 'fresh', 'direction' => 'bullish', 'line' => 24_410.25,
+                                                 'timeframe_minutes' => 5, 'age_seconds' => 60)
+    end
+
+    it 'never fabricates a Supertrend value when none was computed' do
+      stub_market_brief_sources(regime: brief_regime_entry(supertrend: nil))
+      expect(index('NIFTY')['supertrend']).to eq('status' => 'unavailable', 'reason' => 'not_computed')
+    end
+
+    it 'does not degrade paper health for the absent broker reconciliation' do
+      expect(snapshot.dig('health', 'components', 'reconciliation', 'status')).to eq('not_required')
     end
 
     it 'reports unsupported context sources as unavailable instead of approximating them' do

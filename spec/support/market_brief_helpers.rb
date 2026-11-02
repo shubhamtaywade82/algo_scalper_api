@@ -20,10 +20,11 @@ module MarketBriefHelpers
                    oi: 0, oi_change: 0, bid: nil, ask: nil, volume: 0, prev_close: prev_close)
   end
 
-  def brief_regime_entry(label: 'TRENDING_UP', adx: 31.42, fresh: true)
+  def brief_regime_entry(label: 'TRENDING_UP', adx: 31.42, fresh: true, supertrend: { direction: 'bullish', line: 24_410.25 })
     {
       data: { regime: label, confidence: adx,
-              metrics: { adx_value: adx, atr_percent: 0.0042, volatility_regime: 'normal', bb_breakout: false } },
+              metrics: { adx_value: adx, atr_percent: 0.0042, volatility_regime: 'normal', bb_breakout: false },
+              supertrend: supertrend }.compact,
       validity: { computed_at: 1.minute.ago.iso8601, age_seconds: 60, fresh: fresh }
     }
   end
