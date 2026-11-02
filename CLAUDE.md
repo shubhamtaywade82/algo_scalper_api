@@ -214,3 +214,4 @@ All percentage values in `config/algo.yml` use **DECIMAL format**: `0.12` means 
 - `Live::Gateway` is **deprecated** — use `Orders::GatewayLive` directly
 - Option chain adapter is always `DhanAdapter` (even in paper mode) — option chain reads are live
 - Token refresh uses `Dhan::TokenManager` with 3-tier fallback: authority server → TOTP auto-refresh → static ENV
+- This app is the Dhan token **owner** for other local tools: `GET /api/dhan/token` (requires `API_OPERATOR_TOKEN`, even in dev) serves `Dhan::TokenManager.snapshot` — read-only, never refreshes. Any other app that logs in itself invalidates this app's token (DH-906); consumers (e.g. pine-ts-workbench) must fetch from here and generate their own only when this app is unreachable
