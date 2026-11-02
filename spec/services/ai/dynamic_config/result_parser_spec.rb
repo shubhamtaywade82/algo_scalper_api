@@ -77,6 +77,26 @@ RSpec.describe Ai::DynamicConfig::ResultParser do
     expect(result[:proposed_patch]).to eq('risk' => { 'sl_pct' => 0.15 })
   end
 
+  describe 'sl_pct' do
+    let(:sl) { ->(suggested) { suggestion('parameter' => 'sl_pct', 'index_key' => '', 'current' => 0.10, 'suggested' => suggested) } }
+
+    it 'rejects a stop tighter than the 8% floor' do
+      expect(call([sl.call(0.05)])[:parameter_changes]).to be_empty
+    end
+
+    it 'does not treat a tighter stop as the safe direction while stressed' do
+      result = call([sl.call(0.09)], current_config: { sl_pct: 0.10 }, stressed: true)
+
+      expect(result[:proposed_patch]).to eq('risk' => { 'sl_pct' => 0.09 })
+    end
+
+    it 'lets a stressed agent widen the stop (it is no longer direction-gated)' do
+      result = call([sl.call(0.15)], current_config: { sl_pct: 0.10 }, stressed: true)
+
+      expect(result[:proposed_patch]).to eq('risk' => { 'sl_pct' => 0.15 })
+    end
+  end
+
   it 'merges multiple per-index suggestions for the same index into one indices entry' do
     changes = [
       suggestion,
