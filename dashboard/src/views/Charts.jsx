@@ -23,6 +23,11 @@ const DEFAULT_INDICATORS = [
   { id: 'sma20', type: 'sma', label: 'SMA', period: 20, color: '#fbbf24', enabled: true },
   { id: 'sma50', type: 'sma', label: 'SMA', period: 50, color: '#a78bfa', enabled: true },
   { id: 'ema21', type: 'ema', label: 'EMA', period: 21, color: '#38bdf8', enabled: false },
+  { id: 'rsi14', type: 'rsi', label: 'RSI', period: 14, color: '#f472b6', enabled: false },
+  { id: 'macd', type: 'macd', label: 'MACD', color: '#60a5fa', enabled: false },
+  { id: 'bb20', type: 'bb', label: 'Bollinger', period: 20, color: '#a78bfa', enabled: false },
+  { id: 'vwap', type: 'vwap', label: 'VWAP', color: '#eab308', enabled: false },
+  { id: 'atr14', type: 'atr', label: 'ATR', period: 14, color: '#b388ff', enabled: false },
   { id: 'smc_ob', type: 'smc_ob', label: 'SMC Order Blocks', color: '#10b981', enabled: true },
   { id: 'smc_fvg', type: 'smc_fvg', label: 'SMC Fair Value Gaps', color: '#2dd4bf', enabled: false },
   { id: 'smc_eq', type: 'smc_eq', label: 'SMC Equilibrium & Zones', color: '#eab308', enabled: false },
@@ -75,7 +80,9 @@ export default function Charts() {
   const savedTheme = THEMES.find(t => t.id === savedThemeId) || THEMES[0]
   const [theme, setTheme] = createSignal(savedTheme)
   
-  const savedIndicators = JSON.parse(localStorage.getItem('chart_indicators') || 'null') || DEFAULT_INDICATORS
+  // Saved settings predate newly added catalog entries (e.g. RSI); append any that are missing.
+  const stored = JSON.parse(localStorage.getItem('chart_indicators') || 'null') || []
+  const savedIndicators = [...stored, ...DEFAULT_INDICATORS.filter(d => !stored.some(i => i.id === d.id))]
   const [indicators, setIndicators] = createSignal(savedIndicators)
   
   const [showIndicatorPanel, setShowIndicatorPanel] = createSignal(false)
