@@ -546,7 +546,8 @@ module Capital
 
         # Log breakdown
         alloc_pct_f = alloc_pct.to_f
-        pct_label = alloc_pct_f.finite? ? alloc_pct_f.round(0).to_i : 'n/a'
+        # alloc_pct is a decimal fraction (0.18 = 18%); the label printed 0% before.
+        pct_label = alloc_pct_f.finite? ? (alloc_pct_f * 100).round(1) : 'n/a'
         buy_value = entry_price.to_f * final_quantity
         Rails.logger.info(
           "[Allocator] RUPEES_BASED index:#{index_key} risk:₹#{risk_rupees} " \

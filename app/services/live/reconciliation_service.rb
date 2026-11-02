@@ -108,10 +108,11 @@ module Live
       @stats[:reconciliations] += 1
 
       active_trackers = Positions::ActivePositionsCache.instance.active_trackers
+      active_cache = Positions::ActiveCache.instance
+      prune_exited_positions(active_cache, active_trackers.to_set(&:id))
       return if active_trackers.empty?
 
       hub = Live::MarketFeedHub.instance
-      active_cache = Positions::ActiveCache.instance
       redis_cache = Live::RedisPnlCache.instance
 
       active_trackers.each do |tracker|
@@ -236,6 +237,14 @@ module Live
 
       hub.start! unless hub.running?
       tracker.subscribe
+    end
+
+    # Exits from another process (e.g. a manual close via the web API) can't touch this
+    # process's ActiveCache; drop entries whose tracker is no longer active.
+    def prune_exited_positions(active_cache, active_ids)
+      active_cache.all_positions.each do |position|
+        active_cache.remove_position(position.tracker_id) unless active_ids.include?(position.tracker_id)
+      end
     end
 
     def in_active_cache?(tracker, active_cache)

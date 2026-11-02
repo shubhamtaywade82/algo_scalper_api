@@ -50,6 +50,9 @@ class PositionTracker < ApplicationRecord
 
     def cleanup_exit_caches
       Live::PositionIndex.instance.remove(id, security_id)
+      # Without this the exited position stayed in the daemon's ActiveCache with a PnL that
+      # kept marking to market, so DailyLimits double-counted its loss as unrealized.
+      Positions::ActiveCache.instance.remove_position(id)
       Live::RedisPnlCache.instance.clear_tracker(id)
       Live::RedisTickCache.instance.clear_tick(segment, security_id)
       Live::TickCache.delete(segment, security_id)
