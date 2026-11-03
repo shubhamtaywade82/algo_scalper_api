@@ -13,7 +13,7 @@ module Options
       end
 
       def lot_size
-        15
+        Trading::LotCalculator.lot_size_for('BANKNIFTY')
       end
 
       def atm(spot)

@@ -183,4 +183,26 @@ RSpec.describe Ledger do
       end
     end
   end
+
+  describe LedgerAccount do
+    it 'applies postings atomically even when the in-memory balance is stale' do
+      stale_cash = described_class.fetch!('cash')
+      described_class.fetch!('cash').apply_posting!(debit: 500, credit: 0)
+
+      stale_cash.apply_posting!(debit: 200, credit: 0)
+
+      expect(described_class.fetch!('cash').balance_cache.to_d).to eq(stale_cash.balance_cache.to_d + 500)
+    end
+  end
+
+  describe Ledger::BalanceChecker do
+    it 'reports cash drift when the balance cache disagrees with postings' do
+      LedgerAccount.fetch!('cash').update_columns(balance_cache: 90_000) # rubocop:disable Rails/SkipsModelValidations
+
+      result = described_class.compare_paper_wallet
+
+      expect(result[:postings_cash]).to eq(100_000)
+      expect(result[:cash_drift]).to eq(-10_000)
+    end
+  end
 end

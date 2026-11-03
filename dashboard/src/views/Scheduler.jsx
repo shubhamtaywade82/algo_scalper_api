@@ -4,6 +4,8 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 
+const formatRunTime = (iso) => iso ? new Date(iso).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'
+
 const statusVariant = {
   running: 'success',
   active: 'success',
@@ -11,6 +13,7 @@ const statusVariant = {
   idle: 'outline',
   error: 'danger',
   failed: 'danger',
+  completed: 'success',
 }
 
 export default function Scheduler() {
@@ -66,7 +69,7 @@ export default function Scheduler() {
                           {task.status}
                         </Badge>
                       </TableCell>
-                      <TableCell class="px-4 py-4 text-right text-gray-500 text-[11px]">{task.last_run_at || '—'}</TableCell>
+                      <TableCell class="px-4 py-4 text-right text-gray-500 text-[11px]">{formatRunTime(task.last_run_at)}</TableCell>
                       <TableCell class="px-4 py-4 text-center">
                         <Button
                           variant="outline"

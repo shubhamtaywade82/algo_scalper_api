@@ -6,15 +6,16 @@ module Api
   class SettingsController < ApplicationController
     include Api::TokenAuthenticatable
 
-    before_action :authenticate_dashboard_token!, only: %i[index fast_entry_mode]
+    before_action :authenticate_dashboard_token!, only: %i[index fast_entry_mode change_logs]
     before_action :authenticate_settings!, only: %i[update_bulk update_fast_entry_mode update_ip deep_merge]
 
-    # Top-level keys allowed for algo config overrides (must match config/algo.yml structure)
+    # Top-level keys allowed for algo config overrides (must match config/algo.yml structure).
+    # dhanhq (enable_orders live gate), run_mode, ledger and realtime stay YAML-only on purpose.
     PERMITTED_SETTINGS_KEYS = %i[
       paper_trading trading_time_restrictions feature_flags indices trade_limits
       broker_fees risk position_sizing signals chain_analyzer option_chain
       data_freshness watchlist telegram ai midday_guard loss_streak_guard market_context
-      entry_quality
+      entry_quality profit_lock smc expiry_week_power_trend sizing
     ].freeze
 
     # GET /api/settings
@@ -35,7 +36,15 @@ module Api
     def update_bulk
       raw = params.require(:settings).permit!.to_h
       allowed_keys = PERMITTED_SETTINGS_KEYS.map(&:to_s)
-      new_config = raw.slice(*allowed_keys).deep_symbolize_keys
+      read_only_keys = raw.keys - allowed_keys
+      # Silently slicing these off returned success while discarding the user's edits.
+      if read_only_keys.any?
+        render json: { success: false, error: "Read-only settings sections: #{read_only_keys.join(', ')}" },
+               status: :unprocessable_content
+        return
+      end
+
+      new_config = raw.deep_symbolize_keys
 
       if new_config.blank?
         render json: { success: false, error: 'No permitted settings keys provided' }, status: :unprocessable_content
@@ -51,6 +60,8 @@ module Api
       )
 
       render json: { success: true, message: 'Algo settings updated successfully' }
+    rescue AlgoConfig::ValidationError => e
+      render json: { success: false, error: e.message, errors: e.errors }, status: :unprocessable_content
     rescue ActionController::ParameterMissing => e
       Rails.logger.warn("[SettingsController] update_bulk missing params: #{e.message}")
       render json: { error: e.message }, status: :bad_request
@@ -129,6 +140,8 @@ module Api
       )
 
       render json: { success: true, message: 'Settings updated successfully' }
+    rescue AlgoConfig::ValidationError => e
+      render json: { success: false, error: e.message, errors: e.errors }, status: :unprocessable_content
     rescue ActionController::ParameterMissing => e
       render json: { error: e.message }, status: :bad_request
     rescue StandardError => e

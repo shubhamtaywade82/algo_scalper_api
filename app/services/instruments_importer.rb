@@ -32,9 +32,6 @@ class InstrumentsImporter
   ].freeze
 
   class << self
-    # ------------------------------------------------------------
-    # Public entry points
-    # ------------------------------------------------------------
     def import_from_url
       started_at = Time.current
       csv_text   = fetch_csv_with_cache
@@ -51,23 +48,18 @@ class InstrumentsImporter
 
     def fetch_csv_with_cache
       if CACHE_PATH.exist? && Time.current - CACHE_PATH.mtime < CACHE_MAX_AGE
-        # Rails.logger.info "Using cached CSV (#{CACHE_PATH})"
         return CACHE_PATH.read
       end
 
-      # Rails.logger.info 'Downloading fresh CSV from Dhan…'
       csv_text = download_csv(CSV_URL)
 
       CACHE_PATH.dirname.mkpath
       File.write(CACHE_PATH, csv_text)
-      # Rails.logger.info "Saved CSV to #{CACHE_PATH}"
 
       csv_text
     rescue StandardError => e
-      # Rails.logger.warn "CSV download failed: #{e.message}"
       raise e if CACHE_PATH.exist? == false # don’t swallow if no fallback
 
-      # Rails.logger.warn 'Falling back to cached CSV (may be stale)'
       CACHE_PATH.read
     end
 
@@ -87,6 +79,7 @@ class InstrumentsImporter
 
     def import_from_csv(csv_content)
       rows = build_rows(csv_content)
+      rekey_reissued_contracts!(rows)
       import = rows.empty? ? nil : import_instruments!(rows)
       linked = link_underlying_instruments!
       expired_flagged = mark_expired_contracts_untradable!
@@ -151,6 +144,50 @@ class InstrumentsImporter
 
     private
 
+    # Dhan re-issues live option contracts under new SECURITY_IDs, often recycling the
+    # id of an expired contract. The upsert keys on security_id, so the reissued row hit
+    # the contract-identity unique index and aborted the whole import (master stale
+    # since 2026-09-16). Move the live row to the new id (keeping FKs), first retiring
+    # the expired row that still holds that id.
+    def rekey_reissued_contracts!(rows)
+      by_identity = existing_option_contracts
+      holders = Instrument.where(segment: FNO_SEGMENT).pluck(:exchange, :security_id, :id, :expiry_date)
+                          .to_h { |exchange, sid, id, expiry| [[exchange, sid], { id: id, expiry: expiry }] }
+
+      rows.each do |row|
+        next unless row[:segment] == FNO_SEGMENT && row[:option_type].present? && row[:expiry_date]
+
+        exchange_key = Instrument.exchanges.key(row[:exchange])
+        existing = by_identity[option_identity(exchange_key, row)]
+        next if existing.nil? || existing[:security_id] == row[:security_id]
+
+        holder = holders[[exchange_key, row[:security_id]]]
+        next if holder && !(holder[:expiry] && holder[:expiry] < Date.current)
+
+        move_security_id!(holder[:id], "#{row[:security_id]}:retired:#{holder[:id]}") if holder
+        move_security_id!(existing[:id], row[:security_id])
+      end
+    end
+
+    def move_security_id!(instrument_id, security_id)
+      Instrument.where(id: instrument_id).update_all(security_id: security_id, updated_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
+    end
+
+    def existing_option_contracts
+      Instrument.where(segment: FNO_SEGMENT).where.not(option_type: nil)
+                .pluck(:id, :security_id, :exchange, :underlying_security_id, :expiry_date, :strike_price, :option_type)
+                .to_h do |id, sid, exchange, underlying, expiry, strike, option_type|
+                  identity = option_identity(exchange, underlying_security_id: underlying, expiry_date: expiry,
+                                                       strike_price: strike, option_type: option_type)
+                  [identity, { id: id, security_id: sid }]
+                end
+    end
+
+    def option_identity(exchange_key, attrs)
+      [exchange_key, attrs[:underlying_security_id].to_s, attrs[:expiry_date],
+       BigDecimal(attrs[:strike_price].to_s).round(2), attrs[:option_type]]
+    end
+
     # ------------------------------------------------------------
     # Build attribute rows for every tradable security (all segments)
     # ------------------------------------------------------------
@@ -159,6 +196,9 @@ class InstrumentsImporter
 
       CSV.parse(csv_content, headers: true).each do |row|
         next unless VALID_EXCHANGES.include?(row['EXCH_ID'])
+        # Dhan adds segment codes over time (e.g. 'G'); an unknown code made the whole
+        # import raise on the enum and left the master stale for weeks.
+        next unless Instrument.segments.value?(row['SEGMENT'])
 
         instruments << build_attrs(row).slice(*Instrument.column_names.map(&:to_sym))
       end
@@ -213,9 +253,7 @@ class InstrumentsImporter
       }
     end
 
-    # ------------------------------------------------------------
     # Upsert into the single master on the canonical identity
-    # ------------------------------------------------------------
     def import_instruments!(rows)
       Instrument.import(
         rows,
@@ -224,9 +262,7 @@ class InstrumentsImporter
           conflict_target: %i[exchange segment security_id],
           columns: REFRESHED_COLUMNS
         }
-      ).tap do |res|
-        # Rails.logger.info "Upserted Instruments: #{res.ids.size}"
-      end
+      )
     end
 
     def bulk_link!(pairs)

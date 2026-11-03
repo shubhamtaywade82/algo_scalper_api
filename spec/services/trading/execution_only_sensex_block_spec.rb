@@ -4,6 +4,7 @@ require 'rails_helper'
 
 RSpec.describe 'Execution-only blocked for SENSEX' do
   it 'results in 0 lots for SENSEX in execution_only' do
+    allow(Trading::LotCalculator).to receive(:lot_size_for).with('SENSEX').and_return(20)
     profile = Trading::InstrumentExecutionProfile.for('SENSEX')
     permission_cap = profile[:max_lots_by_permission][:execution_only]
 

@@ -1,19 +1,18 @@
-import { createSignal, createMemo, For, Show, onMount } from 'solid-js'
+import { createSignal, createMemo, For, Show } from 'solid-js'
 import { useBacktest } from '../stores/useBacktest'
-import { useStrategies } from '../stores/useStrategies'
 import { useFunds } from '../stores/useFunds'
 import AnimatedNumber from '../components/AnimatedNumber'
 import EquityCurve from '../components/charts/EquityCurve'
 
+const BACKTEST_STRATEGY = 'SupertrendBacktestStrategy'
+
 export default function Backtester() {
-  const [selectedStrategy, setSelectedStrategy] = createSignal('ORB Breakout')
   const [activeTab, setActiveTab] = createSignal('overview')
   const [selectedTradeIndex, setSelectedTradeIndex] = createSignal(0)
   const [symbol, setSymbol] = createSignal('NIFTY')
   const [daysBack, setDaysBack] = createSignal(30)
 
   const { result, loading, error, runBacktest } = useBacktest()
-  const { strategies, fetchAll: fetchStrategies } = useStrategies()
   const { funds } = useFunds()
 
   const btResult = createMemo(() => result() || {})
@@ -35,31 +34,14 @@ export default function Backtester() {
 
   const isProfit = () => (metrics().netProfit || 0) >= 0
 
-  onMount(() => {
-    fetchStrategies()
-  })
-
   return (
     <div class="space-y-6">
 
       {/* Action Bar */}
       <div class="flex flex-wrap items-center justify-between gap-4 bg-white/[0.01] border border-white/5 rounded-2xl p-4">
         <div class="flex items-center gap-3">
-          <select
-            class="glass-select text-xs px-3 py-2 rounded-xl"
-            value={selectedStrategy()}
-            onChange={e => setSelectedStrategy(e.target.value)}
-          >
-            <For each={strategies()}>
-              {(strat) => (
-                <option value={strat.name}>{strat.name}</option>
-              )}
-            </For>
-            <Show when={strategies().length === 0}>
-              <option value="Supertrend Backtest">Supertrend Backtest</option>
-              <option value="ORB Breakout">ORB Breakout</option>
-            </Show>
-          </select>
+          {/* EquityBacktestJob only runs SupertrendBacktestStrategy; live strategies aren't backtestable here. */}
+          <span class="glass-select text-xs px-3 py-2 rounded-xl">{BACKTEST_STRATEGY}</span>
           <select class="glass-select text-xs px-3 py-2 rounded-xl" value={symbol()} onChange={e => setSymbol(e.target.value)}>
             <option value="NIFTY">NIFTY</option>
             <option value="BANKNIFTY">BANKNIFTY</option>
@@ -290,19 +272,19 @@ export default function Backtester() {
               <div class="text-[10px] space-y-3.5">
                 <div class="flex justify-between items-center">
                   <span class="text-gray-500 font-bold uppercase">Strategy</span>
-                  <span class="font-black text-white uppercase tracking-wider">{config().strategy || selectedStrategy()}</span>
+                  <span class="font-black text-white uppercase tracking-wider">{config().strategy || BACKTEST_STRATEGY}</span>
                 </div>
                 <div class="flex justify-between items-center">
                   <span class="text-gray-500 font-bold uppercase">Timeframe</span>
-                  <span class="font-black text-white text-data">{config().interval || '1 Minute'}</span>
+                  <span class="font-black text-white text-data">{config().interval || '5m'}</span>
                 </div>
                 <div class="flex justify-between items-center">
                   <span class="text-gray-500 font-bold uppercase">Instruments</span>
-                  <span class="font-black text-white text-data">{config().symbol || 'NIFTY'}</span>
+                  <span class="font-black text-white text-data">{config().symbol || symbol()}</span>
                 </div>
                 <div class="flex justify-between items-center">
                   <span class="text-gray-500 font-bold uppercase">Period</span>
-                  <span class="font-black text-white text-data">{config().days_back || '90'} days</span>
+                  <span class="font-black text-white text-data">{config().days_back || daysBack()} days</span>
                 </div>
                 <div class="flex justify-between items-center">
                   <span class="text-gray-500 font-bold uppercase">Initial Capital</span>
@@ -473,7 +455,7 @@ export default function Backtester() {
             <div class="space-y-3.5 text-xs">
               <div class="flex justify-between">
                 <span class="text-gray-500 uppercase font-bold text-[9px]">Instrument</span>
-                <span class="font-black text-white text-data">{config().symbol || 'NIFTY'}</span>
+                <span class="font-black text-white text-data">{config().symbol || symbol()}</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-gray-500 uppercase font-bold text-[9px]">Interval</span>
@@ -481,7 +463,7 @@ export default function Backtester() {
               </div>
               <div class="flex justify-between">
                 <span class="text-gray-500 uppercase font-bold text-[9px]">Lookback Period</span>
-                <span class="font-black text-white text-data">{config().days_back || '30'} Days</span>
+                <span class="font-black text-white text-data">{config().days_back || daysBack()} Days</span>
               </div>
             </div>
           </div>
@@ -495,8 +477,8 @@ export default function Backtester() {
             <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Backtest Execution Logs</span>
           </div>
           <div class="bg-black/60 border border-white/5 rounded-xl p-4 font-mono text-[9px] text-gray-400 h-[300px] overflow-y-auto space-y-2">
-            <div>[INFO] Initializing backtest engine for {config().symbol || 'NIFTY'}</div>
-            <div>[INFO] Loading historical candles for the last {config().days_back || '30'} days...</div>
+            <div>[INFO] Initializing backtest engine for {config().symbol || symbol()}</div>
+            <div>[INFO] Loading historical candles for the last {config().days_back || daysBack()} days...</div>
             <Show when={trades().length > 0} fallback={
               <div class="text-gray-500">[INFO] No trade execution signals triggered during this period.</div>
             }>

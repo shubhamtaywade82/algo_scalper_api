@@ -1,6 +1,8 @@
 import { createSignal, onMount, For, Show } from 'solid-js'
+import toast from 'solid-toast'
 import RecursiveFormNode from '../components/settings/RecursiveFormNode'
 import NetworkStatusPanel from '../components/settings/NetworkStatusPanel'
+import FastEntryModePanel from '../components/settings/FastEntryModePanel'
 import { dashboardApiHeaders } from '../lib/dashboardApi'
 
 export default function Settings() {
@@ -8,15 +10,12 @@ export default function Settings() {
   const [activeSection, setActiveSection] = createSignal('network_status')
   const [loading, setLoading] = createSignal(true)
   const [saving, setSaving] = createSignal(false)
-  const [saveStatus, setSaveStatus] = createSignal(false)
-  const [saveStatusMessage, setSaveStatusMessage] = createSignal('')
-  const [saveStatusClass, setSaveStatusClass] = createSignal('')
+  // Only edited sections are sent: bulk save replaces whole sections, and read-only
+  // ones (dhanhq, run_mode, ...) are rejected by the API rather than silently dropped.
+  const [dirtySections, setDirtySections] = createSignal(new Set())
 
   function showToast(message, type = 'success') {
-    setSaveStatusMessage(message)
-    setSaveStatusClass(type === 'success' ? 'text-cyan-400 border-cyan-800 bg-cyan-900/30' : 'text-red-400 border-red-800 bg-red-900/30')
-    setSaveStatus(true)
-    setTimeout(() => setSaveStatus(false), 4000)
+    type === 'success' ? toast.success(message) : toast.error(message)
   }
 
   async function fetchSettings() {
@@ -26,6 +25,7 @@ export default function Settings() {
       const data = await response.json()
       if (data.success) {
         setConfigRoot(data.config)
+        setDirtySections(new Set())
         if (activeSection() === 'network_status' || !configRoot()) {
           setActiveSection('network_status')
         }
@@ -40,9 +40,14 @@ export default function Settings() {
   function handleUpdate(updatedNode) {
     const sec = activeSection()
     setConfigRoot(prev => ({ ...prev, [sec]: updatedNode }))
+    setDirtySections(prev => new Set(prev).add(sec))
   }
 
   async function saveSettings() {
+    if (dirtySections().size === 0) {
+      showToast('No changes to save', 'error')
+      return
+    }
     let token = localStorage.getItem('algo_settings_token')
     if (!token) {
       token = window.prompt("Enter Settings Update Token (from your .env file):")
@@ -62,7 +67,7 @@ export default function Settings() {
           'Content-Type': 'application/json',
           'X-Settings-Update-Token': token
         },
-        body: JSON.stringify({ settings: configRoot() })
+        body: JSON.stringify({ settings: Object.fromEntries([...dirtySections()].map(sec => [sec, configRoot()[sec]])) })
       })
       const data = await response.json()
       if (response.status === 401) {
@@ -70,6 +75,7 @@ export default function Settings() {
         throw new Error('Invalid token. Try again.')
       }
       if (data.success) {
+        setDirtySections(new Set())
         showToast('Settings saved successfully (Overrides stored in DB)')
       } else {
         throw new Error(data.error)
@@ -84,7 +90,7 @@ export default function Settings() {
   onMount(() => { fetchSettings() })
 
   return (
-    <div class="settings-page w-full min-h-screen bg-gray-950 p-6 flex flex-col pt-24 font-mono text-gray-200">
+    <div class="settings-page w-full flex flex-col font-mono text-gray-200">
       <div class="max-w-7xl mx-auto w-full">
         <div class="flex justify-between items-center mb-8 border-b border-gray-800 pb-4">
           <div>
@@ -99,11 +105,6 @@ export default function Settings() {
           </div>
 
           <div class="flex items-center gap-4">
-            <Show when={saveStatus()}>
-              <div class={`text-xs font-bold px-3 py-1.5 rounded bg-gray-900 border ${saveStatusClass()}`}>
-                {saveStatusMessage()}
-              </div>
-            </Show>
 
             <button
               onClick={fetchSettings}
@@ -118,7 +119,7 @@ export default function Settings() {
               disabled={saving()}
               class={`px-5 py-2 bg-cyan-900 hover:bg-cyan-800 text-cyan-100 rounded border border-cyan-700 transition-all flex items-center gap-2 text-sm font-bold shadow-[0_0_15px_rgba(8,145,178,0.2)] hover:shadow-[0_0_20px_rgba(8,145,178,0.4)] ${saving() ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              SAVE ALL CHANGES
+              SAVE CHANGES{dirtySections().size > 0 ? ` (${dirtySections().size})` : ''}
             </button>
           </div>
         </div>
@@ -173,6 +174,9 @@ export default function Settings() {
                   <h2 class="text-xl font-bold text-gray-100 uppercase tracking-wide border-b border-gray-800 pb-4 mb-6">
                     {String(activeSection()).replace(/_/g, ' ')}
                   </h2>
+                  <Show when={activeSection() === 'signals'}>
+                    <div class="mb-6"><FastEntryModePanel /></div>
+                  </Show>
                   <RecursiveFormNode
                     node={configRoot()[activeSection()]}
                     nodeKey={activeSection()}

@@ -6,12 +6,14 @@
 # via AnalysisStore so the API endpoint always returns instantly from cache.
 #
 # Usage:
-#   AnalysisJob.perform_later                      # All indices, stale only
-#   AnalysisJob.perform_later('NIFTY')             # Single index, stale only
-#   AnalysisJob.perform_later('NIFTY', force: true) # Single index, force refresh
+#   AnalysisJob.perform_later                            # All indices, stale only
+#   AnalysisJob.perform_later('NIFTY')                   # Single index, stale only
+#   AnalysisJob.perform_later('NIFTY', force: true)      # Single index, force refresh
+#   AnalysisJob.perform_later(nil, %w[smc regime])       # recurring.yml: no LLM call
 #
+# The recurring run is what keeps regime/SMC/Supertrend fresh for the Market Brief;
+# before it existed they were only computed while someone had the Analysis page open.
 class AnalysisJob < ApplicationJob
-  self.queue_adapter = :async
   queue_as :background
 
   retry_on StandardError, wait: ->(executions) { 2**executions }, attempts: 2
@@ -31,12 +33,13 @@ class AnalysisJob < ApplicationJob
     end
   end
 
-  def perform(index_key = nil, force: false)
+  def perform(index_key = nil, components = nil, force: false)
     indices = index_key ? [index_key.upcase] : all_index_keys
+    only = components&.map(&:to_sym)
     failures = []
 
     indices.each do |key|
-      failures.concat(compute_for_index(key, force: force))
+      failures.concat(compute_for_index(key, force: force, only: only))
       sleep 1 # Rate limit between indices
     end
 
@@ -51,7 +54,7 @@ class AnalysisJob < ApplicationJob
   private
 
   # @return [Array<String>] labels of components that failed (not written)
-  def compute_for_index(index_key, force: false)
+  def compute_for_index(index_key, force: false, only: nil)
     instrument = find_instrument(index_key)
     unless instrument
       Rails.logger.warn("[AnalysisJob] Instrument not found for #{index_key}")
@@ -59,6 +62,7 @@ class AnalysisJob < ApplicationJob
     end
 
     stale = force ? AnalysisStore::COMPONENTS : AnalysisStore.stale_components(index_key)
+    stale &= only if only
     return [] if stale.empty?
 
     Rails.logger.info("[AnalysisJob] #{index_key}: refreshing #{stale.join(', ')}")
@@ -77,7 +81,7 @@ class AnalysisJob < ApplicationJob
       failures << compute_component("#{index_key}:regime") do
         series = instrument.candle_series(interval: '5')
         data = if series&.candles&.size&.>= 20
-                 MarketRegimeDetector.new(series).detect
+                 MarketRegimeDetector.new(series).detect.merge(supertrend: supertrend_summary(series))
                else
                  { regime: 'NO_DATA', confidence: 0 }
                end
@@ -96,6 +100,15 @@ class AnalysisJob < ApplicationJob
     end
 
     failures.compact
+  end
+
+  # Same period/multiplier the signal engine uses (signals.supertrend), so the brief
+  # reports the trend the engine trades on rather than a second definition.
+  def supertrend_summary(series)
+    cfg = AlgoConfig.fetch.dig(:signals, :supertrend) || {}
+    result = Indicators::Supertrend.new(series: series, period: cfg[:period] || 10,
+                                        base_multiplier: cfg[:base_multiplier] || 2.0).call
+    { direction: result[:trend]&.to_s, line: result[:last_value]&.to_f&.round(2) }
   end
 
   def find_instrument(index_key)

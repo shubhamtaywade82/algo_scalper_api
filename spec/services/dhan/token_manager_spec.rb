@@ -131,4 +131,29 @@ RSpec.describe Dhan::TokenManager do
       end
     end
   end
+
+  describe '.snapshot' do
+    it 'returns the stored live token with its expiry and never refreshes' do
+      expiry = 4.hours.from_now.change(usec: 0)
+      DhanAccessToken.create!(token: 'stored-token', expiry_time: expiry)
+      allow(described_class).to receive(:refresh!)
+
+      snapshot = described_class.snapshot
+
+      expect(snapshot).to include(token: 'stored-token', expiry_time: expiry)
+      expect(described_class).not_to have_received(:refresh!)
+    end
+
+    it 'returns nil for an expired token instead of refreshing it' do
+      DhanAccessToken.create!(token: 'stale-token', expiry_time: 1.minute.ago)
+      allow(described_class).to receive(:refresh!)
+
+      expect(described_class.snapshot).to be_nil
+      expect(described_class).not_to have_received(:refresh!)
+    end
+
+    it 'returns nil when there is no token at all' do
+      expect(described_class.snapshot).to be_nil
+    end
+  end
 end

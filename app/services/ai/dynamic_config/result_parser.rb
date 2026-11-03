@@ -50,8 +50,11 @@ module Ai
                             per_index: true, min: 60, max: 900, safer_direction: :up },
         'max_trades_per_day' => { path: %i[trade_limits max_trades_per_day], current_path: %i[max_trades_per_day],
                                   per_index: true, min: 1, max: 20, safer_direction: :down },
+        # Not a "safer direction" lever: a tighter premium stop is not safer. At the old 0.05 floor
+        # every paper trade on 2026-11-02 was stopped out by noise within 1-3 minutes, and
+        # treating "down" as safe made the agent ratchet the stop to that floor after each loss.
         'sl_pct' => { path: %i[risk sl_pct], current_path: %i[sl_pct],
-                      per_index: false, min: 0.05, max: 0.40, safer_direction: :down },
+                      per_index: false, min: 0.08, max: 0.40, safer_direction: nil },
         'tp_pct' => { path: %i[risk tp_pct], current_path: %i[tp_pct],
                       per_index: false, min: 0.10, max: 0.80, safer_direction: nil }
       }.freeze

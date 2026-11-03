@@ -3,6 +3,9 @@
 require 'rails_helper'
 
 RSpec.describe Entries::EntryGuard do
+  # Lot sizes come from the instrument master, which these specs don't seed.
+  before { allow(Trading::LotCalculator).to receive(:lot_size_for).and_return(65) }
+
   let(:index_cfg) { { key: 'NIFTY', segment: 'NSE_FNO', cooldown_sec: 0 } }
   let(:pick) { { symbol: 'NIFTY24MAR22000CE', security_id: '12345', segment: 'NSE_FNO', ltp: BigDecimal('150.0') } }
   let(:direction) { 'LONG' }

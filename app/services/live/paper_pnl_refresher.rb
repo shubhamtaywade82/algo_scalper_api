@@ -116,11 +116,13 @@ module Live
       hwm_pnl = [tracker.high_water_mark_pnl.to_d, pnl].max
       hwm_pnl_pct = entry.positive? ? (hwm_pnl / (entry * qty)) : 0
 
-      tracker.update!(
-        last_pnl_rupees: pnl,
-        last_pnl_pct: pct ? BigDecimal(pct.to_s) : nil,
-        high_water_mark_pnl: hwm_pnl
-      )
+      attrs = { last_pnl_rupees: pnl, last_pnl_pct: pct ? BigDecimal(pct.to_s) : nil, high_water_mark_pnl: hwm_pnl }
+      # `tracker` comes from ActivePositionsCache and may already be exited by ExitFlow
+      # in another thread. A plain update! on that stale object overwrote the exit-fill
+      # PnL with this mark-to-market value (754/759 paper trades drifted from the ledger).
+      return unless PositionTracker.where(id: tracker.id, status: :active).update_all(attrs.merge(updated_at: Time.current)) == 1 # rubocop:disable Rails/SkipsModelValidations
+
+      tracker.assign_attributes(attrs)
 
       Live::RedisPnlCache.instance.store_pnl(
         tracker_id: tracker.id,

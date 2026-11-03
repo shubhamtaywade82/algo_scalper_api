@@ -24,6 +24,16 @@ RSpec.describe 'Api::Backtests' do
       expect(body['status']).to eq('queued')
       expect(Rails.cache.read(EquityBacktestJob.cache_key(body['backtest_run_id']))).to eq(status: 'queued')
     end
+
+    it 'honours a lookback shorter than the default' do
+      expect { post '/api/backtests', params: { days_back: 7 } }
+        .to have_enqueued_job(EquityBacktestJob).with(an_instance_of(String), symbol: 'NIFTY', interval: '5', days_back: 7)
+    end
+
+    it 'defaults days_back when omitted' do
+      expect { post '/api/backtests' }
+        .to have_enqueued_job(EquityBacktestJob).with(an_instance_of(String), symbol: 'NIFTY', interval: '5', days_back: 30)
+    end
   end
 
   describe 'GET /api/backtests/:id' do

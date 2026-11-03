@@ -45,6 +45,17 @@ development:
     priority: 8
     description: "Multi-Agent AI cycle (Market Analysis, Risk Management, Strategy Selection, Calibration)"
 
+  analysis_refresh:
+    class: AnalysisJob
+    args: [null, ["smc", "regime"]]
+    # Regime/SMC/Supertrend expire after 2-3 min in AnalysisStore; without this they
+    # were only computed while the Analysis page was open, leaving the Market Brief
+    # (and its event detection) on "unavailable". No LLM call (AI component excluded).
+    schedule: "*/2 9-15 * * 1-5 Asia/Kolkata"
+    queue_name: background
+    priority: 7
+    description: "Refresh regime, SMC and Supertrend for all indices (feeds Market Brief); no AI"
+
   market_brief_refresh:
     class: Reports::MarketBriefJob
     args: [null, "scheduled"]
@@ -160,6 +171,17 @@ production:
     queue_name: background
     priority: 8
     description: "Multi-Agent AI cycle every 15 minutes in the cash session (cron 9:00-15:45 weekdays; the 9:00 and 15:45 edge runs are accepted)"
+
+  analysis_refresh:
+    class: AnalysisJob
+    args: [null, ["smc", "regime"]]
+    # Regime/SMC/Supertrend expire after 2-3 min in AnalysisStore; without this they
+    # were only computed while the Analysis page was open, leaving the Market Brief
+    # (and its event detection) on "unavailable". No LLM call (AI component excluded).
+    schedule: "*/2 9-15 * * 1-5 Asia/Kolkata"
+    queue_name: background
+    priority: 7
+    description: "Refresh regime, SMC and Supertrend for all indices (feeds Market Brief); no AI"
 
   market_brief_refresh:
     class: Reports::MarketBriefJob

@@ -1,40 +1,38 @@
 # frozen_string_literal: true
 
 module Trading
+  # Lot size comes from the exchange via the instrument master (InstrumentsImportJob
+  # syncs Dhan's scrip CSV daily). NSE/BSE revise lots a few times a year; the old
+  # hard-coded 75/15/10 went stale and mis-sized every BANKNIFTY entry by 2x.
   class LotCalculator
     class UnsupportedInstrumentError < StandardError; end
 
-    LOT_SIZES = {
-      'NIFTY' => 75,
-      'BANKNIFTY' => 15,
-      'SENSEX' => 10
-    }.freeze
+    CACHE_TTL = 1.hour
 
     class << self
-      # Weekly expiry only is assumed upstream (no dynamic sizing here).
-      #
-      # Sources: the India index registry (config-driven) and the static LOT_SIZES
-      # floor. When both define a symbol they must AGREE — a silent
-      # registry-wins policy would let a stale registry row mis-size every order.
-      #
-      # @param symbol [String, Symbol]
-      # @return [Integer]
-      # @raise [Trading::LotCalculator::UnsupportedInstrumentError] when neither source defines the symbol
-      # @raise [Errors::InvariantViolation] when the two sources disagree
+      # @param symbol [String, Symbol] underlying index key, e.g. "NIFTY"
+      # @return [Integer] lot size of the nearest live option contract
+      # @raise [UnsupportedInstrumentError] when the master has no live contract —
+      #   fail closed rather than size an order with a guessed lot.
       def lot_size_for(symbol)
         key = symbol.to_s.strip.upcase
-        registry_lot = IndiaIndexRegistry.for_key(key)&.dig(:lot)
-        static_lot = LOT_SIZES[key]
-
-        if registry_lot && static_lot && registry_lot != static_lot
-          raise Errors::InvariantViolation,
-                "lot size sources disagree for #{key}: india_index_registry=#{registry_lot.inspect} vs LOT_SIZES=#{static_lot.inspect}"
+        lot = Rails.cache.fetch("lot_size:#{key}:#{Time.zone.today}", expires_in: CACHE_TTL, skip_nil: true) do
+          nearest_contract_lot(key)
         end
+        return lot if lot&.positive?
 
-        lot = registry_lot || static_lot
-        raise UnsupportedInstrumentError, "Unsupported instrument: #{symbol}" unless lot
+        raise UnsupportedInstrumentError,
+              "No live option contract with a lot size for #{key} in the instrument master — run InstrumentsImportJob"
+      end
 
-        lot
+      private
+
+      def nearest_contract_lot(key)
+        Instrument.options
+                  .where(underlying_symbol: key, expiry_date: Time.zone.today..)
+                  .where.not(lot_size: nil)
+                  .order(:expiry_date)
+                  .pick(:lot_size)
       end
     end
   end

@@ -207,7 +207,7 @@ module Notifications
         return nil unless available_strikes.any?
 
         # Calculate strike interval
-        strike_interval = available_strikes.size >= 2 ? (available_strikes[1] - available_strikes[0]) : 50
+        strike_interval = Options::ChainAnalyzer.strike_interval(available_strikes)
 
         # Find ATM strike (closest to spot)
         atm_strike = available_strikes.min_by { |s| (s - spot_price).abs }

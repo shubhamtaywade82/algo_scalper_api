@@ -73,4 +73,20 @@ RSpec.describe Positions::ActiveCache do
   ensure
     ActiveSupport::Notifications.unsubscribe(subscriber)
   end
+
+  it 'is pruned by reconciliation once the tracker is no longer active (exit in another process)' do
+    cache.add_position(tracker: tracker)
+
+    Live::ReconciliationService.instance.send(:prune_exited_positions, cache, Set.new)
+
+    expect(cache.get_by_tracker_id(42)).to be_nil
+  end
+
+  it 'keeps positions whose tracker is still active during reconciliation' do
+    cache.add_position(tracker: tracker)
+
+    Live::ReconciliationService.instance.send(:prune_exited_positions, cache, Set[42])
+
+    expect(cache.get_by_tracker_id(42)).to be_present
+  end
 end

@@ -104,7 +104,7 @@ export default function LedgerWalletPanel() {
           <Show when={config().shadow_mode}>
             <div class={`rounded-xl border px-4 py-3 mb-5 ${driftOk() ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-amber-500/30 bg-amber-500/10'}`}>
               <div class="flex flex-wrap items-center justify-between gap-2">
-                <span class="text-[10px] font-black uppercase tracking-widest text-gray-400">Reconciliation vs legacy wallet</span>
+                <span class="text-[10px] font-black uppercase tracking-widest text-gray-400">Cache vs postings</span>
                 <span class={`text-[9px] font-black uppercase tracking-widest ${driftOk() ? 'text-emerald-400' : 'text-amber-400'}`}>
                   {driftOk() ? 'ALIGNED' : 'DRIFT'}
                 </span>

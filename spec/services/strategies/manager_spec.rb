@@ -98,4 +98,25 @@ RSpec.describe Strategies::Manager do
       expect(Strategies::Runtime.lookup('LifecycleTestStrategy')).to be_nil
     end
   end
+
+  describe '#attempt_entry expiry window' do
+    let(:record) { instance_double(Strategies::Signal, confidence: 0.9, update!: true) }
+
+    before do
+      allow(manager).to receive(:auto_entry_enabled?).and_return(true)
+      allow(IndexConfigLoader).to receive(:load_indices).and_return([{ key: 'BANKNIFTY' }])
+      allow(Options::ChainAnalyzer).to receive(:pick_strikes)
+      allow(Entries::EntryGuard).to receive(:try_enter)
+    end
+
+    it 'blocks the entry before any strike is picked when the nearest expiry is beyond the window' do
+      allow(Signal::ExpiryGate).to receive(:beyond_entry_window?).and_return(true)
+
+      manager.send(:attempt_entry, record, 'BANKNIFTY', 'buy_call')
+
+      expect(record).to have_received(:update!).with(outcome: 'blocked_by_guard', reason: 'expiry_beyond_entry_window')
+      expect(Options::ChainAnalyzer).not_to have_received(:pick_strikes)
+      expect(Entries::EntryGuard).not_to have_received(:try_enter)
+    end
+  end
 end

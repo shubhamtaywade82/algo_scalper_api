@@ -5,6 +5,11 @@
 # your test database is "scratch space" for the test suite and is wiped
 # and recreated between test runs. Don't rely on the data there!
 
+# Specs write fixture ticks/PnL to Redis; sharing dev db 0 leaked a fake NIFTY LTP
+# (22150.75) into the running dashboard. Set here, not in rails_helper: the
+# ollama-client gem calls Dotenv.overload at Bundler.require, clobbering earlier ENV.
+ENV['REDIS_URL'] = ENV.fetch('TEST_REDIS_URL', 'redis://127.0.0.1:6379/15')
+
 Rails.application.configure do
   # Settings specified here will take precedence over those in config/application.rb.
 

@@ -98,7 +98,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
     # to the per-example get_by_tracker_id fixture so trailing flows see the
     # same position data. update_position covers TrailingEngine peak writes.
     @mock_active_cache = instance_double(Positions::ActiveCache)
-    allow(@mock_active_cache).to receive_messages(get_by_tracker_id: nil, update_position: true)
+    allow(@mock_active_cache).to receive_messages(get_by_tracker_id: nil, update_position: true, remove_position: true)
     allow(@mock_active_cache).to receive(:upsert_from_tracker) do |tracker, **_kwargs|
       @mock_active_cache.get_by_tracker_id(tracker.id)
     end
@@ -696,7 +696,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
       it 'handles missing entry price gracefully' do
         position_tracker.update!(entry_price: nil, avg_price: nil)
 
-        allow(PositionTracker).to receive(:active).and_return(double(find_each: [].each))
+        allow(PositionTracker).to receive(:active).and_return(double(find_each: [].each, exists?: true))
         expect { risk_manager.send(:run_interval_enforcement_if_needed, mock_exit_engine) }.not_to raise_error
       end
     end
@@ -721,7 +721,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
 
       it 'handles zero quantity gracefully' do
         position_tracker.update!(quantity: 0)
-        allow(PositionTracker).to receive(:active).and_return(double(find_each: [].each))
+        allow(PositionTracker).to receive(:active).and_return(double(find_each: [].each, exists?: true))
 
         expect { risk_manager.send(:run_interval_enforcement_if_needed, mock_exit_engine) }.not_to raise_error
       end

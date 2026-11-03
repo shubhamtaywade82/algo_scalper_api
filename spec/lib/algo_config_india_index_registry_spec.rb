@@ -20,7 +20,7 @@ RSpec.describe AlgoConfig do
       # The DocumentStore overlay wins over the algo.yml base entry...
       expect(nifty[:capital_alloc_pct]).to eq(0.30)
 
-      # ...but canonical registry identity (sid/segment/lot/execution defaults)
+      # ...but canonical registry identity (sid/segment/execution defaults)
       # is no longer merged into the raw config document —
       # IndiaIndexRegistry.merge_into is applied per index by IndexConfigLoader
       # when index configs are loaded.
@@ -31,7 +31,6 @@ RSpec.describe AlgoConfig do
       merged = IndiaIndexRegistry.merge_into(key: 'NIFTY', capital_alloc_pct: 0.30)
       expect(merged[:sid]).to eq('13')
       expect(merged[:segment]).to eq('IDX_I')
-      expect(merged[:lot]).to eq(75)
       expect(merged[:execution][:earliest_entry_time]).to eq('09:30')
       expect(merged[:capital_alloc_pct]).to eq(0.30)
     end

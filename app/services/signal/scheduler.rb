@@ -439,11 +439,7 @@ module Signal
     # Get maximum expiry days from config (default: 7 days)
     # Indices with expiry > this limit will be skipped
     def max_expiry_days
-      config = AlgoConfig.fetch[:signals] || {}
-      max_days = config[:max_expiry_days] || 7
-      max_days.to_i
-    rescue StandardError
-      7 # Default to 7 days if config unavailable
+      Signal::ExpiryGate.max_expiry_days
     end
   end
 end

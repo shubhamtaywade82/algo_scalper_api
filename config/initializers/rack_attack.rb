@@ -8,7 +8,9 @@
 
 module Rack
   class Attack
-    API_LIMIT = Integer(ENV.fetch('RACK_ATTACK_API_LIMIT', '240'))
+    # One dashboard tab polls ~0.5 req/s; 240/5min (0.8/s) throttled two tabs and
+    # killed backtest polling. 1200/5min (4/s) leaves headroom for several tabs.
+    API_LIMIT = Integer(ENV.fetch('RACK_ATTACK_API_LIMIT', '1200'))
     API_PERIOD = Integer(ENV.fetch('RACK_ATTACK_API_PERIOD_SECONDS', '300'))
     AI_LIMIT = Integer(ENV.fetch('RACK_ATTACK_AI_LIMIT', '12'))
     AI_PERIOD = Integer(ENV.fetch('RACK_ATTACK_AI_PERIOD_SECONDS', '60'))

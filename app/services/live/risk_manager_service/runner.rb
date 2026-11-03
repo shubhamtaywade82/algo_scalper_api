@@ -90,6 +90,10 @@ module Live
           return
         end
 
+        # The realtime timestamp only advances on position PnL events, so with no open
+        # positions the stream always looks stale — nothing to scan, nothing to warn about.
+        return unless PositionTracker.active.exists?
+
         unless realtime_fallback_enabled?
           Rails.logger.warn('[RiskManager] Tick stream stale and fallback disabled; skipping interval exit scan')
           return

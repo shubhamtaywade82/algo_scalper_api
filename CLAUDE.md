@@ -8,7 +8,7 @@ Rails 8 API backend for **fully autonomous** intraday options scalping on Indian
 - PostgreSQL (persistence, Solid Queue backend)
 - Redis (tick cache, PnL cache, position state, circuit breaker)
 - Solid Queue (background job processing — not Sidekiq)
-- ActionCable over the `redis` adapter (`config/cable.yml`) — not Solid Cable
+- ActionCable over the `solid_cable` adapter (`config/cable.yml`): broadcasts are rows in `solid_cable_messages` (dev: main DB; prod: separate `cable` DB), polled every 0.1s — this is how the trading daemon's broadcasts reach browsers via the web process. Not Redis
 - Solid Cache (Rails.cache backend in production; development uses `:redis_cache_store`)
 - DhanHQ v2 via `dhanhq` gem (broker API + WebSocket)
 - Optional: OpenAI for AI technical analysis
@@ -116,7 +116,7 @@ app/jobs/
   instruments_import_job.rb        # daily DhanHQ CSV sync
   smc_scanner_job.rb               # SMC + AVRZ pattern detection
   ai_technical_analysis_job.rb     # AI analysis (NIFTY, SENSEX)
-  analysis_job.rb                  # on-demand analysis (async adapter, not Solid Queue)
+  analysis_job.rb                  # regime/SMC/Supertrend (+AI on demand) → AnalysisStore; recurring every 2 min without AI
 
 lib/trading_system/
   daemon.rb                        # trading process lifecycle
@@ -149,6 +149,7 @@ Registered in `lib/trading_system/bootstrap.rb`, started by `supervisor.start_al
 |-----|---------|---------|
 | `InstrumentsImportJob` | Daily 8:45 AM | DhanHQ instrument master CSV sync |
 | `SmcScannerJob` | Every 15 min (market hours) | SMC + AVRZ pattern detection |
+| `AnalysisJob` (`smc`, `regime`) | Every 2 min, 9:00–15:59 IST weekdays | Keeps AnalysisStore regime/SMC/Supertrend fresh for Market Brief + Analysis page; no LLM |
 | `AiTechnicalAnalysisJob` (NIFTY) | Every 15 min (market hours) | AI-powered analysis |
 | `AiTechnicalAnalysisJob` (SENSEX) | Every 15 min (market hours) | AI-powered analysis |
 | `Reports::MarketBriefJob` | Every 15 min, 9:00–15:45 IST weekdays (job skips outside the cash session) | Market Brief AI refresh (heartbeat); event-driven runs come from the daemon watcher |
@@ -213,3 +214,4 @@ All percentage values in `config/algo.yml` use **DECIMAL format**: `0.12` means 
 - `Live::Gateway` is **deprecated** — use `Orders::GatewayLive` directly
 - Option chain adapter is always `DhanAdapter` (even in paper mode) — option chain reads are live
 - Token refresh uses `Dhan::TokenManager` with 3-tier fallback: authority server → TOTP auto-refresh → static ENV
+- This app is the Dhan token **owner** for other local tools: `GET /api/dhan/token` (requires `API_OPERATOR_TOKEN`, even in dev) serves `Dhan::TokenManager.snapshot` — read-only, never refreshes. Any other app that logs in itself invalidates this app's token (DH-906); consumers (e.g. pine-ts-workbench) must fetch from here and generate their own only when this app is unreachable

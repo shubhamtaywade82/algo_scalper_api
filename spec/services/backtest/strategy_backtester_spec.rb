@@ -32,7 +32,12 @@ RSpec.describe Backtest::StrategyBacktester do
     )
   end
 
-  before { File.write(file_path, strategy_source) }
+  before do
+    File.write(file_path, strategy_source)
+    # Lot size is read from the instrument master (Trading::LotCalculator).
+    create(:instrument, underlying_symbol: 'NIFTY', instrument_type: 'OPTIDX', option_type: 'CE',
+                        strike_price: 23_000, expiry_date: 1.week.from_now.to_date, lot_size: 65)
+  end
 
   after do
     FileUtils.rm_f(file_path)

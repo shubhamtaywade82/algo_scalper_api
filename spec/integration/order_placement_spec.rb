@@ -15,6 +15,8 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
   let(:instrument) { create(:instrument, :nifty_future, security_id: '12345') }
 
   before do
+    # Lot sizes come from the instrument master, which these specs don't seed.
+    allow(Trading::LotCalculator).to receive(:lot_size_for).and_return(65)
     # Mock DhanHQ order creation with WebMock
     stub_request(:post, /.*dhan.*orders/)
       .to_return(
@@ -400,7 +402,10 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
       end
 
       it 'skips entry when cooldown is active' do
-        allow(Entries::EntryGuard).to receive_messages(cooldown_active?: true, cooldown_active_for_index?: true)
+        # The pipeline is stubbed to PASS above, so stubbing cooldown_active? never
+        # reached CooldownGuard; this passed only because stale lot sizes (NIFTY 75)
+        # made the sizing cap 0. Block via the pipeline like the exposure example.
+        allow(Entries::EntryGuard.entry_guard_pipeline).to receive(:run).and_return({ blocked: 'cooldown active for nifty' })
 
         result = Entries::EntryGuard.try_enter(
           index_cfg: index_config,

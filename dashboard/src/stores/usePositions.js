@@ -21,6 +21,8 @@ export function usePositions() {
   async function fetchPositions() {
     try {
       const res = await fetch('/api/positions', { headers: dashboardApiHeaders() })
+      // A 429/5xx body has no open/closed keys; applying it would blank live positions.
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setOpen(data.open || [])
       setClosed(data.closed || [])

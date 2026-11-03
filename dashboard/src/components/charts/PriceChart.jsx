@@ -1,6 +1,7 @@
 import { onMount, onCleanup, createEffect, createSignal, Show, For } from 'solid-js'
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers, ColorType } from 'lightweight-charts'
 import { istTickMarkFormatter, istTimeFormatter } from '../../lib/chartTime'
+import { runPineIndicator } from '../../lib/pineIndicators'
 import {
   detectFVGs,
   detectOrderBlocks,
@@ -21,33 +22,31 @@ import {
 import { scanSetups, resampleCandles, strikeIntervalForSymbol } from '../../lib/smc/setupScanner'
 import { drawSmcOverlays } from '../../lib/smc/canvasOverlay'
 
-// Overlay indicators are just LineSeries fed derived {time, value} arrays.
-// Add a new type by: (1) writing a compute fn here, (2) registering it in
-// INDICATOR_COMPUTE, (3) adding it to the catalog passed from Charts.jsx.
-function sma(bars, period) {
-  const out = []
-  let sum = 0
-  for (let i = 0; i < bars.length; i++) {
-    sum += bars[i].close
-    if (i >= period) sum -= bars[i - period].close
-    if (i >= period - 1) out.push({ time: bars[i].time, value: sum / period })
+// Indicators are computed by pine-ts (see lib/pineIndicators.js) and drawn as lightweight-charts
+// series. Register a new one here (pine-ts registry id, pane, one entry per plot) and in the
+// catalog passed from Charts.jsx. `pane: 0` = price pane; `pane: 'sub'` = the indicator's own
+// pane below it (each enabled oscillator gets one, in catalog order).
+// `periodInput` is the pine-ts input the catalog's `period` maps to (omit for fixed defaults).
+// A plot's `color` defaults to the catalog entry's color.
+const PINE_INDICATORS = {
+  sma: { id: 'sma', pane: 0, periodInput: 'length', plots: [{ key: 'main' }] },
+  ema: { id: 'ema', pane: 0, periodInput: 'length', plots: [{ key: 'main' }] },
+  vwap: { id: 'vwap', pane: 0, plots: [{ key: 'main' }] },
+  bb: {
+    id: 'bb', pane: 0, periodInput: 'length',
+    plots: [{ key: 'middle' }, { key: 'upper', width: 1 }, { key: 'lower', width: 1 }]
+  },
+  rsi: { id: 'rsi', pane: 'sub', periodInput: 'length', plots: [{ key: 'main' }] },
+  atr: { id: 'atr', pane: 'sub', periodInput: 'length', plots: [{ key: 'main' }] },
+  macd: {
+    id: 'macd', pane: 'sub',
+    plots: [
+      { key: 'histogram', kind: 'histogram', color: '#6b728080' },
+      { key: 'macd' },
+      { key: 'signal', color: '#ff6d00', width: 1 }
+    ]
   }
-  return out
 }
-
-function ema(bars, period) {
-  const out = []
-  const k = 2 / (period + 1)
-  let prev = null
-  for (let i = 0; i < bars.length; i++) {
-    const close = bars[i].close
-    prev = prev === null ? close : close * k + prev * (1 - k)
-    if (i >= period - 1) out.push({ time: bars[i].time, value: prev })
-  }
-  return out
-}
-
-const INDICATOR_COMPUTE = { sma, ema }
 
 // Exponential lerp toward a target — same approach as chart-studio's MotionEngine
 // (current += (target - current) * smoothingFactor per animation frame).
@@ -76,7 +75,7 @@ const INITIAL_VISIBLE_BARS = 80
  * Props:
  *   candles:    () => [{ time, open, high, low, close, volume }]  (time = unix seconds)
  *   liveLtp:    () => number | null — real-time tick driving the forming bar + LTP line
- *   indicators: () => [{ id, type: 'sma'|'ema', period, color, enabled }] — overlay config
+ *   indicators: () => [{ id, type: 'sma'|'ema'|'vwap'|'bb'|'rsi'|'atr'|'macd', period, color, enabled }] — pine-ts indicator config
  *   positions:  () => [{ id, symbol, side, entry_price, created_at, pnl }] — active
  *               positions on this underlying; rendered as dotted entry-price lines
  *               + entry-time arrow markers, colored green/red by current PnL sign
@@ -184,15 +183,23 @@ export default function PriceChart(props) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, width, height)
     if (!lastCandles.length) return
+    // Zones belong to the price pane only; with an oscillator pane (RSI) below, the full
+    // container height would paint them across it too.
+    const pricePaneHeight = chart.panes?.()[0]?.getHeight?.() ?? height
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(0, 0, width, pricePaneHeight)
+    ctx.clip()
     drawSmcOverlays(ctx, {
       chart,
       series: candleSeries,
       width,
-      height,
+      height: pricePaneHeight,
       candles: lastCandles,
       detections: detectionResults(),
       toggles: overlayToggles()
     })
+    ctx.restore()
   }
 
   // Scanner HUD — MTF bias + CE/PE strike recommendation. Recomputed at most
@@ -475,6 +482,29 @@ export default function PriceChart(props) {
     })
   }
 
+  function addPineSeries(plot, cfg, pane) {
+    const color = plot.color || cfg.color
+    if (plot.kind === 'histogram') {
+      return chart.addSeries(HistogramSeries, { color, lastValueVisible: false, priceLineVisible: false }, pane)
+    }
+    return chart.addSeries(LineSeries, {
+      color, lineWidth: plot.width || 2, lastValueVisible: false, priceLineVisible: false
+    }, pane)
+  }
+
+  // pine-ts runs asynchronously; `run` discards a result if the candles, config or series
+  // changed again while it was computing, so a slow run can't overwrite newer data.
+  function applyPineIndicator(entry, spec, cfg) {
+    const run = ++entry.run
+    const inputs = spec.periodInput ? { [spec.periodInput]: cfg.period } : {}
+    runPineIndicator(spec.id, lastCandles, inputs)
+      .then((plots) => {
+        if (entry.run !== run || indicatorSeries.get(cfg.id) !== entry) return
+        for (const plot of spec.plots) entry.series[plot.key].setData(plots[plot.key] || [])
+      })
+      .catch((e) => console.error(`[Chart] pine-ts ${spec.id} failed:`, e))
+  }
+
   // Reconciles indicatorSeries against the current config: adds series for newly
   // enabled indicators, removes ones turned off, restyles changed ones, and
   // (re)computes data for anything whose config or the underlying candles changed.
@@ -483,31 +513,34 @@ export default function PriceChart(props) {
     const configs = (props.indicators ? props.indicators() : []).filter(c => c.enabled)
     const seenIds = new Set()
 
+    let subPanes = 0
     for (const cfg of configs) {
       seenIds.add(cfg.id)
-      const computeFn = INDICATOR_COMPUTE[cfg.type]
-      if (!computeFn) continue
+      const spec = PINE_INDICATORS[cfg.type]
+      if (!spec) continue
 
+      const pane = spec.pane === 'sub' ? ++subPanes : 0
       let entry = indicatorSeries.get(cfg.id)
       if (!entry) {
-        const series = chart.addSeries(LineSeries, {
-          color: cfg.color, lineWidth: 2, lastValueVisible: false, priceLineVisible: false
-        })
-        entry = { series, config: null }
+        const series = Object.fromEntries(spec.plots.map(plot => [plot.key, addPineSeries(plot, cfg, pane)]))
+        entry = { series, config: null, run: 0, pane }
         indicatorSeries.set(cfg.id, entry)
+      } else if (entry.pane !== pane) {
+        // Another oscillator was toggled off above this one: shift up so panes stay contiguous.
+        for (const series of Object.values(entry.series)) series.moveToPane(pane)
+        entry.pane = pane
       }
 
-      const prev = entry.config
-      const restyled = !prev || prev.color !== cfg.color
-
-      if (restyled) entry.series.applyOptions({ color: cfg.color })
-      entry.series.setData(computeFn(lastCandles, cfg.period))
+      if (!entry.config || entry.config.color !== cfg.color) {
+        for (const plot of spec.plots) entry.series[plot.key].applyOptions({ color: plot.color || cfg.color })
+      }
       entry.config = { ...cfg }
+      applyPineIndicator(entry, spec, cfg)
     }
 
     for (const [id, entry] of indicatorSeries) {
       if (!seenIds.has(id)) {
-        chart.removeSeries(entry.series)
+        for (const series of Object.values(entry.series)) chart.removeSeries(series)
         indicatorSeries.delete(id)
       }
     }

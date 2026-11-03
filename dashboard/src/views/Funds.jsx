@@ -2,6 +2,8 @@ import { Show } from 'solid-js'
 import { useFunds } from '../stores/useFunds'
 import Button from '../components/ui/Button'
 
+const formatRupees = (value) => `₹${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+
 export default function Funds() {
   const { funds, loading, error, fetchFunds } = useFunds()
 
@@ -29,19 +31,19 @@ export default function Funds() {
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div class="glass p-5 rounded-2xl">
             <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Cash</span>
-            <div class="text-2xl font-black text-white text-data mt-1">{funds().cash}</div>
+            <div class="text-2xl font-black text-white text-data mt-1">{formatRupees(funds().cash)}</div>
           </div>
           <div class="glass p-5 rounded-2xl">
             <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Equity</span>
-            <div class="text-2xl font-black text-white text-data mt-1">{funds().equity}</div>
+            <div class="text-2xl font-black text-white text-data mt-1">{formatRupees(funds().equity)}</div>
           </div>
           <div class="glass p-5 rounded-2xl">
             <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">MTM</span>
-            <div class="text-2xl font-black text-white text-data mt-1">{funds().mtm}</div>
+            <div class="text-2xl font-black text-white text-data mt-1">{formatRupees(funds().mtm)}</div>
           </div>
           <div class="glass p-5 rounded-2xl">
             <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Exposure</span>
-            <div class="text-2xl font-black text-white text-data mt-1">{funds().exposure}</div>
+            <div class="text-2xl font-black text-white text-data mt-1">{formatRupees(funds().exposure)}</div>
           </div>
         </div>
       </Show>

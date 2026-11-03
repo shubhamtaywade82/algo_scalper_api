@@ -29,6 +29,18 @@ module Dhan
         token_data&.dig(:token)
       end
 
+      # Read-only view for other local processes (e.g. pine-ts-workbench) that should share this
+      # app's token. Never refreshes: every refresh mints a new Dhan token and invalidates the one
+      # everybody else holds (the DH-906 collision), so only this app's own paths may do that.
+      #
+      # @return [Hash, nil] { token:, expiry_time:, client_id: }, nil when there is no live token
+      def snapshot
+        data = cached_token
+        return nil if data.nil? || data[:token].blank? || data[:expiry_time] <= Time.current
+
+        data.slice(:token, :expiry_time).merge(client_id: creds[:client_id])
+      end
+
       def refresh!(force: false)
         mutex.synchronize do
           token_data = cached_token

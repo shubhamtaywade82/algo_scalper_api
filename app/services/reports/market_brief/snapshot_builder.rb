@@ -164,7 +164,7 @@ module Reports
           index_key: key,
           quote: build_quote(cfg, session),
           regime: regime,
-          supertrend: { status: 'unavailable', reason: 'no_cross_process_supertrend_snapshot' },
+          supertrend: build_supertrend(key, regime),
           smc: smc,
           bias: build_bias(regime, smc),
           expiry: build_expiry(key)
@@ -224,6 +224,17 @@ module Reports
           computed_at: validity['computed_at'],
           age_seconds: validity['age_seconds']
         }
+      end
+
+      # Written alongside the regime by AnalysisJob (same 5m series and signals.supertrend
+      # params as the engine), so it shares the regime's freshness.
+      def build_supertrend(index_key, regime)
+        data = stringify(AnalysisStore.read(index_key, :regime)&.dig(:data)) || {}
+        trend = stringify(data['supertrend']) || {}
+        return { status: 'unavailable', reason: 'not_computed' } if trend['direction'].blank?
+
+        { status: regime[:status], direction: trend['direction'], line: numeric(trend['line']),
+          timeframe_minutes: 5, age_seconds: regime[:age_seconds] }
       end
 
       def build_smc(index_key)
@@ -464,7 +475,8 @@ module Reports
           run = ReconciliationRun.where(mode: mode.to_s).order(created_at: :desc).first
           unresolved = run ? ReconciliationDiscrepancy.where(reconciliation_run_id: run.id, resolution: nil).count : 0
           finished = run&.completed_at
-          status = if run.nil? then 'unavailable'
+          # Broker reconciliation runs (ReconciliationRun) compare against Dhan; paper has no broker side.
+          status = if run.nil? then paper? ? 'not_required' : 'unavailable'
                    elsif run.halted_trading then 'halted'
                    elsif %w[failed error].include?(run.status) then 'failed'
                    elsif finished.nil? || finished < @now - RECONCILIATION_MAX_AGE then 'stale'

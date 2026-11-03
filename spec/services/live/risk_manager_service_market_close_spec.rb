@@ -30,7 +30,7 @@ RSpec.describe Live::RiskManagerService do
         # (the old includes/to_a chain is gone) - a relation double that yields
         # nothing keeps the cycle quiet.
         allow(PositionTracker).to receive(:active).and_return(
-          double('ActiveRelation', find_each: nil, includes: double('IncRelation', to_a: []), count: 1)
+          double('ActiveRelation', find_each: nil, exists?: true, includes: double('IncRelation', to_a: []), count: 1)
         )
         allow(service).to receive(:update_paper_positions_pnl_if_due)
         allow(service).to receive(:ensure_all_positions_in_redis)
@@ -80,6 +80,20 @@ RSpec.describe Live::RiskManagerService do
         # Thread should be sleeping, not processing
         service.stop
       end
+    end
+  end
+
+  describe '#run_interval_enforcement_if_needed' do
+    it 'skips the fallback scan and its stale warning when no positions are open' do
+      travel_to(Time.zone.parse('2026-11-02 10:00:00'))
+      allow(service).to receive_messages(realtime_tick_first_enabled?: true, realtime_fallback_enabled?: true)
+      allow(service).to receive(:run_enforcement_cycle)
+      allow(Rails.logger).to receive(:warn)
+
+      service.send(:run_interval_enforcement_if_needed, exit_engine)
+
+      expect(service).not_to have_received(:run_enforcement_cycle)
+      expect(Rails.logger).not_to have_received(:warn).with(/Tick stream stale/)
     end
   end
 end
