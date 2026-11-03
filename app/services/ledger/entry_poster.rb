@@ -47,7 +47,8 @@ module Ledger
         qty = quantity.to_i
         price = BigDecimal(fill_price.to_s)
         gross = (qty * price).round(2)
-        fee = BrokerFeeCalculator.fee_per_order
+        # Real statutory charges for this leg (not the flat ₹20): the flat fee understated costs ~2x.
+        fee = Orders::ChargesCalculator.call(side: tracker.short_position? ? 'sell' : 'buy', quantity: qty, price: price).round(2)
 
         journal = PostingService.post!(
           idempotency_key: "entry:#{tracker.id}",

@@ -136,7 +136,8 @@ RSpec.describe Positions::ExitFlow do
           entry_price: tracker.entry_price,
           quantity: tracker.quantity,
           exit_price: BigDecimal('127.5'),
-          is_exited: true
+          is_exited: true,
+          segment: tracker.segment
         )
 
         expect(tracker.last_pnl_rupees).to eq(expected[:pnl])

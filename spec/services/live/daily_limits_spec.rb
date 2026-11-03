@@ -333,6 +333,57 @@ RSpec.describe Live::DailyLimits do
     end
   end
 
+  describe '#remaining_loss_budget' do
+    # ₹1,00,000 capital: NIFTY 2% = ₹2,000, global 4% = ₹4,000.
+    it 'returns the tighter of the per-index and global headroom' do
+      allow(redis).to receive(:get).with(/daily_limits:loss:.*:NIFTY/).and_return('1500.0')
+      allow(redis).to receive(:get).with(/daily_limits:loss:.*:global/).and_return('1000.0')
+
+      expect(daily_limits.remaining_loss_budget(index_key: 'NIFTY')).to eq(500.0)
+    end
+
+    it 'counts open losses, as can_trade? does' do
+      open_loss = instance_double(Positions::PositionData, index_key: 'NIFTY', pnl: -700.0)
+      allow(Positions::ActiveCache.instance).to receive(:all_positions).and_return([open_loss])
+      allow(redis).to receive(:get).with(/daily_limits:loss:.*:NIFTY/).and_return('1000.0')
+
+      expect(daily_limits.remaining_loss_budget(index_key: 'NIFTY')).to eq(300.0)
+    end
+
+    it 'never goes below zero once a limit is exceeded' do
+      allow(redis).to receive(:get).with(/daily_limits:loss:.*:SENSEX/).and_return('1479.75')
+
+      expect(daily_limits.remaining_loss_budget(index_key: 'SENSEX')).to eq(0.0)
+    end
+
+    it 'returns nil when no loss limit is configured' do
+      allow(AlgoConfig).to receive(:fetch).and_return(risk: {})
+
+      expect(daily_limits.remaining_loss_budget(index_key: 'NIFTY')).to be_nil
+    end
+
+    it 'returns no budget without Redis' do
+      instance = described_class.new
+      instance.instance_variable_set(:@redis, nil)
+
+      expect(instance.remaining_loss_budget(index_key: 'NIFTY')).to eq(0.0)
+    end
+  end
+
+  describe 'when Redis errors while reading losses' do
+    before { allow(redis).to receive(:get).and_raise(Redis::CannotConnectError) }
+
+    it 'blocks trading instead of reading the loss as zero' do
+      result = daily_limits.can_trade?(index_key: 'NIFTY')
+
+      expect(result[:allowed]).to be false
+    end
+
+    it 'raises from the budget so the caller can fail closed' do
+      expect { daily_limits.remaining_loss_budget(index_key: 'NIFTY') }.to raise_error(Redis::CannotConnectError)
+    end
+  end
+
   describe '#get_global_daily_loss' do
     it 'returns global daily loss' do
       allow(redis).to receive(:get).with(/daily_limits:loss:.*:global/).and_return('5000.0')

@@ -120,6 +120,26 @@ module Live
       { allowed: false, reason: "error: #{e.message}" }
     end
 
+    # Rupees that can still be lost today before the tighter of the per-index and global loss limits trips,
+    # measured as #can_trade? measures them (realized plus open losses, against the same capital base).
+    # nil when neither limit is configured; 0.0 without Redis. Errors propagate so callers can fail closed.
+    # @return [Float, nil]
+    def remaining_loss_budget(index_key:)
+      return 0.0 unless @redis
+
+      index_key = normalize_index_key(index_key)
+      limits = load_risk_config[:daily_limits] || {}
+      capital = capital_base
+      budgets = []
+      if (pct = limits.dig(:per_index, index_key.to_sym))
+        budgets << ((capital * pct.to_f) - get_daily_loss(index_key) - unrealized_loss(index_key: index_key))
+      end
+      if (pct = limits[:global_limit_pct])
+        budgets << ((capital * pct.to_f) - get_global_daily_loss - unrealized_loss(index_key: nil))
+      end
+      budgets.empty? ? nil : [budgets.min, 0.0].max
+    end
+
     # Record a loss for the given index
     # @param index_key [Symbol, String] Index key
     # @param amount [Float, BigDecimal] Loss amount in rupees (positive value)
@@ -257,12 +277,11 @@ module Live
     def get_daily_loss(index_key)
       return 0.0 unless @redis
 
+      # No rescue: reading 0.0 on a Redis error would switch every loss limit off for the outage.
+      # #can_trade? and #remaining_loss_budget turn the error into a block.
       key = daily_loss_key(normalize_index_key(index_key))
       value = @redis.get(key)
       (value || 0).to_f
-    rescue StandardError => e
-      Rails.logger.error("[DailyLimits] get_daily_loss error: #{e.class} - #{e.message}")
-      0.0
     end
 
     # Get global daily loss
@@ -270,12 +289,10 @@ module Live
     def get_global_daily_loss
       return 0.0 unless @redis
 
+      # No rescue, as #get_daily_loss.
       key = global_daily_loss_key
       value = @redis.get(key)
       (value || 0).to_f
-    rescue StandardError => e
-      Rails.logger.error("[DailyLimits] get_global_daily_loss error: #{e.class} - #{e.message}")
-      0.0
     end
 
     # Get daily trade count for index

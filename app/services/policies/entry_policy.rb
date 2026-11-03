@@ -16,6 +16,9 @@ module Policies
   class EntryPolicy < BasePolicy
     MARKET_OPEN  = '09:15'
     MARKET_CLOSE = '15:30'
+    # Trade-frequency limits are left to their own guard. Every other DailyLimits refusal is reported under its
+    # own reason: they all used to read "daily_loss_limit_reached", which hid which limit had fired.
+    TRADE_FREQUENCY_REASONS = %w[trade_frequency_limit_exceeded global_trade_frequency_limit_exceeded].freeze
 
     def initialize(index_cfg:, direction: nil)
       @index_cfg = index_cfg
@@ -38,14 +41,13 @@ module Policies
     end
 
     def compute_violations
-      checks = %i[
-        circuit_breaker_tripped?
-        outside_trading_hours?
-        daily_loss_limit_reached?
-      ]
-      checks.each_with_object([]) do |check, acc|
+      checks = %i[circuit_breaker_tripped? outside_trading_hours?]
+      violations = checks.each_with_object([]) do |check, acc|
         acc << check.to_s.delete_suffix('?') if send(check)
       end
+      limits_reason = daily_limits_block_reason
+      violations << limits_reason if limits_reason
+      violations
     end
 
     def circuit_breaker_tripped?
@@ -63,14 +65,15 @@ module Policies
       true # fail-safe: block entries if time cannot be determined
     end
 
-    def daily_loss_limit_reached?
-      index_key = @index_cfg&.dig(:key)
-      result = Live::DailyLimits.new.can_trade?(index_key: index_key)
-      return false if result[:allowed]
+    def daily_limits_block_reason
+      result = Live::DailyLimits.new.can_trade?(index_key: @index_cfg&.dig(:key))
+      return nil if result[:allowed] || TRADE_FREQUENCY_REASONS.include?(result[:reason])
 
-      %w[trade_frequency_limit_exceeded global_trade_frequency_limit_exceeded].exclude?(result[:reason])
-    rescue StandardError
-      false
+      result[:reason].to_s.presence || 'daily_limits_blocked'
+    rescue StandardError => e
+      # Fail closed: an unreadable loss limit must not let an entry through.
+      Rails.logger.error("[EntryPolicy] daily limits check failed: #{e.class} - #{e.message}")
+      'daily_limits_unavailable'
     end
   end
 end

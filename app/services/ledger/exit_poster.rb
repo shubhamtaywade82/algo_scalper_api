@@ -41,7 +41,7 @@ module Ledger
 
         entry_px = BigDecimal((tracker.avg_price || tracker.entry_price).to_s)
         exit_px = BigDecimal((exit_price || tracker.exit_price).to_s)
-        exit_fee = BrokerFeeCalculator.fee_per_order
+        exit_fee = Orders::ChargesCalculator.call(side: tracker.short_position? ? 'buy' : 'sell', quantity: qty, price: exit_px).round(2)
 
         lines, entry_cost, gross_proceeds, gain =
           if tracker.short_position?

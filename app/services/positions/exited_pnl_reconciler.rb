@@ -70,13 +70,7 @@ module Positions
     end
 
     def truth_snapshot(tracker)
-      FinalPnl.from_exit_price(
-        entry_price: tracker.entry_price,
-        quantity: tracker.quantity,
-        exit_price: tracker.exit_price,
-        is_exited: true,
-        position_side: tracker.position_side
-      )
+      FinalPnl.for_tracker(tracker)
     end
 
     def drifted?(tracker, truth)
