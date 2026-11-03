@@ -13,6 +13,11 @@ module Live
     FLUSH_INTERVAL_SECONDS = 0.25
     MAX_BATCH = 200
     PNL_STALE_DEBOUNCE_SECONDS = 5
+    # The header's index prices ride their own frame: the stats heartbeat is 5s and the idle loop sleeps 5s,
+    # which made prices step every few seconds. Each solid_cable broadcast is a DB insert, so this is
+    # throttled here (never from the tick handler) and sent only when a price moved.
+    INDEX_TICK_INTERVAL_SECONDS = 0.25
+    INDEX_SECURITY_IDS = { nifty: '13', banknifty: '25', sensex: '51' }.freeze
 
     attr_reader :running
 
@@ -133,8 +138,9 @@ module Live
 
         processed = flush!
         maybe_broadcast_heartbeat
+        maybe_broadcast_index_ticks
         maybe_broadcast_positions_keepalive
-        sleep_duration = next_interval(queue_empty: !processed && queue_empty?)
+        sleep_duration = [next_interval(queue_empty: !processed && queue_empty?), INDEX_TICK_INTERVAL_SECONDS].min
         wait_for_interval(sleep_duration)
       end
     rescue StandardError => e
@@ -485,7 +491,7 @@ module Live
       @logger.debug("[PnlUpdater] maybe_broadcast_pnl_stale failed: #{e.message}")
     end
 
-    # Broadcast aggregate dashboard stats every 1 second to the "dashboard" channel.
+    # Broadcast aggregate dashboard stats every 5 seconds to the "dashboard" channel.
     def maybe_broadcast_heartbeat
       return if @last_heartbeat_at && (Time.current.to_f - @last_heartbeat_at) < 5.0
 
@@ -493,6 +499,16 @@ module Live
       ActionCable.server.broadcast("dashboard", build_dashboard_stats)
     rescue StandardError => e
       @logger.debug("[PnlUpdater] heartbeat broadcast failed: #{e.message}")
+    end
+
+    def maybe_broadcast_index_ticks
+      ltps = INDEX_SECURITY_IDS.transform_values { |security_id| Live::TickCache.ltp('IDX_I', security_id) }
+      return if ltps.values.all?(&:nil?) || ltps == @last_index_ltps
+
+      @last_index_ltps = ltps
+      ActionCable.server.broadcast("dashboard", { type: "indices", indices: ltps.compact, timestamp: Time.current.iso8601 })
+    rescue StandardError => e
+      @logger.debug("[PnlUpdater] index tick broadcast failed: #{e.message}")
     end
 
     # Keep the positions WS channel warm when ticks are quiet (illiquid strikes).

@@ -13,6 +13,35 @@ RSpec.describe Live::PnlUpdaterService, :freeze_time do
     allow(service).to receive(:start!).and_return(true)
   end
 
+  describe 'index tick frames' do
+    before do
+      service.instance_variable_set(:@last_index_ltps, nil)
+      allow(ActionCable.server).to receive(:broadcast)
+      allow(Live::TickCache).to receive(:ltp).and_return(nil)
+      allow(Live::TickCache).to receive(:ltp).with('IDX_I', '13').and_return(23_350.5)
+    end
+
+    it 'broadcasts the index prices when they moved' do
+      service.send(:maybe_broadcast_index_ticks)
+
+      expect(ActionCable.server).to have_received(:broadcast)
+        .with('dashboard', hash_including(type: 'indices', indices: { nifty: 23_350.5 }))
+    end
+
+    it 'does not broadcast again when no price moved' do
+      2.times { service.send(:maybe_broadcast_index_ticks) }
+
+      expect(ActionCable.server).to have_received(:broadcast).once
+    end
+
+    it 'does not broadcast before any index tick has arrived' do
+      allow(Live::TickCache).to receive(:ltp).with('IDX_I', '13').and_return(nil)
+      service.send(:maybe_broadcast_index_ticks)
+
+      expect(ActionCable.server).not_to have_received(:broadcast)
+    end
+  end
+
   it 'writes pnl to redis using tickcache ltp' do
     # Mock TickQuery to return LTP
     allow(Live::TickQuery).to receive(:for_security).and_return(double(ltp: 120.0))
