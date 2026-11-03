@@ -55,6 +55,38 @@ RSpec.describe Policies::EntryPolicy do
     it { expect(policy.reasons).to include('daily_loss_limit_reached') }
   end
 
+  context 'when a different daily limit refuses the entry' do
+    before do
+      allow_any_instance_of(Live::DailyLimits).to receive(:can_trade?)
+        .and_return({ allowed: false, reason: 'strategy_trade_frequency_limit_exceeded' })
+    end
+
+    it 'reports that limit, not a daily loss' do
+      expect(policy.reasons).to include('strategy_trade_frequency_limit_exceeded')
+      expect(policy.reasons).not_to include('daily_loss_limit_reached')
+    end
+  end
+
+  context 'when only the trade-frequency limit refuses' do
+    before do
+      allow_any_instance_of(Live::DailyLimits).to receive(:can_trade?)
+        .and_return({ allowed: false, reason: 'trade_frequency_limit_exceeded' })
+    end
+
+    it 'leaves it to the frequency guard' do
+      expect(policy.reasons).not_to include('trade_frequency_limit_exceeded')
+    end
+  end
+
+  context 'when the daily limits check raises' do
+    before do
+      allow_any_instance_of(Live::DailyLimits).to receive(:can_trade?).and_raise(StandardError, 'boom')
+    end
+
+    it { is_expected.to be_forbidden }
+    it { expect(policy.reasons).to include('daily_limits_unavailable') }
+  end
+
   # ── Multiple violations ─────────────────────────────────────────────────────
 
   context 'with multiple violations' do

@@ -46,6 +46,10 @@ Rails.application.configure do
     "#{severity[0]}, [#{time.strftime('%Y-%m-%dT%H:%M:%S.%6N')} ##{Process.pid}]  #{severity} -- : #{msg}\n"
   end
 
+  # RAILS_LOG_LEVEL in .env was never read here, so the level stayed :debug and every SQL statement was logged
+  # (development.log grew past 650 MB a day). Unset still means :debug.
+  config.log_level = ENV.fetch('RAILS_LOG_LEVEL', 'debug').to_sym
+
   log_path = Rails.root.join('log', "#{Rails.env}.log")
   FileUtils.mkdir_p(log_path.dirname)
   file_logger = ActiveSupport::Logger.new(log_path, 'daily')

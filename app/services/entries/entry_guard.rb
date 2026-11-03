@@ -116,6 +116,13 @@ module Entries
         quantity = [quantity_by_existing_allocator.to_i, quantity_by_cap.to_i].min
         quantity = cap_quantity_by_margin(quantity, position_side: position_side, pick: pick, index_cfg: index_cfg, lot_size: lot_size, ltp: ltp)
         quantity = (quantity / lot_size) * lot_size # ensure lot-aligned
+        budget_quantity = cap_quantity_by_loss_budget(quantity, index_cfg: index_cfg, ltp: ltp, lot_size: lot_size)
+        if budget_quantity < lot_size && quantity >= lot_size
+          Rails.logger.warn("[EntryGuard] Blocked #{index_cfg[:key]}: #{pick[:symbol]} one lot's stop risk exceeds today's remaining loss budget")
+          signal&.record_entry_outcome('blocked', 'loss_budget_exhausted')
+          return false
+        end
+        quantity = budget_quantity
 
         if quantity <= 0 || quantity < lot_size
           Rails.logger.warn(
@@ -420,6 +427,25 @@ module Entries
       rescue StandardError => e
         Rails.logger.warn("[EntryGuard] cap_quantity_by_margin failed: #{e.class} - #{e.message}")
         quantity
+      end
+
+      # Cuts the quantity so a stop-out cannot take the day past its loss limit. The daily limits only block the
+      # next entry once they are exceeded, so without this one ₹10,000-risk trade could blow through a ₹1,900
+      # per-index limit (2026-11-03: NIFTY lost ₹2,916 on one trade against a 2% limit).
+      # Risk per unit is the premium stop MetaBuilder pins (entry × risk.sl_pct); fees are the flat round trip.
+      def cap_quantity_by_loss_budget(quantity, index_cfg:, ltp:, lot_size:)
+        return quantity if quantity <= 0
+
+        budget = Live::DailyLimits.new.remaining_loss_budget(index_key: index_cfg[:key])
+        return quantity if budget.nil?
+
+        risk_per_unit = ltp.to_f * Entries::MetaBuilder.supertrend_sl_decimal
+        affordable = ((budget - BrokerFeeCalculator.fee_per_trade.to_f) / (risk_per_unit * lot_size)).floor
+        [quantity, [affordable, 0].max * lot_size].min
+      rescue StandardError => e
+        # Fail closed: without a readable budget the trade could breach the limit unseen.
+        Rails.logger.error("[EntryGuard] cap_quantity_by_loss_budget failed: #{e.class} - #{e.message}")
+        0
       end
 
       def find_watchable_for_pick(pick:, instrument:)

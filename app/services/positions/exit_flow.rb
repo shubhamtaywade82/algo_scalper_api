@@ -23,6 +23,7 @@ module Positions
         final_hwm = [tracker.high_water_mark_pnl.to_f, cache_data[:hwm_pnl].to_f, pnl_stats[:pnl].to_f].max
 
         metadata = build_metadata(cache_data)
+        metadata['fee_model'] = Positions::FinalPnl::STATUTORY_FEE_MODEL if pnl_stats[:charges]
         decision_data = build_decision
 
         tracker.update!(
@@ -32,6 +33,7 @@ module Positions
           exit_triggered_at: metadata['exit_triggered_at'],
           last_pnl_rupees: pnl_stats[:pnl],
           last_pnl_pct: pnl_stats[:pnl_pct],
+          **charge_attrs(pnl_stats),
           high_water_mark_pnl: final_hwm,
           exit_reason: metadata['exit_reason'],
           meta: metadata,
@@ -48,6 +50,10 @@ module Positions
 
     attr_reader :tracker, :exit_price, :exited_at, :exit_reason
 
+    def charge_attrs(pnl_stats)
+      pnl_stats[:charges] ? { charges_rupees: pnl_stats[:charges] } : {}
+    end
+
     def resolved_final_pnl(cache_data)
       if resolved_exit_price && tracker.entry_price&.positive? && tracker.quantity&.nonzero?
         Positions::FinalPnl.from_exit_price(
@@ -55,7 +61,8 @@ module Positions
           quantity: tracker.quantity,
           exit_price: resolved_exit_price,
           is_exited: true,
-          position_side: tracker.side
+          position_side: tracker.position_side,
+          segment: tracker.segment
         ) || fallback_pnl(cache_data)
       else
         fallback_pnl(cache_data)

@@ -258,12 +258,14 @@ RSpec.describe Live::ExitEngine do
         expect(tracker.reload.charges_rupees).to eq(expected)
       end
 
-      it 'does not persist charges for a local expired-contract settlement (no real broker order placed)' do
+      it 'still records the modelled charges for a local expired-contract settlement, so they match the net P&L booked' do
         tracker.update!(expiry_date: Date.yesterday)
 
         engine.execute_exit(tracker, 'stop_loss')
 
-        expect(tracker.reload.charges_rupees).to be_nil
+        tracker.reload
+        gross = (tracker.exit_price - tracker.entry_price) * tracker.quantity
+        expect(tracker.last_pnl_rupees).to be_within(0.001).of(gross - tracker.charges_rupees)
       end
     end
 

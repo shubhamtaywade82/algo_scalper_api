@@ -97,7 +97,8 @@ RSpec.describe Ledger do
       cash = LedgerAccount.fetch!('cash')
       deployed = LedgerAccount.fetch!('premium_deployed')
       expect(deployed.balance_cache.to_d).to eq(1000)
-      expect(cash.balance_cache.to_d).to eq(100_000 - 1000 - 20)
+      buy_charges = Orders::ChargesCalculator.call(side: 'buy', quantity: 10, price: 100).round(2)
+      expect(cash.balance_cache.to_d).to eq(100_000 - 1000 - buy_charges)
     end
 
     context 'with a short position' do
@@ -117,8 +118,9 @@ RSpec.describe Ledger do
         premium_written = LedgerAccount.fetch!('premium_written')
         expect(margin_blocked.balance_cache.to_d).to eq(8000)
         expect(premium_written.balance_cache.to_d).to eq(1000)
-        # +1000 premium received, -8000 margin locked, -20 fee
-        expect(cash.balance_cache.to_d).to eq(100_000 + 1000 - 8000 - 20)
+        # +1000 premium received, -8000 margin locked, minus the sell-leg statutory charges
+        sell_charges = Orders::ChargesCalculator.call(side: 'sell', quantity: 10, price: 100).round(2)
+        expect(cash.balance_cache.to_d).to eq(100_000 + 1000 - 8000 - sell_charges)
       end
     end
   end

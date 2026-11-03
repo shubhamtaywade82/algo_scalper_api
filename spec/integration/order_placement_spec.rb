@@ -315,7 +315,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
       # Mock trading session and daily limits to allow entry
       allow(TradingSession::Service).to receive(:entry_allowed?).and_return({ allowed: true })
       allow(Live::DailyLimits).to receive(:new).and_return(
-        instance_double(Live::DailyLimits, can_trade?: { allowed: true })
+        instance_double(Live::DailyLimits, can_trade?: { allowed: true }, remaining_loss_budget: nil)
       )
       # Mock MarketFeedHub to prevent subscription errors during PositionTracker creation
       allow(Live::MarketFeedHub.instance).to receive_messages(

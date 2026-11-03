@@ -246,13 +246,7 @@ module Live
     end
 
     def final_pnl_snapshot(tracker)
-      priced = Positions::FinalPnl.from_exit_price(
-        entry_price: tracker.entry_price,
-        quantity: tracker.quantity,
-        exit_price: tracker.exit_price,
-        is_exited: true,
-        position_side: tracker.position_side
-      )
+      priced = Positions::FinalPnl.for_tracker(tracker)
       if priced
         return {
           pnl: priced[:pnl],
