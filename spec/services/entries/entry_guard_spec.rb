@@ -21,6 +21,9 @@ RSpec.describe Entries::EntryGuard do
 
       # Mock order execution
       allow(Entries::OrderExecutionService).to receive(:call).and_return(instance_double(PositionTracker))
+
+      # No daily loss limit in play: the loss-budget cap has its own spec (entry_guard_loss_budget_spec).
+      allow(Live::DailyLimits).to receive(:new).and_return(instance_double(Live::DailyLimits, remaining_loss_budget: nil))
     end
 
     context 'when pipeline fails' do
