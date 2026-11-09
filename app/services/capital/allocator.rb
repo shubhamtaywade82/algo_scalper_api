@@ -20,42 +20,21 @@ module Capital
       end
 
       def qty_for(index_cfg:, entry_price:, derivative_lot_size:, scale_multiplier: 1)
-        multiplier = effective_multiplier(scale_multiplier)
+        multiplier = normalize_multiplier(scale_multiplier)
         capital_available = available_cash
 
         return 0 unless valid_for_allocation?(index_cfg, entry_price, derivative_lot_size, capital_available)
 
         @index_key = index_cfg[:key] || 'UNKNOWN'
 
-        # Check if Kelly-based position sizing is enabled
-        if kelly_based_sizing_enabled?(index_cfg)
-          return calculate_kelly_based_quantity(
-            index_cfg: index_cfg,
-            entry_price: entry_price,
-            derivative_lot_size: derivative_lot_size,
-            capital_available: capital_available,
-            multiplier: multiplier
-          )
-        end
-
-        # Check if rupee-based position sizing is enabled
-        if rupee_based_sizing_enabled?
-          return calculate_rupee_based_quantity(
-            index_cfg: index_cfg,
-            entry_price: entry_price,
-            derivative_lot_size: derivative_lot_size,
-            capital_available: capital_available,
-            multiplier: multiplier
-          )
-        end
-
-        calculate_and_apply_quantity(
+        quantity = base_quantity(
           index_cfg: index_cfg,
           entry_price: entry_price,
           derivative_lot_size: derivative_lot_size,
           capital_available: capital_available,
           multiplier: multiplier
         )
+        apply_size_cut(quantity, derivative_lot_size.to_i)
       rescue StandardError => e
         log_allocation_error(index_cfg, e)
         0
@@ -102,19 +81,31 @@ module Capital
         [scale_multiplier.to_i, 1].max
       end
 
-      def effective_multiplier(scale_multiplier)
-        base_multiplier = normalize_multiplier(scale_multiplier)
-        midday_multiplier = post_1100_multiplier
-        adjusted = base_multiplier
-        adjusted = (adjusted * midday_multiplier).floor if midday_multiplier < 1.0 && post_1100?
+      # Kelly, rupee and percentage sizing all take an integer lot multiplier, so a
+      # fractional cut (0.5) floored to 0 and clamped back to 1 never reduced a 1x
+      # entry. Cuts are applied to the finished quantity instead.
+      def base_quantity(index_cfg:, entry_price:, derivative_lot_size:, capital_available:, multiplier:)
+        args = { index_cfg: index_cfg, entry_price: entry_price, derivative_lot_size: derivative_lot_size,
+                 capital_available: capital_available, multiplier: multiplier }
+        return calculate_kelly_based_quantity(**args) if kelly_based_sizing_enabled?(index_cfg)
+        return calculate_rupee_based_quantity(**args) if rupee_based_sizing_enabled?
 
-        regime_cut = time_regime_size_multiplier
-        adjusted = (adjusted * regime_cut).floor if regime_cut < 1.0
+        calculate_and_apply_quantity(**args)
+      end
 
-        peak_cut = post_peak_size_cut
-        adjusted = (adjusted * peak_cut).floor if peak_cut < 1.0
+      # Never cuts below one lot: a single-lot entry cannot be shrunk, only allowed or blocked.
+      def apply_size_cut(quantity, lot_size)
+        factor = size_cut_factor
+        return quantity if factor >= 1.0 || lot_size <= 0 || quantity <= lot_size
 
-        [adjusted, 1].max
+        lots = (quantity / lot_size * factor).floor
+        [lots, 1].max * lot_size
+      end
+
+      def size_cut_factor
+        factor = 1.0
+        factor *= post_1100_multiplier if post_1100?
+        factor * time_regime_size_multiplier * post_peak_size_cut
       end
 
       # Scales position size down when the current market session is theta/IV-decay
