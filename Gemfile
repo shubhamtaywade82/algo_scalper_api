@@ -120,3 +120,10 @@ end
 gem "json_schemer", "~> 2.4"
 
 gem "rswag", "~> 2.17", groups: %i[development test]
+
+group :development do
+  # MCP server for coding agents: tests, read-only DB queries, schema, routes, logs.
+  gem 'ask-rails-harness-mcp', '~> 0.2.9'
+  # ask-ruby-harness 0.4.1 references Ask::Tools::Shell without requiring it; load it first.
+  gem 'ask-tools-shell', require: 'ask/tools/shell'
+end
