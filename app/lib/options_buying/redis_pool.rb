@@ -2,7 +2,7 @@
 
 module OptionsBuying
   # Thread-safe Redis connection pool for OptionsBuying services.
-  # Used by StateStore, StreamConsumer, BreakoutWatcher, and Solid Queue jobs.
+  # Used by StateStore, BreakoutWatcher, and Solid Queue jobs.
   # Returns a wrapper that delegates all Redis commands to a checked-out connection
   # from the pool, enabling transparent thread-safe usage.
   class RedisPool

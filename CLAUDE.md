@@ -12,7 +12,7 @@ Rails 8 API backend for **fully autonomous** intraday options scalping on Indian
 - Solid Cache (Rails.cache backend in production; development uses `:redis_cache_store`)
 - DhanHQ v2 via `dhanhq` gem (broker API + WebSocket)
 - Optional: OpenAI for AI technical analysis
-- RubyLLM 2.x (`ruby_llm ~> 2.1`): native `RubyLLM::Agent` / `RubyLLM::Tool` classes in `app/agents`, `app/tools` (Ollama or Ollama Cloud via `LLMSettings`, configured in `config/initializers/ruby_llm.rb`); advisory only, not in the order path
+- RubyLLM 2.x (`ruby_llm ~> 2.1`): native `RubyLLM::Agent` / `RubyLLM::Tool` classes in `app/agents`, `app/tools` (Ollama or Ollama Cloud via `LLMSettings`, configured in `config/initializers/ruby_llm.rb`); advisory, not in the order path — except `Ai::Agents::DynamicConfigAgent`, which applies bounded config patches (paper-only, risk-reducing under stress)
 - Optional: Telegram Bot for notifications
 
 ## Commands
@@ -38,7 +38,7 @@ ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon  # trading daemon s
 | Process | Command | Purpose |
 |---------|---------|---------|
 | `web` | `bin/rails server -p 3011` | Rails API server |
-| `trading` | `ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon` | Trading brain (11 services in threads) |
+| `trading` | `ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon` | Trading brain (services in threads, see `bootstrap.rb`) |
 | `jobs` | `bin/jobs` | Solid Queue worker (recurring tasks) |
 | `dashboard` | `cd dashboard && npm run dev` | SolidJS + Vite frontend (dev server on :5181, proxies `/api` and `/cable` to :3011) |
 
@@ -78,7 +78,7 @@ app/services/
     scheduler.rb                   # 30s signal polling loop
   entries/
     entry_guard.rb                 # orchestrates entry from signal to order
-    entry_guard_pipeline.rb        # 10-guard chain
+    entry_guard_pipeline.rb        # ~40-guard chain (order = `default_handlers`); several OptionsBuying guards are no-ops until ChainRadar/IvSnapshotJob are scheduled
     bos_entry_engine.rb            # Break-of-Structure entry state machine
     guards/                        # circuit_breaker, cooldown, daily_limits, exposure, etc.
   capital/
@@ -120,7 +120,7 @@ app/jobs/
 
 lib/trading_system/
   daemon.rb                        # trading process lifecycle
-  bootstrap.rb                     # service wiring (builds supervisor with 11 services)
+  bootstrap.rb                     # service wiring (registers ~17 services)
   supervisor.rb                    # start_all / stop_all coordinator
 ```
 
@@ -167,7 +167,7 @@ Signal::Scheduler (30s)
   → Options::ChainAnalyzer.pick_strikes_with_qualification
     → ATM±1 strike selection, liquidity scoring, expected move validation
   → Entries::EntryGuard.try_enter
-    → 10-guard pipeline (circuit breaker → cooldown → exposure → ...)
+    → guard pipeline (~40 guards; circuit breaker → cooldown → exposure → ...)
     → Capital::Allocator.qty_for (risk-based sizing)
     → Orders.config.gateway.place_market
     → PositionTracker.create + subscribe to WebSocket feed

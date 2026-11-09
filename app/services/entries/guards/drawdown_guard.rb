@@ -6,7 +6,7 @@ module Entries
       include BaseGuard
 
       def self.call(context)
-        if Portfolio::DrawdownGuard.triggered?
+        if Portfolio::DrawdownGuard.triggered?(fail_closed: true)
           { blocked: 'drawdown_guard_active' }
         else
           PASS

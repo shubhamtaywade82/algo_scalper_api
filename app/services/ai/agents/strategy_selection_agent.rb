@@ -4,7 +4,7 @@ module Ai
   module Agents
     # Blueprint §8.4 "Strategy Selection Agent" — ranks strategies by
     # realized expectancy from TradeMemory instead of the fixed
-    # regime-to-strategy mapping in OptionsBuying::StrategyEngine.
+    # fixed regime-to-strategy mapping (the former OptionsBuying::StrategyEngine was removed).
     #
     # Level 1 (Advisor) only: this ranking is a recommendation logged to
     # AgentDecisionLog. It does not touch the live strategy-selection

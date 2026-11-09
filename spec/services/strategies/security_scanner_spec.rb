@@ -218,6 +218,21 @@ RSpec.describe Strategies::SecurityScanner do
     end
   end
 
+  describe 'reflection and file-read bypasses' do
+    [
+      'Object.const_get("Orders").config',
+      'Object.const_set(:X, 1)',
+      'Class.new { define_method(:a) { 1 } }',
+      'binding.local_variable_get(:x)',
+      'File.read("/etc/passwd")',
+      'File.new("/etc/passwd")'
+    ].each do |code|
+      it "blocks #{code}" do
+        expect(described_class.new(code).scan[:pass]).to be false
+      end
+    end
+  end
+
   describe 'shipped strategy plugins' do
     Rails.root.glob('strategies/*/strategy.rb').each do |path|
       it "passes the scan for #{File.basename(File.dirname(path))}" do

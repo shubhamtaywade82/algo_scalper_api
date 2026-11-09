@@ -47,7 +47,8 @@ module Orders
             price: meta[:price],
             target_price: meta[:target_price],
             stop_loss_price: meta[:stop_loss_price],
-            product_type: meta[:product_type]
+            # An explicit nil would override Placer's INTRADAY default and send a blank productType.
+            product_type: meta[:product_type] || 'INTRADAY'
           )
         else
           Orders::Placer.sell_market!(

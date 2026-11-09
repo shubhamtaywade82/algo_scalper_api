@@ -157,6 +157,12 @@ RSpec.describe Orders::GatewayLive do
         )
       end
 
+      it 'defaults product_type to INTRADAY when meta omits it' do
+        gateway.place_market(side: 'buy', segment: 'NSE_FNO', security_id: '55111', qty: 50, meta: {})
+
+        expect(Orders::Placer).to have_received(:buy_market!).with(hash_including(product_type: 'INTRADAY'))
+      end
+
       it 'uses provided client_order_id from meta' do
         gateway.place_market(
           side: 'buy',

@@ -266,7 +266,6 @@ module OptionsBuying
 
       # Connection pool for thread-safe Redis access across:
       # - BreakoutWatcher tick callback thread
-      # - StreamConsumer thread
       # - Solid Queue job threads
       # - RiskManagerService monitor loop
       def redis

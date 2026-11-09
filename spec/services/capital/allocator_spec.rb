@@ -308,8 +308,8 @@ RSpec.describe Capital::Allocator do
           expect(quantity).to be >= lot_size # Should still get at least 1 lot if affordable
         end
 
-        it 'ensures at least 1 lot even after adjustment' do
-          # Very limited capital but just enough for 1 lot
+        it 'returns 0 instead of forcing a lot that breaks the allocation cap' do
+          # Cash covers one lot, but one lot is 100% of cash — far above the allocation cap
           allow(described_class).to receive(:available_cash).and_return(7_500.0)
           entry_price = 100.0
           lot_size = 75 # NIFTY lot size
@@ -321,9 +321,7 @@ RSpec.describe Capital::Allocator do
             scale_multiplier: scale_multiplier
           )
 
-          expect(quantity).to eq(lot_size) # Exactly 1 lot
-          total_cost = entry_price * quantity
-          expect(total_cost).to be <= 7_500.0 # 1 lot of 75 shares at ₹100 = ₹7,500
+          expect(quantity).to eq(0)
         end
       end
 
@@ -488,6 +486,7 @@ RSpec.describe Capital::Allocator do
 
       it 'handles API errors gracefully' do
         # Disable paper trading so it tries to fetch from API
+        allow(AlgoConfig).to receive(:paper_trading_enabled?).and_return(true)
         allow(Orders.config.gateway).to receive(:wallet_snapshot).and_raise(StandardError, 'API error')
         expect(Rails.logger).to receive(:error).with(match(/\[Capital\].*Failed to fetch available cash/)).at_least(:once)
         expect(Rails.logger).to receive(:error).with(match(/\[Capital\].*Backtrace/)).at_least(:once)
@@ -498,6 +497,13 @@ RSpec.describe Capital::Allocator do
         # (default ₹100k) instead of zeroing out, so sizing keeps a workable
         # capital base.
         expect(cash).to eq(BigDecimal(described_class.paper_trading_balance.to_s))
+      end
+
+      it 'returns zero cash when the wallet is unreadable in live mode' do
+        allow(AlgoConfig).to receive(:paper_trading_enabled?).and_return(false)
+        allow(Orders.config.gateway).to receive(:wallet_snapshot).and_raise(StandardError, 'API error')
+
+        expect(described_class.available_cash).to eq(BigDecimal(0))
       end
     end
   end

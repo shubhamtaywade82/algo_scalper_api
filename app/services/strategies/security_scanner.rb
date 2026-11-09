@@ -8,7 +8,8 @@ module Strategies
       instance_exec class_exec module_exec
       send __send__ public_send
       method instance_variable_get instance_variable_set
-      constantize
+      constantize const_get const_set const_missing remove_const
+      define_method define_singleton_method binding
       require require_relative load
       popen syscall
       exit exit! abort at_exit trap
@@ -22,7 +23,7 @@ module Strategies
     KERNEL_ONLY_BLOCKER_METHODS = %w[open].freeze
 
     BLOCKER_RECEIVER_CALLS = {
-      "File" => %w[write open rename delete chmod chown mkdir rm cp mv symlink link unlink chdir binread],
+      "File" => %w[write open new read readlines foreach rename delete chmod chown mkdir rm cp mv symlink link unlink chdir binread],
       "FileUtils" => %w[cp mv rm mkdir rmdir rm_r rm_f rm_rf remove_entry remove_entry_secure
                         touch chmod chown ln ln_s cp_r],
       "Dir" => %w[open glob entries children mkdir chdir rmdir delete unlink home],

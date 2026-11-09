@@ -50,6 +50,18 @@ RSpec.describe Capital::Allocator do
 
         expect(before_qty).to be < after_qty
       end
+
+      it 'cuts a 1x entry that spans several lots, but never below one lot' do
+        qty = described_class.qty_for(index_cfg: index_cfg, entry_price: entry_price,
+                                      derivative_lot_size: derivative_lot_size, scale_multiplier: 1)
+        allow(Time).to receive(:current).and_return(Time.zone.parse('2026-03-24 10:30:00 IST'))
+        uncut_qty = described_class.qty_for(index_cfg: index_cfg, entry_price: entry_price,
+                                            derivative_lot_size: derivative_lot_size, scale_multiplier: 1)
+
+        expect(uncut_qty).to be > derivative_lot_size
+        expect(qty).to eq((uncut_qty / derivative_lot_size * 0.5).floor * derivative_lot_size)
+        expect(qty).to be >= derivative_lot_size
+      end
     end
   end
 end

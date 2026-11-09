@@ -49,10 +49,14 @@ module Portfolio
       # Used by: EntryPolicy, ProfitLockEngine, UnifiedExitChecker.
       #
       # @return [Boolean]
-      def triggered?
+      # @param fail_closed [Boolean] value to return when Redis is unreadable. Entries pass
+      #   true (no new risk on unknown state); the exit path keeps false so a Redis blip
+      #   does not liquidate every open position.
+      def triggered?(fail_closed: false)
         redis&.get(KEY_TRIGGERED) == 'true'
-      rescue StandardError
-        false
+      rescue StandardError => e
+        Rails.logger.error("[DrawdownGuard] triggered? unreadable (fail_closed=#{fail_closed}): #{e.class} - #{e.message}")
+        fail_closed
       end
 
       # True if entries have been blocked (subset of triggered? — same lifetime here).

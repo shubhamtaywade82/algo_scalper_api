@@ -14,6 +14,15 @@ RSpec.describe Entries::Guards::DailyLimitsGuard do
       end
     end
 
+    context 'when the config cannot be read' do
+      it 'keeps the limits on and lets the downstream error block the entry' do
+        allow(AlgoConfig).to receive(:fetch).and_raise(StandardError, 'corrupt config')
+        allow(Live::DailyLimits).to receive(:new).and_raise(StandardError, 'unavailable')
+
+        expect { described_class.call(context) }.to raise_error(StandardError, 'unavailable')
+      end
+    end
+
     context 'when daily limits are enabled' do
       let(:daily_limits) { instance_double(Live::DailyLimits) }
 

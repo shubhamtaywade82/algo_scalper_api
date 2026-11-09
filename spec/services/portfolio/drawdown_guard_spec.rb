@@ -106,6 +106,18 @@ RSpec.describe Portfolio::DrawdownGuard do
     end
   end
 
+  describe '.triggered? when Redis is unreadable' do
+    before { allow(redis).to receive(:get).and_raise(Redis::CannotConnectError, 'down') }
+
+    it 'stays open for the exit path so a Redis blip does not liquidate positions' do
+      expect(described_class.triggered?).to be(false)
+    end
+
+    it 'fails closed when the caller asks for it (new entries)' do
+      expect(described_class.triggered?(fail_closed: true)).to be(true)
+    end
+  end
+
   describe '.entries_blocked?' do
     it 'returns false when key is not set' do
       allow(redis).to receive(:get).with(described_class::KEY_ENTRIES_BLOCKED).and_return(nil)

@@ -54,8 +54,11 @@ module Entries
           config = AlgoConfig.fetch
           config.dig(:daily_limits, :enabled) == true ||
             config.dig(:risk, :daily_limits, :enabled) == true
-        rescue StandardError
-          false
+        rescue StandardError => e
+          # An unreadable config must not silently switch the daily loss limit off; the
+          # downstream can_trade? error is caught by EntryGuard.try_enter and blocks the entry.
+          Rails.logger.error("[DailyLimitsGuard] config unreadable, treating limits as enabled: #{e.class} - #{e.message}")
+          true
         end
 
         def strategy_limits_config

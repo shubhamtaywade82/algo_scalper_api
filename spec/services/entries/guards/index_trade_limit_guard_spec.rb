@@ -21,6 +21,16 @@ RSpec.describe Entries::Guards::IndexTradeLimitGuard do
       end
     end
 
+    context 'when the trade counter cannot be read' do
+      let(:max_trades) { 5 }
+
+      it 'blocks instead of allowing unlimited entries' do
+        allow(daily_limits).to receive(:get_daily_trades).and_raise(Redis::CannotConnectError, 'down')
+
+        expect(described_class.call(context)).to eq(blocked: 'index_trade_limit_unavailable')
+      end
+    end
+
     context 'when max_trades_per_day is unset' do
       let(:context) { { index_cfg: { key: 'NIFTY' } } }
 

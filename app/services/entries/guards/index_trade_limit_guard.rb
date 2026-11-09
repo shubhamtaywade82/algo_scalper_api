@@ -22,8 +22,9 @@ module Entries
 
           { blocked: "index trade limit #{index_key} (#{trades_today}/#{max_trades})" }
         rescue StandardError => e
-          Rails.logger.warn("[IndexTradeLimitGuard] #{e.class} - #{e.message}")
-          PASS
+          # Hard trade-count limit: an unreadable counter must block, not allow unlimited entries.
+          Rails.logger.error("[IndexTradeLimitGuard] #{e.class} - #{e.message}")
+          { blocked: 'index_trade_limit_unavailable' }
         end
 
         private

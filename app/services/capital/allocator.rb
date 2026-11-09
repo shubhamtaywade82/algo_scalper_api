@@ -54,7 +54,8 @@ module Capital
         cash
       rescue StandardError => e
         log_balance_fetch_error(e)
-        BigDecimal(paper_trading_balance.to_s)
+        # Live money: an unreadable wallet must size to zero, not to the paper balance.
+        AlgoConfig.paper_trading_enabled? ? BigDecimal(paper_trading_balance.to_s) : BigDecimal(0)
       end
 
       private
@@ -515,9 +516,6 @@ module Capital
         # Calculate quantity (must be lot-aligned)
         quantity = max_lots * lot_size
 
-        # Ensure minimum 1 lot
-        quantity = [quantity, lot_size].max
-
         # Check capital allocation constraint (alloc_pct caps total buy value)
         cost_per_lot = BigDecimal(entry_price.to_s) * lot_size
         alloc_pct = effective_allocation_pct(index_cfg, capital_available.to_f)
@@ -531,9 +529,6 @@ module Capital
 
         # Take minimum of risk-based, allocation-based, and capital-based quantity
         final_quantity = [quantity, max_alloc_quantity, max_affordable_quantity].min
-
-        # Ensure at least 1 lot
-        final_quantity = [final_quantity, lot_size].max
 
         # Log breakdown
         alloc_pct_f = alloc_pct.to_f
