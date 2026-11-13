@@ -65,7 +65,7 @@ gem 'prometheus_exporter', '~> 2.3'
 # RubyLLM::Agent / RubyLLM::Tool APIs. ruby_llm-agents was removed: every 3.x
 # release requires ruby_llm/schema and RubyLLM::Model::Info, which 2.x replaced
 # (Schematist, RubyLLM::Model), and its only caller was deleted in #296.
-gem 'ruby_llm', '~> 2.1'
+gem 'ruby_llm', '~> 2.2'
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 # gem "image_processing", "~> 1.2"
