@@ -182,6 +182,34 @@ come from `ts-language-mcp`, and an inferred edge is checked at its cited `file:
 **Enforced by.** test: `tests/devTooling.test.ts` (exact pin in the wrapper, allow-list limited to the offline commands,
 `--code-only` required for extract, `graphify-out/` ignored). review: any change to the allow-list or to the installed integrations.
 
+## ADR-014 A client-side stop is watched for silence, and the broker P&L exit is an opt-in live rail
+
+**Context.** Paper and the sandbox gateway hold the stop and target in the agent. Those levels fire only when option ticks
+arrive, so a silent feed leaves an open position with no working stop, and nothing records that it is unprotected. The live
+venue holds the stop as a super-order leg at the exchange, which does not depend on the agent's feed. The daily-loss brake is
+local. The broker also has a daily P&L exit (`traderControls.setPnlExit`), which the adapter did not use.
+
+**Decision.** Each execution port declares its protection (`ExecutionPort.protection`): `EXCHANGE_BRACKET` for live,
+`CLIENT_SIDE` for paper, Postgres paper and the gateway. The cockpit labels a client-side stop, and the journal records the
+protection on `entry_filled` and `position_client_side`. For a client-side position, silence on option ticks longer than
+`FEED_STALE_MS`, counted from the later of the fill and the last tick, journals `position_stale` and refuses entries on that
+underlying. Past `STALE_POSITION_GRACE_MS`, which must be at least `FEED_STALE_MS`, the position exits with reason `STALE_DATA`
+through the normal exit path, where `exitSent` keeps it to one sell. Live positions are not watched by this rule. In live mode
+with `BROKER_PNL_EXIT=true`, the adapter sets Dhan's daily loss exit at start to the daily loss limit, with
+`enableKillSwitch: false` (invariant 7). The request is a broker write under ADR-005. A definitive refusal is tried again by the
+next entry. Any ambiguous outcome is never resent, and every entry is refused as unconfirmed until restart.
+
+**Consequences.** The watch measures silence in the option's own ticks, so it cannot tell a dead feed from a strike that has not
+traded. A grace shorter than a quiet strike's trade gap closes that position. The watch affects paper and sandbox runs only. The
+broker P&L exit is off by default, because its `lossValue` sign and units, its action when it fires and its persistence across
+sessions are unverified (BROKER_CONTRACT row 1.9). A refused arm at start does not stop the agent; it refuses entries. Research
+does not import the runtime or the execution ports (ADR-001), so the watch cannot change a research result.
+
+**Enforced by.** tests: `tests/runtime.test.ts` ('stale option ticks on an open client-side position', 'broker P&L exit arming
+at start'), `tests/gatewayPort.test.ts` ('GatewayExecutionPort protection, trailing stop and gap-through'),
+`tests/liveExecution.test.ts` ('LiveExecutionPort protection and the broker P&L exit'), `tests/config.test.ts`
+('stale-position grace and broker P&L exit settings'), `tests/cockpit.test.ts` ('position protection label').
+
 ## Deliberately not decided yet
 
 Each waits for a concrete need, as `docs/ROADMAP.md` states: a strategy registry service, a Zod schema for every domain

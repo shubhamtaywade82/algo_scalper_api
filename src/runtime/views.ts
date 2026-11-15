@@ -60,6 +60,8 @@ export interface PositionView {
   readonly openedAt: number;
   readonly heldMinutes: number;
   readonly exitRequested: boolean;
+  /** Where the stop and target are held: at the broker, or by the agent. Absent on views from older snapshots. */
+  readonly protection?: 'EXCHANGE_BRACKET' | 'CLIENT_SIDE';
 }
 
 export interface IndicatorView {

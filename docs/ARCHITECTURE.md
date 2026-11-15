@@ -87,12 +87,13 @@ Two things happen while HALTED without a state change, and they matter in operat
    ahead of the wall clock, or a same-day series is far behind it during a session.
 9. **Stale means no entry.** Spot freshness is measured on local receipt time. Option quote freshness is the age of the chain snapshot used for selection, measured when the risk gate runs, after the REST calls. Missing data counts as stale. After the advisor, the entry window and spot freshness are checked again (`STALE_AT_SUBMIT`). The quote is not re-read: the entry is a LIMIT at the gated price, so a moved market can leave it unfilled but cannot fill it above the sized risk.
 10. **Advisor is a veto.** Its output is one of two values, and its failures are SKIP.
+11. **Client-side protection needs ticks, and silence is watched.** A position whose stop and target the agent holds (`protection: CLIENT_SIDE`: paper and the sandbox gateway) fires only on option ticks. Silence since the later of the fill and the last tick, past `FEED_STALE_MS`, refuses entries on that underlying and journals `position_stale`. Past `STALE_POSITION_GRACE_MS` the agent sells the position with reason `STALE_DATA` through the normal exit path, where `exitSent` keeps it to one sell. `EXCHANGE_BRACKET` positions (live) are not watched: their legs are held at the exchange.
 
 ## 4. Failure-mode matrix
 
 | Failure | Detection | Response |
 | --- | --- | --- |
-| Feed disconnect | `ageMs` grows past `FEED_STALE_MS` | No new entries. Live positions keep their broker brackets. Paper SL and target cannot fire until ticks resume. |
+| Feed disconnect | `ageMs` grows past `FEED_STALE_MS` | No new entries. Live positions keep their broker brackets. Client-side stops (paper, sandbox gateway) cannot fire until ticks resume. Past `STALE_POSITION_GRACE_MS` they are sold as `STALE_DATA` (invariant 11). |
 | Chart or chain request fails | exception in `prepareEntry` | Signal dropped with `DATA_UNAVAILABLE`. No position change. |
 | Entry HTTP timeout or 5xx | `classifyPlacementError` → UNCONFIRMED | Underlying HALTED. Broker kill switch once no position is open. Reconciliation watches for a late fill, which is then exited like any position. |
 | Entry never reaches a terminal status | `ORDER_TIMEOUT_MS` | ENTRY_UNCONFIRMED, as above. |
@@ -115,6 +116,8 @@ Two things happen while HALTED without a state change, and they matter in operat
 | Event log write fails | `EventLog` error callback | Logged to console. Trading is not blocked. |
 | Advisor down or slow | timeout / exception in `review` | SKIP (fail-closed). |
 | Wrong epoch convention | `assertWarmupClock` at start | Refuses to start. |
+| Broker P&L exit refused (live, `BROKER_PNL_EXIT`) | `setPnlExit` 4xx → REJECTED | Not armed. Each entry tries once more and is refused until the call succeeds. |
+| Broker P&L exit outcome unknown (live) | `setPnlExit` timeout, 5xx, 401, 429 or network → UNCONFIRMED | Never resent. Every entry is refused as ENTRY_UNCONFIRMED, which halts the underlying. Broker kill switch once no position is open. |
 | Shutdown with open position | `Orchestrator.stop` | SHUTDOWN exit. Bounded wait. Warns if still open. |
 
 ## 5. Threading model

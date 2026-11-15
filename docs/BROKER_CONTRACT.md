@@ -23,6 +23,7 @@ Evidence levels:
 | 1.6a | A SELL with no known outcome: `orders.getByCorrelationId` on each reconciliation pass, and `orders.cancel` again while the order rests | `settleUnknownExit` | Typed (call); **Assumed** (fields) | Relies on `orderStatus` and `filledQty` in the order row. `CANCELLED`, `REJECTED` or `EXPIRED` with `filledQty` exactly 0 is read as definitive, and the exit is released for a retry. A row that cannot be read, has no status, or shows any fill leaves the outcome unknown and no SELL is sent. Whether a SELL placed with a timed-out response is findable by correlation id is not recorded. |
 | 1.7 | `trailingJump` on the super order | `submitEntry` | **Assumed** | Sent when `TRAILING_JUMP_PCT` is above zero. The broker trails the stop leg by its own rule. The agent's `calculateTrailingStop` is a different model, so on the live venue its stop is an estimate for the cockpit and the journal. The day book's open risk stays at the initial stop there, because the broker's leg only ever moves up from it. The broker's trigger rule is not verified. |
 | 1.8 | Order APIs are accepted only from a static IP registered with Dhan | every broker write | **Assumed (operational)** | Required for retail API orders since 2026-04-01. An unregistered IP is refused with `DH-905`, which is a definitive rejection here. Register the host's IP before a sandbox or live run. |
+| 1.9 | Broker P&L exit: `traderControls.setPnlExit({ lossValue, enableKillSwitch: false, productType: ['INTRADAY'] })`, once at start, live only, when `BROKER_PNL_EXIT` is on | `armBrokerPnlExit`, `tryArmPnlExit` in `src/dhan/liveExecution.ts` | Typed (fields); **Assumed** (sign and units of `lossValue`, what the broker does when the rule fires, whether it persists across sessions) | Classified as a placement. A 4xx except 401, 408 and 429 was not applied, and the next entry tries once more. Anything else is never resent, and entries are refused as unconfirmed. The SDK's sandbox allow-list has no `/pnlExit`, so sandbox refuses the call before any request (`SandboxUnsupportedError`). `getPnlExit()` reads the rule back; the adapter does not call it. |
 
 ## 2. Reads the live path relies on
 
@@ -67,6 +68,7 @@ here, and this change does not reach Dhan.
 | 1.4: an accepted leg cancel reads CANCELLED in the book | Same recording |
 | Section 3: a 4xx write is never live at the venue | Sandbox: a deliberately invalid order, then a book read |
 | 2.3: the settled-status set is complete | Sandbox: an order cancelled, rejected and expired, each recorded |
+| 1.9: the sign and units of `lossValue`, the broker's action when the rule fires, and whether it persists across sessions | An operator check on the live account, because the SDK refuses this call in sandbox: read `getPnlExit()` before and after arming, and record both responses |
 
 Until a recording exists, the fake broker in `tests/liveExecution.test.ts` is the only definition of these shapes. Changing
 a fake response changes the contract, so it needs a recording to justify it.

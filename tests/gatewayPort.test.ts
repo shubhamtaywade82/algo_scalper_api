@@ -198,3 +198,39 @@ describe('GatewayExecutionPort', () => {
     assert.equal(await execution.openPositionCount(), 2);
   });
 });
+
+describe('GatewayExecutionPort protection, trailing stop and gap-through', () => {
+  it('reports client-side protection', () => {
+    const { port: created } = port(new ScriptedGateway());
+    assert.equal(created.protection, 'CLIENT_SIDE');
+  });
+
+  it('trails the stop up with the high-water mark, never lowers it, and sells once it is reached', async () => {
+    const gateway = new ScriptedGateway().answer(FILLED(75, 100), FILLED(75, 118));
+    const { port: created } = port(gateway);
+    await created.submitEntry(entry({ trailingJump: 5, breakevenAtRr: 1 }));
+    await flush();
+    for (const ltp of [120, 140, 150, 135]) {
+      created.onOptionTick(tick(ltp));
+      await flush();
+    }
+    assert.equal(gateway.sent.length, 1, 'no sell while the price stays above the trailed stop');
+    created.onOptionTick(tick(119));
+    await flush();
+    assert.equal(gateway.sent.length, 2);
+    assert.equal(gateway.sent[1]?.side, 'SELL');
+    assert.equal(gateway.sent[1]?.reason, 'STOP_LOSS');
+  });
+
+  it('sells once on a gap through the stop, even while more ticks arrive below it', async () => {
+    const gateway = new ScriptedGateway().answer(FILLED(75, 100), FILLED(75, 60));
+    const { port: created } = port(gateway);
+    await created.submitEntry(entry());
+    await flush();
+    created.onOptionTick(tick(60));
+    created.onOptionTick(tick(55));
+    await flush();
+    assert.equal(gateway.sent.length, 2, 'one protective sell, not one per tick');
+    assert.equal(gateway.sent[1]?.reason, 'STOP_LOSS');
+  });
+});

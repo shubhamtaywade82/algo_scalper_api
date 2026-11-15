@@ -22,6 +22,8 @@ interface FakeOptions {
   sellOrderId?: string;
   /** Fails every cancel of a plain order while set. */
   orderCancelError?: unknown;
+  /** Fails the broker P&L exit calls in order, one failure per call. Calls past the end succeed. */
+  pnlExitFailures?: unknown[];
   /** What the order book returns for a correlation id. Without it the read fails. */
   orderByCorrelationId?: (correlationId: string) => Record<string, unknown>;
 }
@@ -34,6 +36,7 @@ function fakeBroker(options: FakeOptions = {}) {
     place: [] as Array<Record<string, unknown>>,
     kill: [] as string[],
     cancel: [] as string[],
+    pnlExit: [] as Array<Record<string, unknown>>,
     orderReads: [] as string[],
     superList: 0,
   };
@@ -111,6 +114,14 @@ function fakeBroker(options: FakeOptions = {}) {
       },
     },
     traderControls: {
+      setPnlExit: async (request: Record<string, unknown>) => {
+        calls.pnlExit.push(request);
+        const failure = options.pnlExitFailures?.shift();
+        if (failure !== undefined) {
+          throw failure;
+        }
+        return { message: 'ACTIVE' };
+      },
       setKillSwitch: async (status: string) => {
         calls.kill.push(status);
         return {};
@@ -847,5 +858,59 @@ describe('LiveExecutionPort exit resilience (review 2026-11-10)', () => {
     await live.submitExit({ ...exit(), correlationId: 'EXT-2' });
     assert.equal(broker.calls.place.length, 1, 'no second SELL while the first is unresolved');
     await live.close();
+  });
+});
+
+describe('LiveExecutionPort protection and the broker P&L exit', () => {
+  it('reports the protection as exchange-held', () => {
+    const { live } = port(fakeBroker());
+    assert.equal(live.protection, 'EXCHANGE_BRACKET');
+  });
+
+  it('arms the broker P&L exit before the entry, without the kill switch', async () => {
+    const broker = fakeBroker();
+    const { live } = port(broker);
+    await live.armBrokerPnlExit(3_000);
+    await live.submitEntry(entry());
+    await settle();
+    assert.deepEqual(broker.calls.pnlExit, [{ lossValue: 3_000, enableKillSwitch: false, productType: ['INTRADAY'] }]);
+    assert.equal(broker.calls.superPlace.length, 1, 'the entry went out after the arm');
+  });
+
+  it('does not resend an ambiguous arming outcome, and refuses every entry as unconfirmed', async () => {
+    const broker = fakeBroker({ pnlExitFailures: [new Error('socket hang up')] });
+    const { live, events } = port(broker);
+    await live.armBrokerPnlExit(3_000);
+    await live.submitEntry(entry('ENT-1'));
+    await live.submitEntry(entry('ENT-2'));
+    await settle();
+    const seen = events as Array<{ kind: string; reason?: string }>;
+    assert.deepEqual(
+      seen.map((event) => event.kind),
+      ['ENTRY_UNCONFIRMED', 'ENTRY_UNCONFIRMED'],
+      'each entry is refused as unconfirmed, because the broker P&L exit outcome is unknown',
+    );
+    assert.match(seen[0]?.reason ?? '', /P&L exit/);
+    assert.equal(broker.calls.superPlace.length, 0, 'the entry never reached Dhan');
+    assert.equal(broker.calls.pnlExit.length, 1, 'the ambiguous call is never resent (ADR-005)');
+  });
+
+  it('retries a refused arming on the next entry, and sends the entry once it is armed', async () => {
+    const broker = fakeBroker({ pnlExitFailures: [new ApiResponseError('loss value out of range', 400)] });
+    const { live, events } = port(broker);
+    await live.armBrokerPnlExit(3_000);
+    await live.submitEntry(entry());
+    await settle();
+    assert.equal(broker.calls.pnlExit.length, 2, 'a definitive refusal was not applied, so one retry per entry is safe');
+    assert.equal(broker.calls.superPlace.length, 1, 'the entry went out once the retry armed the exit');
+    assert.equal((events as Array<{ kind: string }>).filter((event) => event.kind === 'ENTRY_REJECTED').length, 0);
+  });
+
+  it('sends no broker P&L exit unless the feature was armed', async () => {
+    const broker = fakeBroker();
+    const { live } = port(broker);
+    await live.submitEntry(entry());
+    await settle();
+    assert.equal(broker.calls.pnlExit.length, 0);
   });
 });

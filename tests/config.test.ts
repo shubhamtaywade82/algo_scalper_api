@@ -336,3 +336,21 @@ describe('telegram configuration', () => {
     );
   });
 });
+
+describe('stale-position grace and broker P&L exit settings', () => {
+  const STALE_ENV = { DHAN_CLIENT_ID: '1', DHAN_ACCESS_TOKEN: 't', DATABASE_URL: 'postgres://paper.test.invalid/agent' };
+
+  it('defaults the stale-position grace to 30 seconds and keeps the broker P&L exit off', () => {
+    const config = loadConfig(STALE_ENV);
+    assert.equal(config.ops.stalePositionGraceMs, 30_000);
+    assert.equal(config.ops.brokerPnlExit, false);
+  });
+
+  it('refuses a grace period shorter than the feed stale threshold', () => {
+    assert.throws(() => loadConfig({ ...STALE_ENV, FEED_STALE_MS: '8000', STALE_POSITION_GRACE_MS: '6000' }), /STALE_POSITION_GRACE_MS must be at least FEED_STALE_MS/);
+  });
+
+  it('turns the broker P&L exit on from BROKER_PNL_EXIT', () => {
+    assert.equal(loadConfig({ ...STALE_ENV, BROKER_PNL_EXIT: 'on' }).ops.brokerPnlExit, true);
+  });
+});

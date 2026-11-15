@@ -106,6 +106,10 @@ interface SideSlot {
   structureExit: boolean;
   /** An exit for the current position was sent and has no known outcome yet. A halted slot never resends one. */
   exitSent: boolean;
+  /** Local time of the last option tick for this side's position. Undefined until the first tick. */
+  lastOptionTickAt: number | undefined;
+  /** The position's option silence is past FEED_STALE_MS and has been journalled. Cleared when ticks resume. */
+  staleAlerted: boolean;
   lastTradedFlipBarTime?: number | undefined;
   lastTradedBarTime?: number | undefined;
 }
@@ -147,6 +151,8 @@ export class UnderlyingAgent {
       manualExit: false,
       structureExit: false,
       exitSent: false,
+      lastOptionTickAt: undefined,
+      staleAlerted: false,
     };
     this.pe = {
       optionType: 'PE',
@@ -158,6 +164,8 @@ export class UnderlyingAgent {
       manualExit: false,
       structureExit: false,
       exitSent: false,
+      lastOptionTickAt: undefined,
+      staleAlerted: false,
     };
     this.strategySession = deps.strategySession ?? new StrategySession(deps.config.session.initialPosture, deps.config.strategy.enabledStrategies);
     this.queue = new SerialQueue((error) => {
@@ -290,6 +298,7 @@ export class UnderlyingAgent {
     if (closed !== undefined) {
       this.acceptClosedBar(closed);
     }
+    this.watchStaleOptionTicks();
     this.queue.run(async () => {
       await this.checkExitForSlot(this.ce, false);
       await this.checkExitForSlot(this.pe, false);
@@ -301,6 +310,7 @@ export class UnderlyingAgent {
       const position = slot.position;
       if (position !== undefined && instrumentKey(tick) === instrumentKey(position.contract)) {
         slot.lastMark = tick.ltp;
+        slot.lastOptionTickAt = this.now();
         this.deps.book.setOpenPnl(this.symbol, (tick.ltp - position.averagePrice) * position.quantity, slot.optionType);
         this.updateTrailingStop(slot, tick.ltp);
         this.queue.run(() => this.checkExitForSlot(slot, false));
@@ -429,7 +439,7 @@ export class UnderlyingAgent {
     const openPositions = this.openPositions;
     const positions = openPositions.map((p) => {
       const slot = this.slotForOptionType(p.contract.optionType);
-      return positionView(p, slot.lastMark, nowMs, slot.manualExit);
+      return positionView(p, slot.lastMark, nowMs, slot.manualExit, this.deps.execution.protection);
     });
     const cooldownUntil = this.deps.book.cooldownUntilFor(this.symbol);
     return {
@@ -718,6 +728,10 @@ export class UnderlyingAgent {
     const feedCode = this.deps.feed.terminalDisconnectCode?.();
     if (feedCode !== undefined) {
       return `market feed ended by the server with code ${feedCode}; entries stay refused until the feed is restarted`;
+    }
+    const staleSilence = this.staleClientSideSilence(this.now());
+    if (staleSilence !== undefined) {
+      return `client-side protection stale: no option tick for ${Math.round(staleSilence / 1000)} s on an open position; entries wait for ticks`;
     }
     return this.deps.book.snapshot().killSwitchReason ?? (this.deps.gate ?? OPEN_GATE).entryBlock();
   }
@@ -1066,7 +1080,17 @@ export class UnderlyingAgent {
       slot.fsm.dispatch('ENTRY_FILLED');
       slot.fsm.dispatch('PROTECTION_ARMED');
       slot.pending = undefined;
-      this.record('entry_filled', { correlationId, quantity, averagePrice, stopLossPrice: position.stopLossPrice, targetPrice: position.targetPrice });
+      this.record('entry_filled', {
+        correlationId,
+        quantity,
+        averagePrice,
+        stopLossPrice: position.stopLossPrice,
+        targetPrice: position.targetPrice,
+        protection: this.deps.execution.protection,
+      });
+      if (this.clientSideProtection) {
+        this.record('position_client_side', { correlationId, stopLossPrice: position.stopLossPrice, targetPrice: position.targetPrice });
+      }
       this.deps.logger.info('position open', { underlying: this.symbol, quantity, averagePrice, optionType: slot.optionType });
       if (this.shuttingDown) {
         this.queue.run(() => this.checkExitForSlot(slot, true));
@@ -1263,6 +1287,61 @@ export class UnderlyingAgent {
     }
   }
 
+  /** Whether the agent holds the stop and target itself. Only then does a silent option feed leave a position unprotected. */
+  private get clientSideProtection(): boolean {
+    return this.deps.execution.protection === 'CLIENT_SIDE';
+  }
+
+  /** Milliseconds since the position's last option tick, counted from the fill until the first tick arrives. */
+  private optionSilenceMs(slot: SideSlot, position: OpenPosition, now: number): number {
+    return now - Math.max(slot.lastOptionTickAt ?? position.openedAt, position.openedAt);
+  }
+
+  /** The longest silence among client-side positions past FEED_STALE_MS, or undefined when none is. */
+  private staleClientSideSilence(now: number): number | undefined {
+    if (!this.clientSideProtection) {
+      return undefined;
+    }
+    let worst: number | undefined;
+    for (const slot of this.allSlots()) {
+      if (slot.position === undefined) {
+        continue;
+      }
+      const silence = this.optionSilenceMs(slot, slot.position, now);
+      if (silence > this.deps.config.feed.staleMs) {
+        worst = Math.max(worst ?? 0, silence);
+      }
+    }
+    return worst;
+  }
+
+  /** Journals the start and the end of each stale episode on a client-side position, once per episode. */
+  private watchStaleOptionTicks(): void {
+    const now = this.now();
+    for (const slot of this.allSlots()) {
+      const position = slot.position;
+      if (position === undefined || !this.clientSideProtection) {
+        slot.staleAlerted = false;
+        continue;
+      }
+      const silenceMs = this.optionSilenceMs(slot, position, now);
+      const stale = silenceMs > this.deps.config.feed.staleMs;
+      if (stale && !slot.staleAlerted) {
+        slot.staleAlerted = true;
+        this.record('position_stale', {
+          positionId: position.positionId,
+          silenceMs,
+          staleMs: this.deps.config.feed.staleMs,
+          graceMs: this.deps.config.ops.stalePositionGraceMs,
+        });
+        this.deps.logger.error('client-side position has no option ticks', { underlying: this.symbol, positionId: position.positionId, silenceMs });
+      } else if (!stale && slot.staleAlerted) {
+        slot.staleAlerted = false;
+        this.record('position_stale_cleared', { positionId: position.positionId, silenceMs });
+      }
+    }
+  }
+
   private exitReason(slot: SideSlot, now: number, shutdown: boolean): ExitReason | undefined {
     // Keyed on the flag as well as the argument: a rejected shutdown exit is retried through the
     // ordinary tick path, and that retry must still be a shutdown exit.
@@ -1285,6 +1364,10 @@ export class UnderlyingAgent {
     const position = slot.position;
     if (position !== undefined && now - position.openedAt >= this.deps.config.exits.maxHoldMinutes * 60_000) {
       return 'TIME_STOP';
+    }
+    // A client-side stop cannot fire while the option feed is silent. Past the grace period the agent sells instead.
+    if (position !== undefined && this.clientSideProtection && this.optionSilenceMs(slot, position, now) >= this.deps.config.ops.stalePositionGraceMs) {
+      return 'STALE_DATA';
     }
     return undefined;
   }
@@ -1320,7 +1403,13 @@ function instrumentRefOf(contract: OptionContract): InstrumentRef {
   return { exchangeSegment: contract.exchangeSegment, securityId: contract.securityId };
 }
 
-function positionView(position: OpenPosition, mark: number | undefined, nowMs: number, exitRequested: boolean): PositionView {
+function positionView(
+  position: OpenPosition,
+  mark: number | undefined,
+  nowMs: number,
+  exitRequested: boolean,
+  protection: 'EXCHANGE_BRACKET' | 'CLIENT_SIDE',
+): PositionView {
   return {
     contractSymbol: position.contract.symbol,
     optionType: position.contract.optionType,
@@ -1335,5 +1424,6 @@ function positionView(position: OpenPosition, mark: number | undefined, nowMs: n
     openedAt: position.openedAt,
     heldMinutes: Math.max(0, Math.floor((nowMs - position.openedAt) / 60_000)),
     exitRequested,
+    protection,
   };
 }

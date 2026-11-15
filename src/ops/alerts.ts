@@ -12,6 +12,8 @@ export const ALERT_EVENT_TYPES: ReadonlySet<string> = new Set([
   'exit_rejected',
   'late_entry_fill',
   'audit_gap',
+  'position_stale',
+  'position_client_side',
 ]);
 
 const ALERT_TIMEOUT_MS = 5_000;

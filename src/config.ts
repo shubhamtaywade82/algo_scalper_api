@@ -169,6 +169,10 @@ export interface AgentConfig {
     /** Directory holding one `events-YYYY-MM-DD.jsonl` file per IST trading day. */
     readonly eventLogDir: string;
     readonly brokerKillSwitchOnBreach: boolean;
+    /** Milliseconds of option-tick silence after which a client-side position is sold as STALE_DATA. Never below FEED_STALE_MS. */
+    readonly stalePositionGraceMs: number;
+    /** Live only: arms Dhan's broker-side daily P&L exit at the loss limit, so it outlives a crash. Off by default. */
+    readonly brokerPnlExit: boolean;
     readonly reconcileIntervalMs: number;
     readonly orderTimeoutMs: number;
     /** Plain-text POST target for operator alerts (an ntfy.sh topic URL works). Acts as a secret; never logged. */
@@ -592,6 +596,8 @@ export function loadConfig(env: Env = process.env, configPath?: string): AgentCo
     ops: {
       eventLogDir: text(env, 'EVENT_LOG_DIR', 'data/journal'),
       brokerKillSwitchOnBreach: flag(env, 'BROKER_KILL_SWITCH_ON_BREACH', true),
+      stalePositionGraceMs: number(env, 'STALE_POSITION_GRACE_MS', 30_000, { min: 5_000, max: 600_000, integer: true }),
+      brokerPnlExit: flag(env, 'BROKER_PNL_EXIT', false),
       reconcileIntervalMs: number(env, 'RECONCILE_INTERVAL_MS', 5_000, { min: 1_000, max: 60_000, integer: true }),
       orderTimeoutMs: number(env, 'ORDER_TIMEOUT_MS', 30_000, { min: 1_000, max: 300_000, integer: true }),
       alertWebhookUrl: parseAlertWebhookUrl(env),
@@ -748,6 +754,9 @@ export function configFingerprint(config: AgentConfig): string {
 
 function validateCrossFields(config: AgentConfig): void {
   const { session, exits, strategy, contract } = config;
+  if (config.ops.stalePositionGraceMs < config.feed.staleMs) {
+    throw new Error('STALE_POSITION_GRACE_MS must be at least FEED_STALE_MS: the grace period starts after the stale threshold');
+  }
   if (!(session.entryStartMinute < session.entryEndMinute)) {
     throw new Error('ENTRY_START must be earlier than ENTRY_END');
   }

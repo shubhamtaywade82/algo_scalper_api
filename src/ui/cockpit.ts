@@ -388,7 +388,7 @@ function positionLines(position: PositionView, maxHoldMinutes: number, width: nu
     fit(`${markPrefix}${ok('OPEN')} ${symbol}`, width),
     fit(`    qty ${emphasis(String(position.quantity))} avg ${price(position.averagePrice)}`, width),
     fit(`    mark ${emphasis(price(position.mark))} P&L ${pnl}`, width),
-    fit(`    SL ${bad(price(position.stopLossPrice))} TP ${ok(price(position.targetPrice))}`, width),
+    fit(`    SL ${bad(price(position.stopLossPrice))} TP ${ok(price(position.targetPrice))}${position.protection === 'CLIENT_SIDE' ? muted(' client-side') : ''}`, width),
     fit(`    held ${position.heldMinutes}m of ${maxHoldMinutes}m${position.exitRequested ? yellow(' close requested') : ''}`, width),
   ];
 }

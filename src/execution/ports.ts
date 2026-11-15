@@ -86,6 +86,13 @@ export type ExecutionEvent =
 export type ExecutionListener = (event: ExecutionEvent) => void;
 
 /**
+ * Where a stop and target are held. `EXCHANGE_BRACKET`: the broker holds them as super-order legs, so they fire
+ * without the agent. `CLIENT_SIDE`: the agent sends the sell itself when the option LTP reaches them, so a silent
+ * option feed leaves the position without a stop.
+ */
+export type VenueProtection = 'EXCHANGE_BRACKET' | 'CLIENT_SIDE';
+
+/**
  * Single execution contract for paper and live. Entry and exit results arrive
  * as events, never as return values, so the state machine is driven by one
  * source of truth regardless of venue. `submit*` never throws for a venue
@@ -93,6 +100,7 @@ export type ExecutionListener = (event: ExecutionEvent) => void;
  */
 export interface ExecutionPort {
   readonly mode: TradingMode;
+  readonly protection: VenueProtection;
   /** Fill prices already include charges (paper_exchange nets them in). Otherwise the agent deducts an estimate. */
   readonly chargesInFills?: boolean;
   /** Starts background work such as broker reconciliation. Optional: paper has none. */
@@ -104,5 +112,7 @@ export interface ExecutionPort {
   onEvent(listener: ExecutionListener): () => void;
   /** Live only: disengages trading at the broker. Paper has no broker-side switch. */
   engageBrokerKillSwitch?(reason: string): Promise<void>;
+  /** Live only, and only when BROKER_PNL_EXIT is on: arms the broker's daily P&L exit at the loss limit. */
+  armBrokerPnlExit?(lossInr: number): Promise<void>;
   close(): Promise<void>;
 }

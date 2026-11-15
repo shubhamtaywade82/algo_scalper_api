@@ -206,6 +206,9 @@ export class Orchestrator {
       this.agents.get(event.underlying)?.onExecutionEvent(event);
       this.notifyView();
     });
+    if (this.config.mode === 'live' && this.config.ops.brokerPnlExit) {
+      await this.services.execution.armBrokerPnlExit?.(this.dailyLossLimitInr);
+    }
     this.services.execution.start?.();
     await this.services.feed.start();
     if (this.stopRequested) {

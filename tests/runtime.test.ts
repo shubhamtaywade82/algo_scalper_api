@@ -129,6 +129,10 @@ function build(
     /** Runs inside the funds call, the last REST call before the risk gate. */
     onFunds?: () => void;
     openingCapitalInr?: number;
+    /** Makes the paper venue report the protection an exchange-held bracket gives. */
+    exchangeHeld?: boolean;
+    /** Records each arm of the broker P&L exit, as the live venue would receive it. */
+    brokerPnlExitArm?: number[];
   } = {},
 ): Harness {
   // Start after the warmup's last bar has closed; the clock guard refuses bars stamped in the future.
@@ -149,6 +153,13 @@ function build(
   const events: Harness['events'] = [];
   const paperCloses: ExitOrder[] = [];
   const paper = new PaperExecutionPort({ slippageBps: 0, now });
+  if (options.exchangeHeld === true) {
+    Object.assign(paper, { protection: 'EXCHANGE_BRACKET' });
+  }
+  if (options.brokerPnlExitArm !== undefined) {
+    const armed = options.brokerPnlExitArm;
+    Object.assign(paper, { armBrokerPnlExit: async (lossInr: number) => void armed.push(lossInr) });
+  }
   const execution = options.execution ?? paper;
   if (execution === paper) {
     paper.onEvent(() => undefined);
@@ -628,6 +639,7 @@ function scriptedVenue(script: { exit: 'FILL' | 'UNCONFIRMED' }) {
   const emit = (event: ExecutionEvent) => queueMicrotask(() => listener?.(event));
   const port: ExecutionPort = {
     mode: 'live',
+    protection: 'EXCHANGE_BRACKET',
     submitEntry: async (order) => {
       lastEntry = order;
       emit({ kind: 'ENTRY_UNCONFIRMED', correlationId: order.correlationId, underlying: 'NIFTY', reason: 'timeout' });
@@ -663,6 +675,7 @@ describe('runtime: open risk under a broker-held trailing stop', () => {
     let listener: ((event: ExecutionEvent) => void) | undefined;
     return {
       mode,
+      protection: mode === 'live' ? 'EXCHANGE_BRACKET' : 'CLIENT_SIDE',
       submitEntry: async (order) => {
         queueMicrotask(() =>
           listener?.({ kind: 'ENTRY_FILLED', correlationId: order.correlationId, underlying: 'NIFTY', quantity: order.quantity, averagePrice: order.entryReference, at: 0 }),
@@ -748,6 +761,7 @@ describe('runtime: halts', () => {
     let listener: ((event: ExecutionEvent) => void) | undefined;
     const execution: ExecutionPort = {
       mode: 'live',
+      protection: 'EXCHANGE_BRACKET',
       submitEntry: async (order) => {
         entries.push(order);
         listener?.({ kind: 'ENTRY_UNCONFIRMED', correlationId: order.correlationId, underlying: 'NIFTY', reason: 'timeout' });
@@ -780,6 +794,7 @@ describe('runtime: halts', () => {
     let listener: ((event: ExecutionEvent) => void) | undefined;
     const execution: ExecutionPort = {
       mode: 'live',
+      protection: 'EXCHANGE_BRACKET',
       submitEntry: async (order) => {
         listener?.({ kind: 'ENTRY_UNCONFIRMED', correlationId: order.correlationId, underlying: 'NIFTY', reason: 'timeout' });
       },
@@ -975,6 +990,7 @@ describe('runtime: shutdown exits', () => {
     const at = () => harness?.now() ?? 0;
     const execution: ExecutionPort = {
       mode: 'live',
+      protection: 'EXCHANGE_BRACKET',
       submitEntry: async (order) => {
         listener?.({ kind: 'ENTRY_FILLED', correlationId: order.correlationId, underlying: 'NIFTY', quantity: order.quantity, averagePrice: order.entryReference, at: at() });
       },
@@ -1255,6 +1271,7 @@ describe('runtime: durable intents and the trading gate', () => {
     const durableTypes: string[] = [];
     const execution: ExecutionPort = {
       mode: 'live',
+      protection: 'EXCHANGE_BRACKET',
       submitEntry: async (order) => {
         listener?.({ kind: 'ENTRY_UNCONFIRMED', correlationId: order.correlationId, underlying: 'NIFTY', reason: 'timeout' });
       },
@@ -1376,3 +1393,92 @@ describe('runtime: durable intents and the trading gate', () => {
 function requestManual(harness: Harness): void {
   harness.orchestrator.requestManualExit('NIFTY');
 }
+
+describe('stale option ticks on an open client-side position', () => {
+  /** A breakout fills the CE at 09:45:05, and the first option tick arrives with the fill. */
+  async function openPosition(harness: Harness): Promise<void> {
+    await harness.orchestrator.start();
+    await triggerBreakout(harness);
+    optionTick(harness, CE.securityId, 102);
+  }
+
+  /** Moves the clock and runs the clock path, which is where the watchdog decides. */
+  async function atClock(harness: Harness, at: string): Promise<void> {
+    harness.setClock(at);
+    clockTick(harness.orchestrator);
+    await settle(harness.orchestrator);
+  }
+
+  const entryBlock = (harness: Harness): string | undefined =>
+    (harness.orchestrator.agent('NIFTY') as unknown as { entryBlockReason(): string | undefined }).entryBlockReason();
+
+  it('records position_stale once option ticks stop for longer than FEED_STALE_MS', async () => {
+    const harness = build();
+    await openPosition(harness);
+    await atClock(harness, '09:45:20');
+    assert.equal(harness.events.filter((event) => event.type === 'position_stale').length, 1);
+    await atClock(harness, '09:45:21');
+    assert.equal(harness.events.filter((event) => event.type === 'position_stale').length, 1, 'one record per stale episode');
+  });
+
+  it('exits a client-side position with STALE_DATA once the silence reaches the grace period, and only once', async () => {
+    const harness = build();
+    await openPosition(harness);
+    await atClock(harness, '09:45:20');
+    assert.equal(harness.events.filter((event) => event.type === 'exit_submitted').length, 0, 'inside the grace period nothing is sold');
+    await atClock(harness, '09:46:10');
+    const exits = harness.events.filter((event) => event.type === 'exit_submitted');
+    assert.equal(exits.length, 1);
+    assert.equal(exits[0]?.payload['reason'], 'STALE_DATA');
+    await atClock(harness, '09:46:12');
+    assert.equal(harness.events.filter((event) => event.type === 'exit_submitted').length, 1, 'one exit per position');
+  });
+
+  it('blocks new entries on the underlying while its client-side position is stale', async () => {
+    const harness = build();
+    await openPosition(harness);
+    await atClock(harness, '09:45:20');
+    assert.match(entryBlock(harness) ?? '', /client-side protection stale/);
+  });
+
+  it('clears the stale state on the next option tick, and does not exit', async () => {
+    const harness = build();
+    await openPosition(harness);
+    await atClock(harness, '09:45:20');
+    optionTick(harness, CE.securityId, 103);
+    await atClock(harness, '09:45:21');
+    assert.equal(entryBlock(harness), undefined);
+    assert.equal(harness.events.filter((event) => event.type === 'exit_submitted').length, 0);
+  });
+
+  it('leaves an exchange-held position alone: its stop is at the broker, not in the agent', async () => {
+    const harness = build({}, { exchangeHeld: true });
+    await openPosition(harness);
+    await atClock(harness, '09:46:10');
+    assert.equal(harness.events.some((event) => event.type === 'position_stale'), false);
+    assert.equal(harness.events.filter((event) => event.type === 'exit_submitted').length, 0);
+  });
+});
+
+describe('broker P&L exit arming at start', () => {
+  const LIVE_ENV = {
+    MODE: 'live',
+    LIVE_TRADING_ACK: 'I_ACCEPT_LIVE_ORDER_RISK',
+    REDIS_URL: 'redis://cache.test.invalid:6379/0',
+    BROKER_PNL_EXIT: 'on',
+  };
+
+  it('arms the broker P&L exit at the daily loss limit in live mode', async () => {
+    const armed: number[] = [];
+    const harness = build(LIVE_ENV, { brokerPnlExitArm: armed });
+    await harness.orchestrator.start();
+    assert.deepEqual(armed, [3_000], 'CAPITAL_INR 300000 at 1% a day');
+  });
+
+  it('does not arm the broker P&L exit on paper, even when the setting is on', async () => {
+    const armed: number[] = [];
+    const harness = build({ BROKER_PNL_EXIT: 'on' }, { brokerPnlExitArm: armed });
+    await harness.orchestrator.start();
+    assert.deepEqual(armed, []);
+  });
+});

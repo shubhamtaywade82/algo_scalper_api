@@ -44,6 +44,7 @@ interface OpenPosition extends Omit<PaperPositionRecord, 'stopLossPrice'> {
  * fills and exchange freeze limits are not modelled.
  */
 export class PostgresPaperExecutionPort implements ExecutionPort {
+  readonly protection: 'EXCHANGE_BRACKET' | 'CLIENT_SIDE' = 'CLIENT_SIDE';
   readonly mode = 'paper' as const;
   private readonly listeners = new Set<ExecutionListener>();
   private readonly positions = new Map<string, OpenPosition>();

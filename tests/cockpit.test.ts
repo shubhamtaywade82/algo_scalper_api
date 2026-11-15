@@ -309,3 +309,20 @@ describe('cockpit: context and giveback', () => {
     assert.match(screen, /no daily stop/);
   });
 });
+
+describe('position protection label', () => {
+  const withProtection = (protection: 'EXCHANGE_BRACKET' | 'CLIENT_SIDE') => ({
+    ...rich,
+    underlyings: rich.underlyings.map((u) => ({ ...u, positions: (u.positions ?? []).map((p) => ({ ...p, protection })) })),
+  });
+
+  it('says the stop and target are client-side where the venue holds no bracket', () => {
+    const text = renderOptionsCockpit(withProtection('CLIENT_SIDE'), { width: 170, height: 48, selected: 0, notice: undefined, logs }).map(plain).join('\n');
+    assert.match(text, /client-side/);
+  });
+
+  it('does not say client-side for a position whose stop is held at the exchange', () => {
+    const text = renderOptionsCockpit(withProtection('EXCHANGE_BRACKET'), { width: 170, height: 48, selected: 0, notice: undefined, logs }).map(plain).join('\n');
+    assert.doesNotMatch(text, /client-side/);
+  });
+});

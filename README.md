@@ -212,6 +212,8 @@ on); the daily-loss flatten; a manual close; and the end-of-day flatten at `FLAT
 | Cooldown per underlying | `DayBook` | `COOLDOWN_SECONDS` after each exit. |
 | Entry window and expiry-day cutoff | `evaluatePreTrade` | Outside the window, or after `EXPIRY_DAY_ENTRY_CUTOFF` on expiry day: no entry. |
 | Stale data | `evaluatePreTrade`, `DhanFeed.ageMs` | Spot tick older than `FEED_STALE_MS` (or never received) on local receipt time, or a chain snapshot older than `FEED_STALE_MS`: no entry. |
+| Client-side protection | `ExecutionPort.protection`, `UnderlyingAgent.watchStaleOptionTicks`, `UnderlyingAgent.exitReason` | Paper and the sandbox gateway hold the stop and target in the agent, so they fire only on option ticks. The cockpit marks such a stop `client-side`. An open position with no option tick for longer than `FEED_STALE_MS` refuses entries on its underlying and journals `position_stale`. Past `STALE_POSITION_GRACE_MS` it is sold with reason `STALE_DATA`, priced from the last option tick the agent holds, or the entry price if none arrived. The watch cannot tell a silent feed from a strike that has not traded, so a short grace closes quiet strikes. Live positions keep their stop at the exchange and are not watched. |
+| Broker P&L exit (live, opt-in) | `LiveExecutionPort.armBrokerPnlExit` | `BROKER_PNL_EXIT=true` sets Dhan's daily loss exit to the daily loss limit at start, with the kill switch left to the agent. A definitive refusal is tried again by the next entry. An ambiguous outcome is never resent: entries are refused as unconfirmed, which halts the underlying. The `lossValue` sign and units, the broker's action when the rule fires and its persistence across sessions are unverified (BROKER_CONTRACT row 1.9). |
 | Time stop, EOD flatten | `UnderlyingAgent.exitReason` | `MAX_HOLD_MINUTES`, and every position flattened at `FLATTEN_BY` IST. |
 | Kill switch | `DayBook`, `engageBrokerKillSwitch` | Local block on entries at once. Broker kill switch on halts, and on a daily-loss breach once no position is open (Dhan refuses it otherwise), tried again if a late fill reopens and closes one. `BROKER_KILL_SWITCH_ON_BREACH` controls the breach case. |
 | Market feed ended by the server | `DhanFeed.handleDisconnect`, `entryBlockReason` | A terminal reason from the market socket (804 to 810: no Data API plan, bad token, connection or instrument cap) ends the feed for good. Entries are refused until the process restarts, the event `feed_terminal` alerts, and exits keep running on the broker's legs and the clock. Fix the cause before restarting. |
@@ -233,6 +235,8 @@ on); the daily-loss flatten; a manual close; and the end-of-day flatten at `FLAT
 - **No replay of trading writes.** Ambiguous placement outcomes (timeouts, 5xx, 401, 429,
   network) become `ENTRY_UNCONFIRMED` / `EXIT_UNCONFIRMED`, which halt the underlying and
   engage the broker kill switch. Only definitive 4xx rejections are `REJECTED`.
+- **The broker P&L exit request is never resent after an ambiguous outcome.** A definitive refusal is tried again by the
+  next entry. Any other failure leaves every entry refused as unconfirmed until restart.
 - **Reconciliation** polls `positions.list` while tracked positions are open. It reports
   external (bracket) closes and late fills exactly once, through the same terminal-key
   dedupe that prevents double-reporting.
@@ -303,6 +307,8 @@ if either column stops matching the code or the file.
 | Opening range (minutes) | `ORB_MINUTES` | 15 | — |
 | Paper slippage (bps) | `PAPER_SLIPPAGE_BPS` | 25 | 25 |
 | Market feed mode | `DHAN_MARKET_FEED_MODE` | ticker | — |
+| Stale grace for client-side positions (ms) | `STALE_POSITION_GRACE_MS` | 30000 | — |
+| Broker P&L exit, live only | `BROKER_PNL_EXIT` | false | — |
 
 **Calibration.** The code defaults are starting points (see `.env.example`). The paper profile's exit values,
 a 50% stop, a 1R target and a 30-minute time stop, were chosen from Time Machine replays of 2025-10 to 2026-09.
@@ -409,7 +415,8 @@ paper-exchange suite only when `PAPER_EXCHANGE_E2E_URL` is set. `npm test` print
 - the documentation against the code: script names, paths, `.env.example`, the README default and key
   tables, the state diagram, and the statements that were found wrong (`tests/docsConsistency.test.ts`)
 
-**Not covered by tests:** the live DhanHQ wire behaviour. There are no broker credentials
+**Not covered by tests:** the live DhanHQ wire behaviour, including the broker P&L exit's semantics, and a real feed outage
+under the stale-position watch. There are no broker credentials
 in this environment. The items under [Verification required](#verification-required-before-live) must be
 exercised against a Dhan sandbox or with a minimal-size live run.
 
@@ -491,6 +498,8 @@ Do these in order, and do not start a stage until the previous one is clean:
   (see Configuration). Treat paper results as a smoke test until the roadmap's gate passes.
 - The default feed mode is `ticker` (`DHAN_MARKET_FEED_MODE`). The agent uses the last traded price and time.
   No strategy rule reads bar volume.
+- Paper and sandbox stops depend on option ticks. A `STALE_DATA` exit is priced from the last option tick the agent holds,
+  so while the feed is silent the paper fill uses a stale mark. Treat paper P&L for those exits as an estimate.
 
 ## What was removed
 

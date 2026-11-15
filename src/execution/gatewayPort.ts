@@ -42,6 +42,7 @@ export interface GatewayPortOptions {
  *  - A protective sell that is rejected leaves the position open at the venue, so it is a BROKER_MISMATCH and halts.
  */
 export class GatewayExecutionPort implements ExecutionPort {
+  readonly protection: 'EXCHANGE_BRACKET' | 'CLIENT_SIDE' = 'CLIENT_SIDE';
   readonly mode: 'sandbox' | 'paper';
   /** The paper gateway is paper_exchange, which nets charges into fill prices. The Dhan sandbox reports gross. */
   readonly chargesInFills: boolean;

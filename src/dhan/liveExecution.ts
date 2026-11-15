@@ -198,7 +198,13 @@ function describeError(error: unknown): string {
  * validated in a sandbox before live use.
  */
 export class LiveExecutionPort implements ExecutionPort {
+  readonly protection: 'EXCHANGE_BRACKET' | 'CLIENT_SIDE' = 'EXCHANGE_BRACKET';
   readonly mode: 'live' | 'sandbox';
+  /**
+   * The broker P&L exit. ARMED only after Dhan accepts the request. NOT_ARMED after a definitive refusal, which was
+   * not applied, so the next entry may try once more. UNKNOWN after an ambiguous outcome, which is never resent (ADR-005).
+   */
+  private pnlExit: { lossInr: number; state: 'ARMED' | 'NOT_ARMED' | 'UNKNOWN' } | undefined;
   private readonly listeners = new Set<ExecutionListener>();
   private readonly tracker = new OrderTracker();
   private readonly tracked = new Map<string, TrackedPosition>();
@@ -237,8 +243,51 @@ export class LiveExecutionPort implements ExecutionPort {
     return;
   }
 
+  /**
+   * Sets Dhan's broker-side daily P&L exit to the loss limit, so the broker closes the day's positions if the agent
+   * stops. The kill switch stays with the agent (invariant 7), so enableKillSwitch is off. Called once, at start.
+   * The next entry tries a definitive refusal again. An ambiguous outcome is never resent (ADR-005).
+   */
+  async armBrokerPnlExit(lossInr: number): Promise<void> {
+    await this.tryArmPnlExit(lossInr);
+  }
+
+  /**
+   * One request to Dhan. A definitive refusal (classified as a placement is) was not applied, so the state is
+   * NOT_ARMED. Anything ambiguous is UNKNOWN, and this process never sends the request again.
+   */
+  private async tryArmPnlExit(lossInr: number): Promise<'ARMED' | 'NOT_ARMED' | 'UNKNOWN'> {
+    let state: 'ARMED' | 'NOT_ARMED' | 'UNKNOWN';
+    try {
+      await this.client.traderControls.setPnlExit({ lossValue: lossInr, enableKillSwitch: false, productType: ['INTRADAY'] });
+      state = 'ARMED';
+    } catch (error) {
+      state = classifyPlacementError(error) === 'REJECTED' ? 'NOT_ARMED' : 'UNKNOWN';
+      this.options.logger.error('broker P&L exit could not be armed', { state, reason: describeError(error) });
+    }
+    this.pnlExit = { lossInr, state };
+    return state;
+  }
+
   async submitEntry(order: EntryOrder): Promise<void> {
     const cid = order.correlationId;
+    if (this.pnlExit !== undefined) {
+      const state = this.pnlExit.state === 'NOT_ARMED' ? await this.tryArmPnlExit(this.pnlExit.lossInr) : this.pnlExit.state;
+      if (state === 'UNKNOWN') {
+        // Nothing is sent. The unconfirmed entry halts the underlying (ADR-005), and no later entry re-sends the request.
+        this.emitTerminal(`entry:${cid}`, {
+          kind: 'ENTRY_UNCONFIRMED',
+          correlationId: cid,
+          underlying: order.underlying,
+          reason: 'broker P&L exit outcome is unknown; it is not resent, and entries are refused until restart',
+        });
+        return;
+      }
+      if (state !== 'ARMED') {
+        this.emit({ kind: 'ENTRY_REJECTED', correlationId: cid, underlying: order.underlying, reason: 'broker P&L exit is not armed; the entry is refused until it is' });
+        return;
+      }
+    }
     if (!fitsBrokerLimit(cid)) {
       this.emit({ kind: 'ENTRY_REJECTED', correlationId: cid, underlying: order.underlying, reason: `correlation id of ${cid.length} characters exceeds the broker limit; not sent` });
       return;

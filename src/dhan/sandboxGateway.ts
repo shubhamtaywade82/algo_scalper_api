@@ -21,8 +21,8 @@ export interface SandboxGatewayOptions {
  * Sends agent orders to the Dhan sandbox as regular MARKET orders, and reads each one back until it settles.
  *
  * The sandbox serves no super orders and no WebSocket, so this gateway has to poll `orders.getById`. Super orders
- * are not used here because the sandbox answers 404 for them. An order that is still working at the deadline is
- * cancelled, and a fill that cannot be confirmed is UNCONFIRMED, never FILLED.
+ * are not used here: the SDK refuses them in sandbox before any request is sent (SandboxUnsupportedError). An order
+ * that is still working at the deadline is cancelled, and a fill that cannot be confirmed is UNCONFIRMED, never FILLED.
  */
 export class DhanSandboxGateway implements OrderGateway {
   private readonly now: () => number;

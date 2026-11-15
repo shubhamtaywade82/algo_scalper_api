@@ -94,6 +94,7 @@ export type ExitReason =
   | 'STOP_LOSS'
   | 'TARGET'
   | 'TIME_STOP'
+  | 'STALE_DATA'
   | 'EOD_FLATTEN'
   | 'DAILY_LOSS'
   | 'SHUTDOWN'
