@@ -2,28 +2,52 @@
   "mcpServers": {
     "rails-context": {
       "command": "/home/nemesis/.rvm/gems/ruby-4.0.6/bin/rails-mcp-server",
-      "args": ["--single-project"]
+      "args": [
+        "--single-project"
+      ]
     },
     "railsforge": {
       "command": "node",
-      "args": ["/home/nemesis/.vscode-server/extensions/shubhamtaywade.railsforge-0.1.4/dist/mcp/server.js"],
-      "env": { "RAILSFORGE_WORKSPACE_ROOT": "/home/nemesis/projects/indian-trading/algo_scalper_api" }
+      "args": [
+        "/home/nemesis/.vscode-server/extensions/shubhamtaywade.railsforge-0.1.4/dist/mcp/server.js"
+      ],
+      "env": {
+        "RAILSFORGE_WORKSPACE_ROOT": "/home/nemesis/projects/indian-trading/algo_scalper_api"
+      }
     },
     "rails-harness": {
       "command": "bundle",
-      "args": ["exec", "ask-rails-harness-mcp"],
-      "env": { "BUNDLE_GEMFILE": "/home/nemesis/projects/indian-trading/algo_scalper_api/Gemfile" }
+      "args": [
+        "exec",
+        "ask-rails-harness-mcp"
+      ],
+      "env": {
+        "BUNDLE_GEMFILE": "/home/nemesis/projects/indian-trading/algo_scalper_api/Gemfile"
+      }
     },
     "debug": {
       "command": "debug-mcp"
     },
     "ruby-console": {
       "command": "/home/nemesis/.nvm/versions/node/v20.19.0/bin/node",
-      "args": ["/home/nemesis/.local/share/ruby-console-mcp-host/node_modules/ruby-console-mcp/build/index.js"],
+      "args": [
+        "/home/nemesis/.local/share/ruby-console-mcp-host/node_modules/ruby-console-mcp/build/index.js"
+      ],
       "env": {
         "RUBY_APP_PATH": "/home/nemesis/projects/indian-trading/algo_scalper_api",
         "RUBY_CONSOLE_COMMAND": "bundle exec rails c --sandbox",
         "COMMAND_TIMEOUT": "60000"
+      }
+    },
+    "rails-ai-context": {
+      "command": "bundle",
+      "args": [
+        "exec",
+        "rails-ai-context",
+        "serve"
+      ],
+      "env": {
+        "BUNDLE_GEMFILE": "/home/nemesis/projects/indian-trading/algo_scalper_api/Gemfile"
       }
     }
   }

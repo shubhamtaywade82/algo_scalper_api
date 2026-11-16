@@ -1,0 +1,5 @@
+[mcp_servers.rails-ai-context]
+command = "bundle"
+args = ["exec", "rails-ai-context", "serve"]
+env_vars = ["GEM_HOME", "GEM_PATH", "GEM_ROOT", "RUBY_VERSION", "BUNDLE_PATH"]
+startup_timeout_sec = 30.0

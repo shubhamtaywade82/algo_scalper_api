@@ -43,6 +43,15 @@
         "/home/nemesis/.rvm/gems/ruby-4.0.6/bin/debug-mcp"
       ],
       "enabled": true
+    },
+    "rails-ai-context": {
+      "type": "local",
+      "command": [
+        "bundle",
+        "exec",
+        "rails-ai-context",
+        "serve"
+      ]
     }
   }
 }

@@ -8,19 +8,27 @@
     },
     "rails-context": {
       "command": "/home/nemesis/.rvm/gems/ruby-4.0.6/bin/rails-mcp-server",
-      "args": ["--single-project"]
+      "args": [
+        "--single-project"
+      ]
     },
     "railsforge": {
       "command": "node",
-      "args": ["/home/nemesis/.cursor-server/extensions/shubhamtaywade.railsforge-0.1.4/dist/mcp/server.js"],
-      "env": { "RAILSFORGE_WORKSPACE_ROOT": "/home/nemesis/projects/indian-trading/algo_scalper_api" }
+      "args": [
+        "/home/nemesis/.cursor-server/extensions/shubhamtaywade.railsforge-0.1.4/dist/mcp/server.js"
+      ],
+      "env": {
+        "RAILSFORGE_WORKSPACE_ROOT": "/home/nemesis/projects/indian-trading/algo_scalper_api"
+      }
     },
     "rails-harness": {
       "command": "/home/nemesis/.rvm/gems/ruby-4.0.6/bin/ask-rails-harness-mcp"
     },
     "ruby-console": {
       "command": "/home/nemesis/.nvm/versions/node/v20.19.0/bin/node",
-      "args": ["/home/nemesis/.local/share/ruby-console-mcp-host/node_modules/ruby-console-mcp/build/index.js"],
+      "args": [
+        "/home/nemesis/.local/share/ruby-console-mcp-host/node_modules/ruby-console-mcp/build/index.js"
+      ],
       "env": {
         "RUBY_APP_PATH": "/home/nemesis/projects/indian-trading/algo_scalper_api",
         "RUBY_CONSOLE_COMMAND": "bundle exec rails c --sandbox",
@@ -29,6 +37,17 @@
     },
     "ruby-debug": {
       "command": "/home/nemesis/.rvm/gems/ruby-4.0.6/bin/debug-mcp"
+    },
+    "rails-ai-context": {
+      "command": "ruby",
+      "args": [
+        "-e",
+        "dirs = ENV[\"PATH\"].to_s.split(File::PATH_SEPARATOR).map { |dir| File.dirname(dir) }.select { |dir| File.directory?(File.join(dir, \"specifications\")) }.uniq; ENV[\"GEM_PATH\"] = [*dirs, \"\"].join(File::PATH_SEPARATOR) if dirs.any? && ENV[\"GEM_PATH\"].to_s.empty? && ENV[\"GEM_HOME\"].to_s.empty?; exec(*ARGV)",
+        "bundle",
+        "exec",
+        "rails-ai-context",
+        "serve"
+      ]
     }
   }
 }

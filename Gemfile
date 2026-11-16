@@ -129,3 +129,5 @@ group :development do
 end
 
 gem "actionmcp", "~> 0.203"
+
+gem "rails-ai-context", ">= 5.35.0", group: :development

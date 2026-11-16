@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "rails-ai-context": {
+      "command": "ruby",
+      "args": [
+        "-e",
+        "dirs = ENV[\"PATH\"].to_s.split(File::PATH_SEPARATOR).map { |dir| File.dirname(dir) }.select { |dir| File.directory?(File.join(dir, \"specifications\")) }.uniq; ENV[\"GEM_PATH\"] = [*dirs, \"\"].join(File::PATH_SEPARATOR) if dirs.any? && ENV[\"GEM_PATH\"].to_s.empty? && ENV[\"GEM_HOME\"].to_s.empty?; exec(*ARGV)",
+        "bundle",
+        "exec",
+        "rails-ai-context",
+        "serve"
+      ],
+      "tools": [
+        "*"
+      ]
+    }
+  }
+}

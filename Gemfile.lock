@@ -355,6 +355,8 @@ GEM
       net-pop
       net-smtp
     marcel (1.2.1)
+    mcp (1.10.0)
+      json_schemer (>= 2.4)
     mini_mime (1.1.5)
     minitest (6.1.0)
       drb (~> 2.0)
@@ -451,6 +453,13 @@ GEM
       activesupport (= 8.1.4.1)
       bundler (>= 1.15.0)
       railties (= 8.1.4.1)
+    rails-ai-context (5.39.1)
+      concurrent-ruby (>= 1.2, < 3.0)
+      mcp (>= 0.13, < 2.0)
+      prism (>= 1.4, < 3.0)
+      railties (>= 7.0, < 9.0)
+      thor (>= 1.2, < 3.0)
+      zeitwerk (~> 2.5)
     rails-dom-testing (2.3.0)
       activesupport (>= 5.0.0)
       minitest
@@ -731,6 +740,7 @@ DEPENDENCIES
   rack-attack (~> 6.7)
   rack-cors
   rails (~> 8.1.4)
+  rails-ai-context (>= 5.35.0)
   rails_best_practices
   redis (~> 6.0)
   rspec-rails
