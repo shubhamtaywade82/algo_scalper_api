@@ -30,6 +30,33 @@ RSpec.describe 'RESTful API sub-resources' do # rubocop:disable RSpec/DescribeCl
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body['error']).to eq('task_not_found')
     end
+
+    it 'enqueues a task with a valid registered job class' do
+      schedule_config = {
+        'smc_scanner' => { 'class' => 'SmcScannerJob', 'args' => [] }
+      }
+      allow_any_instance_of(Api::ScheduledTaskExecutionsController)
+        .to receive(:load_schedule_config).and_return(schedule_config)
+
+      expect do
+        post '/api/scheduler/tasks/smc_scanner/executions'
+      end.to have_enqueued_job(SmcScannerJob)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body['success']).to be true
+    end
+
+    it 'rejects a task with an unregistered job class' do
+      schedule_config = {
+        'unregistered_task' => { 'class' => 'Kernel', 'args' => [] }
+      }
+      allow_any_instance_of(Api::ScheduledTaskExecutionsController)
+        .to receive(:load_schedule_config).and_return(schedule_config)
+
+      post '/api/scheduler/tasks/unregistered_task/executions'
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body['error']).to eq('invalid_job_class')
+    end
   end
 
   describe 'GET /api/positions/:position_id/journal_entries' do

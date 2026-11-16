@@ -267,15 +267,16 @@ class InstrumentsImporter
 
     def bulk_link!(pairs)
       pairs.each_slice(500) do |slice|
-        # Values are parameterized through sanitize_sql so broker CSV data can
-        # never alter the statement shape.
+        # Parameterize WHEN clauses and IN clause via sanitize_sql_array to guarantee safety
         when_clauses = slice.map do |id, parent_id|
-          ActiveRecord::Base.sanitize_sql_array(['WHEN ? THEN ?', id, parent_id])
-        end
-        ids = slice.map { |(id, _)| ActiveRecord::Base.sanitize_sql(['?', id]) }.join(',')
-        ActiveRecord::Base.connection.execute(
-          "UPDATE instruments SET underlying_instrument_id = CASE id #{when_clauses.join(' ')} END WHERE id IN (#{ids})"
+          ActiveRecord::Base.sanitize_sql_array(['WHEN id = ? THEN ?', id, parent_id])
+        end.join(' ')
+        ids = slice.map(&:first)
+
+        sql = ActiveRecord::Base.sanitize_sql_array(
+          ["UPDATE instruments SET underlying_instrument_id = CASE #{when_clauses} END WHERE id IN (?)", ids]
         )
+        ActiveRecord::Base.connection.execute(sql)
       end
     end
 
