@@ -59,7 +59,7 @@ RSpec.describe 'Api::CalibrationRuns' do
     end
   end
 
-  describe 'POST /api/calibration_runs/:id/apply' do
+  describe 'POST /api/calibration_runs/:id/application' do
     let(:run) { create_run }
     let(:doc_key) { AlgoConfig::DocumentStore::DOCUMENT_KEY }
 
@@ -77,13 +77,13 @@ RSpec.describe 'Api::CalibrationRuns' do
     end
 
     it 'returns 200 on success' do
-      post "/api/calibration_runs/#{run.id}/apply",
+      post "/api/calibration_runs/#{run.id}/application",
            headers: { 'Authorization' => 'Bearer spec-operator-token' }
       expect(response).to have_http_status(:ok)
     end
 
     it 'returns applied_at in the response' do
-      post "/api/calibration_runs/#{run.id}/apply",
+      post "/api/calibration_runs/#{run.id}/application",
            headers: { 'Authorization' => 'Bearer spec-operator-token' }
       json = response.parsed_body
       expect(json['applied_at']).to be_present
@@ -91,13 +91,13 @@ RSpec.describe 'Api::CalibrationRuns' do
 
     it 'returns 422 on double-apply' do
       run.update!(applied_at: Time.current)
-      post "/api/calibration_runs/#{run.id}/apply",
+      post "/api/calibration_runs/#{run.id}/application",
            headers: { 'Authorization' => 'Bearer spec-operator-token' }
       expect(response).to have_http_status(:unprocessable_content)
     end
 
     it 'returns 404 for unknown id' do
-      post '/api/calibration_runs/999999/apply',
+      post '/api/calibration_runs/999999/application',
            headers: { 'Authorization' => 'Bearer spec-operator-token' }
       expect(response).to have_http_status(:not_found)
     end

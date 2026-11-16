@@ -85,11 +85,11 @@ RSpec.describe 'Api::BacktestRuns' do
     end
   end
 
-  describe 'GET /api/backtest_runs/:id/download_csv' do
+  describe 'GET /api/backtest_runs/:id.csv' do
     it 'returns a CSV of trades for a completed run' do
       run = create(:backtest_run, :completed)
 
-      get "/api/backtest_runs/#{run.id}/download_csv"
+      get "/api/backtest_runs/#{run.id}.csv"
 
       expect(response).to have_http_status(:ok)
       expect(response.content_type).to include('text/csv')
@@ -99,7 +99,7 @@ RSpec.describe 'Api::BacktestRuns' do
     it 'returns 422 for a run that has not completed yet' do
       run = create(:backtest_run, status: 'running')
 
-      get "/api/backtest_runs/#{run.id}/download_csv"
+      get "/api/backtest_runs/#{run.id}.csv"
 
       expect(response).to have_http_status(:unprocessable_content)
     end

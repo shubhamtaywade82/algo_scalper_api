@@ -53,7 +53,7 @@ export function useAnalysis() {
     setActiveIndex(index)
     try {
       setHistoricalLoading(true)
-      const res = await fetch(`/api/analysis/${index}/historical?weeks=${weeks}`, { headers: dashboardApiHeaders() })
+      const res = await fetch(`/api/analysis/${index}/history?weeks=${weeks}`, { headers: dashboardApiHeaders() })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setHistoricalData(await res.json())
     } catch (e) {
@@ -87,7 +87,7 @@ export function useAnalysis() {
     setSnapshotLoading(true)
     setSnapshotError(null)
     try {
-      const res = await fetch(`/api/analysis/${index}/ai_snapshot`, { method: 'POST' })
+      const res = await fetch(`/api/analysis/${index}/ai_snapshots`, { method: 'POST' })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         const msg = res.status === 401 || res.status === 403

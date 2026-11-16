@@ -5,7 +5,7 @@ module Api
     include Api::TokenAuthenticatable
 
     before_action :authenticate_dashboard_token!
-    before_action :set_trading_strategy, only: %i[show update destroy validate deploy]
+    before_action :set_trading_strategy, only: %i[show update destroy]
 
     # GET /api/trading_strategies
     def index
@@ -42,35 +42,6 @@ module Api
     def destroy
       @trading_strategy.update!(status: "archived")
       render json: @trading_strategy
-    end
-
-    # POST /api/trading_strategies/:id/validate
-    def validate
-      result = @trading_strategy.run_checks!
-      render json: {
-        checks: result[:checks],
-        backtest_results: result[:backtest_results],
-        scan_report: result[:scan_report],
-        strategy: @trading_strategy
-      }
-    end
-
-    # POST /api/trading_strategies/:id/deploy
-    def deploy
-      result = ::Strategies::AdHocDeployer.call(@trading_strategy)
-
-      if result[:ok]
-        render json: {
-          success: true,
-          slug: @trading_strategy.slug,
-          strategy_record_id: @trading_strategy.strategy_record_id,
-          scan_report: result[:scan_report],
-          strategy: @trading_strategy
-        }
-      else
-        render json: { success: false, errors: result[:errors], scan_report: result[:scan_report] },
-               status: :unprocessable_content
-      end
     end
 
     private

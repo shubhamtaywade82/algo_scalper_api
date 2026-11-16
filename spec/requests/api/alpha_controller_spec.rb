@@ -2,7 +2,7 @@
 
 require "rails_helper"
 
-RSpec.describe Api::AlphaController do
+RSpec.describe "Alpha API" do
   describe "GET /api/alpha/status" do
     it "reports enabled true when a strategy has desired_status running" do
       create(:strategy_record, slug: "supertrend_v1", desired_status: "running")

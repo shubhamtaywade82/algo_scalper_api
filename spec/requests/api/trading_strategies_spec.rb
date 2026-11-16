@@ -23,9 +23,9 @@ RSpec.describe "Api::TradingStrategies" do
     FileUtils.rm_rf(dir) if dir.exist?
   end
 
-  describe "POST /api/trading_strategies/:id/deploy" do
+  describe "POST /api/trading_strategies/:id/deployment" do
     it "deploys and links the strategy record" do
-      post "/api/trading_strategies/#{strategy.id}/deploy", headers: headers
+      post "/api/trading_strategies/#{strategy.id}/deployment", headers: headers
 
       expect(response).to have_http_status(:ok)
       body = response.parsed_body
@@ -37,7 +37,7 @@ RSpec.describe "Api::TradingStrategies" do
     it "returns 422 with errors when code has no class" do
       strategy.update!(code: "# nothing")
 
-      post "/api/trading_strategies/#{strategy.id}/deploy", headers: headers
+      post "/api/trading_strategies/#{strategy.id}/deployment", headers: headers
 
       expect(response).to have_http_status(:unprocessable_content)
       body = response.parsed_body

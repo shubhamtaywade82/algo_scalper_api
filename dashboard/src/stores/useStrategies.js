@@ -77,7 +77,7 @@ export function useStrategies() {
 
   async function validateStrategy(id) {
     try {
-      const res = await apiClient.post(endpoints.tradingStrategies.validate(id))
+      const res = await apiClient.post(endpoints.tradingStrategies.validation(id))
       setCurrentStrategy(prev => ({ ...prev, ...res.data.strategy }))
       return res.data
     } catch (e) {
@@ -88,7 +88,7 @@ export function useStrategies() {
 
   async function deployStrategy(id) {
     try {
-      const res = await apiClient.post(endpoints.tradingStrategies.deploy(id))
+      const res = await apiClient.post(endpoints.tradingStrategies.deployment(id))
       setCurrentStrategy(prev => ({ ...prev, ...res.data.strategy }))
       return res.data
     } catch (e) {

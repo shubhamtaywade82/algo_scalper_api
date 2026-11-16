@@ -1,12 +1,13 @@
 # frozen_string_literal: true
 
 module Api
-  class DrawdownGuardController < ApplicationController
+  class DrawdownGuardTripsController < ApplicationController
     include Api::TokenAuthenticatable
 
     before_action :authenticate_operator_token!
 
-    def reset
+    # DELETE /api/drawdown_guard/trip
+    def destroy
       Rails.logger.info(
         "[DrawdownGuardController] Reset requested: " \
         "IP=#{request.remote_ip}, UserAgent=#{request.user_agent}"

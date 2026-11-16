@@ -91,13 +91,6 @@ class RedisUiController < ActionController::Base
     end
   end
 
-  def info
-    info_data = @redis.info
-    render json: { info: info_data }
-  rescue StandardError => e
-    render json: { error: e.message }, status: :unprocessable_content
-  end
-
   private
 
   def ensure_development

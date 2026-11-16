@@ -2,12 +2,15 @@
 
 module Api
   # Algo config read/update API.
-  # When SETTINGS_UPDATE_TOKEN is set, PATCH requires header X-Settings-Update-Token or param token.
+  #   GET   /api/settings  current config
+  #   PUT   /api/settings  { settings: } replaces whole top-level sections
+  #   PATCH /api/settings  { patch: }    deep-merges a nested patch
+  # When SETTINGS_UPDATE_TOKEN is set, writes require the X-Settings-Update-Token header.
   class SettingsController < ApplicationController
     include Api::TokenAuthenticatable
 
-    before_action :authenticate_dashboard_token!, only: %i[index fast_entry_mode change_logs]
-    before_action :authenticate_settings!, only: %i[update_bulk update_fast_entry_mode update_ip deep_merge]
+    before_action :authenticate_dashboard_token!, only: :show
+    before_action :authenticate_settings_token!, only: :update
 
     # Top-level keys allowed for algo config overrides (must match config/algo.yml structure).
     # dhanhq (enable_orders live gate), run_mode, ledger and realtime stay YAML-only on purpose.
@@ -19,21 +22,24 @@ module Api
     ].freeze
 
     # GET /api/settings
-    def index
+    def show
       config = AlgoConfig.fetch
 
       # Separate top-level keys for easy categories
       render json: { success: true, config: config }
     rescue StandardError => e
-      Rails.logger.error("[SettingsController] index error: #{e.class} - #{e.message}")
+      Rails.logger.error("[SettingsController] show error: #{e.class} - #{e.message}")
       render json: { error: e.message }, status: :internal_server_error
     end
 
-    # PATCH /api/settings
-    # Requires a param `settings` containing the full updated config object.
-    # Only top-level keys in PERMITTED_SETTINGS_KEYS are accepted.
-    # When SETTINGS_UPDATE_TOKEN is set, PATCH requires header X-Settings-Update-Token or param token.
-    def update_bulk
+    def update
+      request.put? ? replace_sections : deep_merge_patch
+    end
+
+    private
+
+    # PUT: `settings` holds full top-level sections; only PERMITTED_SETTINGS_KEYS are accepted.
+    def replace_sections
       # Full unfiltered read is intentional: authorization happens below against
       # PERMITTED_SETTINGS_KEYS (unknown top-level keys are rejected, not sliced).
       raw = params.require(:settings).to_unsafe_h
@@ -72,58 +78,10 @@ module Api
       render json: { error: e.message }, status: :internal_server_error
     end
 
-    # GET /api/settings/fast_entry_mode
-    def fast_entry_mode
-      render json: { success: true, fast_entry_mode: Signal::FastEntryMode.status }
-    rescue StandardError => e
-      Rails.logger.error("[SettingsController] fast_entry_mode error: #{e.class} - #{e.message}")
-      render json: { error: e.message }, status: :internal_server_error
-    end
-
-    # PATCH /api/settings/fast_entry_mode
-    # Requires a param `enabled` (boolean).
-    def update_fast_entry_mode
-      enabled = ActiveModel::Type::Boolean.new.cast(params.require(:enabled))
-
-      AlgoConfig::DocumentStore.apply_deep_merge_patch!(
-        { signals: { fast_entry_mode: { enabled: enabled } } },
-        source: 'api_settings_fast_entry_mode',
-        actor: 'api',
-        request_id: request.request_id,
-        metadata: { remote_ip: request.remote_ip }
-      )
-      Signal::FastEntryMode.reset!
-
-      render json: { success: true, fast_entry_mode: Signal::FastEntryMode.status }
-    rescue ActionController::ParameterMissing => e
-      render json: { error: e.message }, status: :bad_request
-    rescue StandardError => e
-      Rails.logger.error("[SettingsController] update_fast_entry_mode error: #{e.class} - #{e.message}")
-      render json: { error: e.message }, status: :internal_server_error
-    end
-
-    # POST /api/settings/update_ip
-    # Detects the current public IPv4 and attempts to whitelist it on Dhan.
-    def update_ip
-      info = Dhan::IpService.fetch_ip_info
-      ip = info[:public_ipv4]
-
-      if ip.blank? || ip == 'Unknown'
-        render json: { success: false, error: 'Could not detect current public IPv4' }
-        return
-      end
-
-      render json: Dhan::IpService.update_ip(ip)
-    rescue StandardError => e
-      Rails.logger.error("[SettingsController] update_ip error: #{e.class} - #{e.message}")
-      render json: { error: e.message }, status: :internal_server_error
-    end
-
-    # PATCH /api/settings/deep_merge
-    # Requires a param `patch` (nested hash) — deep-merged into the algo config document.
+    # PATCH: `patch` (nested hash) is deep-merged into the algo config document.
     # Only top-level keys in PERMITTED_SETTINGS_KEYS are accepted; nested values within
-    # an allowed key are merged in full (unlike update_bulk's top-level replacement).
-    def deep_merge
+    # an allowed key are merged in full (unlike PUT's top-level replacement).
+    def deep_merge_patch
       # Full unfiltered read is intentional: only PERMITTED_SETTINGS_KEYS top-level
       # keys survive the slice below; nested values merge in full by design.
       patch = params.require(:patch).to_unsafe_h
@@ -151,43 +109,6 @@ module Api
     rescue StandardError => e
       Rails.logger.error("[SettingsController] deep_merge error: #{e.class} - #{e.message}")
       render json: { error: e.message }, status: :internal_server_error
-    end
-
-    # GET /api/settings/change_logs — paginated audit trail.
-    def change_logs
-      limit = (params[:limit] || 50).to_i.clamp(1, 200)
-      offset = [params[:offset].to_i, 0].max
-      total = AlgoConfigChangeLog.count
-      rows = AlgoConfigChangeLog.recent_first.limit(limit).offset(offset)
-
-      render json: {
-        success: true,
-        total: total,
-        limit: limit,
-        offset: offset,
-        change_logs: rows.as_json(only: %i[id source actor request_id patch changed_paths metadata created_at])
-      }
-    rescue StandardError => e
-      Rails.logger.error("[SettingsController] change_logs error: #{e.class} - #{e.message}")
-      render json: { error: e.message }, status: :internal_server_error
-    end
-
-    private
-
-    def authenticate_settings!
-      if Rails.env.production? && ENV['SETTINGS_UPDATE_TOKEN'].blank?
-        Rails.logger.error('[SettingsController] SETTINGS_UPDATE_TOKEN must be set in production for bulk updates')
-        render json: { error: 'settings_update_unconfigured' }, status: :service_unavailable
-        return
-      end
-
-      expected = ENV['SETTINGS_UPDATE_TOKEN'].presence
-      return if expected.nil?
-
-      provided = request.headers['X-Settings-Update-Token'].presence
-      return if provided && ActiveSupport::SecurityUtils.secure_compare(provided, expected)
-
-      render json: { error: 'unauthorized' }, status: :unauthorized
     end
   end
 end

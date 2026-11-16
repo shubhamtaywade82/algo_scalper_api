@@ -11,7 +11,7 @@ module Api
     before_action :authenticate_dashboard_token!
 
     # GET /api/variables
-    def index
+    def show
       vars = ::PlatformVariable.global.order(:key)
       render json: {
         success: true,

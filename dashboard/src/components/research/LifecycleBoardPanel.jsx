@@ -99,7 +99,7 @@ export default function LifecycleBoardPanel() {
     setRunning(true)
     setDetail(null)
     try {
-      const res = await fetch('/api/research/lifecycles/run', {
+      const res = await fetch('/api/research/lifecycle_runs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...dashboardApiHeaders() },
         body: JSON.stringify({

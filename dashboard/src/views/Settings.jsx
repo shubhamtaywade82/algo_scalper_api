@@ -61,8 +61,8 @@ export default function Settings() {
 
     setSaving(true)
     try {
-      const response = await fetch('/api/settings/bulk', {
-        method: 'PATCH',
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
           'X-Settings-Update-Token': token

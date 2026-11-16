@@ -26,12 +26,12 @@ RSpec.describe Api::PositionsController do
     expect(response).to have_http_status(:ok)
   end
 
-  describe 'POST /api/positions/:id/close' do
+  describe 'POST /api/positions/:id/closure' do
     it 'delegates to ManualCloseService and returns its status' do
       payload = { status: :ok, json: { success: true, reason: 'MANUAL_DASHBOARD_CLOSE' } }
       allow(Positions::ManualCloseService).to receive(:call).and_return(payload)
 
-      post "/api/positions/42/close"
+      post "/api/positions/42/closure"
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body['success']).to be(true)

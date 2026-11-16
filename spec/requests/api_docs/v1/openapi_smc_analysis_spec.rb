@@ -79,7 +79,7 @@ RSpec.describe 'OpenAPI v1 — SMC & analysis', openapi_spec: 'v1/swagger.yaml' 
     end
   end
 
-  path '/api/analysis/{index_key}/historical' do
+  path '/api/analysis/{index_key}/history' do
     get 'Historical options context' do
       tags 'Analysis'
       produces 'application/json'
@@ -102,7 +102,7 @@ RSpec.describe 'OpenAPI v1 — SMC & analysis', openapi_spec: 'v1/swagger.yaml' 
     end
   end
 
-  path '/api/analysis/{index_key}/ai_snapshot' do
+  path '/api/analysis/{index_key}/ai_snapshots' do
     post 'On-demand AI snapshot (sync)' do
       tags 'Analysis'
       produces 'application/json'

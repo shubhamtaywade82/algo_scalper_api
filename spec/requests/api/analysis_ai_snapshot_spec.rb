@@ -2,7 +2,7 @@
 
 require 'rails_helper'
 
-RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot' do # rubocop:disable RSpec/DescribeClass
+RSpec.describe 'POST /api/analysis/:index_key/ai_snapshots' do # rubocop:disable RSpec/DescribeClass
   let(:instrument) { create(:instrument, :nifty_future) }
 
   before do
@@ -27,7 +27,7 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot' do # rubocop:disable 
     end
 
     it 'returns 200 with snapshot and generated_at' do
-      post '/api/analysis/NIFTY/ai_snapshot'
+      post '/api/analysis/NIFTY/ai_snapshots'
       expect(response).to have_http_status(:ok)
       json = response.parsed_body
       expect(json).to have_key('snapshot')
@@ -35,7 +35,7 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot' do # rubocop:disable 
     end
 
     it 'returns the AI response as snapshot' do
-      post '/api/analysis/NIFTY/ai_snapshot'
+      post '/api/analysis/NIFTY/ai_snapshots'
       json = response.parsed_body
       expect(json['snapshot']).to include('Bullish outlook')
     end
@@ -50,12 +50,12 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot' do # rubocop:disable 
     end
 
     it 'returns 503' do
-      post '/api/analysis/NIFTY/ai_snapshot'
+      post '/api/analysis/NIFTY/ai_snapshots'
       expect(response).to have_http_status(:service_unavailable)
     end
 
     it 'returns a human-readable error' do
-      post '/api/analysis/NIFTY/ai_snapshot'
+      post '/api/analysis/NIFTY/ai_snapshots'
       json = response.parsed_body
       expect(json['error']).to include('unavailable')
     end
@@ -68,7 +68,7 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot' do # rubocop:disable 
     end
 
     it 'returns 503 without calling chat' do
-      post '/api/analysis/NIFTY/ai_snapshot'
+      post '/api/analysis/NIFTY/ai_snapshots'
       expect(response).to have_http_status(:service_unavailable)
       json = response.parsed_body
       expect(json['error']).to include('not configured')
@@ -89,13 +89,13 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot' do # rubocop:disable 
     end
 
     it 'returns 422 and does not call chat' do
-      post '/api/analysis/NIFTY/ai_snapshot'
+      post '/api/analysis/NIFTY/ai_snapshots'
       expect(response).to have_http_status(:unprocessable_content)
       expect(client).not_to have_received(:chat)
     end
 
     it 'allows force=true to run chat' do
-      post '/api/analysis/NIFTY/ai_snapshot', params: { force: 'true' }
+      post '/api/analysis/NIFTY/ai_snapshots', params: { force: 'true' }
       expect(response).to have_http_status(:ok)
       expect(client).to have_received(:chat)
     end
@@ -108,7 +108,7 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot' do # rubocop:disable 
     end
 
     it 'returns 404' do
-      post '/api/analysis/UNKNOWN/ai_snapshot'
+      post '/api/analysis/UNKNOWN/ai_snapshots'
       expect(response).to have_http_status(:not_found)
     end
   end

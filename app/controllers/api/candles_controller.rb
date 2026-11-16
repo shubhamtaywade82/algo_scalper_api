@@ -12,7 +12,7 @@ module Api
     ALLOWED_INTERVALS = %w[1 5 15 25 60].freeze
     MAX_DAYS = 30
 
-    def index
+    def show
       index_key = params[:index_key].to_s.upcase
       instrument = IndexConfigLoader.index_instrument(index_key)
       return render json: { error: 'Index not found' }, status: :not_found unless instrument

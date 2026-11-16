@@ -22,117 +22,117 @@ Rails.application.routes.draw do
   }
 
   namespace :api do
-    get :health, to: "health#show"
-    post :test_broadcast, to: "test#broadcast"
+    resource :health, only: :show, controller: 'health'
+    resources :test_broadcasts, only: :create
 
-    get    'settings',              to: 'settings#index'
-    get    'settings/change_logs',  to: 'settings#change_logs'
-    patch  'settings/bulk',         to: 'settings#update_bulk'
-    get    'settings/fast_entry_mode',   to: 'settings#fast_entry_mode'
-    patch  'settings/fast_entry_mode',   to: 'settings#update_fast_entry_mode'
-    post   'settings/update_ip',         to: 'settings#update_ip'
-    patch  'settings/deep_merge',        to: 'settings#deep_merge'
+    # Settings: PUT replaces whole top-level sections, PATCH deep-merges a nested patch.
+    resource :settings, only: %i[show update]
+    scope 'settings', as: 'settings' do
+      resources :change_logs, only: :index, controller: 'setting_change_logs'
+      resource :fast_entry_mode, only: %i[show update]
+      resource :ip_whitelist, only: :update, controller: 'ip_whitelists'
+    end
 
-    get 'dashboard', to: 'dashboard#show'
-    get 'orders', to: 'orders#index'
-    get 'equity_curve', to: 'equity_curve#index'
+    resource :dashboard, only: :show, controller: 'dashboard'
+    resources :orders, only: :index
+    resource :equity_curve, only: :show, controller: 'equity_curve'
     resources :positions, only: %i[index show] do
-      post :close, on: :member
+      resource :closure, only: :create, controller: 'position_closures'
+      resources :journal_entries, only: :index, controller: 'position_journal_entries'
     end
     resources :alerts, only: %i[index create update destroy]
+    resources :signals, only: :index
 
-    get 'signals', to: 'signals#index'
-    get 'analysis/:index_key', to: 'analysis#show'
-    get 'analysis/:index_key/historical', to: 'analysis#historical'
-    post 'analysis/:index_key/ai_snapshot', to: 'analysis#ai_snapshot'
-    get 'candles/:index_key', to: 'candles#index'
-    get 'option_chain/:index_key', to: 'option_chains#show'
-    get 'depth', to: 'depth#index'
-    get 'market/vix', to: 'market#vix'
-    post 'drawdown_guard/reset', to: 'drawdown_guard#reset'
-    get 'public_ip/audit', to: 'public_ip#audit'
+    resources :analyses, path: 'analysis', param: :index_key, only: :show, controller: 'analysis'
+    scope 'analysis/:index_key', as: 'analysis' do
+      resource :history, only: :show, controller: 'analysis_histories'
+      resources :ai_snapshots, only: :create, controller: 'analysis_ai_snapshots'
+    end
+    resources :candles, param: :index_key, only: :show
+    resources :option_chains, path: 'option_chain', param: :index_key, only: :show
+    resource :depth, only: :show, controller: 'depth'
+    resource :market_vix, path: 'market/vix', only: :show, controller: 'market_vix'
+    resource :public_ip_audit, path: 'public_ip/audit', only: :show
     # Requires API_OPERATOR_TOKEN — never expose this endpoint without that env var set
-    get 'dhan_access_token', to: 'dhan_access_token#show'
-    get 'smc/decision', to: 'smc#decision'
+    resource :dhan_access_token, only: :show, controller: 'dhan_access_token'
+    resource :dhan_token, path: 'dhan/token', only: :show
+    resource :smc_decision, path: 'smc/decision', only: :show
 
-    get 'alpha/status', to: 'alpha#status'
-    get 'alpha/history', to: 'alpha#history'
-    get 'alpha/performance', to: 'alpha#performance'
-
-    get    'ledger/balance',  to: 'ledger#balance'
-    get    'ledger/journal',  to: 'ledger#journal'
-    get    'ledger/position', to: 'ledger#position'
-
-    get  'funds', to: 'funds#index'
-    post 'funds/add', to: 'funds#add'
-    post 'funds/withdraw', to: 'funds#withdraw'
-
-    get 'holdings', to: 'holdings#index'
-    get 'logs', to: 'logs#index'
-
-    get 'reports', to: 'reports#index'
-    get 'reports/pnl', to: 'reports#pnl'
-    get 'reports/trades', to: 'reports#trades'
-    get 'reports/performance', to: 'reports#performance'
-    get 'reports/pnl_by_strategy', to: 'reports#pnl_by_strategy'
-    get 'reports/pnl_by_instrument', to: 'reports#pnl_by_instrument'
-    get 'reports/export', to: 'reports#export'
-    get  'dhan/token', to: 'dhan_tokens#show'
-    get  'reports/market_brief', to: 'market_briefs#show'
-    get  'reports/market_brief/live', to: 'market_briefs#live'
-    post 'reports/market_brief', to: 'market_briefs#create'
-
-    get  'scheduler/tasks', to: 'scheduler#index'
-    post 'scheduler/tasks/:id/execute', to: 'scheduler#execute'
-
-    post 'backtests', to: 'backtests#create'
-    get  'backtests/:id', to: 'backtests#show'
-    post 'replays', to: 'replays#create'
-
-    resources :backtest_runs, only: %i[create index show] do
-      get :download_csv, on: :member
+    scope 'alpha', as: 'alpha' do
+      resource :status, only: :show, controller: 'alpha_statuses'
+      resources :history, only: :index, controller: 'alpha_signals', as: :signals
+      resource :performance, only: :show, controller: 'alpha_performances'
     end
 
+    scope 'ledger', as: 'ledger' do
+      resource :balance, only: :show, controller: 'ledger_balances'
+      resources :journal, only: :index, controller: 'ledger_journal_entries', as: :journal_entries
+    end
+
+    resource :funds, only: :show
+    scope 'funds', as: 'funds' do
+      resources :deposits, only: :create, controller: 'fund_deposits'
+      resources :withdrawals, only: :create, controller: 'fund_withdrawals'
+    end
+
+    resources :holdings, only: :index
+    resources :logs, only: :index
+
+    scope 'reports', as: 'reports' do
+      resource :pnl, only: :show, controller: 'pnl_reports'
+      resources :trades, only: :index, controller: 'trade_reports'
+      resource :performance, only: :show, controller: 'performance_reports'
+      resources :pnl_by_strategy, only: :index, controller: 'strategy_pnl_reports', as: :strategy_pnls
+      resources :pnl_by_instrument, only: :index, controller: 'instrument_pnl_reports', as: :instrument_pnls
+      resource :export, only: :show, controller: 'report_exports'
+      resource :market_brief, only: %i[show create] do
+        resource :live, only: :show, controller: 'live_market_briefs'
+      end
+    end
+
+    scope 'scheduler', as: 'scheduler' do
+      resources :tasks, only: :index, controller: 'scheduled_tasks' do
+        resources :executions, only: :create, controller: 'scheduled_task_executions'
+      end
+    end
+
+    resources :backtests, only: %i[create show]
+    resources :replays, only: :create
+    # GET /api/backtest_runs/:id.csv downloads the trades
+    resources :backtest_runs, only: %i[create index show]
     resources :calibration_runs, only: %i[index show] do
-      post :apply, on: :member
+      resource :application, only: :create, controller: 'calibration_run_applications'
     end
 
-    get 'variables', to: 'variables#index'
-    put 'variables', to: 'variables#update'
+    resource :variables, only: %i[show update]
 
     resources :trading_strategies, only: %i[index show create update destroy] do
-      post :validate, on: :member
-      post :deploy, on: :member
+      resource :validation, only: :create, controller: 'trading_strategy_validations'
+      resource :deployment, only: :create, controller: 'trading_strategy_deployments'
     end
 
-    resources :strategies, only: %i[index show create], param: :slug do
-      member do
-        post :deploy
-        post :start
-        post :stop
-        post :restart
-        get :versions
-        get :signals
-        get :logs
-        get :variables
-        put :variables, action: :update_variables
-      end
+    scope 'strategies/health', module: 'strategies', as: 'strategy_health' do
+      resource :pool, only: :show, controller: 'health_pools'
+      resource :session, only: :show, controller: 'health_sessions'
+      resource :backtest, only: :show, controller: 'health_backtests'
     end
-    get 'strategies/health/pool', to: 'strategies/health#pool'
-    get 'strategies/health/session', to: 'strategies/health#session'
-    get 'strategies/health/backtest', to: 'strategies/health#backtest'
+    resources :strategies, only: %i[index show create], param: :slug do
+      resource :deployment, only: :create, controller: 'strategy_deployments'
+      # POST starts, PATCH restarts, DELETE stops the strategy runner
+      resource :run, only: %i[create update destroy], controller: 'strategy_runs'
+      resources :versions, only: :index, controller: 'strategy_versions'
+      resources :signals, only: :index, controller: 'strategy_signals'
+      resources :logs, only: :index, controller: 'strategy_logs'
+      resource :variables, only: %i[show update], controller: 'strategy_variables'
+    end
 
     namespace :research do
-      resources :lifecycles, only: %i[index show] do
-        collection do
-          post :run
-          get :expectancy
-        end
-      end
+      resource :expectancy, path: 'lifecycles/expectancy', only: :show, controller: 'lifecycle_expectancies'
+      resources :lifecycle_runs, only: :create
+      resources :lifecycles, only: %i[index show]
       resources :signals, only: %i[index show create]
     end
 
-    # Circuit breaker — emergency halt
     namespace :mcp do
       resources :tools, only: :index do
         resources :calls, only: :create, controller: 'tool_calls'
@@ -140,21 +140,20 @@ Rails.application.routes.draw do
       resources :questions, only: :create
     end
 
-    # GET    /api/circuit_breaker        → status (unauthenticated)
-    # POST   /api/circuit_breaker/trip   → trip   (requires X-Circuit-Breaker-Token)
-    # DELETE /api/circuit_breaker/trip   → reset  (requires X-Circuit-Breaker-Token)
-    resource :circuit_breaker, only: %i[show], controller: 'circuit_breaker' do
-      post :trip, on: :member
-      delete :trip, action: :reset, on: :member
+    # Circuit breaker — emergency halt. Trip/reset need X-Circuit-Breaker-Token.
+    resource :circuit_breaker, only: :show, controller: 'circuit_breaker' do
+      resource :trip, only: %i[create destroy], controller: 'circuit_breaker_trips'
+    end
+    # Drawdown guard: DELETE clears the day's latched trip (operator token)
+    resource :drawdown_guard, only: [] do
+      resource :trip, only: :destroy, controller: 'drawdown_guard_trips'
     end
   end
 
   # Redis UI (development only)
   if Rails.env.development?
-    get 'redis_ui', to: 'redis_ui#index'
-    get 'redis_ui/info', to: 'redis_ui#info'
-    get 'redis_ui/:id', to: 'redis_ui#show', as: :redis_ui_key
-    delete 'redis_ui/:id', to: 'redis_ui#destroy'
+    resource :redis_ui_info, path: 'redis_ui/info', only: :show
+    resources :redis_ui, only: %i[index show destroy], controller: 'redis_ui', as: :redis_ui_keys
   end
 
   # Quietly handle browser/devtools well-known probes with 204 No Content

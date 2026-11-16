@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
 module Api
-  class TestController < ApplicationController
+  class TestBroadcastsController < ApplicationController
     include Api::TokenAuthenticatable
 
     before_action :ensure_test_broadcast_allowed!
 
-    def broadcast
+    def create
       tick_data = {
         segment: params[:segment] || 'IDX_I',
         security_id: params[:security_id] || '13',
@@ -32,7 +32,7 @@ module Api
 
       expected = ENV['API_OPERATOR_TOKEN'].presence
       unless expected
-        Rails.logger.warn('[Api::TestController] test_broadcast blocked outside development (set API_OPERATOR_TOKEN)')
+        Rails.logger.warn('[Api::TestBroadcastsController] test_broadcast blocked outside development (set API_OPERATOR_TOKEN)')
         render json: { error: 'forbidden' }, status: :forbidden
         return
       end

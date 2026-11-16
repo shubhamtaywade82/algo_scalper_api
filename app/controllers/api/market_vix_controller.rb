@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
 module Api
-  class MarketController < ApplicationController
+  class MarketVixController < ApplicationController
     include Api::TokenAuthenticatable
 
     before_action :authenticate_dashboard_token!
 
     # GET /api/market/vix — read-only India VIX snapshot for dashboard tooling.
-    def vix
+    def show
       ltp = Market::VixGate.current_ltp
       render json: {
         vix: ltp&.to_f,

@@ -2,7 +2,7 @@
 
 module Api
   # SMC context/decision for alerts, scanners, and debugging (GET /api/smc/decision).
-  class SmcController < ApplicationController
+  class SmcDecisionsController < ApplicationController
     include Api::TokenAuthenticatable
 
     before_action :authenticate_smc_decision!
@@ -17,7 +17,7 @@ module Api
     # - security_id: underlying security id (string/int)
     # - segment: exchange segment code (e.g. "IDX_I")
     # - symbol_name (optional): fallback lookup by symbol
-    def decision
+    def show
       instrument = find_instrument
       return unless instrument
 
@@ -26,7 +26,7 @@ module Api
 
       render json: payload, status: :ok
     rescue StandardError => e
-      Rails.logger.error("[Api::SmcController] #{e.class} - #{e.message}")
+      Rails.logger.error("[Api::SmcDecisionsController] #{e.class} - #{e.message}")
       render json: { ok: false, error: 'internal_error' }, status: :internal_server_error
     end
 
