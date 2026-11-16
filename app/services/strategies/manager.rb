@@ -255,6 +255,9 @@ module Strategies
 
     def handle_event(state, slug, event)
       instrument_key = event[:instrument_key]
+      # Off-hours candle events carry no usable data and only pollute the signals audit with empty HOLD rows.
+      return if ::TradingSession::Service.market_closed?
+
       # NIFTY futures share symbol_name "NIFTY"; an unscoped lookup can return a
       # future whose security_id has no candles, starving every strategy.
       instrument = Instrument.segment_index.find_by(symbol_name: instrument_key)

@@ -44,7 +44,7 @@ module Api
 
     def trades
       scope = date_filtered_scope(PositionTracker.exited.includes(:watchable, :instrument))
-              .order(exited_at: :desc)
+              .order(params[:sort] == 'pnl_desc' ? { last_pnl_rupees: :desc } : { exited_at: :desc })
 
       scope = scope.where(side: params.expect(:side).upcase) if params[:side].present?
 
@@ -126,11 +126,9 @@ module Api
                     Arel.sql("AVG(last_pnl_rupees)")
                   )
 
-      breakdown = rows.filter_map do |name, total, wins, losses, net_pnl, avg_pnl|
-        next if name.blank?
-
+      breakdown = rows.map do |name, total, wins, losses, net_pnl, avg_pnl|
         {
-          strategy: name,
+          strategy: name.presence || "unattributed",
           total_trades: total,
           wins: wins,
           losses: losses,

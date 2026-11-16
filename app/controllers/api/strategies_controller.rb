@@ -5,6 +5,7 @@ module Api
   # All endpoints require dashboard token authentication.
   class StrategiesController < ApplicationController
     include Api::TokenAuthenticatable
+    include Api::VariableSerialization
 
     before_action :authenticate_dashboard_token!
     before_action :find_strategy, only: %i[show start stop restart versions signals logs variables update_variables]
@@ -236,16 +237,6 @@ module Api
         reason: s.reason,
         outcome: s.outcome,
         emitted_at: s.emitted_at
-      }
-    end
-
-    def serialize_variable(v)
-      {
-        id: v.id,
-        key: v.key,
-        value: v.secret ? "•••" : v.value,
-        value_type: v.value_type,
-        secret: v.secret
       }
     end
 

@@ -172,6 +172,9 @@ module Live
     def check_connection_health!
       return unless running?
 
+      # No ticks/updates after the close is normal; restarting only churns Dhan's WS and trips 429.
+      return if ::TradingSession::Service.market_closed?
+
       last_seen = @last_update_at
       return unless last_seen
 

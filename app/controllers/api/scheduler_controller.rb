@@ -42,6 +42,14 @@ module Api
         return
       end
 
+      # Only valid Ruby constant paths may be resolved (defense in depth: the
+      # value comes from the repo-owned recurring.yml, but a malformed entry
+      # should 422 cleanly instead of reaching constantize).
+      unless job_class_name.match?(/\A[A-Z][A-Za-z0-9_]*(?:::[A-Z][A-Za-z0-9_]*)*\z/)
+        render json: { success: false, error: "invalid_job_class" }, status: :unprocessable_content
+        return
+      end
+
       begin
         klass = job_class_name.constantize
         args = Array(config["args"])
@@ -65,8 +73,9 @@ module Api
     private
 
     def latest_recurring_runs(keys)
-      SolidQueue::RecurringExecution.where(task_key: keys).includes(job: :failed_execution)
-                                    .order(:run_at).index_by(&:task_key)
+      # Table grows unbounded (one row per run); fetch only the newest row per key.
+      newest_ids = SolidQueue::RecurringExecution.where(task_key: keys).group(:task_key).maximum(:id).values
+      SolidQueue::RecurringExecution.where(id: newest_ids).includes(job: :failed_execution).index_by(&:task_key)
     end
 
     def run_status(job)

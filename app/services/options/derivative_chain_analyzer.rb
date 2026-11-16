@@ -7,6 +7,7 @@ module Options
   # This replaces the need for raw option chain APIs by leveraging existing Derivative models
   # rubocop:disable-next Metrics/ClassLength
   class DerivativeChainAnalyzer
+    MAX_STRIKE_WINDOW_STEPS = 10
     def initialize(index_key:, expiry: nil, config: {})
       @index_key = index_key.to_s.upcase
       @config = config || {}
@@ -229,10 +230,10 @@ module Options
       end
 
       # Limit derivatives to a small strike window around ATM to avoid scanning entire chain
-      # Only consider ATM, 1OTM, and 2OTM (window = 2, max)
+      # Default ATM±2 for the trading path; the Option Chain view asks for a wider window
       if atm_strike_approx
         window = (@config[:strike_window_steps] || 2).to_i
-        window = 2 if window <= 0 || window > 2 # Cap at 2OTM only
+        window = 2 if window <= 0 || window > MAX_STRIKE_WINDOW_STEPS
         target_strikes_raw = (-window..window).map do |offset|
           atm_strike_approx + (offset * strike_increment)
         end
@@ -421,6 +422,11 @@ module Options
       nil
     end
 
+    # A tick carries oi/volume 0 when the feed hasn't sent them; that must not mask the API snapshot.
+    def positive_or(tick_value, api_value)
+      tick_value&.positive? ? tick_value : api_value
+    end
+
     # Build option data hash from Derivative, API data, and tick
     # rubocop:disable-next Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
     def build_option_data(derivative, api_data, tick)
@@ -428,7 +434,7 @@ module Options
       exchange_seg = derivative.exchange_segment || 'NSE_FNO'
 
       # Calculate OI change: prefer tick data, fallback to API data (current_oi - previous_oi)
-      current_oi = tick&.oi&.to_i || api_data&.dig('oi')&.to_i || 0
+      current_oi = positive_or(tick&.oi&.to_i, api_data&.dig('oi')&.to_i) || 0
       oi_change_from_tick = tick&.oi_change&.to_i
       previous_oi = api_data&.dig('previous_oi').to_i
       oi_change = if oi_change_from_tick && oi_change_from_tick != 0
@@ -453,7 +459,7 @@ module Options
         bid: tick&.bid&.to_f || api_data&.dig('top_bid_price')&.to_f,
         ask: tick&.ask&.to_f || api_data&.dig('top_ask_price')&.to_f,
         iv: api_data&.dig('implied_volatility')&.to_f,
-        volume: tick&.volume&.to_i || api_data&.dig('volume')&.to_i,
+        volume: positive_or(tick&.volume&.to_i, api_data&.dig('volume')&.to_i),
         prev_close: api_data&.dig('previous_close_price')&.to_f,
         delta: api_data&.dig('greeks', 'delta')&.to_f,
         gamma: api_data&.dig('greeks', 'gamma')&.to_f,

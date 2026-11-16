@@ -34,7 +34,9 @@ module Api
     # Only top-level keys in PERMITTED_SETTINGS_KEYS are accepted.
     # When SETTINGS_UPDATE_TOKEN is set, PATCH requires header X-Settings-Update-Token or param token.
     def update_bulk
-      raw = params.require(:settings).permit!.to_h
+      # Full unfiltered read is intentional: authorization happens below against
+      # PERMITTED_SETTINGS_KEYS (unknown top-level keys are rejected, not sliced).
+      raw = params.require(:settings).to_unsafe_h
       allowed_keys = PERMITTED_SETTINGS_KEYS.map(&:to_s)
       read_only_keys = raw.keys - allowed_keys
       # Silently slicing these off returned success while discarding the user's edits.
@@ -122,7 +124,9 @@ module Api
     # Only top-level keys in PERMITTED_SETTINGS_KEYS are accepted; nested values within
     # an allowed key are merged in full (unlike update_bulk's top-level replacement).
     def deep_merge
-      patch = params.require(:patch).permit!.to_h
+      # Full unfiltered read is intentional: only PERMITTED_SETTINGS_KEYS top-level
+      # keys survive the slice below; nested values merge in full by design.
+      patch = params.require(:patch).to_unsafe_h
       allowed_keys = PERMITTED_SETTINGS_KEYS.map(&:to_s)
       filtered_patch = patch.slice(*allowed_keys)
 

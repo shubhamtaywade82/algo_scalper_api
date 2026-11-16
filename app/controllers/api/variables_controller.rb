@@ -6,6 +6,7 @@ module Api
   # Secrets are masked in reads; full values accessible only at runtime.
   class VariablesController < ApplicationController
     include Api::TokenAuthenticatable
+    include Api::VariableSerialization
 
     before_action :authenticate_dashboard_token!
 
@@ -32,16 +33,6 @@ module Api
     end
 
     private
-
-    def serialize_variable(v)
-      {
-        id: v.id,
-        key: v.key,
-        value: v.secret ? "•••" : v.value,
-        value_type: v.value_type,
-        secret: v.secret
-      }
-    end
 
     def upsert_variable(attrs)
       variable = ::PlatformVariable.find_or_initialize_by(

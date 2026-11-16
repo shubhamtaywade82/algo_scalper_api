@@ -26,7 +26,8 @@ module Api
         render json: {
           success: true,
           market_open: ::TradingSession::Service.market_open?,
-          session: ::TradingSession::Service.current_session_info
+          in_session: ::TradingSession::Service.in_session?,
+          entry_allowed: ::TradingSession::Service.entry_allowed?
         }
       end
 

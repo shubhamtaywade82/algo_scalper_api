@@ -164,7 +164,15 @@ RSpec.describe Live::MarketFeedHub do
   describe 'health check' do
     before do
       allow(Live::FeedHealthService.instance).to receive(:threshold_for).and_return(30)
+      allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
       hub.start!
+    end
+
+    it 'does not restart on stale ticks after the market closes' do
+      allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
+      hub.instance_variable_set(:@last_tick_at, 1.minute.ago)
+      expect(hub).not_to receive(:restart!)
+      hub.send(:check_connection_health!)
     end
 
     it 'restarts if ticks are stale' do
