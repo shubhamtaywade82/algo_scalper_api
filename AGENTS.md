@@ -119,17 +119,24 @@
   - Tests and lint commands run
   - Remaining risks or follow-up tasks
 
-## Ruby/Rails MCP Tooling Policy (verified 2026-11-16)
+## Ruby/Rails MCP Tooling Policy (verified 2026-11-17)
 
 Escalation order for connected MCP servers — static/structured first, arbitrary execution last:
 
-1. **`rails-context`** (rails-mcp-server 2.0, read-only; 3 bootstrap tools: `switch_project`, `search_tools`, `execute_tool`):
-   - Load house rules first: `execute_tool("load_guide", { library: "custom", guide: "algo-scalper-architecture" })`.
-   - DB + route ground truth via `execute_tool("get_schema", ...)` / `execute_tool("get_routes", ...)` — never infer schema from migrations.
-   - `analyze_models` only sees `app/models`; it does NOT see `app/domain/` POROs (verified: `MarketTick` → "not found") or anything under `app/services/`, `app/strategies/`, `lib/`. Use `rg`/read for those.
-   - RailsForge MCP (already connected) overlaps on `list_routes`/`get_project_guidelines` — prefer `rails-context` for database truth.
-2. **Verification loop stays in-shell** per existing DoD (`bundle exec rspec`, `rubocop`, `brakeman`). `ruby-harness` (ask-rails-harness-mcp: `run_tests`, `read_log`, `query_database`, `run_command`, `schema_graph`, `route_inspector`) is enabled in all clients but **boots the entire trading app at launch** (slower session starts) — prefer in-shell rspec unless its structured output is needed.
-3. **`ruby-console`** (ruby-console-mcp) — persistent PTY REPL, arbitrary Ruby eval. `--sandbox` is pre-configured via `RUBY_CONSOLE_COMMAND`, but tool output is uncapped and secrets are not masked. Enabled in all clients, yet last resort in this escalation order; never used against live-trading state; never prints tokens/ENV (see repo guide §3).
-4. **`ruby-debug`** (debug-mcp: `set_breakpoint`, `trigger_request`, `get_context`, `evaluate_code`, `continue_execution`, `rails_recent_events`, ...) — attaches to `rdbg --open` sessions. Enabled; use only for live debugging; rdbg binds loopback/unix-socket only; never in production.
+1. **`rails-ai-context`** (v5.39+, read-only; 35 specialized live tools; accessible via MCP or `bundle exec rails-ai-context tool <name>`):
+   - **Ground truth before implementing or fixing:**
+     - Call `rails_get_schema(table: ...)` before writing migrations, queries, or model logic — never guess column names, types, or nullability.
+     - Call `rails_get_model_details(model: ...)` to inspect associations, validations, enums, scopes, callbacks, and included concerns before modifying an Active Record model.
+     - Call `rails_get_routes(controller: ...)` / `rails_get_controllers(...)` to verify endpoint paths, action names, parameters, and active `before_action` filters.
+   - **Blast radius & regression prevention before editing shared code:**
+     - Call `rails_analyze_feature(feature: ...)` before refactoring or altering models/services to map all collaborating services, callers, and test coverage gaps.
+     - Call `rails_get_callbacks(model: ...)` when diagnosing model lifecycle, order transitions, or state machine events.
+   - **Pre-acceptance verification:**
+     - Call `rails_performance_check` to detect N+1 query risks or missing eager-loads on modified paths.
+     - Call `rails_review_changes` to audit uncommitted diffs against Rails best practices.
+2. **Verification loop stays in-shell** per existing DoD (`bundle exec rspec <paths>`, `bundle exec rubocop <paths>`, `bin/brakeman --no-pager`).
+3. **`ruby-harness`** (ask-rails-harness-mcp: `run_tests`, `read_log`, `query_database`, `run_command`, `schema_graph`, `route_inspector`) — boots the entire trading app at launch (slower session starts); prefer in-shell rspec unless structured query output is needed.
+4. **`ruby-console`** (ruby-console-mcp) — persistent PTY REPL, arbitrary Ruby eval. `--sandbox` is pre-configured via `RUBY_CONSOLE_COMMAND`, but tool output is uncapped and secrets are not masked. Enabled in all clients, yet last resort in this escalation order; never used against live-trading state; never prints tokens/ENV (see repo guide §3).
+5. **`ruby-debug`** (debug-mcp: `set_breakpoint`, `trigger_request`, `get_context`, `evaluate_code`, `continue_execution`, `rails_recent_events`, ...) — attaches to `rdbg --open` sessions. Enabled; use only for live debugging; rdbg binds loopback/unix-socket only; never in production.
 
 Trading safety overrides all tooling: paper-first (`paper_trading.enabled: true`, `dhanhq.enable_orders: false`); never flip those flags; never invoke `Orders::GatewayLive`, DhanHQ order placement, or `Dhan::TokenManager` writes from console/debug tools; never print DhanHQ tokens or `.env` contents.
