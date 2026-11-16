@@ -30,7 +30,7 @@ export default function Reports() {
   const [untilDate, setUntilDate] = createSignal('')
 
   const { data: curveData, fetchCurve } = useEquityCurve()
-  const { summary, daily, trades: reportTrades, byStrategy, byInstrument, loading, error, fetchAll } = useReports()
+  const { summary, daily, trades: reportTrades, topWinners, byStrategy, byInstrument, loading, error, fetchAll } = useReports()
 
   onMount(() => {
     fetchCurve()
@@ -68,10 +68,6 @@ export default function Reports() {
     }
     const label = new Date(year, month - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
     return { label, cells }
-  })
-
-  const topWinners = createMemo(() => {
-    return reportTrades().filter(t => t.pnl > 0).sort((a, b) => b.pnl - a.pnl).slice(0, 5)
   })
 
   const monthly = createMemo(() => {

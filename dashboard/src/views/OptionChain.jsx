@@ -13,12 +13,10 @@ export default function OptionChain() {
 
   const spotPrice = () => indices()?.[selectedAsset().toLowerCase()] || chain()?.spot || 0
 
-  const indexPrevClose = () => {
-    return indices()?.[selectedAsset().toLowerCase() + '_prev_close'] || (spotPrice() / 1.0062)
-  }
+  const indexPrevClose = () => indices()?.[selectedAsset().toLowerCase() + '_prev_close'] || 0
 
   const spotChange = () => spotPrice() - indexPrevClose()
-  const spotChangePct = () => indexPrevClose() > 0 ? (spotChange() / indexPrevClose()) * 100 : 0.62
+  const spotChangePct = () => (spotChange() / indexPrevClose()) * 100
 
   const atmStrike = () => chain()?.atm_strike || 0
   const currentExpiry = () => chain()?.expiry || ''
@@ -271,8 +269,10 @@ export default function OptionChain() {
             <AnimatedNumber value={spotPrice()} decimals={2} />
           </div>
           <span class="text-[8px] font-bold text-emerald-500 mt-0.5 block">
-            {spotChange() >= 0 ? '+' : ''}
-            <AnimatedNumber value={spotChange()} decimals={2} /> ({spotChangePct().toFixed(2)}%)
+            <Show when={indexPrevClose() > 0} fallback="—">
+              {spotChange() >= 0 ? '+' : ''}
+              <AnimatedNumber value={spotChange()} decimals={2} /> ({spotChangePct().toFixed(2)}%)
+            </Show>
           </span>
         </div>
         <div class="glass p-3.5 rounded-xl">
@@ -452,8 +452,10 @@ export default function OptionChain() {
               <div class="flex justify-between border-b border-white/5 pb-2">
                 <span class="text-gray-500 font-bold uppercase">Change</span>
                 <span class="font-black text-emerald-400">
-                  {spotChange() >= 0 ? '+' : ''}
-                  <AnimatedNumber value={spotChange()} decimals={2} /> ({spotChangePct().toFixed(2)}%)
+                  <Show when={indexPrevClose() > 0} fallback="—">
+                    {spotChange() >= 0 ? '+' : ''}
+                    <AnimatedNumber value={spotChange()} decimals={2} /> ({spotChangePct().toFixed(2)}%)
+                  </Show>
                 </span>
               </div>
               <div class="flex justify-between">
