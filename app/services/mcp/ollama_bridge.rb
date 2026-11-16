@@ -18,7 +18,7 @@ module MCP
       You analyse an automated Indian index-options trading system using the provided tools.
       Always call a tool before answering. Quote numbers exactly as returned.
       A status of unavailable, stale or last_session means the value is not live; say so.
-      You cannot place or cancel trades. Answer in a few short sentences.
+      You cannot place or cancel trades. Answer in a few short plain sentences; no tables or headings.
     PROMPT
 
     def initialize(token: nil, url: DEFAULT_URL, model: DEFAULT_MODEL, llm: Services::Ai::OllamaClient.instance)
@@ -27,12 +27,32 @@ module MCP
       @model = model
       @llm = llm
       @request_id = 0
+      @tools_used = []
+    end
+
+    # Names of the MCP tools the model called during the last #ask.
+    attr_reader :tools_used, :model
+
+    def list_tools
+      open_session!
+      rpc('tools/list')['tools']
+    end
+
+    # @return [String] the tool's text content (JSON for this app's tools)
+    def call_tool(name, arguments = {})
+      open_session!
+      result = rpc('tools/call', name: name, arguments: arguments)
+      text = Array(result['content']).filter_map { |c| c['text'] }.join("\n")
+      raise Error, "MCP tool #{name} failed: #{text}" if result['isError']
+
+      text
     end
 
     def ask(question)
       open_session!
+      @tools_used = []
       messages = [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: question }]
-      tools = ollama_tools
+      tools = list_tools.map { |tool| ollama_tool(tool) }
 
       MAX_TOOL_ROUNDS.times do
         reply = chat(messages, tools)
@@ -63,21 +83,26 @@ module MCP
       call.deep_merge('function' => { 'arguments' => {} })
     end
 
+    # A failing tool goes back to the model as text so it can say the data is missing.
     def tool_message(call)
       name = call.dig('function', 'name')
-      result = rpc('tools/call', name: name, arguments: call.dig('function', 'arguments'))
-      text = Array(result['content']).filter_map { |c| c['text'] }.join("\n")
-      { role: 'tool', name: name, content: text }
+      @tools_used << name
+      content = begin
+        call_tool(name, call.dig('function', 'arguments'))
+      rescue Error => e
+        e.message
+      end
+      { role: 'tool', name: name, content: content }
     end
 
-    def ollama_tools
-      rpc('tools/list')['tools'].map do |tool|
-        { type: 'function',
-          function: { name: tool['name'], description: tool['description'], parameters: tool['inputSchema'] } }
-      end
+    def ollama_tool(tool)
+      { type: 'function',
+        function: { name: tool['name'], description: tool['description'], parameters: tool['inputSchema'] } }
     end
 
     def open_session!
+      return if @session_id
+
       response = post(method: 'initialize', params: {
                         protocolVersion: PROTOCOL_VERSION, capabilities: {},
                         clientInfo: { name: 'algo-scalper-ollama-bridge', version: '1.0' }

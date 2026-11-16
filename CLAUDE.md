@@ -224,6 +224,7 @@ All percentage values in `config/algo.yml` use **DECIMAL format**: `0.12` means 
 - Tools in `app/mcp/tools/` are **read-only** views over `Reports::MarketBrief::SnapshotBuilder` (`get_market_overview`, `get_risk_status`, `get_system_health`). `spec/mcp/application_mcp_tool_spec.rb` pins the tool list and fails if MCP code references `Orders::` / gateways
 - Auth: clients on this machine (loopback, no forwarding headers) need no token; remote clients need `Authorization: Bearer $MCP_API_TOKEN` (unset = open in dev, rejected in production). The dashboard never uses MCP
 - Local LLM client: `bin/rails "mcp:ask[question]"` — `MCP::OllamaBridge` drives Ollama (`openbmb/minicpm5-2b` by default, override `MCP_OLLAMA_MODEL`) through the MCP server over HTTP
+- Dashboard page `/ai` (AI Assistant): `GET /api/mcp/tools`, `POST /api/mcp/tools/:tool_id/calls`, `POST /api/mcp/questions` (`Api::MCP::*` controllers) — all go through the MCP server over loopback
 
 ## MCP Tooling
 

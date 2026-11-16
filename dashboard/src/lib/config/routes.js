@@ -23,6 +23,7 @@ export const ROUTES = {
   REPORTS: '/reports',
   MARKET_BRIEF: '/market-brief',
   MARKET_MOOD: '/market-mood',
+  AI_ASSISTANT: '/ai',
   PERFORMANCE: '/performance',
   TRADE_LOG: '/trade-log',
 
@@ -64,7 +65,8 @@ export const navigationConfig = [
     items: [
       { id: 'dashboard', label: 'Dashboard', href: ROUTES.DASHBOARD, icon: 'dashboard', end: true },
       { id: 'reports', label: 'Reports', href: ROUTES.REPORTS, icon: 'reports' },
-      { id: 'market-mood', label: 'Market Mood', href: ROUTES.MARKET_MOOD, icon: 'analysis' }
+      { id: 'market-mood', label: 'Market Mood', href: ROUTES.MARKET_MOOD, icon: 'analysis' },
+      { id: 'ai-assistant', label: 'AI Assistant', href: ROUTES.AI_ASSISTANT, icon: 'ai' }
     ],
   },
   {

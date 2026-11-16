@@ -133,6 +133,13 @@ Rails.application.routes.draw do
     end
 
     # Circuit breaker — emergency halt
+    namespace :mcp do
+      resources :tools, only: :index do
+        resources :calls, only: :create, controller: 'tool_calls'
+      end
+      resources :questions, only: :create
+    end
+
     # GET    /api/circuit_breaker        → status (unauthenticated)
     # POST   /api/circuit_breaker/trip   → trip   (requires X-Circuit-Breaker-Token)
     # DELETE /api/circuit_breaker/trip   → reset  (requires X-Circuit-Breaker-Token)
