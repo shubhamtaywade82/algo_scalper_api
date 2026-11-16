@@ -19,7 +19,7 @@ module Ai
         return true
       end
 
-      model = LLMSettings.default_model
+      model = LLMSettings.analysis_model
 
       prompt = <<~PROMPT
         You are a strict risk management AI for an algorithmic options scalping system.

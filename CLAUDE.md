@@ -14,6 +14,7 @@ Rails 8 API backend for **fully autonomous** intraday options scalping on Indian
 - Optional: OpenAI for AI technical analysis
 - RubyLLM 2.x (`ruby_llm ~> 2.1`): native `RubyLLM::Agent` / `RubyLLM::Tool` classes in `app/agents`, `app/tools` (Ollama or Ollama Cloud via `LLMSettings`, configured in `config/initializers/ruby_llm.rb`); advisory, not in the order path — except `Ai::Agents::DynamicConfigAgent`, which applies bounded config patches (paper-only, risk-reducing under stress)
 - Optional: Telegram Bot for notifications
+- **AI model choice lives only in `LLMSettings`** (`app/lib/llm_settings.rb`): `default_model` (`OLLAMA_MODEL`) for interactive/tool-calling paths, `analysis_model` (`OLLAMA_ANALYSIS_MODEL`, falls back to `OLLAMA_MODEL`) for reports/analysis. Never hard-code a model name in a caller
 
 ## Commands
 
