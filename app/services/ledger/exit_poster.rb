@@ -47,7 +47,7 @@ module Ledger
           if tracker.short_position?
             short_exit_lines(tracker: tracker, qty: qty, entry_px: entry_px, exit_px: exit_px, exit_fee: exit_fee)
           else
-            long_exit_lines(qty: qty, entry_px: entry_px, exit_px: exit_px, exit_fee: exit_fee)
+            long_exit_lines(qty: qty, entry_cost: deployed_premium(tracker, qty * entry_px), exit_px: exit_px, exit_fee: exit_fee)
           end
 
         if gain.positive?
@@ -83,9 +83,18 @@ module Ledger
         Result.new(status: :failed, error: "#{e.class}: #{e.message}")
       end
 
-      def long_exit_lines(qty:, entry_px:, exit_px:, exit_fee:)
+      # Release exactly what the entry posting deployed: tracker.avg_price can drift after the
+      # fill, which left premium_deployed with a permanent residual per trade.
+      def deployed_premium(tracker, fallback)
+        entry = LedgerJournalEntry.find_by(idempotency_key: "entry:#{tracker.id}")
+        deployed = entry && LedgerPosting.joins(:ledger_account)
+                                         .where(ledger_journal_entry_id: entry.id, ledger_accounts: { code: 'premium_deployed' })
+                                         .sum(:debit)
+        (deployed.to_d.positive? ? deployed : fallback).round(2)
+      end
+
+      def long_exit_lines(qty:, entry_cost:, exit_px:, exit_fee:)
         gross_proceeds = (qty * exit_px).round(2)
-        entry_cost = (qty * entry_px).round(2)
         gain = gross_proceeds - entry_cost
 
         lines = [

@@ -45,8 +45,8 @@ export default function NetworkStatusPanel() {
 
     setUpdating(true)
     try {
-      const res = await fetch('/api/settings/update_ip', {
-        method: 'POST',
+      const res = await fetch('/api/settings/ip_whitelist', {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'X-Settings-Update-Token': token }
       })
       const data = await res.json()

@@ -14,6 +14,20 @@ class IndexConfigLoader
     instance.load_indices
   end
 
+  # Resolve a configured index key to its tradable Instrument row.
+  # Shared by the analysis/candles APIs and AnalysisJob (was duplicated ×3).
+  # @param index_key [String, Symbol] configured index key, e.g. 'NIFTY'
+  # @return [Instrument, nil]
+  def self.index_instrument(index_key)
+    index_cfg = load_indices.find { |idx| idx[:key].to_s.upcase == index_key.to_s.upcase }
+    return nil unless index_cfg
+
+    Instrument.find_by_sid_and_segment(
+      security_id: index_cfg[:sid],
+      segment_code: index_cfg[:segment]
+    )
+  end
+
   WATCHLIST_CHECK_TTL = 60.seconds
 
   def initialize

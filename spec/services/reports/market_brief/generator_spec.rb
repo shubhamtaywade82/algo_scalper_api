@@ -4,7 +4,9 @@ require 'rails_helper'
 
 RSpec.describe Reports::MarketBrief::Generator do
   let(:report) { MarketBriefReport.request!(mode: :paper).first }
-  let(:client) { instance_double(Services::Ai::OllamaClient, enabled?: true, selected_model: 'llama3.1:8b') }
+  let(:client) { instance_double(Services::Ai::OllamaClient, enabled?: true) }
+
+  before { allow(LLMSettings).to receive(:analysis_model).and_return('llama3.1:8b') }
   let(:valid_ai_json) do
     JSON.generate(
       'schema_version' => 1,

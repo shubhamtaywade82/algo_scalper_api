@@ -6,7 +6,7 @@ module Api
 
     before_action :authenticate_dashboard_token!
 
-    def index
+    def show
       symbol = params[:symbol] || 'NIFTY'
       depth = fetch_depth(symbol)
 

@@ -161,15 +161,7 @@ module Services
           facts_prompt = build_facts_prompt(context)
           synthesis_timeout = ENV.fetch('AI_AGENT_SYNTHESIS_TIMEOUT', '25').to_i
 
-          model = if @client.provider == :ollama
-                    if @client.respond_to?(:preferred_text_model)
-                      @client.preferred_text_model(default: 'llama3.1:8b')
-                    else
-                      ENV['OLLAMA_MODEL'] || @client.selected_model || 'llama3.1:8b'
-                    end
-                  else
-                    ENV['OLLAMA_MODEL'] || @client.selected_model || 'llama3.1:8b'
-                  end
+          model = LLMSettings.analysis_model
 
           messages = [
             { role: 'system', content: build_synthesis_prompt_for_query(query, context) },

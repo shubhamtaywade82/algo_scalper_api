@@ -35,7 +35,7 @@ export function usePositions() {
     if (!id) return
     setClosingPositionId(id)
     try {
-      const res = await fetch(`/api/positions/${id}/close`, { method: 'POST', headers: dashboardApiHeaders() })
+      const res = await fetch(`/api/positions/${id}/closure`, { method: 'POST', headers: dashboardApiHeaders() })
       const data = await res.json()
       if (res.ok) {
         toast.success(`Position #${id} close requested`)

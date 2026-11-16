@@ -27,11 +27,11 @@ RSpec.describe 'OpenAPI v1 — settings, calibration, risk, debug', openapi_spec
     end
   end
 
-  path '/api/settings/update_ip' do
-    post 'Refresh Dhan-registered IP' do
+  path '/api/settings/ip_whitelist' do
+    patch 'Whitelist the current public IP on Dhan' do
       tags 'Settings'
       produces 'application/json'
-      description 'Requires operator token when API_OPERATOR_TOKEN is set.'
+      description 'Requires X-Settings-Update-Token when SETTINGS_UPDATE_TOKEN is set.'
 
       response '200', 'success flag' do
         before do
@@ -97,14 +97,14 @@ RSpec.describe 'OpenAPI v1 — settings, calibration, risk, debug', openapi_spec
     end
   end
 
-  path '/api/calibration_runs/{id}/apply' do
+  path '/api/calibration_runs/{calibration_run_id}/application' do
     post 'Apply proposed patch to settings' do
       tags 'Calibration'
       produces 'application/json'
-      parameter name: :id, in: :path, type: :integer, required: true
+      parameter name: :calibration_run_id, in: :path, type: :integer, required: true
 
       response '200', 'applied' do
-        let(:id) do
+        let(:calibration_run_id) do
           CalibrationRun.create!(
             symbol: 'NIFTY', weeks_analyzed: 8, strike_mode: 'atm_plus_minus',
             raw_stats: {}, proposed_patch: { 'risk' => { 'trailing' => { 'activation_pct' => 0.02 } } }
@@ -166,10 +166,8 @@ RSpec.describe 'OpenAPI v1 — settings, calibration, risk, debug', openapi_spec
     end
   end
 
-  path '/api/drawdown_guard/reset' do
-    # The route is POST (action endpoint: config/routes.rb post 'drawdown_guard/reset');
-    # a DELETE here 404s because no DELETE route exists.
-    post 'Reset intraday drawdown guard' do
+  path '/api/drawdown_guard/trip' do
+    delete 'Reset intraday drawdown guard' do
       tags 'Risk'
       produces 'application/json'
       description 'Requires operator token when API_OPERATOR_TOKEN is set.'
@@ -191,7 +189,7 @@ RSpec.describe 'OpenAPI v1 — settings, calibration, risk, debug', openapi_spec
     end
   end
 
-  path '/api/test_broadcast' do
+  path '/api/test_broadcasts' do
     post 'Inject a test tick into TickCache' do
       tags 'Debug'
       produces 'application/json'

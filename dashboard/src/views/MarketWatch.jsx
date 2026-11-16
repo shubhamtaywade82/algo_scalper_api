@@ -18,7 +18,7 @@ function QuoteCard(props) {
       <div class="flex items-center justify-between mb-3">
         <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">{props.label}</span>
         <span class={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${props.isPositive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-          {props.isPositive ? '+' : ''}{props.changePct}%
+          {props.changePct === null ? '—' : `${props.isPositive ? '+' : ''}${props.changePct}%`}
         </span>
       </div>
       <div class="text-2xl font-black text-white text-data tracking-tight">
@@ -44,7 +44,7 @@ export default function MarketWatch() {
     const getNiftyChange = () => {
       const val = idxs.nifty
       const prev = idxs.nifty_prev_close
-      if (!val || !prev) return { isPositive: true, changePct: 0 }
+      if (!val || !prev) return { isPositive: true, changePct: null }
       const change = val - prev
       const pct = (change / prev) * 100
       return { isPositive: change >= 0, changePct: pct.toFixed(2) }
@@ -53,7 +53,7 @@ export default function MarketWatch() {
     const getBankniftyChange = () => {
       const val = idxs.banknifty
       const prev = idxs.banknifty_prev_close
-      if (!val || !prev) return { isPositive: true, changePct: 0 }
+      if (!val || !prev) return { isPositive: true, changePct: null }
       const change = val - prev
       const pct = (change / prev) * 100
       return { isPositive: change >= 0, changePct: pct.toFixed(2) }
@@ -62,7 +62,7 @@ export default function MarketWatch() {
     const getSensexChange = () => {
       const val = idxs.sensex
       const prev = idxs.sensex_prev_close
-      if (!val || !prev) return { isPositive: true, changePct: 0 }
+      if (!val || !prev) return { isPositive: true, changePct: null }
       const change = val - prev
       const pct = (change / prev) * 100
       return { isPositive: change >= 0, changePct: pct.toFixed(2) }

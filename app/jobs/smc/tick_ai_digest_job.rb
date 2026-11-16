@@ -16,7 +16,7 @@ module Smc
 
       signals_cfg = AlgoConfig.fetch[:signals] || {}
       return unless signals_cfg[:tick_ai_analysis_enabled] == true
-      return unless ai_enabled?
+      return unless Services::Ai::OllamaClient.usable?
       return if Ai::GenerativeAiMarketGate.skip?(force: false)
 
       intervals = signals_cfg[:smc_confluence_intervals] || {}
@@ -67,11 +67,7 @@ module Smc
     # Flag absent -> feature off (documented). A corrupt config document
     # propagates — perform's rescue logs and re-raises so the job retries,
     # instead of the AI gate silently reading as disabled (wave 3).
-    def ai_enabled?
-      AlgoConfig.fetch.dig(:ai, :enabled) == true &&
-        Services::Ai::OllamaClient.instance.enabled?
-    end
-
+    # Services::Ai::OllamaClient.usable? is intentionally rescue-less here.
     def run_ai_and_notify(instrument, signals_cfg, ltp, fired_keys, tick_at)
       decision = infer_decision(fired_keys)
       delay = (signals_cfg[:tick_ai_candle_fetch_delay_seconds] || Scanner::DELAY_BETWEEN_CANDLE_FETCHES).to_f

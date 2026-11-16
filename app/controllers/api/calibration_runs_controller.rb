@@ -4,8 +4,7 @@ module Api
   class CalibrationRunsController < ApplicationController
     include Api::TokenAuthenticatable
 
-    before_action :authenticate_dashboard_token!, only: %i[index show]
-    before_action :authenticate_operator_token!, only: %i[apply]
+    before_action :authenticate_dashboard_token!
 
     # GET /api/calibration_runs
     # Returns last N runs ordered by created_at desc, with current_snapshot.
@@ -28,21 +27,6 @@ module Api
       render json: run.as_json.merge('current_snapshot' => current_config_snapshot)
     rescue StandardError => e
       Rails.logger.error("[CalibrationRunsController] show error: #{e.class} - #{e.message}")
-      render json: { error: 'internal_error' }, status: :internal_server_error
-    end
-
-    # POST /api/calibration_runs/:id/apply
-    def apply
-      run = CalibrationRun.find_by(id: params[:id])
-      return render json: { error: 'not found' }, status: :not_found unless run
-
-      run.apply!(applied_by: 'api')
-      render json: run.as_json
-    rescue RuntimeError => e
-      # apply! raises RuntimeError('already applied') for double-apply
-      render json: { error: e.message }, status: :unprocessable_content
-    rescue StandardError => e
-      Rails.logger.error("[CalibrationRunsController] apply error: #{e.class} - #{e.message}")
       render json: { error: 'internal_error' }, status: :internal_server_error
     end
 

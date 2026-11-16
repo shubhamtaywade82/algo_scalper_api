@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-# Provider/model resolution for RubyLLM (2.x) agents.
+# Single source of truth for which Ollama model every AI path uses: RubyLLM agents,
+# Services::Ai::OllamaClient callers and the MCP bridge all read it from here.
 #
 # Only Ollama is wired. RubyLLM 2.x models Ollama Cloud as its own provider
 # (:ollama_cloud, separate credentials) rather than an Ollama base-URL variant,
@@ -11,7 +12,8 @@
 # Env:
 #   OLLAMA_BASE_URL  local default http://localhost:11434; https://ollama.com selects Ollama Cloud
 #   OLLAMA_API_KEY   bearer token (required for Ollama Cloud)
-#   OLLAMA_MODEL     model id (default llama3.2:3b locally, minimax-m2.5 on cloud)
+#   OLLAMA_MODEL           default model (default llama3.2:3b locally, minimax-m2.5 on cloud)
+#   OLLAMA_ANALYSIS_MODEL  heavier model for analysis/report work (defaults to OLLAMA_MODEL)
 #   OLLAMA_TIMEOUT   request timeout seconds for agent calls (default 60)
 module LLMSettings
   LOCAL_DEFAULT_BASE = 'http://localhost:11434'
@@ -49,6 +51,12 @@ module LLMSettings
     return configured if configured && !(cloud? && configured == LOCAL_DEFAULT_MODEL)
 
     cloud? ? CLOUD_DEFAULT_MODEL : LOCAL_DEFAULT_MODEL
+  end
+
+  # Market Brief, AI snapshot, technical-analysis agent, calibration and other
+  # analysis/report calls; quick interactive paths (MCP assistant, agents) use default_model.
+  def analysis_model
+    ENV['OLLAMA_ANALYSIS_MODEL'].presence || default_model
   end
 
   def request_timeout

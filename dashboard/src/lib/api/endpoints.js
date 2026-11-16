@@ -1,38 +1,33 @@
 export const endpoints = {
   dashboard: '/dashboard',
+  // GET reads; PUT replaces whole sections ({ settings }); PATCH deep-merges ({ patch })
   settings: '/settings',
-  settingsBulk: '/settings/bulk',
-  settingsDeepMerge: '/settings/deep_merge',
   settingsFastEntryMode: '/settings/fast_entry_mode',
-  settingsUpdateIP: '/settings/update_ip',
+  settingsIpWhitelist: '/settings/ip_whitelist',
 
   candles: (symbol) => `/candles/${symbol}`,
 
   positions: '/positions',
   positionDetail: (id) => `/positions/${id}`,
-  closePosition: (id) => `/positions/${id}/close`,
+  positionClosure: (id) => `/positions/${id}/closure`,
 
   signals: '/signals',
 
   scheduler: {
     tasks: '/scheduler/tasks',
-    execute: (id) => `/scheduler/tasks/${id}/execute`
+    executions: (taskId) => `/scheduler/tasks/${taskId}/executions`
   },
 
   analysis: {
     show: (index) => `/analysis/${index}`,
-    historical: (index) => `/analysis/${index}/historical`,
-    riskExplorer: (index) => `/analysis/${index}/risk_explorer`,
-    aiSnapshot: (index) => `/analysis/${index}/ai_snapshot`,
-    optimize: (index) => `/analysis/${index}/optimize`
+    history: (index) => `/analysis/${index}/history`,
+    aiSnapshots: (index) => `/analysis/${index}/ai_snapshots`
   },
 
   alpha: {
     status: '/alpha/status',
     history: '/alpha/history',
-    performance: '/alpha/performance',
-    scan: '/alpha/scan',
-    execute: '/alpha/execute'
+    performance: '/alpha/performance'
   },
 
   ledger: {
@@ -45,12 +40,13 @@ export const endpoints = {
     vix: '/market/vix'
   },
 
-  drawdownGuard: {
-    reset: '/drawdown_guard/reset'
-  },
+  // DELETE clears the day's latched drawdown trip (operator token)
+  drawdownGuardTrip: '/drawdown_guard/trip',
 
   holdings: '/holdings',
   funds: '/funds',
+  fundDeposits: '/funds/deposits',
+  fundWithdrawals: '/funds/withdrawals',
   reports: {
     pnl: '/reports/pnl',
     trades: '/reports/trades',
@@ -68,13 +64,12 @@ export const endpoints = {
 
   strategies: {
     list: '/strategies',
-    one: (id) => `/strategies/${id}`
+    one: (slug) => `/strategies/${slug}`
   },
   tradingStrategies: {
     list: '/trading_strategies',
     one: (id) => `/trading_strategies/${id}`,
-    validate: (id) => `/trading_strategies/${id}/validate`,
-    deploy: (id) => `/trading_strategies/${id}/deploy`
+    validation: (id) => `/trading_strategies/${id}/validation`,
+    deployment: (id) => `/trading_strategies/${id}/deployment`
   }
 }
-

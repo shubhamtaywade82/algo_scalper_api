@@ -113,8 +113,7 @@ module Ai
         schema_path = Rails.root.join("config/ai_calibration_schema.json")
         schema      = JSON.parse(File.read(schema_path))
 
-        # Use the specific model prioritized for calibration if set
-        model = ENV['AI_CALIBRATION_MODEL'] || client.preferred_text_model
+        model = LLMSettings.analysis_model
 
         client.generate(
           prompt: prompt,

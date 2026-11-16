@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'English'
+require 'shellwords'
 require "json"
 
 module AutoExp
@@ -10,7 +11,7 @@ module AutoExp
     def run
       # Run the script using rails runner to ensure environment is loaded
       # Capture stdout for the JSON metrics and ignore stderr (or handle separately)
-      output = `rails runner #{SCRIPT}`
+      output = `rails runner #{Shellwords.escape(SCRIPT.to_s)}`
 
       unless $CHILD_STATUS.success?
         Rails.logger.error("[AutoExp] Backtest script failed with status #{$CHILD_STATUS.exitstatus}")

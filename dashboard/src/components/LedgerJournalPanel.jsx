@@ -6,7 +6,7 @@ const POLL_MS = 30_000
 function formatTime(iso) {
   if (!iso) return '—'
   try {
-    return new Date(iso).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    return new Date(iso).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' })
   } catch {
     return iso
   }

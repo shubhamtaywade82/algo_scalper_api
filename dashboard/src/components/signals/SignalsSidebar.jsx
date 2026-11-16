@@ -167,7 +167,7 @@ export default function SignalsSidebar() {
     }
 
     try {
-      const resp = await fetch('/api/settings/deep_merge', {
+      const resp = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 
           'Content-Type': 'application/json',

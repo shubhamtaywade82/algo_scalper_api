@@ -1,4 +1,4 @@
-// Backend endpoints: GET /api/funds, POST /api/funds/add, POST /api/funds/withdraw
+// Backend endpoints: GET /api/funds, POST /api/funds/deposits, POST /api/funds/withdrawals
 // WebSocket: FundsChannel — receives { type: "funds_changed" } signals to refetch
 import { createSignal, onMount, onCleanup } from 'solid-js'
 import { apiClient } from '../lib/api'
@@ -33,7 +33,7 @@ export function useFunds() {
 
   async function addFunds(amount) {
     try {
-      const res = await apiClient.post('/funds/add', { amount })
+      const res = await apiClient.post('/funds/deposits', { amount })
       toast.success(`₹${amount} added successfully`)
       await fetchFunds()
       return { ok: true, data: res.data }
@@ -45,7 +45,7 @@ export function useFunds() {
 
   async function withdrawFunds(amount) {
     try {
-      const res = await apiClient.post('/funds/withdraw', { amount })
+      const res = await apiClient.post('/funds/withdrawals', { amount })
       toast.success(`₹${amount} withdrawal initiated`)
       await fetchFunds()
       return { ok: true, data: res.data }

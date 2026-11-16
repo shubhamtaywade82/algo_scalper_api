@@ -193,7 +193,7 @@ module Services
       private
 
       def resolved_chat_model
-        @client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3'
+        LLMSettings.analysis_model
       end
 
       def system_prompt

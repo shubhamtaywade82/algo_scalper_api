@@ -97,13 +97,14 @@ module AutoExp
 
     def commit(reason)
       escaped_reason = Shellwords.escape("autoexp: #{reason}")
-      system("git add #{AutoExp::ConfigApplier::CONFIG_PATH}")
+      config_path = Shellwords.escape(AutoExp::ConfigApplier::CONFIG_PATH.to_s)
+      system("git add #{config_path}")
       system("git commit -m #{escaped_reason} --no-verify")
     end
 
     def revert
       # Revert ONLY the config file to its state in HEAD
-      system("git checkout HEAD -- #{AutoExp::ConfigApplier::CONFIG_PATH}")
+      system("git checkout HEAD -- #{Shellwords.escape(AutoExp::ConfigApplier::CONFIG_PATH.to_s)}")
     end
 
     def current_commit

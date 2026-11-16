@@ -9,7 +9,7 @@ module Api
     # Built from exited trades' final P&L — the same source as Reports. The daily
     # wallet snapshots (PaperDailyWallet) recorded the drifted ledger cash cache and
     # showed ₹77k equity while trades + ledger postings both say ₹1.03L.
-    def index
+    def show
       date_from = parse_date(params[:date_from], 90.days.ago.to_date)
       date_to = parse_date(params[:date_to], Time.zone.today)
 

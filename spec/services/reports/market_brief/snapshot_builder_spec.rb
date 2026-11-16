@@ -67,6 +67,26 @@ RSpec.describe Reports::MarketBrief::SnapshotBuilder do
       expect(snapshot.dig('market_context', 'vix')).to include('status' => 'ok', 'value' => 13.25, 'entry_allowed' => true)
     end
 
+    it 'shows India VIX from the Dhan LTP when the VIX gate has nothing cached' do
+      allow(Market::VixGate).to receive_messages(current_ltp: nil, evaluated?: false)
+      allow(DhanHQ::Models::MarketFeed).to receive(:ltp)
+        .and_return({ 'data' => { 'IDX_I' => { '21' => { 'last_price' => 15.68 } } } })
+
+      expect(snapshot.dig('market_context', 'vix')).to include('status' => 'ok', 'value' => 15.68, 'evaluated' => false)
+    end
+
+    it 'derives prev close from daily bars when the feed sent none' do
+      allow(Live::TickQuery).to receive(:for_security)
+        .and_return(brief_tick(ltp: 24_500.5, prev_close: nil, at: 2.seconds.ago))
+      session_day = Time.current.to_date
+      bars = [{ timestamp: (session_day - 1).in_time_zone, close: 24_250.0 },
+              { timestamp: session_day.in_time_zone, close: 24_500.5 }]
+      allow(IndexConfigLoader).to receive(:index_instrument)
+        .and_return(instance_double(Instrument, historical_ohlc: bars))
+
+      expect(snapshot['indices'].first['quote']).to include('prev_close' => 24_250.0, 'change_pct' => 1.03)
+    end
+
     it 'rates overall freshness live when every critical source is fresh' do
       expect(snapshot['freshness']['state']).to eq('live')
       expect(snapshot.dig('health', 'components', 'market_feed', 'status')).to eq('ok')

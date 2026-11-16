@@ -69,7 +69,7 @@ module Options
       if run.applied_at.present?
         lines << "✅ *Auto-applied* at #{run.applied_at.in_time_zone('Asia/Kolkata').iso8601}"
       else
-        lines << "Apply: POST /api/calibration_runs/#{run.id}/apply"
+        lines << "Apply: POST /api/calibration_runs/#{run.id}/application"
       end
       append_auto_apply_skip_line(lines, auto_apply_result)
       lines.join("\n")

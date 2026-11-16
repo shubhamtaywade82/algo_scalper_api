@@ -1,4 +1,4 @@
-// Backend: GET /api/scheduler/tasks, POST /api/scheduler/tasks/:id/execute
+// Backend: GET /api/scheduler/tasks, POST /api/scheduler/tasks/:task_id/executions
 // WebSocket: ActionCable SchedulerChannel TBD
 // Data shape: [{ id, name, cron, status, last_run_at, next_run_at, description }]
 
@@ -28,7 +28,7 @@ export function useScheduler() {
 
   async function executeTask(taskId) {
     try {
-      const res = await apiClient.post(`/scheduler/tasks/${taskId}/execute`)
+      const res = await apiClient.post(`/scheduler/tasks/${taskId}/executions`)
       const taskName = res.data?.message ? `Job enqueued` : `Task ${taskId} triggered`
       toast.success(taskName)
       await fetchTasks()

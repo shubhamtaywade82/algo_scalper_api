@@ -43,7 +43,7 @@ RSpec.describe Api::Research::LifecyclesController do
     end
   end
 
-  describe "POST /api/research/lifecycles/run" do
+  describe "POST /api/research/lifecycle_runs" do
     it "runs the lifecycle board and returns ranked results" do
       allow(Research::LifecycleRunner).to receive(:run).and_return(
         [Research::PremiumLifecycle.create!(underlying_symbol: "NIFTY", expiry_flag: "WEEK", option_type: "CE",
@@ -51,7 +51,7 @@ RSpec.describe Api::Research::LifecyclesController do
                                             status: "computed", peak_return_pct: 55.0)]
       )
 
-      post "/api/research/lifecycles/run", params: {
+      post "/api/research/lifecycle_runs", params: {
         underlying_symbol: "NIFTY", date: "2026-07-10", spot_price: 24_800, expiry_flag: "WEEK", max_distance: 2
       }
 
@@ -62,7 +62,7 @@ RSpec.describe Api::Research::LifecyclesController do
     end
 
     it "returns 422 for an invalid date" do
-      post "/api/research/lifecycles/run", params: { underlying_symbol: "NIFTY", date: "not-a-date",
+      post "/api/research/lifecycle_runs", params: { underlying_symbol: "NIFTY", date: "not-a-date",
                                                      spot_price: 24_800 }
 
       expect(response).to have_http_status(:unprocessable_content)

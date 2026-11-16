@@ -2,6 +2,7 @@
 
 # Job to execute AI technical analysis rake task
 require 'English'
+
 class AiTechnicalAnalysisJob < ApplicationJob
   queue_as :background
 
@@ -12,8 +13,7 @@ class AiTechnicalAnalysisJob < ApplicationJob
   end
 
   def perform(index_name)
-    index_key = validate_index_key!(index_name)
-
+    validate_index_key!(index_name)
     if AlgoConfig.scheduled_ai_technical_analysis_job_deferred?
       Rails.logger.info(
         "[AiTechnicalAnalysisJob] Skipped #{index_key}: event-driven intraday AI " \
@@ -58,7 +58,9 @@ class AiTechnicalAnalysisJob < ApplicationJob
     self.class.chdir_mutex.synchronize do
       Dir.chdir(Rails.root) do
         # Set environment variable and execute command
-        result = system({ 'STREAM' => 'true' }, "bundle exec rake 'ai:technical_analysis[\"#{query}\"]'")
+        # Query travels via ENV (the rake task reads ENV['QUERY']): the command
+        # string stays static so query text is never parsed by the shell.
+        result = system({ 'STREAM' => 'true', 'QUERY' => query }, 'bundle exec rake ai:technical_analysis')
 
         if result
           Rails.logger.info("[AiTechnicalAnalysisJob] Successfully executed for #{index_name}")
@@ -74,6 +76,17 @@ class AiTechnicalAnalysisJob < ApplicationJob
   end
 
   private
+
+  def validate_index_key!(index_name)
+    key = index_name.to_s.upcase
+    return key if all_index_keys.include?(key)
+
+    raise ArgumentError, "Unknown index '#{index_name}' — expected one of #{all_index_keys.join(', ')}"
+  end
+
+  def all_index_keys
+    IndexConfigLoader.load_indices.map { |idx| idx[:key].to_s.upcase }
+  end
 
   def closed_market_session_label
     Live::TimeRegimeService.closed_session_label

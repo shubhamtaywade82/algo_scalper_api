@@ -1,0 +1,29 @@
+---
+# Tuned for algo_scalper_api.
+#
+# Rationale: the unconfigured run produced ~10.8k warnings, dominated by
+# structural-noise detectors rather than real smells:
+#   - IrresponsibleModule flags every class without a top comment (this
+#     codebase documents services, not every PORO/concern).
+#   - Uncommunicative* duplicates RuboCop's Naming cops, which are already
+#     enforced in CI — one naming authority is enough.
+# Real-smell detectors (FeatureEnvy, TooManyStatements, NilCheck,
+# RepeatedConditional, ...) stay enabled at their defaults.
+#
+# One threshold exception: DuplicateMethodCall at its default (2) produced 3.7k
+# warnings, ~42% of all output — dominated by this codebase's idiomatic
+# repeated AlgoConfig.fetch.dig / Rails.logger chains. max_calls: 3 still flags
+# genuine heavy repetition (4+ identical calls in one method).
+detectors:
+  DuplicateMethodCall:
+    max_calls: 3
+  IrresponsibleModule:
+    enabled: false
+  UncommunicativeVariableName:
+    enabled: false
+  UncommunicativeParameterName:
+    enabled: false
+  UncommunicativeMethodName:
+    enabled: false
+  UncommunicativeModuleName:
+    enabled: false

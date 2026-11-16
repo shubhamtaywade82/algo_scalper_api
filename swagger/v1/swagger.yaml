@@ -203,12 +203,13 @@ paths:
                 required:
                 - success
                 - config
-  "/api/settings/update_ip":
-    post:
-      summary: Refresh Dhan-registered IP
+  "/api/settings/ip_whitelist":
+    patch:
+      summary: Whitelist the current public IP on Dhan
       tags:
       - Settings
-      description: Requires operator token when API_OPERATOR_TOKEN is set.
+      description: Requires X-Settings-Update-Token when SETTINGS_UPDATE_TOKEN is
+        set.
       responses:
         '200':
           description: success flag
@@ -262,13 +263,13 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
-  "/api/calibration_runs/{id}/apply":
+  "/api/calibration_runs/{calibration_run_id}/application":
     post:
       summary: Apply proposed patch to settings
       tags:
       - Calibration
       parameters:
-      - name: id
+      - name: calibration_run_id
         in: path
         required: true
         schema:
@@ -320,7 +321,7 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
-  "/api/drawdown_guard/reset":
+  "/api/drawdown_guard/trip":
     delete:
       summary: Reset intraday drawdown guard
       tags:
@@ -338,7 +339,7 @@ paths:
                     type: boolean
                   message:
                     type: string
-  "/api/test_broadcast":
+  "/api/test_broadcasts":
     post:
       summary: Inject a test tick into TickCache
       tags:
@@ -448,7 +449,7 @@ paths:
                   ltp:
                     type: number
                     nullable: true
-  "/api/analysis/{index_key}/historical":
+  "/api/analysis/{index_key}/history":
     get:
       summary: Historical options context
       tags:
@@ -472,7 +473,7 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
-  "/api/analysis/{index_key}/ai_snapshot":
+  "/api/analysis/{index_key}/ai_snapshots":
     post:
       summary: On-demand AI snapshot (sync)
       tags:

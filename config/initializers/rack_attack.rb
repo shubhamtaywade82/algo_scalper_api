@@ -24,7 +24,7 @@ module Rack
     end
 
     throttle('api/ai_snapshot/ip', limit: AI_LIMIT, period: AI_PERIOD) do |req|
-      req.ip if req.post? && req.path.match?(%r{\A/api/analysis/[^/]+/ai_snapshot\z})
+      req.ip if req.post? && req.path.match?(%r{\A/api/(analysis/[^/]+/ai_snapshots|mcp/questions)\z})
     end
 
     self.throttled_responder = lambda { |_req|

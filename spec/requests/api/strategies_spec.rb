@@ -69,7 +69,7 @@ RSpec.describe 'Api::Strategies' do
     end
   end
 
-  describe 'POST /api/strategies/:slug/deploy' do
+  describe 'POST /api/strategies/:slug/deployment' do
     let(:slug) { 'deploy_test' }
     let(:strategy_dir) { Rails.root.join('strategies', slug) }
 
@@ -98,7 +98,7 @@ RSpec.describe 'Api::Strategies' do
     end
 
     it 'deploys the strategy' do
-      post "/api/strategies/#{slug}/deploy"
+      post "/api/strategies/#{slug}/deployment"
       expect(response).to have_http_status(:ok)
       body = response.parsed_body
       expect(body['success']).to be true
@@ -106,31 +106,31 @@ RSpec.describe 'Api::Strategies' do
     end
   end
 
-  describe 'POST /api/strategies/:slug/start' do
+  describe 'POST /api/strategies/:slug/run (start)' do
     let!(:strategy) { create(:strategy_record, slug: 'start_test', status: 'deployed') }
 
     it 'sets desired_status to running' do
-      post "/api/strategies/#{strategy.slug}/start"
+      post "/api/strategies/#{strategy.slug}/run"
       expect(response).to have_http_status(:accepted)
       expect(strategy.reload.desired_status).to eq('running')
     end
   end
 
-  describe 'POST /api/strategies/:slug/stop' do
+  describe 'DELETE /api/strategies/:slug/run (stop)' do
     let!(:strategy) { create(:strategy_record, slug: 'stop_test', status: 'running', desired_status: 'running') }
 
     it 'sets desired_status to stopped' do
-      post "/api/strategies/#{strategy.slug}/stop"
+      delete "/api/strategies/#{strategy.slug}/run"
       expect(response).to have_http_status(:accepted)
       expect(strategy.reload.desired_status).to eq('stopped')
     end
   end
 
-  describe 'POST /api/strategies/:slug/restart' do
+  describe 'PATCH /api/strategies/:slug/run (restart)' do
     let!(:strategy) { create(:strategy_record, slug: 'restart_test', status: 'running', desired_status: 'running') }
 
     it 'cycles desired_status through stopped to running' do
-      post "/api/strategies/#{strategy.slug}/restart"
+      patch "/api/strategies/#{strategy.slug}/run"
       expect(response).to have_http_status(:accepted)
       expect(strategy.reload.desired_status).to eq('running')
     end

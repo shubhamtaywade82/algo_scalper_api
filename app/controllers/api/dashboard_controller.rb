@@ -49,7 +49,16 @@ module Api
         nifty: load_indices.find { |i| i[:key] == 'NIFTY' }&.dig(:ltp),
         banknifty: load_indices.find { |i| i[:key] == 'BANKNIFTY' }&.dig(:ltp),
         sensex: load_indices.find { |i| i[:key] == 'SENSEX' }&.dig(:ltp)
-      }
+      }.merge(index_prev_closes(load_indices))
+    end
+
+    # Header/MarketWatch % change needs prev_close; the WS push only carries it intraday.
+    def index_prev_closes(load_indices)
+      %w[NIFTY BANKNIFTY SENSEX].to_h do |key|
+        idx = load_indices.find { |i| i[:key] == key }
+        prev = idx && Live::TickCache.fetch('IDX_I', idx[:sid].to_s)&.dig(:prev_close)
+        [:"#{key.downcase}_prev_close", prev]
+      end
     end
 
     def sorted_indices_with_strategy

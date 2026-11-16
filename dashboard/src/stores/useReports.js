@@ -6,6 +6,7 @@ export function useReports() {
   const [summary, setSummary] = createSignal(null)
   const [daily, setDaily] = createSignal([])
   const [trades, setTrades] = createSignal([])
+  const [topWinners, setTopWinners] = createSignal([])
   const [byStrategy, setByStrategy] = createSignal([])
   const [byInstrument, setByInstrument] = createSignal([])
   const [loading, setLoading] = createSignal(false)
@@ -16,10 +17,11 @@ export function useReports() {
     setError(null)
     const q = { since: params.since || undefined, until: params.until || undefined }
     try {
-      const [perfRes, pnlRes, tradesRes, stratRes, instrRes] = await Promise.all([
+      const [perfRes, pnlRes, tradesRes, winnersRes, stratRes, instrRes] = await Promise.all([
         apiClient.get(endpoints.reports.performance, { params: q }),
         apiClient.get(endpoints.reports.pnl, { params: q }),
         apiClient.get(endpoints.reports.trades, { params: { ...q, per_page: 10 } }),
+        apiClient.get(endpoints.reports.trades, { params: { ...q, per_page: 5, sort: 'pnl_desc' } }),
         apiClient.get(endpoints.reports.pnlByStrategy, { params: q }),
         apiClient.get(endpoints.reports.pnlByInstrument, { params: q })
       ])
@@ -29,6 +31,7 @@ export function useReports() {
       })
       setDaily(perfRes.data?.daily || [])
       setTrades(tradesRes.data?.trades || [])
+      setTopWinners((winnersRes.data?.trades || []).filter(t => t.pnl > 0))
       setByStrategy(stratRes.data?.breakdown || [])
       setByInstrument(instrRes.data?.breakdown || [])
       return { ok: true }
@@ -44,10 +47,11 @@ export function useReports() {
     setSummary(null)
     setDaily([])
     setTrades([])
+    setTopWinners([])
     setByStrategy([])
     setByInstrument([])
     setError(null)
   }
 
-  return { summary, daily, trades, byStrategy, byInstrument, loading, error, fetchAll, reset }
+  return { summary, daily, trades, topWinners, byStrategy, byInstrument, loading, error, fetchAll, reset }
 }

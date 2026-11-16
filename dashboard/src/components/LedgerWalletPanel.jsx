@@ -94,7 +94,7 @@ export default function LedgerWalletPanel() {
               </div>
             </div>
             <div>
-              <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Realized PnL</span>
+              <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Realized PnL (gross)</span>
               <div class="text-xl font-black mt-1">
                 <AnimatedNumber value={wallet().realized_pnl} currency decimals={2} pnlColor zeroPositive />
               </div>

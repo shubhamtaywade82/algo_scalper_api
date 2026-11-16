@@ -31,6 +31,8 @@ class MarketBriefReport < ApplicationRecord
   MAX_TRIGGER_REASONS = 6
   # A build that never left `building` (worker crash) may be retried after this.
   BUILDING_TIMEOUT = 10.minutes
+  # A build older than this is treated as dead, not in flight (a crashed job leaves it pending forever).
+  IN_FLIGHT_WINDOW = 15.minutes
 
   validates :report_key, presence: true, uniqueness: true
   validates :trading_date, presence: true
@@ -42,6 +44,7 @@ class MarketBriefReport < ApplicationRecord
   scope :for_mode, ->(mode) { where(mode: mode.to_s) }
   scope :ready, -> { where(status: 'ready') }
   scope :latest_first, -> { order(created_at: :desc, id: :desc) }
+  scope :in_flight, ->(now = Time.current) { where(status: %w[pending building], created_at: (now - IN_FLIGHT_WINDOW)..) }
 
   class << self
     # Finds or creates the report for the slot covering +now+. Safe under

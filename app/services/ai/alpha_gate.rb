@@ -19,7 +19,7 @@ module Ai
         return true
       end
 
-      model = ENV['OLLAMA_MODEL'] || client.selected_model || 'llama3.2:3b'
+      model = LLMSettings.analysis_model
 
       prompt = <<~PROMPT
         You are a strict risk management AI for an algorithmic options scalping system.

@@ -38,7 +38,7 @@ module Smc
     end
 
     def select_model
-      @ai_client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3.2:3b'
+      LLMSettings.analysis_model
     end
 
     def initialize_conversation

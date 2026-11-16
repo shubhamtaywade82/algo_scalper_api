@@ -2,10 +2,6 @@
 
 module AutoExp
   class LLMPlanner
-    def model
-      ENV['OLLAMA_MODEL'] || "llama3.2:3b"
-    end
-
     SCHEMA = {
       "type" => "object",
       "required" => %w[parameter value reason],
@@ -27,14 +23,14 @@ module AutoExp
     }.freeze
 
     def initialize
-      @client = Services::Ai::OpenaiClient.instance
+      @client = Services::Ai::OllamaClient.instance
     end
 
     def propose(results:, config:)
       prompt = build_prompt(results, config)
 
       @client.generate(
-        model: model,
+        model: LLMSettings.analysis_model,
         prompt: prompt,
         schema: SCHEMA
       )

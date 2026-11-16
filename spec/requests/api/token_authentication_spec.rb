@@ -68,9 +68,9 @@ RSpec.describe 'API token authentication' do
       allow(Rails.env).to receive(:production?).and_return(true)
       ENV.delete('SETTINGS_UPDATE_TOKEN')
 
-      patch '/api/settings/bulk',
-            params: { settings: { feature_flags: {} } },
-            as: :json
+      put '/api/settings',
+          params: { settings: { feature_flags: {} } },
+          as: :json
 
       expect(response).to have_http_status(:service_unavailable)
       body = response.parsed_body

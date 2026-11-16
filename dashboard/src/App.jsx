@@ -31,6 +31,7 @@ const Holdings = lazy(() => import('./views/Holdings'))
 const Funds = lazy(() => import('./views/Funds'))
 const Reports = lazy(() => import('./views/Reports'))
 const MarketBrief = lazy(() => import('./views/MarketBrief'))
+const AiAssistant = lazy(() => import('./views/AiAssistant'))
 const Alerts = lazy(() => import('./views/Alerts'))
 const Scheduler = lazy(() => import('./views/Scheduler'))
 const Logs = lazy(() => import('./views/Logs'))
@@ -136,6 +137,7 @@ export default function App() {
         <Route path="/market-watch" component={MarketWatch} />
         <Route path="/reports" component={Reports} />
         <Route path="/market-mood" component={MarketBrief} />
+        <Route path="/ai" component={AiAssistant} />
         <Route path="/market-brief" component={() => <Navigate href="/market-mood" />} />
         <Route path="/system" component={System} />
         <Route path="/settings" component={() => <System defaultTab="settings" />} />

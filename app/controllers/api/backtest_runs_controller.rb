@@ -33,10 +33,14 @@ module Api
         meta: { total: total, page: page, per_page: per_page, pages: [1, (total.to_f / per_page).ceil].max }
       }
     end
+    # GET /api/backtest_runs/:id(.csv) — JSON detail, or the trades as CSV
     def show
       run = BacktestRun.find(params.expect(:id))
+      return send_trades_csv(run) if request.format.csv?
+
       render json: run_detail(run)
     end
+
     def create
       strategy_version = resolve_strategy_version(params[:strategy_slug])
       if params[:strategy_slug].present? && strategy_version.nil?
@@ -56,8 +60,9 @@ module Api
       render json: { backtest_run_id: run.id, status: run.status }, status: :accepted
     end
 
-    def download_csv
-      run = BacktestRun.find(params.expect(:id))
+    private
+
+    def send_trades_csv(run)
       unless run.completed?
         render json: { error: 'not_completed', status: run.status }, status: :unprocessable_content
         return
@@ -73,8 +78,6 @@ module Api
       end
       send_data csv_string, filename: "backtest_#{run.id}_#{run.symbol}_#{Time.zone.today}.csv", type: 'text/csv'
     end
-
-    private
 
     def resolve_strategy_version(slug)
       return nil if slug.blank?

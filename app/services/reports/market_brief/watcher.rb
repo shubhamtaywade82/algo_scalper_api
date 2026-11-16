@@ -28,7 +28,6 @@ module Reports
       IDLE_INTERVAL = 15.seconds # below the 30s heartbeat TTL
       AI_DEBOUNCE = 60.seconds
       MAX_AI_RUNS_PER_HOUR = 12
-      IN_FLIGHT_WINDOW = 15.minutes # a build older than this is treated as dead, not in flight
       HEARTBEAT = :market_brief_watcher
       IST = TradingSession::Service::IST_TIMEZONE
 
@@ -174,8 +173,7 @@ module Reports
       end
 
       def in_flight?(mode, now)
-        MarketBriefReport.for_mode(mode).where(status: %w[pending building])
-                         .where(created_at: (now - IN_FLIGHT_WINDOW)..).exists?
+        MarketBriefReport.for_mode(mode).in_flight(now).exists?
       end
 
       def within_debounce?(mode, now)

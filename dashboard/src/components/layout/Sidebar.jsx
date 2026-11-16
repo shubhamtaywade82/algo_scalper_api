@@ -4,6 +4,12 @@ import { navigationConfig } from '../../lib/config/routes'
 
 // SVG icon mapping — avoids external icon dependency
 const ICONS = {
+  ai: () => (
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path d="M12 3v3m0 12v3M3 12h3m12 0h3M7 7l1.5 1.5m7 7L17 17M7 17l1.5-1.5m7-7L17 7" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="12" cy="12" r="3" stroke-width="2"/>
+    </svg>
+  ),
   dashboard: () => (
     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <rect width="20" height="16" x="2" y="4" rx="2" stroke-width="2"/>

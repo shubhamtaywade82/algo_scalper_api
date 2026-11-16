@@ -20,7 +20,7 @@ RSpec.describe Ai::Calibration::Runner do
     # Mock OllamaClient generate
     client = double('client', enabled?: true)
     allow(Services::Ai::OllamaClient).to receive(:instance).and_return(client)
-    allow(client).to receive_messages(preferred_text_model: 'model', generate: { 'system_diagnosis' => {}, 'parameter_changes' => [] })
+    allow(client).to receive_messages(generate: { 'system_diagnosis' => {}, 'parameter_changes' => [] })
 
     # Mock ResultParser
     allow(Ai::Calibration::ResultParser).to receive(:call).and_return({

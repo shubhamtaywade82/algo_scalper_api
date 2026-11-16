@@ -4,6 +4,6 @@
 Rails.application.config.after_initialize do
   if defined?(Market::Calendar)
     Market::Calendar.clear_holiday_cache!
-    Rails.logger.info("[Market::Calendar] Holiday cache cleared on boot")
+    Rails.logger.debug("[Market::Calendar] Holiday cache cleared on boot")
   end
 end

@@ -79,12 +79,12 @@ module Reports
         return finish_ai('skipped_market_closed') if Ai::GenerativeAiMarketGate.skip?(force: @force_ai)
         return finish_ai('unavailable', error: 'provider_backoff_active') if backoff_active?
 
+        model = LLMSettings.analysis_model
         started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         raw = Timeout.timeout(AI_TIMEOUT) do
-          client.chat(messages: AiPromptBuilder.build(@report.snapshot, trigger: @report.trigger_reasons), temperature: 0.1,
-                      log_context: 'market_brief')
+          client.chat(messages: AiPromptBuilder.build(@report.snapshot, trigger: @report.trigger_reasons), model: model,
+                      temperature: 0.1, log_context: 'market_brief')
         end
-        model = client.selected_model.presence || ENV.fetch('OLLAMA_MODEL', nil)
 
         if raw.blank?
           trip_backoff!

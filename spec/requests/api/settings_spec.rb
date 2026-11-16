@@ -21,7 +21,7 @@ RSpec.describe 'Api::Settings' do
     end
   end
 
-  describe 'PATCH /api/settings/bulk' do
+  describe 'PUT /api/settings' do
     around do |example|
       prior = ENV.fetch('SETTINGS_UPDATE_TOKEN', nil)
       ENV.delete('SETTINGS_UPDATE_TOKEN')
@@ -40,8 +40,8 @@ RSpec.describe 'Api::Settings' do
     end
 
     it 'replaces a permitted top-level subtree' do
-      patch '/api/settings/bulk',
-            params: { settings: { risk: { sl_pct: 0.03, trailing: { drawdown_pct: 0.02 } } } }
+      put '/api/settings',
+          params: { settings: { risk: { sl_pct: 0.03, trailing: { drawdown_pct: 0.02 } } } }
       expect(response).to have_http_status(:ok)
       doc = JSON.parse(Setting.find_by!(key: doc_key).value)
       expect(doc.dig('risk', 'sl_pct').to_f).to eq(0.03)
@@ -49,32 +49,32 @@ RSpec.describe 'Api::Settings' do
     end
 
     it 'writes api_settings_bulk change log' do
-      patch '/api/settings/bulk', params: { settings: { signals: { enable_adx_filter: false } } }
+      put '/api/settings', params: { settings: { signals: { enable_adx_filter: false } } }
       log = AlgoConfigChangeLog.order(:id).last
       expect(log.source).to eq('api_settings_bulk')
       expect(log.changed_paths).to include('/signals')
     end
 
     it 'returns 400 when settings param missing' do
-      patch '/api/settings/bulk', params: {}
+      put '/api/settings', params: {}
       expect(response).to have_http_status(:bad_request)
     end
 
     it 'rejects read-only sections instead of silently dropping them' do
-      patch '/api/settings/bulk', params: { settings: { risk: { sl_pct: 0.03 }, dhanhq: { enable_orders: true } } }
+      put '/api/settings', params: { settings: { risk: { sl_pct: 0.03 }, dhanhq: { enable_orders: true } } }
       expect(response).to have_http_status(:unprocessable_content)
       expect(response.parsed_body['error']).to include('dhanhq')
       expect(JSON.parse(Setting.find_by!(key: doc_key).value).dig('risk', 'sl_pct').to_f).to eq(0.02)
     end
 
     it 'persists sections that previously were silently discarded' do
-      patch '/api/settings/bulk', params: { settings: { profit_lock: { enabled: 'false' } } }
+      put '/api/settings', params: { settings: { profit_lock: { enabled: 'false' } } }
       expect(response).to have_http_status(:ok)
       expect(JSON.parse(Setting.find_by!(key: doc_key).value)).to have_key('profit_lock')
     end
 
     it 'rejects values the config validator forbids' do
-      patch '/api/settings/bulk', params: { settings: { risk: { sl_pct: 5 } } }
+      put '/api/settings', params: { settings: { risk: { sl_pct: 5 } } }
       expect(response).to have_http_status(:unprocessable_content)
       expect(response.parsed_body['error']).to include('sl_pct')
       expect(JSON.parse(Setting.find_by!(key: doc_key).value).dig('risk', 'sl_pct').to_f).to eq(0.02)
@@ -178,7 +178,7 @@ RSpec.describe 'Api::Settings' do
     end
   end
 
-  describe 'POST /api/settings/update_ip' do
+  describe 'PATCH /api/settings/ip_whitelist' do
     context 'when SETTINGS_UPDATE_TOKEN is set' do
       around do |example|
         prior = ENV.fetch('SETTINGS_UPDATE_TOKEN', nil)
@@ -193,7 +193,7 @@ RSpec.describe 'Api::Settings' do
       end
 
       it 'rejects requests without the token' do
-        post '/api/settings/update_ip'
+        patch '/api/settings/ip_whitelist'
         expect(response).to have_http_status(:unauthorized)
       end
 
@@ -201,7 +201,7 @@ RSpec.describe 'Api::Settings' do
         allow(Dhan::IpService).to receive(:fetch_ip_info).and_return(
           { public_ipv4: 'Unknown', public_ipv6: 'Unknown', registered_ips: nil }
         )
-        post '/api/settings/update_ip', headers: { 'X-Settings-Update-Token' => 'test-token' }
+        patch '/api/settings/ip_whitelist', headers: { 'X-Settings-Update-Token' => 'test-token' }
         expect(response).to have_http_status(:ok)
         json = response.parsed_body
         expect(json['success']).to be(false)
@@ -214,7 +214,7 @@ RSpec.describe 'Api::Settings' do
         allow(Dhan::IpService).to receive(:update_ip).with('1.2.3.4').and_return(
           { success: true, flag: 'PRIMARY' }
         )
-        post '/api/settings/update_ip', headers: { 'X-Settings-Update-Token' => 'test-token' }
+        patch '/api/settings/ip_whitelist', headers: { 'X-Settings-Update-Token' => 'test-token' }
         expect(response).to have_http_status(:ok)
         json = response.parsed_body
         expect(json['success']).to be(true)
@@ -223,7 +223,7 @@ RSpec.describe 'Api::Settings' do
     end
   end
 
-  describe 'PATCH /api/settings/deep_merge' do
+  describe 'PATCH /api/settings' do
     context 'when SETTINGS_UPDATE_TOKEN is set' do
       around do |example|
         prior = ENV.fetch('SETTINGS_UPDATE_TOKEN', nil)
@@ -238,7 +238,7 @@ RSpec.describe 'Api::Settings' do
       end
 
       it 'rejects requests without the token' do
-        patch '/api/settings/deep_merge', params: { patch: { signals: { fast_entry_mode: { enabled: true } } } }
+        patch '/api/settings', params: { patch: { signals: { fast_entry_mode: { enabled: true } } } }
         expect(response).to have_http_status(:unauthorized)
       end
 
@@ -247,7 +247,7 @@ RSpec.describe 'Api::Settings' do
         # — Signal::FastEntryMode.persisted_enabled? does a strict `== true` check, so a
         # form-encoded "true" string (as the other describe blocks in this file send) would
         # silently fail to enable the flag. This request must exercise the real wire format.
-        patch '/api/settings/deep_merge',
+        patch '/api/settings',
               params: { patch: { signals: { fast_entry_mode: { enabled: true } } } },
               headers: { 'X-Settings-Update-Token' => 'test-token' },
               as: :json
@@ -259,12 +259,12 @@ RSpec.describe 'Api::Settings' do
       end
 
       it 'requires the patch param' do
-        patch '/api/settings/deep_merge', params: {}, headers: { 'X-Settings-Update-Token' => 'test-token' }
+        patch '/api/settings', params: {}, headers: { 'X-Settings-Update-Token' => 'test-token' }
         expect(response).to have_http_status(:bad_request)
       end
 
       it 'returns 422 when the patch only targets a non-permitted top-level key' do
-        patch '/api/settings/deep_merge',
+        patch '/api/settings',
               params: { patch: { dhanhq: { enable_orders: true } } },
               headers: { 'X-Settings-Update-Token' => 'test-token' },
               as: :json
@@ -286,7 +286,7 @@ RSpec.describe 'Api::Settings' do
           entry_quality: { gates: { block_choppy_regime: false } }
         }
         nested_by_key.each do |top_key, nested|
-          patch '/api/settings/deep_merge',
+          patch '/api/settings',
                 params: { patch: { top_key => nested } },
                 headers: { 'X-Settings-Update-Token' => 'test-token' },
                 as: :json
@@ -297,7 +297,7 @@ RSpec.describe 'Api::Settings' do
       end
 
       it 'returns 422 when the patch only targets the run_mode non-permitted key' do
-        patch '/api/settings/deep_merge',
+        patch '/api/settings',
               params: { patch: { run_mode: { mode: 'live' } } },
               headers: { 'X-Settings-Update-Token' => 'test-token' },
               as: :json

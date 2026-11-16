@@ -22,6 +22,8 @@ module Reports
       RECONCILIATION_MAX_AGE = 5.minutes
       REJECTION_REASON_LIMIT = 6
       UNSUPPORTED_CONTEXT = %w[market_breadth fii_dii_flows sector_performance global_indices news].freeze
+      INDIA_VIX_SECURITY_ID = 21 # Dhan IDX_I security id for India VIX
+      DISPLAY_VIX_CACHE_KEY = 'market_brief:display_vix'
       HEALTHY_COMPONENT = %w[ok not_required].freeze
       LIVE_STATUSES = %w[live fresh].freeze
       SMC_DECISIONS = { 'call' => 'CALL', 'put' => 'PUT', 'no_trade' => 'NO_TRADE' }.freeze
@@ -177,8 +179,8 @@ module Reports
         return { status: 'unavailable' }.tap { @warnings << "#{cfg[:key]}_quote_unavailable" } unless tick
 
         ltp = tick.ltp.to_f
-        prev_close = tick.prev_close.to_f.positive? ? tick.prev_close.to_f : nil
         observed_at = parse_time(tick.timestamp)
+        prev_close = tick.prev_close.to_f.positive? ? tick.prev_close.to_f : display_prev_close(cfg[:key], observed_at)
         freshness = tick.freshness(QUOTE_LIVE_MAX_AGE)
 
         status = if freshness == :invalid then 'invalid'
@@ -332,6 +334,7 @@ module Reports
         vix_value = Market::VixGate.current_ltp
         evaluated = Market::VixGate.evaluated?
         observed_at = parse_time(Rails.cache.read(Market::VixGate::CACHE_TS_KEY))
+        vix_value, observed_at = display_vix unless vix_value&.positive?
 
         {
           vix: {
@@ -347,6 +350,36 @@ module Reports
           # rather than approximated from index indicators.
           unavailable: UNSUPPORTED_CONTEXT
         }
+      end
+
+      # The feed only sends prev_close packets during the session, so after hours the
+      # change % was blank. Close of the last daily bar before the quote's session date.
+      def display_prev_close(index_key, observed_at)
+        return nil unless observed_at
+
+        session_date = observed_at.to_date
+        Rails.cache.fetch("market_brief:prev_close:#{index_key}:#{session_date}", expires_in: 12.hours, skip_nil: true) do
+          bars = IndexConfigLoader.index_instrument(index_key)
+                                  &.historical_ohlc(from_date: (session_date - 10).to_s, to_date: (session_date + 1).to_s)
+          Array(bars).select { |bar| bar[:timestamp].to_date < session_date }.max_by { |bar| bar[:timestamp] }&.dig(:close)&.to_f
+        end
+      rescue StandardError => e
+        Rails.logger.warn("[MarketBrief::SnapshotBuilder] prev close for #{index_key} failed: #{e.class} - #{e.message}")
+        nil
+      end
+
+      # The VIX gate only caches VIX while it is configured and evaluating (market hours),
+      # so the brief would show NO DATA otherwise. Display-only: never written to gate keys.
+      def display_vix
+        cached = Rails.cache.fetch(DISPLAY_VIX_CACHE_KEY, expires_in: 5.minutes) do
+          ltp = DhanHQ::Models::MarketFeed.ltp({ 'IDX_I' => [INDIA_VIX_SECURITY_ID] })
+                                          .dig('data', 'IDX_I', INDIA_VIX_SECURITY_ID.to_s, 'last_price')
+          { value: ltp.to_f, at: Time.current.to_i } if ltp.to_f.positive?
+        end
+        cached ? [cached[:value], parse_time(cached[:at])] : [nil, nil]
+      rescue StandardError => e
+        Rails.logger.warn("[MarketBrief::SnapshotBuilder] India VIX fetch failed: #{e.class} - #{e.message}")
+        [nil, nil]
       end
 
       # ------------------------------------------------------------------

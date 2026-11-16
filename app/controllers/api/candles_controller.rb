@@ -12,9 +12,9 @@ module Api
     ALLOWED_INTERVALS = %w[1 5 15 25 60].freeze
     MAX_DAYS = 30
 
-    def index
+    def show
       index_key = params[:index_key].to_s.upcase
-      instrument = find_instrument(index_key)
+      instrument = IndexConfigLoader.index_instrument(index_key)
       return render json: { error: 'Index not found' }, status: :not_found unless instrument
 
       interval = ALLOWED_INTERVALS.include?(params[:interval].to_s) ? params[:interval].to_s : '5'
@@ -33,16 +33,6 @@ module Api
     end
 
     private
-
-    def find_instrument(index_key)
-      index_cfg = IndexConfigLoader.load_indices.find { |idx| idx[:key].to_s.upcase == index_key }
-      return nil unless index_cfg
-
-      Instrument.find_by_sid_and_segment(
-        security_id: index_cfg[:sid],
-        segment_code: index_cfg[:segment]
-      )
-    end
 
     # DhanHQ intraday fetch is the slow part (network round-trip per request).
     # Cache the raw bars per index/interval/days — TTL scaled to the candle size so
