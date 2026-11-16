@@ -105,25 +105,15 @@ namespace :ai do
 
     # Show available models for Ollama
     if client.provider == :ollama
-      if client.available_models&.any?
-        puts "   Available models: #{client.available_models.join(', ')}"
-        puts "   Selected model: #{client.selected_model || 'auto-selecting...'}"
-      else
-        puts '   Fetching available models...'
-        models = client.fetch_available_models
-        if models.any?
-          puts "   Available models: #{models.join(', ')}"
-          puts "   Selected model: #{client.selected_model || client.select_best_model}"
-        else
-          puts '   ⚠️  No models found. Pull a model: ollama pull llama3'
-        end
-      end
+      models = client.available_models.presence || client.fetch_available_models
+      puts "   Available models: #{models.any? ? models.join(', ') : 'none'}"
+      puts "   Default model: #{LLMSettings.default_model} · analysis model: #{LLMSettings.analysis_model}"
     end
     puts ''
 
     # Determine model to use
     test_model = if client.provider == :ollama
-                   client.selected_model || client.select_best_model || ENV['OLLAMA_MODEL'] || 'llama3'
+                   LLMSettings.analysis_model
                  else
                    'gpt-4o'
                  end
@@ -165,11 +155,11 @@ namespace :ai do
     if models.any?
       puts "Found #{models.count} model(s):"
       models.each_with_index do |model, idx|
-        marker = model == client.selected_model ? '⭐ (selected)' : ''
+        marker = [LLMSettings.default_model, LLMSettings.analysis_model].include?(model) ? '⭐ (configured)' : ''
         puts "  #{idx + 1}. #{model} #{marker}"
       end
       puts ''
-      puts "Best model: #{client.selected_model || client.select_best_model}"
+      puts "Default model: #{LLMSettings.default_model} · analysis model: #{LLMSettings.analysis_model}"
     else
       puts '❌ No models found'
       puts '   Pull a model: ollama pull llama3'

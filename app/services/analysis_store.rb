@@ -18,8 +18,11 @@ class AnalysisStore
     regime: 2.minutes
   }.freeze
 
-  # Hard expiry — cache entry auto-deleted after this (allows stale reads for a buffer)
-  HARD_EXPIRY_BUFFER = 5.minutes
+  # Hard expiry — how long a stale entry stays readable. The recurring refresh only runs
+  # in market hours, so a short buffer blanked the Market Brief every evening, weekend and
+  # holiday. Readers get validity.fresh=false and label it stale; nothing in the order path
+  # reads this store.
+  HARD_EXPIRY_BUFFER = 4.days
 
   class << self
     # Read a single component for an index

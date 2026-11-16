@@ -5,7 +5,7 @@ require 'ollama_client'
 module Services
   module Ai
     # Thin wrapper around Ollama::Client for trading AI analysis.
-    # Provides serialized request queuing, model auto-selection, and a
+    # Provides serialized request queuing (model choice lives in LLMSettings) and a
     # stable interface (chat / generate / chat_stream) for the rest of the app.
     class OllamaClient
       class << self
@@ -50,12 +50,11 @@ module Services
         @enabled               = false
         @client                = nil
         @available_models      = nil
-        @selected_model        = nil
         @last_request_time     = nil
         ensure_connection!
       end
 
-      attr_reader :provider, :selected_model, :available_models
+      attr_reader :provider, :available_models
 
       def client
         ensure_connection!
@@ -115,57 +114,6 @@ module Services
       end
 
       delegate :get_cached_models, :set_cached_models, to: :class
-
-      def select_best_model
-        fetch_available_models if @available_models.nil?
-
-        explicit = ENV['OLLAMA_MODEL'].presence
-        if explicit
-          if @available_models&.include?(explicit)
-            @selected_model = explicit
-            Rails.logger.info("[OllamaClient] Using explicitly set model: #{explicit}")
-            return explicit
-          else
-            Rails.logger.warn("[OllamaClient] OLLAMA_MODEL=#{explicit} not found in available models — falling back to auto-selection")
-          end
-        end
-
-        return nil if @available_models.blank?
-
-        priority = %w[
-          llama3.1:8b llama3.1:8b-instruct llama3:8b llama3:8b-instruct
-          mistral:7b mistral mistral:instruct
-          llama3.2:3b llama3.2:3b-instruct
-          phi3:mini phi3 phi3:medium
-          qwen2.5:1.5b-instruct gemma:2b gemma
-          llama3:70b llama3:70b-instruct llama3 llama3:instruct
-          codellama codellama:instruct gemma:7b
-        ]
-
-        selected = priority.find { |m| @available_models.include?(m) }
-        selected ||= @available_models.find { |m| text_capable_model?(m) }
-        selected ||= @available_models.first
-
-        @selected_model = selected
-        Rails.logger.info("[OllamaClient] Auto-selected model: #{selected}")
-        selected
-      end
-
-      def preferred_text_model(default: 'llama3.1:8b')
-        fetch_and_select_model if @selected_model.nil? && @available_models.nil?
-
-        explicit = ENV['OLLAMA_MODEL'].presence
-        return explicit if explicit && text_capable_model?(explicit)
-
-        return @selected_model if @selected_model.present? && text_capable_model?(@selected_model)
-
-        @available_models&.find { |m| text_capable_model?(m) } || default
-      end
-
-      def fetch_and_select_model
-        fetch_available_models
-        select_best_model
-      end
 
       # ------------------------------------------------------------------
       # Chat
@@ -274,7 +222,6 @@ module Services
           @connection_fingerprint = fp
           @client = nil
           @available_models = nil
-          @selected_model = nil
           @enabled = connection_allowed?(use_cloud: use_cloud, base: base, key: key)
           build_client! if @enabled
         end
@@ -326,7 +273,7 @@ module Services
 
         config = Ollama::Config.new
         config.base_url    = base
-        config.model       = ENV.fetch('OLLAMA_MODEL', 'llama3.2:3b')
+        config.model       = LLMSettings.analysis_model
         config.timeout     = timeout
         config.temperature = 0.2
         config.strict_json = false
@@ -344,10 +291,7 @@ module Services
       end
 
       def resolve_model(model)
-        return model if model.present?
-
-        fetch_and_select_model if @selected_model.nil?
-        @selected_model || ENV.fetch('OLLAMA_MODEL', 'llama3.2:3b')
+        model.presence || LLMSettings.analysis_model
       end
 
       def with_serialization(&)
@@ -417,12 +361,6 @@ module Services
         end || []
 
         { content: content, tool_calls: tool_calls }
-      end
-
-      def text_capable_model?(name)
-        return false if name.blank?
-
-        %w[vl vision llava minicpm-v qwen-vl].none? { |m| name.downcase.include?(m) }
       end
 
       def estimate_token_count(messages)

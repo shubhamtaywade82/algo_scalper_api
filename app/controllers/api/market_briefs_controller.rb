@@ -28,7 +28,7 @@ module Api
       end
 
       latest = MarketBriefReport.latest_ready(mode: mode)
-      in_flight = MarketBriefReport.for_mode(mode).where(status: %w[pending building]).latest_first.first
+      in_flight = MarketBriefReport.for_mode(mode).in_flight.latest_first.first
       in_flight = nil if latest && in_flight && in_flight.created_at < latest.created_at
 
       render json: {

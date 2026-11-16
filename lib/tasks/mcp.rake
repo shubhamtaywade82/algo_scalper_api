@@ -6,8 +6,7 @@ namespace :mcp do
     question = args[:question].presence || abort('usage: bin/rails "mcp:ask[How is NIFTY looking?]"')
     bridge = MCP::OllamaBridge.new(
       token: ENV.fetch('MCP_API_TOKEN', nil),
-      url: ENV.fetch('MCP_URL', MCP::OllamaBridge::DEFAULT_URL),
-      model: ENV.fetch('MCP_OLLAMA_MODEL', MCP::OllamaBridge::DEFAULT_MODEL)
+      url: ENV.fetch('MCP_URL', MCP::OllamaBridge::DEFAULT_URL)
     )
     puts bridge.ask(question)
   end

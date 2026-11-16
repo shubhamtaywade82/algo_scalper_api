@@ -15,7 +15,7 @@ module Api
 
       # Loopback call: the MCP gateway lets same-machine clients in without a token.
       def bridge
-        @bridge ||= ::MCP::OllamaBridge.new(model: ENV.fetch('MCP_OLLAMA_MODEL', ::MCP::OllamaBridge::DEFAULT_MODEL))
+        @bridge ||= ::MCP::OllamaBridge.new
       end
 
       def render_mcp_error(error)

@@ -13,6 +13,8 @@ module Reports
     class LiveBrief
       CACHE_TTL = 3.seconds
       STALE_AI_AFTER = 20.minutes
+      # How far back the AI panel may reach for the last session's commentary (covers long weekends).
+      PREVIOUS_SESSION_LOOKBACK = 7
 
       class << self
         def call(mode: AlgoConfig.mode, now: Time.current)
@@ -35,10 +37,9 @@ module Reports
 
       def payload_for(snapshot)
         trading_date = snapshot['trading_date']
-        analysis_report = MarketBriefReport.for_mode(@mode).where(ai_status: 'completed', trading_date: trading_date)
-                                           .latest_first.first
+        analysis_report = latest_analysis(trading_date)
         latest_attempt = MarketBriefReport.for_mode(@mode).ready.where(trading_date: trading_date).latest_first.first
-        in_flight = MarketBriefReport.for_mode(@mode).where(status: %w[pending building]).latest_first.first
+        in_flight = MarketBriefReport.for_mode(@mode).in_flight(@now).latest_first.first
 
         {
           live: true,
@@ -62,6 +63,14 @@ module Reports
         # A cache-store failure must not take the live page down; build uncached.
         Rails.logger.warn("[MarketBrief::LiveBrief] cache unavailable: #{e.class}")
         SnapshotBuilder.call(now: @now)
+      end
+
+      # Before the day's first AI run (pre-market, or a day the app was off) fall back to the
+      # last session's commentary instead of an empty panel; the payload flags it.
+      def latest_analysis(trading_date)
+        completed = MarketBriefReport.for_mode(@mode).where(ai_status: 'completed').latest_first
+        completed.find_by(trading_date: trading_date) ||
+          completed.where(trading_date: (trading_date_for(trading_date) - PREVIOUS_SESSION_LOOKBACK)...).first
       end
 
       def trading_date_for(iso_date)
@@ -107,6 +116,8 @@ module Reports
           model: analysis_report.ai_model,
           generated_at: analysis_report.ai_generated_at&.iso8601,
           report_id: analysis_report.id,
+          trading_date: analysis_report.trading_date.iso8601,
+          from_previous_session: analysis_report.trading_date.iso8601 != snapshot['trading_date'].to_s,
           trigger: analysis_report.trigger,
           trigger_reasons: analysis_report.trigger_reasons,
           based_on_snapshot_at: based_on&.iso8601,

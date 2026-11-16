@@ -10,7 +10,6 @@ module MCP
     class Error < StandardError; end
 
     DEFAULT_URL = 'http://127.0.0.1:62770/'
-    DEFAULT_MODEL = 'openbmb/minicpm5-2b'
     PROTOCOL_VERSION = '2025-11-25'
     # Small models loop on tool calls; cap rounds and force a plain answer after.
     MAX_TOOL_ROUNDS = 3
@@ -21,7 +20,7 @@ module MCP
       You cannot place or cancel trades. Answer in a few short plain sentences; no tables or headings.
     PROMPT
 
-    def initialize(token: nil, url: DEFAULT_URL, model: DEFAULT_MODEL, llm: Services::Ai::OllamaClient.instance)
+    def initialize(token: nil, url: DEFAULT_URL, model: LLMSettings.default_model, llm: Services::Ai::OllamaClient.instance)
       @uri = URI(url)
       @token = token
       @model = model

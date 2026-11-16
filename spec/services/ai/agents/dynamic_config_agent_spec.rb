@@ -5,7 +5,7 @@ require 'rails_helper'
 RSpec.describe Ai::Agents::DynamicConfigAgent do
   subject(:agent) { described_class.new }
 
-  let(:client) { instance_double(Services::Ai::OllamaClient, enabled?: true, preferred_text_model: 'model', generate: raw_response) }
+  let(:client) { instance_double(Services::Ai::OllamaClient, enabled?: true, generate: raw_response) }
   let(:raw_response) do
     { 'market_assessment' => { 'regime' => 'choppy', 'iv_environment' => 'high' },
       'parameter_changes' => [

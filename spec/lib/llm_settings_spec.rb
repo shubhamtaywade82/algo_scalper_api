@@ -3,39 +3,27 @@
 require 'rails_helper'
 
 RSpec.describe LLMSettings do
-  def with_env(vars)
-    stub_const('ENV', ENV.to_h.except('OLLAMA_BASE_URL', 'OLLAMA_MODEL', 'OLLAMA_API_KEY', 'OLLAMA_TIMEOUT').merge(vars))
+  around do |example|
+    keys = %w[OLLAMA_MODEL OLLAMA_ANALYSIS_MODEL OLLAMA_BASE_URL]
+    saved = keys.index_with { |k| ENV.fetch(k, nil) }
+    keys.each { |k| ENV.delete(k) }
+    example.run
+  ensure
+    saved.each { |k, v| v ? ENV[k] = v : ENV.delete(k) }
   end
 
-  it 'defaults to local Ollama with a /v1 base for the Chat Completions client' do
-    with_env({})
-    expect(described_class.provider).to eq(:ollama)
-    expect(described_class.api_base).to eq('http://localhost:11434/v1')
-    expect(described_class.default_model).to eq('llama3.2:3b')
-    expect(described_class.request_timeout).to eq(60)
+  it 'uses OLLAMA_MODEL for both tiers when no analysis model is set' do
+    ENV['OLLAMA_MODEL'] = 'openbmb/minicpm5-2b'
+    expect([described_class.default_model, described_class.analysis_model]).to eq(%w[openbmb/minicpm5-2b openbmb/minicpm5-2b])
   end
 
-  it 'does not double the /v1 suffix' do
-    with_env('OLLAMA_BASE_URL' => 'http://gpu-box:11434/v1/')
-    expect(described_class.api_base).to eq('http://gpu-box:11434/v1')
+  it 'lets OLLAMA_ANALYSIS_MODEL override only the analysis tier' do
+    ENV['OLLAMA_MODEL'] = 'openbmb/minicpm5-2b'
+    ENV['OLLAMA_ANALYSIS_MODEL'] = 'qwen3:4b'
+    expect([described_class.default_model, described_class.analysis_model]).to eq(%w[openbmb/minicpm5-2b qwen3:4b])
   end
 
-  it 'selects the Ollama Cloud provider (separate credentials in RubyLLM 2.x) for ollama.com' do
-    with_env('OLLAMA_BASE_URL' => 'https://ollama.com', 'OLLAMA_API_KEY' => 'k')
-    expect(described_class.provider).to eq(:ollama_cloud)
-    expect(described_class.api_base).to eq('https://ollama.com/v1')
-    expect(described_class.default_model).to eq('minimax-m2.5') # local default is not a cloud model
-    expect(described_class.api_key).to eq('k')
-  end
-
-  it 'honours an explicit model and ignores a malformed timeout' do
-    with_env('OLLAMA_MODEL' => 'gpt-oss:20b', 'OLLAMA_TIMEOUT' => 'abc')
-    expect(described_class.default_model).to eq('gpt-oss:20b')
-    expect(described_class.request_timeout).to eq(60)
-  end
-
-  it 'is applied to RubyLLM at boot' do
-    expect(RubyLLM.config.ollama_api_base).to eq(described_class.api_base)
-    expect(RubyLLM.config.default_model).to eq(described_class.default_model)
+  it 'falls back to the local default model when nothing is configured' do
+    expect(described_class.analysis_model).to eq(described_class::LOCAL_DEFAULT_MODEL)
   end
 end

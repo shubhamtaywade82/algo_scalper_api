@@ -267,7 +267,10 @@ function AiProvenance(props) {
             Setup decision changed since this analysis (was {humanize(ai().decision_at_analysis)}, now {humanize(props.liveDecision)}) — commentary may not reflect the current decision
           </span>
         </Show>
-        <Show when={ai().stale && !ai().decision_changed}>
+        <Show when={ai().from_previous_session}>
+          <span class="mb-chip mb-tone-warn" data-testid="ai-previous-session">Commentary from the {ai().trading_date} session — no AI run yet today; facts above are current</span>
+        </Show>
+        <Show when={ai().stale && !ai().decision_changed && !ai().from_previous_session}>
           <span class="mb-chip mb-tone-warn" data-testid="ai-stale">Commentary is older than 20 min — facts above are current</span>
         </Show>
         <Show when={newerFailure()}>

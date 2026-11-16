@@ -54,7 +54,7 @@ module Ai
         return nil unless client.enabled?
 
         schema = JSON.parse(File.read(SCHEMA_PATH))
-        client.generate(prompt: prompt, model: client.preferred_text_model, schema: schema)
+        client.generate(prompt: prompt, model: LLMSettings.analysis_model, schema: schema)
       rescue StandardError => e
         Rails.logger.error("[DynamicConfigAgent] AI generation failed: #{e.message}")
         nil

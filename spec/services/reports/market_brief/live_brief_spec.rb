@@ -52,8 +52,14 @@ RSpec.describe Reports::MarketBrief::LiveBrief do
     expect(live[:ai][:latest_attempt]).to include(report_id: failed.id, status: 'invalid', error: 'unparseable_json')
   end
 
-  it 'ignores commentary from a previous trading day' do
-    analysed_report(at: 1.day.ago)
+  it 'shows the previous session commentary, flagged, until today has its own' do
+    report = analysed_report(at: 1.day.ago)
+    expect(live[:ai]).to include(status: 'completed', report_id: report.id, from_previous_session: true,
+                                 trading_date: report.trading_date.iso8601, latest_attempt: nil)
+  end
+
+  it 'ignores commentary older than the previous-session lookback' do
+    analysed_report(at: (described_class::PREVIOUS_SESSION_LOOKBACK + 1).days.ago)
     expect(live[:ai]).to include(status: 'unavailable', analysis: nil, latest_attempt: nil)
   end
 
