@@ -216,3 +216,7 @@ All percentage values in `config/algo.yml` use **DECIMAL format**: `0.12` means 
 - Token refresh uses `Dhan::TokenManager` with 3-tier fallback: authority server → TOTP auto-refresh → static ENV
 - **Booked P&L uses statutory charges**, not the flat `broker_fees.fee_per_order`: `Positions::FinalPnl.from_exit_price(..., segment:)` and the ledger posters use `Orders::ChargesCalculator` per leg (~₹88 per round trip vs ₹40 flat). Trackers closed since 2026-11-02 carry `meta['fee_model']='statutory'`; older rows keep the flat fee (use `FinalPnl.for_tracker` so a reconciler never mixes the two). Live marks and position sizing still use the flat fee
 - This app is the Dhan token **owner** for other local tools: `GET /api/dhan/token` (requires `API_OPERATOR_TOKEN`, even in dev) serves `Dhan::TokenManager.snapshot` — read-only, never refreshes. Any other app that logs in itself invalidates this app's token (DH-906); consumers (e.g. pine-ts-workbench) must fetch from here and generate their own only when this app is unreachable
+
+## MCP Tooling
+
+Follow the "Ruby/Rails MCP Tooling Policy" section in `AGENTS.md` — escalation order: `rails-context` (read-only) → in-shell `rspec` verification → gated `ruby-console` / `ruby-debug` (disabled by default, never against live-trading state).

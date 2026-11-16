@@ -1,0 +1,12 @@
+---
+description: Ruby/Rails MCP tool escalation policy for this repository
+alwaysApply: true
+---
+
+Follow the escalation order defined in `AGENTS.md` → "Ruby/Rails MCP Tooling Policy":
+
+1. **`rails-context`** (read-only) — load house rules first via `execute_tool("load_guide", { library: "custom", guide: "algo-scalper-architecture" })`, then `get_schema` / `get_routes` for database and route ground truth before generating model or controller code.
+2. Verification runs in-shell: `bundle exec rspec` (+ `rubocop`, `brakeman` on changed paths).
+3. `ruby-console` / `ruby-debug` are gated tools — propose enabling before use; never run them against live-trading state.
+
+Trading safety overrides all tooling: paper-first (`paper_trading.enabled: true`, `dhanhq.enable_orders: false`); never flip those flags; never invoke `Orders::GatewayLive`, DhanHQ order placement, or `Dhan::TokenManager` writes; never print DhanHQ tokens or `.env` contents.

@@ -1,5 +1,9 @@
 {
   "mcpServers": {
+    "rails-context": {
+      "command": "/home/nemesis/.rvm/gems/ruby-4.0.6/bin/rails-mcp-server",
+      "args": ["--single-project"]
+    },
     "railsforge": {
       "command": "node",
       "args": ["/home/nemesis/.vscode-server/extensions/shubhamtaywade.railsforge-0.1.4/dist/mcp/server.js"],
