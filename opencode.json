@@ -9,6 +9,17 @@
       ],
       "enabled": true
     },
+    "railsforge": {
+      "type": "local",
+      "command": [
+        "node",
+        "/home/nemesis/.cursor-server/extensions/shubhamtaywade.railsforge-0.1.4/dist/mcp/server.js"
+      ],
+      "enabled": true,
+      "environment": {
+        "RAILSFORGE_WORKSPACE_ROOT": "/home/nemesis/projects/indian-trading/algo_scalper_api"
+      }
+    },
     "ruby-harness": {
       "type": "local",
       "command": [
