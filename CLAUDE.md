@@ -219,4 +219,4 @@ All percentage values in `config/algo.yml` use **DECIMAL format**: `0.12` means 
 
 ## MCP Tooling
 
-Follow the "Ruby/Rails MCP Tooling Policy" section in `AGENTS.md` — escalation order: `rails-context` (read-only) → in-shell `rspec` verification → gated `ruby-console` / `ruby-debug` (disabled by default, never against live-trading state).
+Follow the "Ruby/Rails MCP Tooling Policy" section in `AGENTS.md` — escalation order: `rails-context` (read-only) → in-shell `rspec` verification → `ruby-console` / `ruby-debug` (enabled but last resort, never against live-trading state).

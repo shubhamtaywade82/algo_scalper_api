@@ -1,0 +1,401 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# One-command portable setup for the Ruby/Rails MCP stack this repo is wired for.
+#
+#   ./bin/setup_ai_mcp [--skip-validate]
+#
+# Configures five MCP servers for four AI clients (OpenCode, Claude Code, Cursor,
+# Antigravity) plus the house rules (AGENTS.md / CLAUDE.md / Cursor rules) and the
+# custom rails-mcp-server architecture guide.
+#
+# Design rules (learned the hard way — do not regress):
+# * Binaries are DETECTED at run time, never hardcoded (rvm/asdf/system ruby all work).
+# * `railsforge` binds via cwd in OpenCode (no RAILSFORGE_WORKSPACE_ROOT there);
+#   via explicit root in the per-project files of the other clients.
+# * `ruby-console` needs Node <= 20 headers when the system g++ is older than 10
+#   (Node >= 22 forces -std=gnu++20 for native addons). We build a pinned host at
+#   ~/.local/share/ruby-console-mcp-host and point configs at its absolute node.
+# * Idempotent: re-runs never overwrite existing config entries or re-build artifacts.
+
+require "json"
+require "fileutils"
+require "open3"
+require "timeout"
+
+REPO_ROOT = File.expand_path("..", __dir__)
+HOME      = Dir.home
+CONSOLE_HOST_DIR = File.join(HOME, ".local/share/ruby-console-mcp-host")
+CONSOLE_JS       = File.join(CONSOLE_HOST_DIR, "node_modules/ruby-console-mcp/build/index.js")
+GUIDE_DEST_DIR   = File.join(HOME, ".config/rails-mcp/resources/custom")
+RAILSFORGE_EXT_GLOB = File.join(HOME, "{.cursor-server,.vscode-server}/extensions/shubhamtaywade.railsforge-*/dist/mcp/server.js")
+
+SKIP_VALIDATE = ARGV.include?("--skip-validate")
+FAILED = [].freeze
+
+def say(msg)
+  $stdout.puts "[setup_ai_mcp] #{msg}"
+end
+
+def find_in_path(name)
+  out, = Open3.capture2("sh", "-c", "command -v #{name} 2>/dev/null")
+  out.strip.empty? ? nil : out.strip
+end
+
+def gem_bin(name)
+  found = find_in_path(name)
+  return found if found
+
+  say("gem '#{name}' not found — installing…")
+  system("gem", "install", name, "--no-document")
+  find_in_path(name).tap do |p|
+    say("  ✗ could not install gem '#{name}'") unless p
+  end
+end
+
+# --- Node selection: prefer anything < 22 (C++20-header problem), Node 20 best ---
+def node_version(path)
+  out, = Open3.capture2(path, "-v")
+  out[/v?(\d+)\.(\d+)\.(\d+)/, 1].to_i
+rescue StandardError
+  999
+end
+
+def pick_node
+  candidates = [find_in_path("node"), *Dir[File.join(HOME, ".nvm/versions/node/v*/bin/node")]].compact.uniq
+  return nil if candidates.empty?
+
+  current = candidates.first
+  return current if node_version(current) < 22
+
+  under22 = candidates.select { |c| node_version(c) < 22 }
+                      .max_by { |c| node_version(c) }
+  under22 || current
+end
+
+def build_console_host(node_path)
+  return CONSOLE_JS if File.exist?(CONSOLE_JS)
+
+  node_bin = File.dirname(node_path)
+  npm = File.exist?(File.join(node_bin, "npm")) ? File.join(node_bin, "npm") : "npm"
+  env = { "PATH" => "#{node_bin}:#{ENV.fetch('PATH', nil)}" }
+  FileUtils.mkdir_p(CONSOLE_HOST_DIR)
+  File.write(File.join(CONSOLE_HOST_DIR, "package.json"), <<~JSON)
+    {
+      "name": "ruby-console-mcp-host",
+      "private": true,
+      "overrides": { "node-pty": "1.0.0" }
+    }
+  JSON
+  ok = system(env, npm, "i", "ruby-console-mcp", "--ignore-scripts", chdir: CONSOLE_HOST_DIR)
+  ok &&= system(env, npm, "rebuild", "node-pty", chdir: CONSOLE_HOST_DIR)
+  unless ok && File.exist?(CONSOLE_JS)
+    say("  ✗ ruby-console build failed (node-pty needs g++ >= 10 or Node <= 20).")
+    say("    Fix: `nvm install 20` or `sudo apt install g++-10`, then re-run this script.")
+    return nil
+  end
+  CONSOLE_JS
+end
+
+def find_railsforge_server
+  paths = Dir[RAILSFORGE_EXT_GLOB].sort_by { |p| p[/railsforge-([\d.]+)/, 1].to_f }.reverse
+  return paths.first if paths.any?
+
+  # Best effort: install the extension for whichever VS Code-family CLI exists.
+  %w[cursor code].each do |cli|
+    next unless find_in_path(cli)
+
+    say("installing railsforge extension via #{cli}…")
+    system(cli, "--install-extension", "shubhamtaywade.railsforge",
+           out: File::NULL, err: File::NULL)
+    retry_glob = Dir[RAILSFORGE_EXT_GLOB].sort_by { |p| p[/railsforge-([\d.]+)/, 1].to_f }.reverse
+    return retry_glob.first if retry_glob.any?
+  end
+  nil
+end
+
+# --- Config writing (add-if-missing: existing entries are NEVER overwritten) ---
+def merge_client_config(path, root_key, servers)
+  data =
+    if File.exist?(path)
+      begin
+        JSON.parse(File.read(path))
+      rescue JSON::ParserError
+        {}
+      end
+    else
+      {}
+    end
+  data[root_key] ||= {}
+  changed = false
+  servers.each do |name, entry|
+    if entry.nil?
+      say("  – #{File.basename(path)}: skipping '#{name}' (dependency missing)")
+    elsif data[root_key].key?(name)
+      say("  = #{File.basename(path)}: '#{name}' already present — keeping existing")
+    else
+      data[root_key][name] = entry
+      changed = true
+      say("  + #{File.basename(path)}: added '#{name}'")
+    end
+  end
+  return unless changed || !File.exist?(path)
+
+  FileUtils.mkdir_p(File.dirname(path))
+  File.write(path, "#{JSON.pretty_generate(data)}\n")
+end
+
+def ensure_block(path, guard, content)
+  if File.exist?(path)
+    body = File.read(path)
+    if body.include?(guard)
+      say("  = #{File.basename(path)}: policy already present — skipping")
+      return
+    end
+    File.write(path, "#{body.rstrip}\n\n#{content}")
+  else
+    FileUtils.mkdir_p(File.dirname(path))
+    File.write(path, content)
+  end
+  say("  + #{File.basename(path)}: appended")
+end
+
+CONSOLE_ENV = lambda { |root|
+  {
+    "RUBY_APP_PATH" => root,
+    "RUBY_CONSOLE_COMMAND" => "bundle exec rails c --sandbox",
+    "COMMAND_TIMEOUT" => "60000"
+  }
+}
+
+# --- Validation: cheap stdio probes (initialize + tools/list) ---
+def probe_stdio(name, cmd, env: {}, chdir: REPO_ROOT)
+  Open3.popen3(env, *cmd, chdir: chdir) do |stdin, stdout, _stderr, wait_thr|
+      Timeout.timeout(30) do
+        stdin.puts '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"probe","version":"1.0"}}}'
+        init = loop do
+          line = stdout.gets
+          break nil if line.nil?
+          parsed = begin
+                     JSON.parse(line)
+          rescue StandardError
+                     nil
+          end
+          break parsed if parsed&.key?("result")
+        end
+        return { name: name, status: "✗ no initialize reply" } unless init
+
+        stdin.puts '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+        list = loop do
+          line = stdout.gets
+          break nil if line.nil?
+          parsed = begin
+                     JSON.parse(line)
+          rescue StandardError
+                     nil
+          end
+          break parsed if parsed&.key?("result")
+        end
+        tools = list&.dig("result", "tools")&.size
+        { name: name, status: tools ? "✓ connected, #{tools} tools" : "✗ tools/list failed" }
+      end
+  rescue Timeout::Error, EOFError, IOError
+      { name: name, status: "✗ probe timeout" }
+  ensure
+      begin
+        stdin.close
+      rescue StandardError
+        nil
+      end
+      wait_thr.value # reap
+  end
+end
+
+# ---------- main ----------
+say("Repo: #{REPO_ROOT}")
+say("Detecting/installing gem-provided servers…")
+rails_mcp = gem_bin("rails-mcp-server")        || (FAILED << "rails-mcp-server"
+ nil)
+debug_mcp = gem_bin("debug-mcp")               || (FAILED << "debug-mcp"
+ nil)
+harness   = gem_bin("ask-rails-harness-mcp")   || (FAILED << "ask-rails-harness-mcp"
+ nil)
+
+say("Selecting Node for ruby-console-mcp (needs <= 20 when g++ < 10)…")
+node_path = pick_node
+console_js = node_path ? build_console_host(node_path) : nil
+FAILED << "ruby-console-mcp" if node_path.nil? || console_js.nil?
+say("  node: #{node_path || 'NOT FOUND'}") if node_path
+
+say("Locating RailsForge MCP server (VS Code/Cursor extension bundle)…")
+railsforge_js = find_railsforge_server
+FAILED << "railsforge extension" if railsforge_js.nil?
+say("  server.js: #{railsforge_js || 'NOT FOUND (skipping railsforge entries)'}")
+
+say("Writing client configs…")
+console_openode = console_js && {
+  "type" => "local",
+  "command" => [node_path, console_js],
+  "enabled" => true,
+  "environment" => CONSOLE_ENV.call(REPO_ROOT)
+}
+console_env_style = console_js && {
+  "command" => node_path,
+  "args" => [console_js],
+  "env" => CONSOLE_ENV.call(REPO_ROOT)
+}
+console_cwd_style = console_js && {
+  "command" => node_path,
+  "args" => [console_js],
+  "cwd" => REPO_ROOT,
+  "env" => CONSOLE_ENV.call(REPO_ROOT)
+}
+
+merge_client_config(File.join(REPO_ROOT, "opencode.json"), "mcp", {
+  "rails-context" => rails_mcp && { "type" => "local", "command" => [rails_mcp, "--single-project"], "enabled" => true },
+  # cwd-binding on purpose: follows the active project automatically (no env var).
+  "railsforge" => railsforge_js && { "type" => "local", "command" => ["node", railsforge_js], "enabled" => true },
+  "ruby-harness" => harness && { "type" => "local", "command" => [harness], "enabled" => true },
+  "ruby-console" => console_openode,
+  "ruby-debug" => debug_mcp && { "type" => "local", "command" => [debug_mcp], "enabled" => true }
+})
+
+merge_client_config(File.join(REPO_ROOT, ".mcp.json"), "mcpServers", {
+  "rails-context" => rails_mcp && { "command" => rails_mcp, "args" => ["--single-project"] },
+  "railsforge" => railsforge_js && { "command" => "node", "args" => [railsforge_js], "env" => { "RAILSFORGE_WORKSPACE_ROOT" => REPO_ROOT } },
+  "rails-harness" => harness && { "command" => harness },
+  "debug" => debug_mcp && { "command" => debug_mcp },
+  "ruby-console" => console_env_style
+})
+
+merge_client_config(File.join(REPO_ROOT, ".cursor/mcp.json"), "mcpServers", {
+  "rails-context" => rails_mcp && { "command" => rails_mcp, "args" => ["--single-project"] },
+  "railsforge" => railsforge_js && { "command" => "node", "args" => [railsforge_js], "env" => { "RAILSFORGE_WORKSPACE_ROOT" => REPO_ROOT } },
+  "rails-harness" => harness && { "command" => harness },
+  "ruby-console" => console_env_style,
+  "ruby-debug" => debug_mcp && { "command" => debug_mcp }
+})
+
+merge_client_config(File.join(REPO_ROOT, ".agents/mcp_config.json"), "mcpServers", {
+  "rails-context" => rails_mcp && { "command" => rails_mcp, "args" => ["--single-project"], "cwd" => REPO_ROOT },
+  "railsforge" => railsforge_js && { "command" => "node", "args" => [railsforge_js], "cwd" => REPO_ROOT },
+  "ruby-harness" => harness && { "command" => harness, "cwd" => REPO_ROOT },
+  "ruby-console" => console_cwd_style,
+  "ruby-debug" => debug_mcp && { "command" => debug_mcp }
+})
+
+say("Writing house rules…")
+ensure_block(File.join(REPO_ROOT, ".cursor/rules/mcp-tooling.mdc"), "escalation order", <<~MDC)
+  ---
+  description: Ruby/Rails MCP tool escalation policy for this repository
+  alwaysApply: true
+  ---
+
+  Follow the escalation order defined in `AGENTS.md` → "Ruby/Rails MCP Tooling Policy":
+
+  1. **`rails-context`** (read-only) — load house rules first via `execute_tool("load_guide", { library: "custom", guide: "algo-scalper-architecture" })`, then `get_schema` / `get_routes` for database and route ground truth before generating model or controller code.
+  2. Verification runs in-shell: `bundle exec rspec` (+ `rubocop`, `brakeman` on changed paths).
+  3. `ruby-console` / `ruby-debug` are enabled but are **last resort** in this escalation order — never run them against live-trading state.
+
+  Trading safety overrides all tooling: paper-first (`paper_trading.enabled: true`, `dhanhq.enable_orders: false`); never flip those flags; never invoke `Orders::GatewayLive`, DhanHQ order placement, or `Dhan::TokenManager` writes; never print DhanHQ tokens or `.env` contents.
+MDC
+
+ensure_block(File.join(REPO_ROOT, "AGENTS.md"), "Ruby/Rails MCP Tooling Policy", <<~MD)
+  ## Ruby/Rails MCP Tooling Policy
+
+  Escalation order for connected MCP servers — static/structured first, arbitrary execution last:
+
+  1. **`rails-context`** (read-only) — load house rules first: `execute_tool("load_guide", { library: "custom", guide: "algo-scalper-architecture" })`, then `get_schema` / `get_routes` before generating model or controller code. `analyze_models` only sees `app/models`; use `rg`/read for `app/services|domain|strategies|lib`.
+  2. **Verification loop stays in-shell** (`bundle exec rspec`, `rubocop`, `brakeman`). `ruby-harness` boots the entire app at launch — prefer in-shell rspec unless its structured output is needed.
+  3. **`ruby-console` / `ruby-debug`** — last resort; never used against live-trading state; never prints tokens/ENV.
+
+  Trading safety overrides all tooling: paper-first (`paper_trading.enabled: true`, `dhanhq.enable_orders: false`); never flip those flags; never invoke `Orders::GatewayLive`, DhanHQ order placement, or `Dhan::TokenManager` writes; never print DhanHQ tokens or `.env` contents.
+MD
+
+ensure_block(File.join(REPO_ROOT, "CLAUDE.md"), "Ruby/Rails MCP Tooling Policy", <<~MD)
+  MCP tooling: follow the "Ruby/Rails MCP Tooling Policy" in AGENTS.md (escalation order + trading-safety rules) before using any MCP server.
+MD
+
+say("Installing custom rails-mcp-server guide…")
+FileUtils.mkdir_p(GUIDE_DEST_DIR)
+File.write(File.join(GUIDE_DEST_DIR, "algo-scalper-architecture.md"), <<~GUIDE)
+  # Algo Scalper API — Architecture & Agent Rules
+
+  > **AGENT OVERRIDE:** This repository deliberately diverges from fat-model Rails conventions.
+  > Rules here supersede default Rails idioms and built-in Rails guides. Verify claims with the
+  > workflow in §5 before writing code.
+
+  ## 1. Directory Topology
+
+  `analyze_models` only indexes `app/models`. The domain logic lives elsewhere — inspect these first with `list_files` / `get_file` (or `rg`):
+
+  - `app/models/` — ActiveRecord records: associations, enums, validations, scopes, plus small self-contained helpers (e.g. `Execution.record_from_order!`). No cross-model workflows.
+  - `app/services/<domain>/` — **The real domain layer.** Grouped by bounded context: `signal/`, `options/`, `orders/`, `live/`, `risk/`, `entries/`, `capital/`, `smc/`, `indicators/`, `dhan/`, `adapters/`, `positions/`, `trading/`, plus `Ledger::` classes. Controllers orchestrate; services decide.
+  - `app/domain/` — framework-independent POROs and value objects (`MarketTick`, `Errors`). **NOT visible to `analyze_models`** (verified: returns "Model 'MarketTick' not found").
+  - `app/strategies/` — trading strategy implementations.
+  - `app/jobs/` — Solid Queue jobs (NOT Sidekiq).
+  - `app/channels/` — ActionCable channels (`positions`, `dashboard`).
+  - `app/lib/` — `AlgoConfig` and supporting utilities (backed by `config/algo.yml`).
+  - `lib/trading_system/` — daemon bootstrap + supervisor (trading process lifecycle).
+  - `lib/services/ai/` — OpenAI/Ollama clients; `lib/notifications/` — Telegram notifier.
+  - `app/controllers/api/` — thin API-only JSON controllers; serializers own response shape.
+  - `spec/` — RSpec mirrors code paths (`app/services/foo/bar.rb` → `spec/services/foo/bar_spec.rb`); FactoryBot, VCR, WebMock, Shoulda Matchers.
+
+  ## 2. Banned / Discouraged Patterns
+
+  1. No business logic in controllers — parse params, call one service, render/serialize.
+  2. No generic service dumping — new services go in the matching `app/services/<domain>/` namespace.
+  3. No `default_scope`, no STI.
+  4. No side-effect callbacks for trading flows — workflows belong in services with explicit transactions.
+  5. Never hand-edit `db/schema.rb`; write migrations.
+  6. Percentage config values are DECIMAL fractions (`0.12` = 12%), never `12.0`.
+  7. Ruby files start with `# frozen_string_literal: true`; 2-space indentation; follow `.rubocop.yml`.
+
+  ## 3. Trading Safety Rules (Highest Priority)
+
+  1. **Paper-first.** Agent sessions operate with `paper_trading.enabled: true` and `dhanhq.enable_orders: false` (`config/algo.yml`). Never flip these switches or suggest flipping them without explicit human approval.
+  2. **Never touch live execution paths from console/debug tools**: no `Orders::GatewayLive`, no DhanHQ order placement endpoints, no `Dhan::TokenManager` writes, no real broker HTTP calls.
+  3. **Never print secrets**: DhanHQ access tokens, `.env` contents, `ENV` dumps, credential objects. This repo holds real broker credentials and console/debug tools do not mask them.
+  4. Market-hours awareness: the daemon only starts trading services when the market is open (`ENABLE_TRADING_SERVICES=true`). Do not fight that gate; do not simulate live fills in the dev database.
+  5. External side effects in console/debug tools (Telegram sends, Ollama calls, HTTP) execute for real — avoid triggering them.
+
+  ## 4. Ground-Truth Rules
+
+  1. Schema: always `get_schema` (columns, nullability, foreign keys, indexes). Migrations are history, not truth.
+  2. Routes: `get_routes` for the compiled table (custom constraints and namespaces included).
+  3. Runtime domain questions (how `Smc::TickAi::AnalysisService` wires up, what `AlgoConfig` returns): static tools cannot see them — prefer focused specs (`bundle exec rspec spec/...`) over live console probing.
+
+  ## 5. rails-mcp-server Workflow
+
+  1. Load this guide: `execute_tool("load_guide", { library: "custom", guide: "algo-scalper-architecture" })`.
+  2. `get_schema` / `get_routes` before generating any model or controller code.
+  3. `analyze_models` only for ActiveRecord models in `app/models`.
+  4. `list_files` / `get_file` for `app/services/`, `app/domain/`, `app/strategies/`, `lib/`.
+  5. `analyze_environment_config` when config drift across environments is suspected.
+GUIDE
+say("  + guide installed to #{GUIDE_DEST_DIR}")
+
+unless SKIP_VALIDATE
+  say("Validating servers (cheap stdio probes; ruby-harness skipped — it boots the whole trading app)…")
+  results = []
+  results << probe_stdio("rails-context", [rails_mcp, "--single-project"]) if rails_mcp
+  results << probe_stdio("railsforge", ["node", railsforge_js], env: { "RAILSFORGE_WORKSPACE_ROOT" => REPO_ROOT }) if railsforge_js
+  results << probe_stdio("ruby-console", [node_path, console_js], chdir: REPO_ROOT) if console_js && node_path
+  results << probe_stdio("ruby-debug", [debug_mcp]) if debug_mcp
+  results.each { |r| say("  #{r[:name]}: #{r[:status]}") }
+  FAILED << "server validation" if results.any? { |r| r[:status].start_with?("✗") }
+end
+
+say("")
+if FAILED.empty?
+  say("DONE. Setup complete and verified.")
+else
+  say("DONE WITH WARNINGS — unresolved: #{FAILED.uniq.join(', ')}")
+end
+say("Next steps:")
+say("  • OpenCode: restart or just start a session in this repo (config is project-scoped, hot-reloads).")
+say("  • Claude Code: start a session here and approve servers via /mcp if prompted.")
+say("  • Cursor: Settings → MCP & Integrations → enable the 5 servers (one-time approval).")
+say("  • Antigravity: auto-discovers .agents/mcp_config.json on next session.")
+say("  • ruby-harness boots the whole trading app at client launch — that is by design (user-approved).")
+exit(FAILED.empty? ? 0 : 1)
