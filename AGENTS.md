@@ -118,3 +118,18 @@
   - Behavioral impact
   - Tests and lint commands run
   - Remaining risks or follow-up tasks
+
+## Ruby/Rails MCP Tooling Policy (verified 2026-11-16)
+
+Escalation order for connected MCP servers — static/structured first, arbitrary execution last:
+
+1. **`rails-context`** (rails-mcp-server 2.0, read-only; 3 bootstrap tools: `switch_project`, `search_tools`, `execute_tool`):
+   - Load house rules first: `execute_tool("load_guide", { library: "custom", guide: "algo-scalper-architecture" })`.
+   - DB + route ground truth via `execute_tool("get_schema", ...)` / `execute_tool("get_routes", ...)` — never infer schema from migrations.
+   - `analyze_models` only sees `app/models`; it does NOT see `app/domain/` POROs (verified: `MarketTick` → "not found") or anything under `app/services/`, `app/strategies/`, `lib/`. Use `rg`/read for those.
+   - RailsForge MCP (already connected) overlaps on `list_routes`/`get_project_guidelines` — prefer `rails-context` for database truth.
+2. **Verification loop stays in-shell** per existing DoD (`bundle exec rspec`, `rubocop`, `brakeman`). `ruby-harness` (ask-rails-harness-mcp: `run_tests`, `read_log`, `query_database`, `run_command`, `schema_graph`, `route_inspector`) exists but **boots the entire trading app on launch** — disabled by default in `opencode.json`; enable only when its structured output is needed.
+3. **`ruby-console`** (ruby-console-mcp) — persistent PTY REPL, arbitrary Ruby eval. Sandbox is opt-in, tool output is uncapped, secrets are not masked. Disabled by default; never used against live-trading state; never prints tokens/ENV (see repo guide §3).
+4. **`ruby-debug`** (debug-mcp: `set_breakpoint`, `trigger_request`, `get_context`, `evaluate_code`, `continue_execution`, `rails_recent_events`, ...) — attaches to `rdbg --open` sessions. Disabled by default; enable only for live debugging; rdbg binds loopback/unix-socket only; never in production.
+
+Trading safety overrides all tooling: paper-first (`paper_trading.enabled: true`, `dhanhq.enable_orders: false`); never flip those flags; never invoke `Orders::GatewayLive`, DhanHQ order placement, or `Dhan::TokenManager` writes from console/debug tools; never print DhanHQ tokens or `.env` contents.

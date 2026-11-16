@@ -1,0 +1,41 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "rails-context": {
+      "type": "local",
+      "command": [
+        "/home/nemesis/.rvm/gems/ruby-4.0.6/bin/rails-mcp-server",
+        "--single-project"
+      ],
+      "enabled": true
+    },
+    "ruby-harness": {
+      "type": "local",
+      "command": [
+        "/home/nemesis/.rvm/gems/ruby-4.0.6/bin/ask-rails-harness-mcp"
+      ],
+      "enabled": false
+    },
+    "ruby-console": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "ruby-console-mcp"
+      ],
+      "enabled": false,
+      "environment": {
+        "RUBY_APP_PATH": "{env:PWD}",
+        "RUBY_CONSOLE_COMMAND": "bundle exec rails c --sandbox",
+        "COMMAND_TIMEOUT": "60000"
+      }
+    },
+    "ruby-debug": {
+      "type": "local",
+      "command": [
+        "/home/nemesis/.rvm/gems/ruby-4.0.6/bin/debug-mcp"
+      ],
+      "enabled": false
+    }
+  }
+}
