@@ -20,7 +20,12 @@ RSpec.describe ApplicationMCPTool do
 
   it 'exposes only the reviewed read-only tools' do
     expect(ActionMCP::ToolsRegistry.tools.keys).to contain_exactly(
-      'get_market_overview', 'get_risk_status', 'get_system_health'
+      'get_market_overview', 'get_risk_status', 'get_system_health',
+      'get_market_regime', 'get_feed_health', 'get_trading_signals',
+      'get_open_positions', 'get_position_details', 'get_closed_positions', 'get_live_pnl',
+      'get_circuit_breaker_status', 'get_daily_trade_limits',
+      'get_trading_mode', 'get_enabled_indices', 'get_algo_config',
+      'get_reconciliation', 'get_experiment_history'
     )
   end
 
