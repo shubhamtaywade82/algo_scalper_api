@@ -16,6 +16,15 @@
     },
     "debug": {
       "command": "debug-mcp"
+    },
+    "ruby-console": {
+      "command": "/home/nemesis/.nvm/versions/node/v20.19.0/bin/node",
+      "args": ["/home/nemesis/.local/share/ruby-console-mcp-host/node_modules/ruby-console-mcp/build/index.js"],
+      "env": {
+        "RUBY_APP_PATH": "/home/nemesis/projects/indian-trading/algo_scalper_api",
+        "RUBY_CONSOLE_COMMAND": "bundle exec rails c --sandbox",
+        "COMMAND_TIMEOUT": "60000"
+      }
     }
   }
 }
