@@ -41,7 +41,7 @@ RSpec.describe 'Api::Settings' do
 
     it 'replaces a permitted top-level subtree' do
       put '/api/settings',
-            params: { settings: { risk: { sl_pct: 0.03, trailing: { drawdown_pct: 0.02 } } } }
+          params: { settings: { risk: { sl_pct: 0.03, trailing: { drawdown_pct: 0.02 } } } }
       expect(response).to have_http_status(:ok)
       doc = JSON.parse(Setting.find_by!(key: doc_key).value)
       expect(doc.dig('risk', 'sl_pct').to_f).to eq(0.03)

@@ -25,6 +25,8 @@ stop_pid_file() {
 }
 
 stop_pid_file "tmp/pids/server.pid" "Puma"
+# bin/mcp (ActionMCP) — Puma renames its process, so the pattern match below misses it.
+stop_pid_file "tmp/pids/mcp.pid" "MCP server"
 
 stop_project_processes() {
   local pattern=$1
@@ -73,9 +75,11 @@ do
 done
 
 if command -v ss >/dev/null 2>&1; then
-  if ss -tlnp 2>/dev/null | grep -q ':3011'; then
-    echo "Warning: port 3011 still in use. Run: ss -tlnp | grep 3011"
-  fi
+  for port in 3011 62770; do
+    if ss -tlnp 2>/dev/null | grep -q ":$port"; then
+      echo "Warning: port $port still in use. Run: ss -tlnp | grep $port"
+    fi
+  done
 fi
 
 echo "Done. Start fresh with: ./bin/dev"

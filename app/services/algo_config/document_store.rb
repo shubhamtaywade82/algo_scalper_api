@@ -13,7 +13,7 @@ class AlgoConfig
         load_or_bootstrap!.deep_dup
       end
 
-      # Replace entire subtree for each present top-level key (PATCH /api/settings/bulk).
+      # Replace entire subtree for each present top-level key (PUT /api/settings).
       def apply_top_level_replacements!(replacements, source:, actor: nil, request_id: nil, metadata: {})
         raise ArgumentError, 'replacements must be a Hash' unless replacements.is_a?(Hash)
 

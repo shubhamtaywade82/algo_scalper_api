@@ -218,10 +218,11 @@ GET  /api/dashboard                   # Dashboard data
 GET  /api/positions                   # Active positions with live PnL
 GET  /api/analysis/:index_key         # AI analysis
 GET  /api/settings                    # Algo settings
-PATCH /api/settings/bulk              # Bulk update settings
+PUT  /api/settings                    # Replace settings sections ({settings})
+PATCH /api/settings                   # Deep-merge a settings patch ({patch})
 GET  /api/circuit_breaker             # Circuit breaker status
 POST /api/circuit_breaker/trip        # Trip (emergency halt)
 DELETE /api/circuit_breaker/trip      # Reset
-GET  /smc/decision                    # SMC analytics decision
+GET  /api/smc/decision                # SMC analytics decision (/smc/decision redirects)
 POST /cable                           # ActionCable (positions, dashboard channels)
 ```

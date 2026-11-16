@@ -69,8 +69,8 @@ RSpec.describe 'API token authentication' do
       ENV.delete('SETTINGS_UPDATE_TOKEN')
 
       put '/api/settings',
-            params: { settings: { feature_flags: {} } },
-            as: :json
+          params: { settings: { feature_flags: {} } },
+          as: :json
 
       expect(response).to have_http_status(:service_unavailable)
       body = response.parsed_body

@@ -81,8 +81,8 @@
   false`) so specs and CI are not throttled.
 - **Dev / production:** Enabled by default:
   - `/api/*` — default **240 requests / 5 minutes** per IP.
-  - `POST /api/analysis/:id/ai_snapshot` — **12 / minute** per IP (separate
-    bucket).
+  - `POST /api/analysis/:index_key/ai_snapshots` and `POST /api/mcp/questions`
+    (LLM calls) — **12 / minute** per IP (separate bucket).
 - **Tuning:** `RACK_ATTACK_API_LIMIT`, `RACK_ATTACK_API_PERIOD_SECONDS`,
   `RACK_ATTACK_AI_LIMIT`, `RACK_ATTACK_AI_PERIOD_SECONDS` in `.env` (see
   `.env.example`). Raise limits for load tests. Throttled clients get **429**

@@ -62,7 +62,7 @@ class AlgoConfig
       base_config = apply_profile(base_config)
 
       # 3. Merge the DB-canonical document (seeded from algo.yml + legacy overrides,
-      #    patched via /api/settings/bulk, calibration runs, profitability slices).
+      #    patched via PUT/PATCH /api/settings, calibration runs, profitability slices).
       base_config = deep_merge_hashes_with_arrays(base_config, DocumentStore.current_mutable_document)
 
       @cached_config = base_config

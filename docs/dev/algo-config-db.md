@@ -36,7 +36,7 @@ Apply via API after review:
 
 ```bash
 GET  /api/calibration_runs
-POST /api/calibration_runs/:id/apply   # requires X-Settings-Update-Token when set
+POST /api/calibration_runs/:id/application   # requires X-Settings-Update-Token when set
 ```
 
 Trailing optimizer (proposes, does not auto-apply by default):
@@ -63,7 +63,7 @@ Midday entry blackout + selective signal tier (config-only behavior change):
 bundle exec rake algo_config:apply_slice2
 
 # Or via API
-PATCH /api/settings/deep_merge
+PATCH /api/settings
 # patch: { trading_time_restrictions: { enabled: true, avoid_periods: ["11:00-13:45"] },
 #          signals: { signal_tier: "selective" } }
 
@@ -82,7 +82,7 @@ Pause SENSEX entries via per-index trade limit (requires `IndexTradeLimitGuard` 
 bundle exec rake algo_config:apply_slice3
 
 # Or via API
-PATCH /api/settings/deep_merge
+PATCH /api/settings
 # patch: { indices: [{ key: "SENSEX", trade_limits: { max_trades_per_day: 0 } }] }
 
 bundle exec rake algo_config:rollback_slice3
@@ -98,7 +98,7 @@ Cap worst-case premium bleed via adaptive trail entry_guard hard_stop and aligne
 bundle exec rake algo_config:apply_slice4
 
 # Or via API
-PATCH /api/settings/deep_merge
+PATCH /api/settings
 # patch: { risk: { sl_pct: 0.08, adaptive_trailing: { stages: [
 #   { name: "entry_guard", min_profit: 0.0, trail_behind_peak: 0.40, hard_stop: -0.08 },
 #   ... remaining stages unchanged ...
@@ -118,7 +118,7 @@ bundle exec rake algo_config:verify_canonical
 
 ## Runtime Updates
 
-- **API:** `PATCH /api/settings/bulk` (replace top-level subtree) or `PATCH /api/settings/deep_merge`
+- **API:** `PUT /api/settings` (replace top-level subtree) or `PATCH /api/settings`
 - **Dashboard:** Settings page writes to `algo_config_document`
 - **Audit trail:** `GET /api/settings/change_logs`
 

@@ -13,7 +13,7 @@ When you run `bin/dev`, it executes `bin/rails server`, which triggers Rails ini
 ### 1. Rails Server
 - **Command**: `bin/rails server`
 - **Purpose**: Starts the Puma web server on port 3000 (default)
-- **Routes**: Serves API endpoints (`/api/health`, `/api/test_broadcast`, `/up`)
+- **Routes**: Serves API endpoints (`/api/health`, `/api/test_broadcasts`, `/up`)
 
 ### 2. Initializers Load
 

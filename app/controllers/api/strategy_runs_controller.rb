@@ -15,17 +15,16 @@ module Api
       render json: { success: true, slug: @strategy.slug, status: "starting" }, status: :accepted
     end
 
-    # DELETE /api/strategies/:strategy_slug/run — stop
-    def destroy
-      @strategy.update!(desired_status: "stopped")
-      render json: { success: true, slug: @strategy.slug, status: "stopping" }, status: :accepted
-    end
-
     # PATCH /api/strategies/:strategy_slug/run — restart
     def update
       @strategy.update!(desired_status: "stopped")
       @strategy.update!(desired_status: "running")
       render json: { success: true, slug: @strategy.slug, status: "restarting" }, status: :accepted
+    end
+    # DELETE /api/strategies/:strategy_slug/run — stop
+    def destroy
+      @strategy.update!(desired_status: "stopped")
+      render json: { success: true, slug: @strategy.slug, status: "stopping" }, status: :accepted
     end
   end
 end
