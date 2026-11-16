@@ -194,6 +194,12 @@ RSpec.describe 'Rule Engine Edge Cases' do
       results = []
       threads = []
 
+      # Materialize lazy lets on the example thread first. FactoryBot creates that
+      # run inside spawned threads autocommit on thread-owned DB connections and
+      # survive the example's rollback transaction, polluting later specs.
+      engine
+      context
+
       5.times do
         threads << Thread.new do
           results << engine.evaluate(context)
