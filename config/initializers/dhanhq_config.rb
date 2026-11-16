@@ -143,71 +143,75 @@ DhanHQ.configure do |config|
   end
 end
 
+# The tiers live in their own method: a `return` inside the Rails.cache.fetch block
+# skipped the cache write, so every Dhan call re-resolved (and logged) the token.
 def fetch_authority_token!
-  Rails.cache.fetch("scalper:dhan_token", expires_in: 60.seconds) do
-    # Tier 1: External Token Authority Server
-    token_url = token_authority_url
-    authority_token = ENV["DHAN_TOKEN_ACCESS_TOKEN"].presence
+  Rails.cache.fetch("scalper:dhan_token", expires_in: 60.seconds) { resolve_authority_token! }
+end
 
-    if token_url.present? && authority_token.present?
-      begin
-        response = Faraday.new(url: token_url, request: { timeout: 5, open_timeout: 3 }).get do |req|
-          req.headers["Authorization"] = "Bearer #{authority_token}"
-        end
+def resolve_authority_token!
+  # Tier 1: External Token Authority Server
+  token_url = token_authority_url
+  authority_token = ENV["DHAN_TOKEN_ACCESS_TOKEN"].presence
 
-        if response.success?
-          data = JSON.parse(response.body)
-          if data["access_token"].present?
-            Rails.logger.info "[SCALPER] Token resolved via Tier 1 (Token Authority)"
-            return data["access_token"]
-          end
-        end
-
-        log_token_authority_fallback_once!(
-          key: "scalper:token_authority_failed_http",
-          message: "[SCALPER] Tier 1 (Token authority) HTTP failed (#{response.status}), trying Tier 2 (TOTP refresh)..."
-        )
-      rescue StandardError => e
-        log_token_authority_fallback_once!(
-          key: "scalper:token_authority_error",
-          message: "[SCALPER] Tier 1 (Token authority) error: #{e.message}, trying Tier 2 (TOTP refresh)..."
-        )
+  if token_url.present? && authority_token.present?
+    begin
+      response = Faraday.new(url: token_url, request: { timeout: 5, open_timeout: 3 }).get do |req|
+        req.headers["Authorization"] = "Bearer #{authority_token}"
       end
-    elsif token_url.present?
+
+      if response.success?
+        data = JSON.parse(response.body)
+        if data["access_token"].present?
+          Rails.logger.debug "[SCALPER] Token resolved via Tier 1 (Token Authority)"
+          return data["access_token"]
+        end
+      end
+
       log_token_authority_fallback_once!(
-        key: "scalper:token_authority_missing_bearer",
-        message: "[SCALPER] Tier 1 token missing (DHAN_TOKEN_ACCESS_TOKEN), trying Tier 2 (TOTP refresh)..."
+        key: "scalper:token_authority_failed_http",
+        message: "[SCALPER] Tier 1 (Token authority) HTTP failed (#{response.status}), trying Tier 2 (TOTP refresh)..."
+      )
+    rescue StandardError => e
+      log_token_authority_fallback_once!(
+        key: "scalper:token_authority_error",
+        message: "[SCALPER] Tier 1 (Token authority) error: #{e.message}, trying Tier 2 (TOTP refresh)..."
       )
     end
-
-    # Tier 2: Automated TOTP Refresh (Dhan::TokenManager)
-    if defined?(Dhan::TokenManager)
-      begin
-        totp_token = Dhan::TokenManager.current_token!
-        if totp_token.present?
-          Rails.logger.info "[SCALPER] Token resolved via Tier 2 (TOTP refresh)"
-          return totp_token
-        end
-
-        Rails.logger.warn "[SCALPER] Tier 2 (TOTP refresh) returned no token, trying Tier 3 (Static ENV)..."
-      rescue StandardError => e
-        Rails.logger.warn "[SCALPER] Tier 2 (TOTP refresh) error: #{e.message}, trying Tier 3 (Static ENV)..."
-      end
-    end
-
-    # Tier 3: Static Environment Variable Fallback
-    env_token = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
-    if env_token.present?
-      Rails.logger.info "[SCALPER] Token resolved via Tier 3 (Static ENV)"
-      return env_token
-    end
-
-    # Stop: All 3 tiers failed
-    raise "[SCALPER] DhanHQ authentication failed across all tiers:\n  " \
-          "- Tier 1 (Token Authority): Unreachable or unconfigured\n  " \
-          "- Tier 2 (TOTP Auto-Refresh): Failed or missing credentials (DHAN_CLIENT_ID, DHAN_PIN, DHAN_TOTP_SECRET)\n  " \
-          "- Tier 3 (Static ENV): ENV[DHAN_ACCESS_TOKEN or ACCESS_TOKEN] not set"
+  elsif token_url.present?
+    log_token_authority_fallback_once!(
+      key: "scalper:token_authority_missing_bearer",
+      message: "[SCALPER] Tier 1 token missing (DHAN_TOKEN_ACCESS_TOKEN), trying Tier 2 (TOTP refresh)..."
+    )
   end
+
+  # Tier 2: Automated TOTP Refresh (Dhan::TokenManager)
+  if defined?(Dhan::TokenManager)
+    begin
+      totp_token = Dhan::TokenManager.current_token!
+      if totp_token.present?
+        Rails.logger.debug "[SCALPER] Token resolved via Tier 2 (TOTP refresh)"
+        return totp_token
+      end
+
+      Rails.logger.warn "[SCALPER] Tier 2 (TOTP refresh) returned no token, trying Tier 3 (Static ENV)..."
+    rescue StandardError => e
+      Rails.logger.warn "[SCALPER] Tier 2 (TOTP refresh) error: #{e.message}, trying Tier 3 (Static ENV)..."
+    end
+  end
+
+  # Tier 3: Static Environment Variable Fallback
+  env_token = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+  if env_token.present?
+    Rails.logger.debug "[SCALPER] Token resolved via Tier 3 (Static ENV)"
+    return env_token
+  end
+
+  # Stop: All 3 tiers failed
+  raise "[SCALPER] DhanHQ authentication failed across all tiers:\n  " \
+        "- Tier 1 (Token Authority): Unreachable or unconfigured\n  " \
+        "- Tier 2 (TOTP Auto-Refresh): Failed or missing credentials (DHAN_CLIENT_ID, DHAN_PIN, DHAN_TOTP_SECRET)\n  " \
+        "- Tier 3 (Static ENV): ENV[DHAN_ACCESS_TOKEN or ACCESS_TOKEN] not set"
 end
 
 def token_authority_url

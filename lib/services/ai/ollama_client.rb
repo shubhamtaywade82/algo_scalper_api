@@ -282,8 +282,7 @@ module Services
 
         @client = Ollama::Client.new(config: config)
         mode = use_cloud ? 'cloud' : 'local'
-        Rails.logger.info("[OllamaClient] Connected (#{mode}) at #{base}")
-        Rails.logger.info('[OllamaClient] Initialized with provider: ollama')
+        Rails.logger.debug { "[OllamaClient] Connected (#{mode}) at #{base}" }
       rescue StandardError => e
         Rails.logger.error("[OllamaClient] Failed to initialize: #{e.class} - #{e.message}")
         @enabled = false

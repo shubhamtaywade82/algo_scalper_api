@@ -5,5 +5,5 @@
 # silently degrading risk constraints.
 Rails.application.config.to_prepare do
   Investing::Config.load!
-  Rails.logger.info("[Investing] config loaded: #{Investing::Config.fetch.mandates.keys.join(', ')}")
+  Rails.logger.debug("[Investing] config loaded: #{Investing::Config.fetch.mandates.keys.join(', ')}")
 end

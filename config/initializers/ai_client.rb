@@ -11,7 +11,7 @@ Rails.application.config.after_initialize do
     # Access the class to trigger autoloading
     client_class = Services::Ai::OllamaClient
     if client_class.instance.enabled?
-      Rails.logger.info("[AI] Ollama client initialized with provider: #{client_class.instance.provider}")
+      Rails.logger.debug { "[AI] Ollama client initialized with provider: #{client_class.instance.provider}" }
     else
       Rails.logger.info('[AI] Ollama client disabled or not configured')
     end
