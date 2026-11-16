@@ -105,8 +105,7 @@ module Smc
     end
 
     def ai_enabled?
-      AlgoConfig.fetch.dig(:ai, :enabled) == true &&
-        Services::Ai::OllamaClient.instance.enabled?
+      Services::Ai::OllamaClient.usable?
     rescue StandardError
       false
     end

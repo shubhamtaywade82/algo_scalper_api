@@ -18,6 +18,13 @@ module Services
         end
 
         delegate :client, :enabled?, to: :instance
+
+        # Combined AI-availability gate: the algo.yml flag AND the live client
+        # must both be on. Does NOT rescue — callers decide whether AI failure
+        # is silent (alert paths) or retry-worthy (tick digest job).
+        def usable?
+          AlgoConfig.fetch.dig(:ai, :enabled) == true && instance.enabled?
+        end
       end
 
       # Serialize concurrent Ollama calls so we don't overwhelm a single GPU

@@ -55,7 +55,7 @@ class AnalysisJob < ApplicationJob
 
   # @return [Array<String>] labels of components that failed (not written)
   def compute_for_index(index_key, force: false, only: nil)
-    instrument = find_instrument(index_key)
+    instrument = IndexConfigLoader.index_instrument(index_key)
     unless instrument
       Rails.logger.warn("[AnalysisJob] Instrument not found for #{index_key}")
       return []
@@ -109,16 +109,6 @@ class AnalysisJob < ApplicationJob
     result = Indicators::Supertrend.new(series: series, period: cfg[:period] || 10,
                                         base_multiplier: cfg[:base_multiplier] || 2.0).call
     { direction: result[:trend]&.to_s, line: result[:last_value]&.to_f&.round(2) }
-  end
-
-  def find_instrument(index_key)
-    index_cfg = IndexConfigLoader.load_indices.find { |idx| idx[:key].to_s.upcase == index_key }
-    return nil unless index_cfg
-
-    Instrument.find_by_sid_and_segment(
-      security_id: index_cfg[:sid],
-      segment_code: index_cfg[:segment]
-    )
   end
 
   def all_index_keys

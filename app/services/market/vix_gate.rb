@@ -26,8 +26,8 @@ module Market
           return nil
         end
 
-        write_ltp!(vix)
-        apply_gates!(vix)
+        write_ltp(vix)
+        apply_gates(vix)
         vix
       rescue StandardError => e
         Rails.logger.error("[VixGate] evaluate! #{e.class} - #{e.message}")
@@ -150,12 +150,14 @@ module Market
         nil
       end
 
-      def write_ltp!(vix)
+      # Cache writes only; failures bubble to evaluate!'s rescue (no !:
+      # never raises by contract).
+      def write_ltp(vix)
         Rails.cache.write(CACHE_LTP_KEY, vix, expires_in: 30.minutes)
         Rails.cache.write(CACHE_TS_KEY, Time.current.to_i, expires_in: 30.minutes)
       end
 
-      def apply_gates!(vix)
+      def apply_gates(vix)
         if vix > force_exit_above
           Rails.cache.write(ENTRY_ALLOWED_KEY, false, expires_in: 30.minutes)
           Rails.cache.write(FORCE_EXIT_KEY, true, expires_in: 30.minutes)
