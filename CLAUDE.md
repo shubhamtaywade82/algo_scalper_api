@@ -33,7 +33,7 @@ ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon  # trading daemon s
 
 ## Process Model
 
-`./bin/dev` starts 4 processes via `Procfile.dev`:
+`./bin/dev` starts 5 processes via `Procfile.dev`:
 
 | Process | Command | Purpose |
 |---------|---------|---------|
@@ -41,6 +41,7 @@ ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon  # trading daemon s
 | `trading` | `ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon` | Trading brain (services in threads, see `bootstrap.rb`) |
 | `jobs` | `bin/jobs` | Solid Queue worker (recurring tasks) |
 | `dashboard` | `cd dashboard && npm run dev` | SolidJS + Vite frontend (dev server on :5181, proxies `/api` and `/cable` to :3011) |
+| `mcp` | `bin/mcp` | ActionMCP server on 127.0.0.1:62770 (read-only AI tools; see ActionMCP section) |
 
 Web and trading are separate OS processes sharing PostgreSQL and Redis — no shared in-process objects.
 
@@ -216,6 +217,13 @@ All percentage values in `config/algo.yml` use **DECIMAL format**: `0.12` means 
 - Token refresh uses `Dhan::TokenManager` with 3-tier fallback: authority server → TOTP auto-refresh → static ENV
 - **Booked P&L uses statutory charges**, not the flat `broker_fees.fee_per_order`: `Positions::FinalPnl.from_exit_price(..., segment:)` and the ledger posters use `Orders::ChargesCalculator` per leg (~₹88 per round trip vs ₹40 flat). Trackers closed since 2026-11-02 carry `meta['fee_model']='statutory'`; older rows keep the flat fee (use `FinalPnl.for_tracker` so a reconciler never mixes the two). Live marks and position sizing still use the flat fee
 - This app is the Dhan token **owner** for other local tools: `GET /api/dhan/token` (requires `API_OPERATOR_TOKEN`, even in dev) serves `Dhan::TokenManager.snapshot` — read-only, never refreshes. Any other app that logs in itself invalidates this app's token (DH-906); consumers (e.g. pine-ts-workbench) must fetch from here and generate their own only when this app is unreachable
+
+## ActionMCP Server (this app as an MCP server)
+
+- `mcp` process in `Procfile.dev` (`bin/mcp`: Puma on 127.0.0.1:62770, pidfile `tmp/pids/mcp.pid`); never mount `ActionMCP::Engine` in routes
+- Tools in `app/mcp/tools/` are **read-only** views over `Reports::MarketBrief::SnapshotBuilder` (`get_market_overview`, `get_risk_status`, `get_system_health`). `spec/mcp/application_mcp_tool_spec.rb` pins the tool list and fails if MCP code references `Orders::` / gateways
+- Auth: clients on this machine (loopback, no forwarding headers) need no token; remote clients need `Authorization: Bearer $MCP_API_TOKEN` (unset = open in dev, rejected in production). The dashboard never uses MCP
+- Local LLM client: `bin/rails "mcp:ask[question]"` — `MCP::OllamaBridge` drives Ollama (`openbmb/minicpm5-2b` by default, override `MCP_OLLAMA_MODEL`) through the MCP server over HTTP
 
 ## MCP Tooling
 
