@@ -1,8 +1,9 @@
 // dashboard/src/components/OptionChainTable.jsx
 import { Index, Show } from 'solid-js'
+import AnimatedNumber from './AnimatedNumber'
 
-function fmt(n, digits = 2) {
-  return n == null ? '—' : Number(n).toFixed(digits)
+function Num(props) {
+  return <AnimatedNumber value={props.v} decimals={props.digits ?? 2} nullDisplay="—" />
 }
 
 export default function OptionChainTable(props) {
@@ -24,7 +25,7 @@ export default function OptionChainTable(props) {
         <h2 class="text-sm font-bold text-white uppercase tracking-[0.2em]">
           {props.indexKey} Option Chain
           <Show when={props.chain?.spot}>
-            <span class="text-primary-400 ml-2 font-black text-data">Spot {fmt(props.chain.spot)}</span>
+            <span class="text-primary-400 ml-2 font-black text-data">Spot <Num v={props.chain.spot} /></span>
           </Show>
         </h2>
         <div class={`text-[10px] font-black tracking-widest px-3 py-1.5 rounded-full border ${props.isStale ? 'text-amber-300 bg-amber-500/10 border-amber-500/30' : 'text-cyan-300 bg-cyan-500/10 border-cyan-500/30'}`}>
@@ -52,15 +53,15 @@ export default function OptionChainTable(props) {
               <Index each={strikeRows()}>
                 {row => (
                   <tr class={`border-b border-white/5 ${row().strike === atmStrike() ? 'bg-primary-500/10' : ''}`}>
-                    <td class="text-right px-3 py-2">{fmt(row().ce?.delta, 3)}</td>
-                    <td class="text-right px-3 py-2">{fmt(row().ce?.iv)}</td>
-                    <td class="text-right px-3 py-2">{row().ce?.oi ?? '—'}</td>
-                    <td class="text-right px-3 py-2 font-bold">{fmt(row().ce?.ltp)}</td>
+                    <td class="text-right px-3 py-2"><Num v={row().ce?.delta} digits={3} /></td>
+                    <td class="text-right px-3 py-2"><Num v={row().ce?.iv} /></td>
+                    <td class="text-right px-3 py-2"><Num v={row().ce?.oi} digits={0} /></td>
+                    <td class="text-right px-3 py-2 font-bold"><Num v={row().ce?.ltp} /></td>
                     <td class="text-center px-3 py-2 font-black">{row().strike}</td>
-                    <td class="text-left px-3 py-2 font-bold">{fmt(row().pe?.ltp)}</td>
-                    <td class="text-left px-3 py-2">{row().pe?.oi ?? '—'}</td>
-                    <td class="text-left px-3 py-2">{fmt(row().pe?.iv)}</td>
-                    <td class="text-left px-3 py-2">{fmt(row().pe?.delta, 3)}</td>
+                    <td class="text-left px-3 py-2 font-bold"><Num v={row().pe?.ltp} /></td>
+                    <td class="text-left px-3 py-2"><Num v={row().pe?.oi} digits={0} /></td>
+                    <td class="text-left px-3 py-2"><Num v={row().pe?.iv} /></td>
+                    <td class="text-left px-3 py-2"><Num v={row().pe?.delta} digits={3} /></td>
                   </tr>
                 )}
               </Index>

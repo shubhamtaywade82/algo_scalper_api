@@ -7,8 +7,8 @@ module Api
     before_action :authenticate_dashboard_token!
 
     def show
-      market_feed_status = Live::MarketFeedHub.instance.health_status
-      order_update_status = Live::OrderUpdateHub.instance.respond_to?(:health_status) ? Live::OrderUpdateHub.instance.health_status : {}
+      # The hubs only run in the trading daemon; the web process must read the shared heartbeats.
+      statuses = Live::SystemStatusCache.instance.all_statuses
       Dhan::IpService.fetch_ip_info
 
       render json: {
@@ -18,15 +18,10 @@ module Api
         scheduler: scheduler_status,
         circuit_breaker: Risk::CircuitBreaker.instance.status,
         websocket: {
-          market_feed_running: market_feed_status[:running],
-          market_feed_connected: market_feed_status[:connected],
-          market_feed_state: market_feed_status[:connection_state],
-          market_feed_started_at: market_feed_status[:started_at],
-          market_feed_last_tick_at: market_feed_status[:last_tick_at],
-          order_update_running: order_update_status[:running],
-          order_update_state: order_update_status[:connection_state],
-          order_update_started_at: order_update_status[:started_at],
-          order_update_last_update_at: order_update_status[:last_update_at],
+          market_feed_connected: statuses[:ws_market_feed],
+          market_feed_last_tick_at: last_index_tick_at,
+          order_update_connected: statuses[:ws_order_update],
+          pnl_updater_running: statuses[:pnl_updater_running],
           tick_cache_size: Live::TickCache.all.size,
           sample_ltps: {
             nifty: Live::TickCache.ltp('IDX_I', '13'),
@@ -38,6 +33,10 @@ module Api
     end
 
     private
+
+    def last_index_tick_at
+      Live::TickCache.fetch('IDX_I', '13')&.dig(:cached_at)
+    end
 
     def scheduler_status
       Thread.list.any? { |thread| thread.name == 'signal-scheduler' } ? 'running' : 'unknown'

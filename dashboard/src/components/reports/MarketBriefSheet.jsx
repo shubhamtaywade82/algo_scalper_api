@@ -147,7 +147,7 @@ function ConfluenceTable(props) {
       </colgroup>
       <thead>
         <tr>
-          <th>Index</th><th>Technical</th><th>SMC decision</th><th title="▲ bullish ▼ bearish ■ range">HTF MTF LTF</th><th>LTF last BOS</th>
+          <th>Index</th><th title="Derived from the 5m regime: trending up/down, or neutral when ranging/choppy. Supertrend is shown on each index card.">Regime bias</th><th>SMC decision</th><th title="▲ bullish ▼ bearish ■ range">HTF MTF LTF</th><th>LTF last BOS</th>
           <th>Sweep</th><th>FVG / OB</th><th>Zone</th><th>Agreement</th>
         </tr>
       </thead>

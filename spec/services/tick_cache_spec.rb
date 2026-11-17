@@ -55,4 +55,21 @@ RSpec.describe TickCache do
       expect(cache.fetch('NSE_FNO', '99999')).to be_nil
     end
   end
+
+  describe '#put prev_close' do
+    before { allow(Live::RedisTickCache.instance).to receive(:store_tick) }
+
+    it 'uses the quote packet day_close as prev_close' do
+      cache.put(segment: 'IDX_I', security_id: '13', ltp: 25_370.0, day_close: 25_291.1)
+
+      expect(cache.fetch('IDX_I', '13')[:prev_close]).to eq(25_291.1)
+    end
+
+    it 'keeps a real prev_close packet over day_close' do
+      cache.put(segment: 'IDX_I', security_id: '13', prev_close: 25_000.0)
+      cache.put(segment: 'IDX_I', security_id: '13', ltp: 25_370.0, day_close: 25_291.1)
+
+      expect(cache.fetch('IDX_I', '13')[:prev_close]).to eq(25_000.0)
+    end
+  end
 end

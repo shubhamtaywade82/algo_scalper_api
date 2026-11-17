@@ -1,6 +1,6 @@
 import { createSignal, createEffect, onCleanup } from 'solid-js'
 
-const DEFAULT_DURATION_MS = 450
+const DEFAULT_DURATION_MS = 150
 
 function easeOutCubic(t) {
   return 1 - (1 - t) ** 3

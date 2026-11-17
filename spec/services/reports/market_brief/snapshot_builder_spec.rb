@@ -69,10 +69,21 @@ RSpec.describe Reports::MarketBrief::SnapshotBuilder do
 
     it 'shows India VIX from the Dhan LTP when the VIX gate has nothing cached' do
       allow(Market::VixGate).to receive_messages(current_ltp: nil, evaluated?: false)
+      allow(Live::TickQuery).to receive(:for_security).with(segment: 'IDX_I', security_id: '21').and_return(nil)
       allow(DhanHQ::Models::MarketFeed).to receive(:ltp)
         .and_return({ 'data' => { 'IDX_I' => { '21' => { 'last_price' => 15.68 } } } })
 
       expect(snapshot.dig('market_context', 'vix')).to include('status' => 'ok', 'value' => 15.68, 'evaluated' => false)
+    end
+
+    it 'shows India VIX from the WS tick without a REST call' do
+      allow(Market::VixGate).to receive_messages(current_ltp: nil, evaluated?: false)
+      allow(Live::TickQuery).to receive(:for_security).with(segment: 'IDX_I', security_id: '21')
+                                                      .and_return(brief_tick(ltp: 15.1, prev_close: nil, at: 2.seconds.ago))
+      allow(DhanHQ::Models::MarketFeed).to receive(:ltp)
+
+      expect(snapshot.dig('market_context', 'vix')).to include('status' => 'ok', 'value' => 15.1)
+      expect(DhanHQ::Models::MarketFeed).not_to have_received(:ltp)
     end
 
     it 'derives prev close from daily bars when the feed sent none' do

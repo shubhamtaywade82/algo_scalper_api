@@ -361,16 +361,27 @@ module Reports
         Rails.cache.fetch("market_brief:prev_close:#{index_key}:#{session_date}", expires_in: 12.hours, skip_nil: true) do
           bars = IndexConfigLoader.index_instrument(index_key)
                                   &.historical_ohlc(from_date: (session_date - 10).to_s, to_date: (session_date + 1).to_s)
-          Array(bars).select { |bar| bar[:timestamp].to_date < session_date }.max_by { |bar| bar[:timestamp] }&.dig(:close)&.to_f
+          last_bar = Array(bars).select { |bar| bar[:timestamp].to_date < session_date }.max_by { |bar| bar[:timestamp] }
+          # Dhan publishes the daily bar late; an older bar would be cached for 12h as the wrong prev close.
+          last_bar[:close].to_f if last_bar && last_bar[:timestamp].to_date >= previous_weekday(session_date)
         end
       rescue StandardError => e
         Rails.logger.warn("[MarketBrief::SnapshotBuilder] prev close for #{index_key} failed: #{e.class} - #{e.message}")
         nil
       end
 
+      def previous_weekday(date)
+        previous = date - 1
+        previous -= 1 while previous.saturday? || previous.sunday?
+        previous
+      end
+
       # The VIX gate only caches VIX while it is configured and evaluating (market hours),
       # so the brief would show NO DATA otherwise. Display-only: never written to gate keys.
       def display_vix
+        tick = Live::TickQuery.for_security(segment: 'IDX_I', security_id: INDIA_VIX_SECURITY_ID.to_s)
+        return [tick.ltp.to_f, parse_time(tick.timestamp)] if tick && tick.ltp.to_f.positive?
+
         cached = Rails.cache.fetch(DISPLAY_VIX_CACHE_KEY, expires_in: 5.minutes) do
           ltp = DhanHQ::Models::MarketFeed.ltp({ 'IDX_I' => [INDIA_VIX_SECURITY_ID] })
                                           .dig('data', 'IDX_I', INDIA_VIX_SECURITY_ID.to_s, 'last_price')

@@ -637,37 +637,60 @@ class Instrument < ApplicationRecord
   end
 
   # API Methods
+  # Dhan allows ~1 chain call / 3s / account across ALL processes, but the gem's limiter is per-process
+  # and sleeps. So: one process refreshes at a time (lock), everyone else is served the last good chain,
+  # and a failed refresh backs off instead of being retried by every caller.
   def fetch_option_chain(expiry = nil)
     expiry ||= expiry_list.first
-
-    # Check if caching is disabled for fresh data
     freshness_config = AlgoConfig.fetch[:data_freshness] || {}
-    disable_caching = freshness_config[:disable_option_chain_caching] || false
+    return fetch_fresh_option_chain(expiry) if freshness_config[:disable_option_chain_caching]
 
-    if disable_caching
-      # Rails.logger.debug { "[Instrument] Fresh data mode - bypassing option chain cache for #{symbol_name}" }
-      return fetch_fresh_option_chain(expiry)
-    end
-
-    # Use cached data if available and not stale
     cache_key = "option_chain:#{security_id}:#{expiry}"
     cached_data = Rails.cache.read(cache_key)
+    return cached_data if cached_data && !option_chain_stale?(expiry)
 
-    if cached_data && !option_chain_stale?(expiry)
-      # Rails.logger.debug { "[Instrument] Using cached option chain for #{symbol_name} #{expiry}" }
-      return cached_data
+    refresh_option_chain(cache_key, expiry, freshness_config) || cached_data
+  end
+
+  OPTION_CHAIN_LAST_GOOD_TTL = 30.minutes
+  OPTION_CHAIN_LOCK_TTL = 15.seconds
+  OPTION_CHAIN_FAILURE_BACKOFF = 10.seconds
+  OPTION_CHAIN_COLD_WAIT_TRIES = 12
+
+  def refresh_option_chain(cache_key, expiry, freshness_config)
+    return nil if Rails.cache.read("#{cache_key}:backoff")
+
+    lock_key = "#{cache_key}:lock"
+    return wait_for_option_chain(cache_key) unless Rails.cache.write(lock_key, true, unless_exist: true, expires_in: OPTION_CHAIN_LOCK_TTL)
+
+    begin
+      store_option_chain(cache_key, fetch_fresh_option_chain(expiry), freshness_config)
+    ensure
+      Rails.cache.delete(lock_key)
+    end
+  end
+
+  def store_option_chain(cache_key, fresh_data, freshness_config)
+    unless fresh_data
+      Rails.cache.write("#{cache_key}:backoff", true, expires_in: OPTION_CHAIN_FAILURE_BACKOFF)
+      return nil
     end
 
-    # Fetch fresh data and cache it
-    fresh_data = fetch_fresh_option_chain(expiry)
-    if fresh_data
-      cache_duration_minutes = freshness_config[:option_chain_cache_duration_minutes] || 2
-      Rails.cache.write(cache_key, fresh_data, expires_in: cache_duration_minutes.minutes)
-      Rails.cache.write("#{cache_key}:timestamp", Time.current, expires_in: cache_duration_minutes.minutes)
-      # Rails.logger.debug { "[Instrument] Cached fresh option chain for #{symbol_name} #{expiry}" }
-    end
-
+    fresh_minutes = freshness_config[:option_chain_cache_duration_minutes] || 2
+    Rails.cache.write(cache_key, fresh_data, expires_in: OPTION_CHAIN_LAST_GOOD_TTL)
+    Rails.cache.write("#{cache_key}:timestamp", Time.current, expires_in: fresh_minutes.minutes)
     fresh_data
+  end
+
+  # Another process holds the refresh lock; only matters on a cold cache (nothing stale to serve).
+  def wait_for_option_chain(cache_key)
+    OPTION_CHAIN_COLD_WAIT_TRIES.times do
+      data = Rails.cache.read(cache_key)
+      return data if data
+
+      sleep 0.25
+    end
+    nil
   end
 
   def fetch_fresh_option_chain(expiry)

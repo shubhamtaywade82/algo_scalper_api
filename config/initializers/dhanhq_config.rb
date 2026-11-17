@@ -233,3 +233,8 @@ def log_token_authority_fallback_once!(key:, message:)
   Rails.logger.warn(message)
   Rails.cache.write(key, true, expires_in: 10.minutes)
 end
+
+# Cross-process spacing for Dhan REST calls (web, jobs and the daemon share one account limit).
+Rails.application.config.after_initialize do
+  DhanHQ::RateLimiter.prepend(Dhan::SharedRateLimit) unless Rails.env.test?
+end

@@ -155,6 +155,10 @@ module Live
         return get_paper_ltp(tracker) if tracker.paper?
 
         if position.respond_to?(:exchange_segment) && position.exchange_segment == 'NSE_FNO'
+          # WS tick first: this runs every risk cycle per position and REST is 1 req/s account-wide.
+          live_tick = Live::TickQuery.for_security(segment: 'NSE_FNO', security_id: tracker.security_id)
+          return live_tick.ltp if live_tick&.fresh?
+
           begin
             response = DhanHQ::Models::MarketFeed.ltp({ 'NSE_FNO' => [tracker.security_id.to_i] })
             if response['status'] == 'success'

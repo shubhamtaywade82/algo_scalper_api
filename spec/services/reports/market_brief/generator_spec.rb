@@ -6,7 +6,6 @@ RSpec.describe Reports::MarketBrief::Generator do
   let(:report) { MarketBriefReport.request!(mode: :paper).first }
   let(:client) { instance_double(Services::Ai::OllamaClient, enabled?: true) }
 
-  before { allow(LLMSettings).to receive(:analysis_model).and_return('llama3.1:8b') }
   let(:valid_ai_json) do
     JSON.generate(
       'schema_version' => 1,
@@ -20,6 +19,7 @@ RSpec.describe Reports::MarketBrief::Generator do
   end
 
   before do
+    allow(LLMSettings).to receive(:analysis_model).and_return('llama3.1:8b')
     travel_to(brief_market_open_time)
     stub_market_brief_sources
     allow(Services::Ai::OllamaClient).to receive(:instance).and_return(client)

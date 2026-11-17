@@ -139,7 +139,7 @@ module Strategies
           state[:last_heartbeat] = now
           # Persist only: periodic broadcasts were ~70% of all ActionCable traffic and no
           # dashboard client subscribes to strategy_status. Transitions still broadcast.
-          state[:run]&.update_column(:stats, state[:run].stats.merge(last_heartbeat: now)) # rubocop:disable Rails/SkipsModelValidations
+          state[:run]&.update_column(:stats, state[:run].stats.merge('last_heartbeat' => now)) # rubocop:disable Rails/SkipsModelValidations
         end
       end
     end
@@ -221,9 +221,10 @@ module Strategies
       state[:run]&.update!(
         stopped_at: Time.current,
         stop_reason: reason,
+        # jsonb loads with string keys; merging symbol keys makes a mixed-key hash that json 3.x refuses to dump
         stats: state[:run].stats.merge(
-          final_error_count: state[:errors],
-          last_heartbeat: Time.current.to_i
+          'final_error_count' => state[:errors],
+          'last_heartbeat' => Time.current.to_i
         )
       )
 

@@ -23,7 +23,7 @@ class TickCache
     sid = tick[:security_id]
     key = cache_key(seg, sid)
 
-    merged = @map.compute(key) do |_, existing|
+    merged = @map.compute(key) do |existing|
       existing ||= {}
       previous_ltp = existing[:ltp]
 
@@ -44,6 +44,10 @@ class TickCache
           new_hash[k] = v
         end
       end
+
+      # Quote packets carry the previous close as day_close; the dedicated prev_close packet
+      # is only sent in ticker mode, so without this index % change had no WS source.
+      new_hash[:prev_close] = new_hash[:day_close].to_f if new_hash[:prev_close].to_f.zero? && new_hash[:day_close].to_f.positive?
 
       # Restore previous LTP if missing
       new_hash[:ltp] = previous_ltp if new_hash[:ltp].nil? && previous_ltp
