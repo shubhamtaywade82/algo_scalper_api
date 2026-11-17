@@ -10,6 +10,7 @@ module Api
     PER_PAGE_MAX     = 100
     ALLOWED_SORT_COLS = %w[emitted_at confidence].freeze
     DIRECTION_BY_ACTION = { "buy_call" => "bullish", "buy_put" => "bearish" }.freeze
+    ACTIONS_BY_DIRECTION = { "bullish" => %w[buy_call], "bearish" => %w[buy_put], "none" => %w[hold] }.freeze
     ENTRY_OUTCOME_BY_OUTCOME = {
       "executed" => "entered",
       "blocked_by_guard" => "blocked",
@@ -45,14 +46,11 @@ module Api
       scope = scope.where(instrument_key: params.expect(:index_key).upcase) if params[:index_key].present?
 
       # HOLD rows are ~95% of the table; showing them by default buries real signals.
-      if params[:direction] == "none"
-        scope = scope.where(action: "hold")
-      elsif params[:direction].present?
-        actions = DIRECTION_BY_ACTION.select { |_, dir| dir == params[:direction] }.keys
-        scope = scope.where(action: actions)
-      else
-        scope = scope.where.not(action: "hold")
-      end
+      scope = if params[:direction].present?
+                scope.where(action: ACTIONS_BY_DIRECTION.fetch(params[:direction], []))
+              else
+                scope.where.not(action: "hold")
+              end
 
       if params[:outcome].present?
         outcomes = ENTRY_OUTCOME_BY_OUTCOME.select { |_, o| o == params[:outcome] }.keys
@@ -108,20 +106,28 @@ module Api
         confidence_score: confidence,
         confidence_level: confidence_level_for(confidence),
         timeframe: sig.strategy_version&.manifest&.dig("timeframes", 0),
-        supertrend_value: nil,
-        adx_value: adx_match && adx_match[1].to_f,
+        supertrend_value: sig.metadata["supertrend_value"],
+        adx_value: sig.metadata["adx_value"] || (adx_match && adx_match[1].to_f),
         signal_timestamp: sig.emitted_at&.iso8601,
         candle_timestamp: sig.emitted_at&.iso8601,
         metadata: {
           strategy: sig.strategy_record&.slug,
           entry_outcome: ENTRY_OUTCOME_BY_OUTCOME[sig.outcome] || "skipped",
+          entry_skip_stage: skip_stage_for(sig),
           reason: sig.reason,
           entry_blocked_reason: sig.outcome == "blocked_by_guard" ? sig.metadata["entry_result_reason"] : nil,
           entry_blocked_guard_results: sig.outcome == "blocked_by_guard" ? sig.metadata["guard_results"] : nil,
-          entry_skip_stage: sig.outcome == "blocked_by_guard" ? nil : "strategy_platform",
-          entry_skip_code: sig.outcome == "blocked_by_guard" ? nil : sig.reason
+          entry_skip_code: skip_stage_for(sig) ? sig.reason : nil
         }
       }
+    end
+
+    # A shadow signal is a valid call nobody tried to enter; its reason is why it fired, not why it was skipped.
+    def skip_stage_for(sig)
+      case sig.outcome
+      when "blocked_by_guard", "shadow" then nil
+      else "strategy_platform"
+      end
     end
 
     def confidence_level_for(score)
