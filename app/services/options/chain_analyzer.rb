@@ -1268,13 +1268,12 @@ module Options
             end
           end
 
-          derivative_segment = if derivative.respond_to?(:exchange_segment) && derivative.exchange_segment.present?
-                                 derivative.exchange_segment
-                               elsif derivative.is_a?(Hash)
-                                 derivative[:exchange_segment]
-                               end
-          derivative_segment ||= instrument.exchange_segment if instrument.respond_to?(:exchange_segment)
-          derivative_segment ||= index_cfg[:segment]
+          derivative_segment = resolve_derivative_segment(derivative, instrument)
+          unless derivative_segment
+            Rails.logger.warn("[Options::ChainAnalyzer] No F&O segment for #{index_cfg[:key]} strike=#{strike} #{side}; skipping strike")
+            rejected_count += 1
+            next
+          end
 
           derivative_lot_size = derivative&.lot_size.to_i
           resolved_lot_size = derivative_lot_size.positive? ? derivative_lot_size : Trading::LotCalculator.lot_size_for(index_cfg[:key])
@@ -1377,6 +1376,18 @@ module Options
 
       def derivative_like?(row)
         row.respond_to?(:expiry_date) && row.respond_to?(:option_type) && row.respond_to?(:strike_price)
+      end
+
+      # Synced contract row first; otherwise the option trades on its underlying's own exchange.
+      # Falling back to the index segment (IDX_I) made every LTP lookup for the contract miss.
+      def resolve_derivative_segment(derivative, underlying)
+        synced = if derivative.respond_to?(:exchange_segment) then derivative.exchange_segment
+                 elsif derivative.is_a?(Hash) then derivative[:exchange_segment]
+                 end
+        return synced if synced.present?
+
+        derived = "#{underlying.try(:exchange).to_s.upcase}_FNO"
+        %w[NSE_FNO BSE_FNO].include?(derived) ? derived : nil
       end
 
       def use_option_chain_security_id?
