@@ -22,7 +22,7 @@ jobs:
 
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.3'
+          ruby-version: .ruby-version
 
       - name: Scan codebase
         run: ruby scripts/scan_architecture.rb architecture-dashboard/src/lib/architecture-data.ts
