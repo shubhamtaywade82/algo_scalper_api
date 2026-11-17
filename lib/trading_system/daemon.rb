@@ -84,6 +84,9 @@ module TradingSystem
       last = Setting.fetch('instruments.last_imported_at').presence
       return if last && Time.zone.parse(last) > INSTRUMENTS_STALE_AFTER.ago
 
+      # Success is only recorded after the ~2 min import; the lock stops a crash-looping daemon from queueing one per restart.
+      return unless Rails.cache.write('instruments_import:boot_enqueued', true, expires_in: 15.minutes, unless_exist: true)
+
       Rails.logger.warn("[TradingDaemon] Instrument master stale (last import: #{last || 'never'}); enqueueing import")
       InstrumentsImportJob.perform_later
     rescue StandardError => e
