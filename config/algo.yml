@@ -529,7 +529,7 @@ position_sizing:
       BANKNIFTY: 0.04
       SENSEX: 0.01
     global_limit_pct: 0.04
-  max_daily_profit: 20000
+  max_daily_profit: 0 # 0 disables the daily profit cap (DailyLimits only enforces positive values)
   edge_failure_detector:
     enabled: true
     rolling_window_size: 5
