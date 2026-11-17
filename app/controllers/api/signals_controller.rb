@@ -22,7 +22,7 @@ module Api
     # (strategy_signals table) — the legacy Signal::Engine → TradingSignal
     # pipeline was removed in b3a8f30 and no longer writes new rows.
     def index
-      scope = ::Strategies::Signal.order(emitted_at: :desc).limit(100)
+      scope = ::Strategies::Signal.order(emitted_at: :desc)
       scope = apply_filters(scope)
       total = scope.count
       scope = apply_sort(scope)
@@ -44,9 +44,14 @@ module Api
     def apply_filters(scope)
       scope = scope.where(instrument_key: params.expect(:index_key).upcase) if params[:index_key].present?
 
-      if params[:direction].present?
+      # HOLD rows are ~95% of the table; showing them by default buries real signals.
+      if params[:direction] == "none"
+        scope = scope.where(action: "hold")
+      elsif params[:direction].present?
         actions = DIRECTION_BY_ACTION.select { |_, dir| dir == params[:direction] }.keys
         scope = scope.where(action: actions)
+      else
+        scope = scope.where.not(action: "hold")
       end
 
       if params[:outcome].present?

@@ -265,6 +265,7 @@ export default function Signals() {
                 <option value="">All</option>
                 <option value="bullish">Bullish</option>
                 <option value="bearish">Bearish</option>
+                <option value="none">Hold (no signal)</option>
               </select>
             </div>
 
