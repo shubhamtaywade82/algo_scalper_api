@@ -10,6 +10,7 @@ module TradingSystem
   # opens; a background thread then starts the remaining services automatically.
   class Daemon
     MARKET_OPEN_POLL_INTERVAL = 60 # seconds
+    INSTRUMENTS_STALE_AFTER = 20.hours
     HEALTH_CHECK_INTERVAL = 30 # seconds (keep_process_alive! loop runs at 1s cadence)
 
     def self.start(...)
@@ -61,6 +62,7 @@ module TradingSystem
 
     def start_services!(keep_alive: true)
       market_closed = TradingSession::Service.market_closed?
+      enqueue_instruments_import_if_stale!
 
       TradingSystem::Bootstrap.boot_reconciliation!(strict: strict_boot_reconciliation?(market_closed: market_closed))
 
@@ -73,6 +75,19 @@ module TradingSystem
       end
 
       start_full_trading_services!
+    end
+
+    # The 08:45 recurring import is skipped whenever the stack starts later (Solid Queue does not
+    # backfill missed runs). The master went 15 days stale and lacked newly listed SENSEX strikes,
+    # so every SENSEX entry was blocked on an LTP lookup under the wrong segment.
+    def enqueue_instruments_import_if_stale!
+      last = Setting.fetch('instruments.last_imported_at').presence
+      return if last && Time.zone.parse(last) > INSTRUMENTS_STALE_AFTER.ago
+
+      Rails.logger.warn("[TradingDaemon] Instrument master stale (last import: #{last || 'never'}); enqueueing import")
+      InstrumentsImportJob.perform_later
+    rescue StandardError => e
+      Rails.logger.error("[TradingDaemon] instruments staleness check failed: #{e.class} - #{e.message}")
     end
 
     def start_market_open_poller!
