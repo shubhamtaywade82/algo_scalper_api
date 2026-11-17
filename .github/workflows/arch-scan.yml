@@ -30,7 +30,8 @@ jobs:
       - name: Check for changes
         id: diff
         run: |
-          if git diff --quiet architecture-dashboard/src/lib/architecture-data.ts; then
+          # -I: the header carries a timestamp that changes on every scan; only real data changes should commit
+          if git diff --quiet -I'AUTO-GENERATED' architecture-dashboard/src/lib/architecture-data.ts; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "changed=true" >> $GITHUB_OUTPUT
