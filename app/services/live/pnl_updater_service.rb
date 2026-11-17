@@ -17,6 +17,7 @@ module Live
     # which made prices step every few seconds. Each solid_cable broadcast is a DB insert, so this is
     # throttled here (never from the tick handler) and sent only when a price moved.
     INDEX_TICK_INTERVAL_SECONDS = 0.25
+    SLOW_STEP_MS = 500
     INDEX_SECURITY_IDS = { nifty: '13', banknifty: '25', sensex: '51' }.freeze
 
     attr_reader :running
@@ -136,10 +137,10 @@ module Live
           # Market closed but positions exist - continue processing (needed for PnL updates)
         end
 
-        processed = flush!
-        maybe_broadcast_heartbeat
-        maybe_broadcast_index_ticks
-        maybe_broadcast_positions_keepalive
+        processed = timed_step(:flush) { flush! }
+        timed_step(:heartbeat) { maybe_broadcast_heartbeat }
+        timed_step(:index_ticks) { maybe_broadcast_index_ticks }
+        timed_step(:keepalive) { maybe_broadcast_positions_keepalive }
         sleep_duration = [next_interval(queue_empty: !processed && queue_empty?), INDEX_TICK_INTERVAL_SECONDS].min
         wait_for_interval(sleep_duration)
       end
@@ -314,6 +315,15 @@ module Live
       true
     end
 
+    # Every live position update rides this loop; a step that blocks freezes the Positions page.
+    def timed_step(name)
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      result = yield
+      elapsed_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round
+      @logger.warn("[PnlUpdater] slow #{name} step: #{elapsed_ms}ms") if elapsed_ms > SLOW_STEP_MS
+      result
+    end
+
     def queue_empty?
       @queue.empty?
     end
@@ -402,47 +412,30 @@ module Live
       pnl_pct_decimal = pnl_pct.to_f
       pnl_pct_as_percent = pnl_pct_decimal * 100.0
 
-      # Get notified milestones from tracker meta
-      meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
-      notified_milestones = meta['telegram_notified_milestones'] || []
+      return if pnl_pct_as_percent.zero?
 
       milestones.each do |milestone_pct|
-        # Check if milestone reached (positive or negative); compare percentage to percentage
-        milestone_reached = if pnl_pct_as_percent.positive?
-                              pnl_pct_as_percent >= milestone_pct && notified_milestones.exclude?(milestone_pct)
-                            elsif pnl_pct_as_percent.negative?
-                              pnl_pct_as_percent <= -milestone_pct && notified_milestones.exclude?(-milestone_pct)
-                            else
-                              false
-                            end
+        next if pnl_pct_as_percent.abs < milestone_pct
 
-        next unless milestone_reached
+        milestone_key = pnl_pct_as_percent.positive? ? milestone_pct : -milestone_pct
+        # Claimed in Redis before sending: the old tracker.update! hit StaleObjectError against the
+        # 30s PnL DB sync, never recorded the milestone, and re-sent it on every tick.
+        next unless Live::PositionRuntimeCache.instance.append_telegram_milestone!(tracker, milestone_key)
 
-        # Send notification (notifier expects pnl_pct in percentage, e.g. 5.0 for 5%)
-        milestone_text = if pnl_pct_as_percent.positive?
-                           "#{milestone_pct}% profit"
-                         else
-                           "#{milestone_pct}% loss"
-                         end
-
-        begin
-          Notifications::TelegramNotifier.instance.notify_pnl_milestone(
-            tracker,
-            milestone: milestone_text,
-            pnl: pnl,
-            pnl_pct: pnl_pct_as_percent
-          )
-
-          # Mark milestone as notified
-          milestone_key = pnl_pct_as_percent.positive? ? milestone_pct : -milestone_pct
-          notified_milestones << milestone_key
-          tracker.update!(meta: meta.merge('telegram_notified_milestones' => notified_milestones))
-        rescue StandardError => e
-          @logger.error("[PnlUpdater] Failed to notify milestone for #{tracker.id}: #{e.class} - #{e.message}")
-        end
+        milestone_text = pnl_pct_as_percent.positive? ? "#{milestone_pct}% profit" : "#{milestone_pct}% loss"
+        send_milestone_async(tracker, milestone_text, pnl, pnl_pct_as_percent)
       end
     rescue StandardError => e
       @logger.error("[PnlUpdater] check_and_notify_pnl_milestones failed: #{e.class} - #{e.message}")
+    end
+
+    # Telegram is a blocking HTTP call; on this thread it froze every position's live PnL while it ran.
+    def send_milestone_async(tracker, milestone_text, pnl, pnl_pct)
+      Thread.new do
+        Rails.application.executor.wrap do
+          Notifications::TelegramNotifier.instance.notify_pnl_milestone(tracker, milestone: milestone_text, pnl: pnl, pnl_pct: pnl_pct)
+        end
+      end
     end
 
     # Broadcast live PnL for a single position to the "positions" ActionCable channel.
@@ -514,7 +507,7 @@ module Live
 
     # Keep the positions WS channel warm when ticks are quiet (illiquid strikes).
     def maybe_broadcast_positions_keepalive
-      return if @last_positions_keepalive_at && (Time.current.to_f - @last_positions_keepalive_at) < 3.0
+      return if @last_positions_keepalive_at && (Time.current.to_f - @last_positions_keepalive_at) < 1.0
       return unless Positions::ActivePositionsCache.instance.active_trackers.any?
 
       @last_positions_keepalive_at = Time.current.to_f

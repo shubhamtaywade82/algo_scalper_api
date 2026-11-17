@@ -13,6 +13,24 @@ RSpec.describe Live::PnlUpdaterService, :freeze_time do
     allow(service).to receive(:start!).and_return(true)
   end
 
+  describe 'PnL milestone notifications' do
+    let(:notifier) { instance_double(Notifications::TelegramNotifier, notify_pnl_milestone: true) }
+
+    before do
+      Live::PositionRuntimeCache.instance.clear(tracker.id)
+      allow(service).to receive(:telegram_milestones_enabled?).and_return(true)
+      allow(Notifications::TelegramNotifier).to receive(:instance).and_return(notifier)
+      allow(Thread).to receive(:new).and_yield
+    end
+
+    it 'sends a crossed milestone once, not on every tick' do
+      2.times { service.send(:check_and_notify_pnl_milestones, tracker, 0.12, 1200) }
+
+      expect(notifier).to have_received(:notify_pnl_milestone).once
+                                                              .with(tracker, hash_including(milestone: '10% profit'))
+    end
+  end
+
   describe 'index tick frames' do
     before do
       service.instance_variable_set(:@last_index_ltps, nil)
