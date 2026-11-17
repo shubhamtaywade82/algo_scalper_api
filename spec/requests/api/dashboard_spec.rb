@@ -4,10 +4,8 @@ require 'rails_helper'
 
 RSpec.describe 'GET /api/dashboard' do
   before do
-    allow(Live::PnlUpdaterService.instance).to receive(:running?).and_return(true)
-    allow(Live::OrderUpdateHub.instance).to receive(:running?).and_return(false)
     allow(Live::SystemStatusCache.instance).to receive(:all_statuses).and_return(
-      ws_market_feed: false, scheduler: 'running'
+      ws_market_feed: false, ws_order_update: false, pnl_updater_running: true, scheduler: 'running'
     )
     allow(Orders).to receive_message_chain(:config, :gateway, :wallet_snapshot).and_return(
       { cash: 100_000, equity: 0, mtm: 0, exposure: 0 }
@@ -34,8 +32,10 @@ RSpec.describe 'GET /api/dashboard' do
     expect(body['system']['pnl_updater_running']).to be(true)
   end
 
-  it 'reflects pnl_updater_running as false when service is stopped' do
-    allow(Live::PnlUpdaterService.instance).to receive(:running?).and_return(false)
+  it 'reflects pnl_updater_running as false when the daemon heartbeat is missing' do
+    allow(Live::SystemStatusCache.instance).to receive(:all_statuses).and_return(
+      ws_market_feed: false, ws_order_update: false, pnl_updater_running: false, scheduler: 'unknown'
+    )
     get '/api/dashboard'
     expect(response).to have_http_status(:ok)
     body = response.parsed_body

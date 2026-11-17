@@ -96,12 +96,10 @@ module InstrumentHelpers
     ltp_from_meta = meta&.dig(:ltp)
     return valid_meta_ltp!(ltp_from_meta, segment: segment, security_id: security_id) if ltp_from_meta.present?
 
-    # Try WebSocket cache if hub is connected and ticks are fresh
-    hub = Live::MarketFeedHub.instance
-    if hub.running? && hub.connected?
-      tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
-      return tick.ltp if tick&.ltp&.positive? && tick.fresh?
-    end
+    # Fresh tick from the shared Redis-backed cache. Not gated on hub.running?: the hub only runs in
+    # the trading daemon, so web/job processes would otherwise always fall through to REST.
+    tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+    return tick.ltp if tick&.ltp&.positive? && tick.fresh?
 
     # Fallback to REST API when WebSocket unavailable or cache miss
     if fallback_to_api

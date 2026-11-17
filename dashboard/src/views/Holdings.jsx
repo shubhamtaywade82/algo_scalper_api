@@ -2,6 +2,7 @@ import { Show, For } from 'solid-js'
 import { useHoldings } from '../stores/useHoldings'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table'
 import Button from '../components/ui/Button'
+import AnimatedNumber from '../components/AnimatedNumber'
 
 export default function Holdings() {
   const { holdings, loading, error, fetchHoldings } = useHoldings()
@@ -52,10 +53,10 @@ export default function Holdings() {
                     <TableRow class="hover:bg-white/[0.02] transition-colors">
                       <TableCell class="px-6 py-4 font-bold text-white">{h.symbol}</TableCell>
                       <TableCell class="px-4 py-4 text-right text-data">{h.quantity}</TableCell>
-                      <TableCell class="px-4 py-4 text-right text-data text-gray-400">{h.avg_price}</TableCell>
-                      <TableCell class="px-4 py-4 text-right text-data text-white">{h.ltp}</TableCell>
+                      <TableCell class="px-4 py-4 text-right text-data text-gray-400"><AnimatedNumber value={h.avg_price} decimals={2} /></TableCell>
+                      <TableCell class="px-4 py-4 text-right text-data text-white"><AnimatedNumber value={h.ltp} decimals={2} /></TableCell>
                       <TableCell class={`px-4 py-4 text-right text-data font-bold ${Number(h.pnl) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {h.pnl}
+                        <AnimatedNumber value={h.pnl} decimals={2} />
                       </TableCell>
                       <TableCell class="px-4 py-4 text-gray-500">{h.segment}</TableCell>
                     </TableRow>

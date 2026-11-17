@@ -9,6 +9,8 @@ module Live
     include Singleton
 
     DEFAULT_MODE = :ticker
+    # India VIX rides the same WS so the VIX gate and Market Brief never need a REST poll.
+    INDIA_VIX_WATCH = { segment: 'IDX_I', security_id: '21' }.freeze
 
     def initialize
       @callbacks = Concurrent::Array.new
@@ -468,6 +470,17 @@ module Live
       update_pnl_caches!(security_id, ltp)
     end
 
+    # Pushed straight from the tick handler so the UI sees every index tick with no polling hop.
+    # Safe here only because the cable adapter is Redis pub/sub (no DB write).
+    def push_index_tick_to_ui(tick, ltp)
+      key = Live::PnlUpdaterService::INDEX_SECURITY_IDS.key(tick[:security_id].to_s)
+      return unless key && tick[:segment].to_s == 'IDX_I'
+
+      ActionCable.server.broadcast('dashboard', { type: 'indices', indices: { key => ltp }, timestamp: Time.current.iso8601(3) })
+    rescue StandardError => e
+      Rails.logger.debug { "[MarketFeedHub] index tick push failed: #{e.message}" }
+    end
+
     def update_connection_state!
       was_connected = @connection_state == :connected
       @last_tick_at = Time.current
@@ -496,6 +509,8 @@ module Live
       Live::TickCache.put(tick) if ltp.positive? || tick[:prev_close].to_f.positive?
 
       return unless ltp.positive?
+
+      push_index_tick_to_ui(tick, ltp)
 
       symbol = tick[:symbol] || tick[:security_id]
       is_index = tick[:instrument_type].to_s.upcase == 'INDEX' || %w[NIFTY SENSEX BANKNIFTY].include?(symbol.to_s.upcase)
@@ -671,6 +686,13 @@ module Live
     end
 
     def load_watchlist
+      items = load_watchlist_items
+      return items if items.empty?
+
+      items.any? { |i| i[:segment].to_s == 'IDX_I' && i[:security_id].to_s == '21' } ? items : items + [INDIA_VIX_WATCH]
+    end
+
+    def load_watchlist_items
       # Prefer DB watchlist if present; fall back to ENV for bootstrap-only
       if ActiveRecord::Base.connection.schema_cache.data_source_exists?("watchlist_items") &&
          WatchlistItem.exists?

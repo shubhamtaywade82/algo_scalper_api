@@ -4,11 +4,11 @@ Rails 8 API backend for **fully autonomous** intraday options scalping on Indian
 
 ## Stack
 
-- Ruby 3.3.4, Rails 8.0.2, API-only mode
+- Ruby 4.0.9, Rails 8.1.4.1, API-only mode
 - PostgreSQL (persistence, Solid Queue backend)
 - Redis (tick cache, PnL cache, position state, circuit breaker)
 - Solid Queue (background job processing — not Sidekiq)
-- ActionCable over the `solid_cable` adapter (`config/cable.yml`): broadcasts are rows in `solid_cable_messages` (dev: main DB; prod: separate `cable` DB), polled every 0.1s — this is how the trading daemon's broadcasts reach browsers via the web process. Not Redis
+- ActionCable over the Redis pub/sub adapter (`config/cable.yml`): the trading daemon's broadcasts reach browsers via the web process with no DB write or polling hop. `MarketFeedHub#push_index_tick_to_ui` broadcasts each index tick straight from the WS handler — this is only allowed because cable is Redis; do not switch back to solid_cable without removing it
 - Solid Cache (Rails.cache backend in production; development uses `:redis_cache_store`)
 - DhanHQ v2 via `dhanhq` gem (broker API + WebSocket)
 - Optional: OpenAI for AI technical analysis
@@ -217,6 +217,7 @@ All percentage values in `config/algo.yml` use **DECIMAL format**: `0.12` means 
 - Option chain adapter is always `DhanAdapter` (even in paper mode) — option chain reads are live
 - Token refresh uses `Dhan::TokenManager` with 3-tier fallback: authority server → TOTP auto-refresh → static ENV
 - **Booked P&L uses statutory charges**, not the flat `broker_fees.fee_per_order`: `Positions::FinalPnl.from_exit_price(..., segment:)` and the ledger posters use `Orders::ChargesCalculator` per leg (~₹88 per round trip vs ₹40 flat). Trackers closed since 2026-11-02 carry `meta['fee_model']='statutory'`; older rows keep the flat fee (use `FinalPnl.for_tracker` so a reconciler never mixes the two). Live marks and position sizing still use the flat fee
+- **Dhan REST is rate-limited per account, not per process**: `Dhan::SharedRateLimit` (prepended onto `DhanHQ::RateLimiter` in `dhanhq_config.rb`) spaces quote/data/option-chain calls through Redis so web, jobs and the daemon share one budget. Live data comes from the WS: index prev close = quote-packet `day_close` (copied to `prev_close` in `TickCache#put`), India VIX (IDX_I 21) is subscribed by `MarketFeedHub`. `Instrument#fetch_option_chain` is single-flight (lock) and serves the last good chain while another process refreshes or after a failure. Keep `DHANHQ_WS_MODE=quote`: `full` mode delivers **no ticks for IDX_I** (verified), so indices would go dark
 - This app is the Dhan token **owner** for other local tools: `GET /api/dhan/token` (requires `API_OPERATOR_TOKEN`, even in dev) serves `Dhan::TokenManager.snapshot` — read-only, never refreshes. Any other app that logs in itself invalidates this app's token (DH-906); consumers (e.g. pine-ts-workbench) must fetch from here and generate their own only when this app is unreachable
 
 ## ActionMCP Server (this app as an MCP server)

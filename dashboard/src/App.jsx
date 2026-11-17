@@ -23,6 +23,7 @@ const Backtester = lazy(() => import('./views/Backtester'))
 const Replay = lazy(() => import('./views/Replay'))
 const Alpha = lazy(() => import('./views/Alpha'))
 const Charts = lazy(() => import('./views/Charts'))
+const ConfluenceTerminal = lazy(() => import('./views/ConfluenceTerminal'))
 
 // New TDD routes — all backends implemented
 const MarketWatch = lazy(() => import('./views/MarketWatch'))
@@ -150,6 +151,8 @@ export default function App() {
       {/* Fullscreen — own layout, no Header/footer chrome */}
       <Route path="/charts" component={Charts} />
       <Route path="/trail-engine" component={TrailEngine} />
+      <Route path="/confluence-terminal" component={ConfluenceTerminal} />
+      <Route path="/terminal" component={() => <Navigate href="/confluence-terminal" />} />
     </Router>
   )
 }

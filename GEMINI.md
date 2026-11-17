@@ -1,7 +1,7 @@
 # Algo Scalper API — Antigravity Context
 
 ## Stack
-- Ruby 3.3.4, Rails 8.1.3 (API-only), PostgreSQL, Redis
+- Ruby 4.0.9, Rails 8.1.4.1 (API-only), PostgreSQL, Redis
 - DhanHQ for Indian market trading (NSE/BSE/MCX)
 - Solid Queue, Solid Cache, Solid Cable
 - Ollama for local LLM (technical analysis agent)

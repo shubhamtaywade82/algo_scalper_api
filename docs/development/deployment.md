@@ -5,7 +5,7 @@ This document covers deployment setup and operational procedures for the Algo Sc
 ## Production Environment
 
 - **OS**: Linux (Ubuntu 22.04+ recommended)
-- **Ruby**: 3.3.4
+- **Ruby**: 4.0.9
 - **Rails**: 8.0.2 (API-only)
 - **Process Manager**: `systemd` for managing the 4 processes (web, trading, jobs, dashboard)
 - **Reverse Proxy**: Nginx (serves Rails API and proxies to Next.js dashboard)

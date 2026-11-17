@@ -20,8 +20,9 @@ module Strategies
 
     attr_reader :runners
 
-    def initialize(context_builder: nil)
+    def initialize(context_builder: nil, supertrend: Indicators::Supertrend)
       @context_builder = context_builder || ContextBuilder.new
+      @supertrend = supertrend
       @runners = {} # slug => RunnerState
       @running = false
       @mutex = Mutex.new
@@ -139,7 +140,7 @@ module Strategies
           state[:last_heartbeat] = now
           # Persist only: periodic broadcasts were ~70% of all ActionCable traffic and no
           # dashboard client subscribes to strategy_status. Transitions still broadcast.
-          state[:run]&.update_column(:stats, state[:run].stats.merge(last_heartbeat: now)) # rubocop:disable Rails/SkipsModelValidations
+          state[:run]&.update_column(:stats, state[:run].stats.merge('last_heartbeat' => now)) # rubocop:disable Rails/SkipsModelValidations
         end
       end
     end
@@ -221,9 +222,10 @@ module Strategies
       state[:run]&.update!(
         stopped_at: Time.current,
         stop_reason: reason,
+        # jsonb loads with string keys; merging symbol keys makes a mixed-key hash that json 3.x refuses to dump
         stats: state[:run].stats.merge(
-          final_error_count: state[:errors],
-          last_heartbeat: Time.current.to_i
+          'final_error_count' => state[:errors],
+          'last_heartbeat' => Time.current.to_i
         )
       )
 
@@ -279,13 +281,13 @@ module Strategies
       signal = state[:strategy].call(context)
       state[:log_stream]&.info("#{instrument_key} → #{signal.class.name.demodulize}")
 
-      persist_signal(state, slug, instrument_key, signal)
+      persist_signal(state, slug, instrument_key, signal, context)
     rescue StandardError => e
       state[:log_stream]&.error("#{instrument_key} error: #{e.message}")
       handle_crash(state, slug, e)
     end
 
-    def persist_signal(state, slug, instrument_key, signal)
+    def persist_signal(state, slug, instrument_key, signal, context)
       action = signal.class.name.demodulize.underscore
 
       record = Strategies::Signal.create!(
@@ -297,6 +299,7 @@ module Strategies
         confidence: signal.respond_to?(:confidence) ? signal.confidence : nil,
         reason: signal.respond_to?(:reason) ? signal.reason : nil,
         outcome: action == "hold" ? "ignored_hold" : "shadow",
+        metadata: ENTRY_ACTIONS.include?(action) ? indicator_snapshot(context) : {},
         emitted_at: Time.current
       )
 
@@ -305,6 +308,18 @@ module Strategies
       @bus.publish(:strategy_signal,
                    slug: slug, instrument_key: instrument_key,
                    action: action, confidence: signal.try(:confidence))
+    end
+
+    # Strategies don't report their indicator values, so the API would show them as blank.
+    def indicator_snapshot(context)
+      series = context.candles.call("5m")
+      return {} unless series&.candles&.any?
+
+      line = @supertrend.new(series: series).call[:line]&.compact&.last
+      { "supertrend_value" => line, "adx_value" => series.adx(14)&.round(2) }.compact
+    rescue StandardError => e
+      Rails.logger.warn("[Strategies::Manager] indicator_snapshot failed: #{e.class} - #{e.message}")
+      {}
     end
 
     def attempt_entry(record, instrument_key, action)

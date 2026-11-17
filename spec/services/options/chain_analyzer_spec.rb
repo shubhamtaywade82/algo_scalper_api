@@ -731,4 +731,26 @@ RSpec.describe Options::ChainAnalyzer do
       expect(described_class.strike_interval([23_300])).to eq(50.0)
     end
   end
+
+  describe '.resolve_derivative_segment' do
+    let(:bse_index) { instance_double(Instrument, exchange: 'bse') }
+    let(:nse_index) { instance_double(Instrument, exchange: 'nse') }
+
+    it 'prefers the synced contract row' do
+      contract = instance_double(Instrument, exchange_segment: 'NSE_FNO')
+
+      expect(described_class.send(:resolve_derivative_segment, contract, bse_index)).to eq('NSE_FNO')
+    end
+
+    it 'derives the F&O segment from the underlying exchange when the contract is not synced' do
+      expect(described_class.send(:resolve_derivative_segment, nil, bse_index)).to eq('BSE_FNO')
+      expect(described_class.send(:resolve_derivative_segment, nil, nse_index)).to eq('NSE_FNO')
+    end
+
+    it 'returns nil rather than the index segment when the exchange is unknown' do
+      unknown = instance_double(Instrument, exchange: nil)
+
+      expect(described_class.send(:resolve_derivative_segment, nil, unknown)).to be_nil
+    end
+  end
 end
