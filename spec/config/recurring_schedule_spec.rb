@@ -17,20 +17,22 @@ RSpec.describe 'config/recurring.yml' do # rubocop:disable RSpec/DescribeClass
 
       expect(invalid).to be_empty
     end
-  end
 
-  it 'keeps the four cash-session jobs on their intended cadence in production' do
-    production = config.fetch('production')
-    schedules = %w[smc_scanner ai_agents_cycle cancel_stuck_orders tick_staleness_sampler].index_with do |key|
-      SolidQueue::RecurringTask.from_configuration(key, **production.fetch(key).symbolize_keys)
-                               .then { |t| t.send(:parsed_schedule).original }
+    # Development is where the daemon and worker actually run during paper sessions, so a round-the-clock
+    # schedule there means ~2,900 queue jobs a day (and off-hours SMC scans and LLM cycles) for nothing.
+    it "keeps the four cash-session jobs on their intended cadence in #{env}" do
+      environment = config.fetch(env)
+      schedules = %w[smc_scanner ai_agents_cycle cancel_stuck_orders tick_staleness_sampler].index_with do |key|
+        SolidQueue::RecurringTask.from_configuration(key, **environment.fetch(key).symbolize_keys)
+                                 .then { |t| t.send(:parsed_schedule).original }
+      end
+
+      expect(schedules).to eq(
+        'smc_scanner' => '*/15 9-15 * * 1-5 Asia/Kolkata',
+        'ai_agents_cycle' => '*/15 9-15 * * 1-5 Asia/Kolkata',
+        'cancel_stuck_orders' => '* 9-15 * * 1-5 Asia/Kolkata',
+        'tick_staleness_sampler' => '* 9-15 * * 1-5 Asia/Kolkata'
+      )
     end
-
-    expect(schedules).to eq(
-      'smc_scanner' => '*/15 9-15 * * 1-5 Asia/Kolkata',
-      'ai_agents_cycle' => '*/15 9-15 * * 1-5 Asia/Kolkata',
-      'cancel_stuck_orders' => '* 9-15 * * 1-5 Asia/Kolkata',
-      'tick_staleness_sampler' => '* 9-15 * * 1-5 Asia/Kolkata'
-    )
   end
 end

@@ -33,14 +33,14 @@ development:
 
   smc_scanner:
     class: SmcScannerJob
-    schedule: every 15 minutes
+    schedule: "*/15 9-15 * * 1-5 Asia/Kolkata"
     queue_name: default
     priority: 10
     description: "SMC + AVRZ scanner for all configured indices - runs every 15 minutes (aligns with 15m MTF candles)"
 
   ai_agents_cycle:
     class: Ai::AgentsCycleJob
-    schedule: every 15 minutes
+    schedule: "*/15 9-15 * * 1-5 Asia/Kolkata"
     queue_name: background
     priority: 8
     description: "Multi-Agent AI cycle (Market Analysis, Risk Management, Strategy Selection, Calibration)"
@@ -98,7 +98,7 @@ development:
 
   cancel_stuck_orders:
     class: Live::CancelStuckOrdersJob
-    schedule: every 1 minute
+    schedule: "* 9-15 * * 1-5 Asia/Kolkata"
     queue_name: background
     priority: 4
     description: "Cancels live entry orders DhanHQ never confirmed filled/rejected within the check window"
@@ -120,7 +120,7 @@ development:
 
   tick_staleness_sampler:
     class: DataQuality::TickStalenessSamplerJob
-    schedule: every 1 minute
+    schedule: "* 9-15 * * 1-5 Asia/Kolkata"
     queue_name: background
     priority: 15
     description: "Samples Live::FeedHealthService's tick-staleness check once a minute to accumulate a daily rate"
