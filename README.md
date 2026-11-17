@@ -22,7 +22,7 @@ Algo Scalper API automates the entire trade lifecycle — from signal identifica
 
 | Component | Technology |
 |-----------|-----------|
-| Language | Ruby 3.3.4 |
+| Language | Ruby 4.0.9 |
 | Framework | Rails 8.0.2 (API-only mode) |
 | Database | PostgreSQL |
 | Cache/State | Redis (tick cache, PnL cache, position state) |
@@ -38,7 +38,7 @@ Algo Scalper API automates the entire trade lifecycle — from signal identifica
 
 ### Prerequisites
 
-- Ruby 3.3.4, PostgreSQL 14+, Redis
+- Ruby 4.0.9, PostgreSQL 14+, Redis
 - DhanHQ account with API credentials
 - Node.js (for dashboard)
 

@@ -4,7 +4,7 @@ Rails 8 API backend for **fully autonomous** intraday options scalping on Indian
 
 ## Stack
 
-- Ruby 3.3.4, Rails 8.0.2, API-only mode
+- Ruby 4.0.9, Rails 8.1.4.1, API-only mode
 - PostgreSQL (persistence, Solid Queue backend)
 - Redis (tick cache, PnL cache, position state, circuit breaker)
 - Solid Queue (background job processing — not Sidekiq)
