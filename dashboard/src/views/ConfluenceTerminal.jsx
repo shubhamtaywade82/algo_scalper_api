@@ -3,9 +3,8 @@ import { A } from '@solidjs/router';
 import { dashboardApiHeaders } from '../lib/dashboardApi';
 import { useDashboard } from '../stores/useDashboard';
 import {
-  SEEDS, SYMBOL_CONFIG, clamp, createSessionState, ensureBars,
-  restoreEngineTo, getAggregatedBook, getFormingValues,
-  loadRealCandlesIntoSession, pushLiveTick
+  SYMBOL_CONFIG, clamp, createSessionState, getAggregatedBook,
+  getFormingValues, loadRealCandlesIntoSession, pushLiveTick, applyLiveDepth
 } from '../lib/confluence/engine';
 import { createAudioEngine } from '../lib/confluence/audio';
 import {
@@ -14,11 +13,11 @@ import {
   drawChips, drawDepthProfile, drawCrosshair, fitViewPrices
 } from '../lib/confluence/renderer';
 
-const SYMBOLS = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'SIM_SOL'];
+const SYMBOLS = ['NIFTY', 'BANKNIFTY', 'SENSEX'];
 const TIMEFRAMES = [{ id: '1', lbl: '1m' }, { id: '5', lbl: '5m' }, { id: '15', lbl: '15m' }, { id: '60', lbl: '1h' }];
 
 export default function ConfluenceTerminal() {
-  let wrapRef, sceneRef, overRef;
+  let wrapRef, sceneRef, overRef, pollTimer = null;
   const audio = createAudioEngine();
   const { indices } = useDashboard();
   const [symbol, setSymbol] = createSignal('NIFTY');
@@ -28,12 +27,12 @@ export default function ConfluenceTerminal() {
   const [speed, setSpeed] = createSignal(1);
   const [palette, setPalette] = createSignal('ion');
   const [layers, setLayers] = createSignal({ heat: true, fvg: true, vol: true });
-  const [spot, setSpot] = createSignal({ price: '--', delta: '0.00%', up: true, bids: '0', asks: '0', bidPct: 50 });
+  const [spot, setSpot] = createSignal({ price: '--', delta: '0.00%', up: true, bids: '0', asks: '0', bidPct: 50, spread: '--' });
   const [levels, setLevels] = createSignal([]);
   const [tape, setTape] = createSignal([]);
   const [loading, setLoading] = createSignal(false);
 
-  let state = createSessionState(SEEDS[0], 5, 'NIFTY');
+  let state = createSessionState(1337, 5, 'NIFTY');
   let aggCache = { bin: 10, len: 0, data: [], symbol: 'NIFTY' };
   let lut = buildLUT('ion');
   let view = { center: 50, visible: 70, minP: 24000, maxP: 26000 };
@@ -50,25 +49,41 @@ export default function ConfluenceTerminal() {
     dirty = true;
   }
 
+  async function fetchDepthData(sym) {
+    try {
+      const res = await fetch(`/api/depth?symbol=${sym}`, { headers: dashboardApiHeaders() });
+      if (!res.ok) return;
+      const data = await res.json();
+      applyLiveDepth(state, data);
+      const bids = data.bid || [];
+      const asks = data.ask || [];
+      const tot = (data.totalBidQty || 0) + (data.totalAskQty || 0) || 1;
+      const spread = asks[0] && bids[0] ? (asks[0].price - bids[0].price).toFixed(2) : '--';
+      setSpot(s => ({ ...s, bids: fmtS(data.totalBidQty || 0), asks: fmtS(data.totalAskQty || 0),
+        bidPct: ((data.totalBidQty || 0) / tot) * 100, spread }));
+      const rows = [];
+      for (const b of bids.slice(0, 5)) rows.push({ price: fmtP(b.price), size: fmtS(b.qty), side: 'bid', orders: b.orders });
+      for (const a of asks.slice(0, 5)) rows.push({ price: fmtP(a.price), size: fmtS(a.qty), side: 'ask', orders: a.orders });
+      setLevels(rows);
+      dirty = true;
+    } catch {
+      // Depth poll non-critical
+    }
+  }
+
   async function loadData(sym, intervalStr) {
     setLoading(true);
-    const cfg = SYMBOL_CONFIG[sym] || SYMBOL_CONFIG.NIFTY;
-    if (sym === 'SIM_SOL') {
-      state = createSessionState(SEEDS[0], parseInt(intervalStr, 10), 'SIM_SOL');
-      ensureBars(state, 180);
-      restoreEngineTo(state, 160);
-    } else {
-      try {
-        const res = await fetch(`/api/candles/${sym}?interval=${intervalStr}&days=2`, { headers: dashboardApiHeaders() });
-        const data = await res.json();
-        loadRealCandlesIntoSession(state, data.candles || [], sym);
-      } catch {
-        ensureBars(state, 120);
-      }
+    try {
+      const res = await fetch(`/api/candles/${sym}?interval=${intervalStr}&days=2`, { headers: dashboardApiHeaders() });
+      const data = await res.json();
+      loadRealCandlesIntoSession(state, data.candles || [], sym);
+    } catch {
+      // Fallback
     }
     view.center = Math.max(20, state.bars.length - 25);
     fitViewPrices(view, state.bars, state.playhead);
     updateStats();
+    await fetchDepthData(sym);
     dirty = true;
     setLoading(false);
   }
@@ -79,17 +94,8 @@ export default function ConfluenceTerminal() {
     const firstOpen = state.bars[0]?.o || fv.cur;
     const d = fv.cur - firstOpen;
     const up = d >= 0;
-    let bt = 0, at = 0;
-    for (const [idx, s] of state.book) {
-      const p = idx * state.baseBin;
-      if (Math.abs(p - fv.cur) <= state.baseBin * 20) { if (p < fv.cur) bt += s; else at += s; }
-    }
-    const tot = bt + at || 1;
-    setSpot({ price: fmtP(fv.cur), delta: (up ? '+' : '') + ((d / firstOpen) * 100).toFixed(2) + '%',
-      up, bids: fmtS(bt), asks: fmtS(at), bidPct: (bt / tot) * 100 });
-    const f = Math.floor(state.playhead);
-    setLevels((state.bigsSnap[f] || []).slice(0, 15).map(b => ({ price: fmtP(b.idx * state.baseBin), size: fmtS(b.size), side: b.side })));
-    setTape(state.events.filter(e => e.bar <= f).slice(-12).reverse());
+    setSpot(s => ({ ...s, price: fmtP(fv.cur), delta: (up ? '+' : '') + ((d / firstOpen) * 100).toFixed(2) + '%', up }));
+    setTape(state.events.slice(-12).reverse());
   }
 
   createEffect(() => {
@@ -106,22 +112,17 @@ export default function ConfluenceTerminal() {
     const dt = Math.min(50, now - prevT);
     prevT = now;
     if (playing() && !halted()) {
-      const prevFloor = Math.floor(state.playhead);
       state.playhead += dt / (1600 / speed());
       if (state.playhead >= state.bars.length - 1) setPlaying(false);
-      const f = Math.floor(state.playhead);
-      if (f !== prevFloor) {
-        restoreEngineTo(state, f);
-        updateStats();
-        dirty = true;
-      }
+      updateStats();
+      dirty = true;
     }
     fitViewPrices(view, state.bars, state.playhead);
-    renderFrame(now);
+    renderFrame();
     animId = requestAnimationFrame(animate);
   }
 
-  function renderFrame(now) {
+  function renderFrame() {
     if (!sceneRef || !overRef) return;
     const sc = sceneRef.getContext('2d'), oc = overRef.getContext('2d');
     const bw = plot.w / view.visible, cfg = SYMBOL_CONFIG[symbol()] || SYMBOL_CONFIG.NIFTY;
@@ -131,7 +132,7 @@ export default function ConfluenceTerminal() {
       sc.clearRect(0, 0, wrapRef.clientWidth, wrapRef.clientHeight);
       drawGrid(sc, view, plot, state.bars, dpr, bw, 64);
       drawHeatmap(sc, view, plot, state, { heat: layers().heat, bin: cfg.defaultBin, gamma: 0.8 }, aggData, lut, bw);
-      drawFvgAndRays(sc, view, plot, state, layers(), Math.floor(state.playhead), bw);
+      drawFvgAndRays(sc, view, plot, state, layers());
       drawCandlesAndVolume(sc, view, plot, state, { vol: layers().vol, candle: 'hollow' }, 0, state.bars.length - 1, bw);
       dirty = false;
     }
@@ -142,9 +143,8 @@ export default function ConfluenceTerminal() {
 
   function renderOverlay(oc, bw, aggData, cfg) {
     const fv = getFormingValues(state);
-    const m = aggData[Math.floor(state.playhead)] || new Map();
-    drawDepthProfile(oc, plot, view, m, fv.cur, cfg.defaultBin, 90);
-    const chips = [{ y0: getY(fv.cur, view, plot), h: 16, bg: fv.cur >= fv.b?.o ? C.bid : C.ask, fg: '#04070F', txt: fmtP(fv.cur) }];
+    drawDepthProfile(oc, plot, view, state.liveDepth, aggData[Math.floor(state.playhead)] || new Map(), fv.cur, cfg.defaultBin, 90);
+    const chips = [{ y0: getY(fv.cur, view, plot), h: 16, bg: fv.cur >= (fv.b?.o || 0) ? C.bid : C.ask, fg: '#04070F', txt: fmtP(fv.cur) }];
     drawChips(oc, plot, 64, chips);
     if (hover && !drag) drawCrosshair(oc, hover, plot, view, 64, state.bars, bw);
   }
@@ -154,11 +154,13 @@ export default function ConfluenceTerminal() {
     resize();
     window.addEventListener('resize', resize);
     animId = requestAnimationFrame(animate);
+    pollTimer = setInterval(() => fetchDepthData(symbol()), 4000);
   });
 
   onCleanup(() => {
     window.removeEventListener('resize', resize);
     if (animId) cancelAnimationFrame(animId);
+    if (pollTimer) clearInterval(pollTimer);
   });
 
   const toggleL = (k) => setLayers(l => ({ ...l, [k]: !l[k] }));
@@ -220,7 +222,8 @@ export default function ConfluenceTerminal() {
         </div>
 
         <aside class="w-72 border-l border-[#182742] bg-[#0B1424] flex flex-col p-3 z-10 max-md:hidden">
-          <div class="text-[10px] tracking-widest text-[#8CA0BF] uppercase mb-2">Order Book Imbalance</div>
+          <div class="text-[10px] tracking-widest text-[#8CA0BF] uppercase mb-1">Live Order Book Imbalance</div>
+          <div class="text-[9px] text-gray-500 mb-2">spread: {spot().spread} pts</div>
           <div class="h-2 rounded bg-[#070D1A] overflow-hidden flex mb-2">
             <div class="bg-[#19E3B1] transition-all" style={{ width: `${spot().bidPct}%` }} />
             <div class="bg-[#FF4D6D] transition-all" style={{ width: `${100 - spot().bidPct}%` }} />
@@ -230,25 +233,25 @@ export default function ConfluenceTerminal() {
             <span class="text-[#FF4D6D]">Asks: {spot().asks}</span>
           </div>
 
-          <div class="text-[10px] tracking-widest text-[#8CA0BF] uppercase mb-1">Resting Levels</div>
+          <div class="text-[10px] tracking-widest text-[#8CA0BF] uppercase mb-1">Resting Depth (DhanHQ)</div>
           <div class="flex-1 overflow-y-auto space-y-1 mb-3">
             <For each={levels()}>
               {(lvl) => (
                 <div class="flex justify-between items-center text-xs p-1.5 rounded bg-[#101C30]/50 border border-[#182742]">
                   <span class={lvl.side === 'bid' ? 'text-[#19E3B1]' : 'text-[#FF4D6D]'}>{lvl.price}</span>
-                  <span class="text-[#8CA0BF] text-[10px]">{lvl.size}</span>
+                  <span class="text-[#8CA0BF] text-[10px]">{lvl.size} ({lvl.orders}o)</span>
                 </div>
               )}
             </For>
           </div>
 
-          <div class="text-[10px] tracking-widest text-[#8CA0BF] uppercase mb-1">Liquidity Tape</div>
+          <div class="text-[10px] tracking-widest text-[#8CA0BF] uppercase mb-1">Live Liquidity Tape</div>
           <div class="h-36 overflow-y-auto space-y-1 border-t border-[#182742] pt-2">
             <For each={tape()}>
               {(ev) => (
                 <div class="flex justify-between text-[10px] text-[#8CA0BF]">
-                  <span class={ev.type === 'held' ? 'text-[#9BE84C]' : ev.type === 'pull' ? 'text-[#FFB224]' : 'text-[#8F7BFF]'}>
-                    {ev.type.toUpperCase()} @ {fmtP(ev.price)}
+                  <span class={ev.side === 'bid' ? 'text-[#19E3B1]' : 'text-[#FF4D6D]'}>
+                    {ev.side.toUpperCase()} WALL @ {fmtP(ev.price)}
                   </span>
                   <span>{fmtS(ev.size)}</span>
                 </div>
@@ -273,7 +276,6 @@ export default function ConfluenceTerminal() {
             onInput={(e) => {
               const val = Number(e.target.value);
               state.playhead = val;
-              restoreEngineTo(state, val);
               updateStats();
               dirty = true;
             }}
