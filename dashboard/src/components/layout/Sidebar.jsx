@@ -57,6 +57,11 @@ const ICONS = {
       <path d="M3 3v18h18M7 16l4-8 4 4 4-6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   ),
+  terminal: () => (
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path d="m4 17 6-6-6-6m8 14h8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  ),
   portfolio: () => (
     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <rect width="20" height="14" x="2" y="7" rx="2" stroke-width="2"/>
