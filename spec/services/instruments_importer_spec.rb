@@ -40,4 +40,30 @@ RSpec.describe InstrumentsImporter do
     expect(contract.reload.security_id).to eq('37316')
     expect(expired.reload.security_id).to eq("37316:retired:#{expired.id}")
   end
+
+  describe 're-importing an unchanged master' do
+    let(:csv) { [header, option_row('37316')].join("\n") }
+
+    it 'leaves rows that did not change untouched, so a daily import is not a full-table rewrite' do
+      described_class.import_from_csv(csv)
+      imported = Instrument.find_by!(security_id: '37316')
+      stamp = imported.updated_at
+
+      travel_to(1.day.from_now) { described_class.import_from_csv(csv) }
+
+      expect(imported.reload.updated_at).to eq(stamp)
+    end
+
+    it 'still updates a row whose master attributes changed' do
+      described_class.import_from_csv(csv)
+      imported = Instrument.find_by!(security_id: '37316')
+
+      travel_to(1.day.from_now) do
+        described_class.import_from_csv([header, option_row('37316').sub(',300', ',375')].join("\n"))
+      end
+
+      expect(imported.reload.lot_size).to eq(375)
+      expect(imported.updated_at).to be > 12.hours.ago
+    end
+  end
 end

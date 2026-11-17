@@ -260,9 +260,18 @@ class InstrumentsImporter
         batch_size: BATCH_SIZE,
         on_duplicate_key_update: {
           conflict_target: %i[exchange segment security_id],
-          columns: REFRESHED_COLUMNS
+          columns: REFRESHED_COLUMNS,
+          condition: changed_attributes_condition
         }
       )
+    end
+
+    # updated_at always differs, so without this every daily import rewrote all ~209k rows
+    # (and the dead tuples that leaves behind) even though almost none had changed.
+    def changed_attributes_condition
+      columns = (REFRESHED_COLUMNS - %i[updated_at]).map { |column| Instrument.connection.quote_column_name(column) }
+      table = Instrument.quoted_table_name
+      "(#{columns.map { |c| "#{table}.#{c}" }.join(', ')}) IS DISTINCT FROM (#{columns.map { |c| "EXCLUDED.#{c}" }.join(', ')})"
     end
 
     def bulk_link!(pairs)
