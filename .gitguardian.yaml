@@ -1,0 +1,6 @@
+version: 2
+secret:
+  # Both files only reference ${ENV_VAR}s / psql variables for passwords; real values live in the gitignored .env.
+  ignored-paths:
+    - deploy/unified/docker-compose.yml
+    - deploy/unified/initdb/01-databases.sh
