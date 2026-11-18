@@ -119,7 +119,11 @@ end
 
 gem "json_schemer", "~> 2.4"
 
-gem "rswag", "~> 2.17", groups: %i[development test]
+# api + ui serve the OpenAPI docs and must load wherever the routes mount them (production with ENABLE_SWAGGER_UI=true);
+# the spec generator is test-only.
+gem "rswag-api", "~> 2.17"
+gem "rswag-specs", "~> 2.17", groups: %i[development test]
+gem "rswag-ui", "~> 2.17"
 
 group :development do
   # MCP server for coding agents: tests, read-only DB queries, schema, routes, logs.

@@ -73,6 +73,11 @@ Rails.application.configure do
   # Only use :id for inspections in production.
   config.active_record.attributes_for_inspect = [ :id ]
 
+  # assume_ssl makes ActionCable's same-origin check expect an https:// origin, so a dashboard served over plain
+  # http (the compose stack on loopback) is refused with a 404. List its origins here; behind a TLS proxy it is not needed.
+  cable_origins = ENV.fetch("CABLE_ALLOWED_ORIGINS", "").split(",").map(&:strip).compact_blank
+  config.action_cable.allowed_request_origins = cable_origins if cable_origins.any?
+
   # Enable DNS rebinding protection and other `Host` header attacks.
   # config.hosts = [
   #   "example.com",     # Allow requests from example.com
