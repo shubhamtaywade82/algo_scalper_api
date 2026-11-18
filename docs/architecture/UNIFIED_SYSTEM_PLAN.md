@@ -44,7 +44,7 @@
 | Processes **[V]** | `web` (puma :3011), `trading` daemon (services in threads), `jobs` (Solid Queue), `dashboard` (SolidJS/Vite), `mcp` (ActionMCP) — started by `Procfile.dev` with `until …; do` restart loops |
 | Stores **[V]** | PostgreSQL (app data, Solid Queue, ~40 tables incl. `strategy_signals`, `position_trackers`, `candles` (≈163k rows), `instruments` (≈329k), ledger tables, paper wallet/orders/positions) · Redis (tick cache, PnL cache, rate limits, Rails.cache in dev, ActionCable) |
 | Dhan touchpoints **[V]** | Token via TOTP, owner of the shared token (`GET /api/dhan/token`) · market-feed WS + order-update WS · REST (chain, quotes, data) behind `Dhan::SharedRateLimit` (Redis) · instrument master import · `Live::WsConnectionBudget` (cap 5 concurrent WS) |
-| Signals **[V]** | `Strategies::Manager` runs ~7 plugin strategies per 1m candle; ~40-guard `EntryGuardPipeline`; chain analyzer + qualification; `Capital::Allocator` sizing |
+| Signals **[V]** | `Strategies::Manager` runs ~7 plugin strategies per 1m candle; 41-guard `EntryGuardPipeline`; chain analyzer + qualification; `Capital::Allocator` sizing |
 | Execution **[V]** | `Orders::GatewayPaper` (default) / `GatewayLive`; client-side exits (15 rule engines, `UnifiedExitChecker`) in the daemon |
 | UI/ops **[V]** | Dashboard (30 views: positions, signals, strategies, ledger, replay, backtester…), 18 read-only MCP tools, Telegram notifier, circuit breaker API |
 | Known weaknesses **[V]** | Exits depend on the daemon staying healthy (a WS-reconnect leak and a CPU stall were found and fixed on 2026-11-17); no broker-side stops on entries |
@@ -457,3 +457,18 @@ Stop Rails' own order placement for agent-routed strategies; retire the duplicat
 ## Appendix C — Shared environment values (proposed `shared.env`)
 
 `DHAN_CLIENT_ID`, `REDIS_URL`, `OLLAMA_HOST`, `OLLAMA_MODEL_*`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `API_OPERATOR_TOKEN` (agent: `DHAN_TOKEN_AUTHORITY_KEY`), `DHAN_SHARED_RATE_LIMIT_KEY=dhan:rate_limit:option_chain`, `AGENT_CAPITAL_SHARE`, `INTENT_TTL_SECONDS`.
+
+## Appendix D — Corrections after the first docker bring-up (2026-11-18)
+
+Things the plan, and the integration blueprint reviewed alongside it, got wrong or left out. Each was checked by running `deploy/unified/` in a throwaway compose project.
+
+| Topic | Correction |
+|---|---|
+| Entry guards | The pipeline has **41** handlers (`EntryGuardPipeline.default_handlers`), not "about 40". |
+| Recurring jobs | Production loads **18** Solid Queue tasks; the blueprint's 17 was a different count. |
+| Instrument freshness | The `Derivative` table is legacy and frozen; check `Setting` `instruments.last_imported_at`, not `Derivative` rows. |
+| Agent container | The agent now has a `Dockerfile` (agent PR #15). Run with `UI=off`: the Ink cockpit and `scripts/session.sh` need a TTY/tmux, which a container does not have. |
+| Rails databases | Production uses **four** databases (primary, cache, queue, cable), not one; `db:prepare` must run for all four, and the compose stack creates them in `initdb/`. |
+| Rails secrets | Production boot needs `SECRET_KEY_BASE`, the three `ACTIVE_RECORD_ENCRYPTION_*` keys (stored Dhan tokens are encrypted), `API_OPERATOR_TOKEN` and `API_DASHBOARD_TOKEN`. Without the dashboard token every dashboard endpoint answers 403. |
+| Production boot | `rswag` had to load in production (gem split) and ActionCable needs `CABLE_ALLOWED_ORIGINS` when the dashboard is served over plain http. Both fixed in PR #327. |
+| Live duty | Do **not** run Rails and the agent live on the same account together: the agent assumes it is the only writer and refuses to start over a broker position it cannot adopt. Paper with paper is fine; the rollout in `deploy/unified/README.md` has no both-live stage. |
