@@ -43,6 +43,15 @@ Live trading needs `MODE=live` **and** `LIVE_TRADING_ACK=I_ACCEPT_LIVE_ORDER_RIS
 both, the process exits before opening a socket. `npm run dev:sandbox` starts sandbox mode.
 Each mode holds its own trading lease, keyed `mode:clientId`, so a paper run never blocks a live run.
 
+### Running in a container
+
+`docker build -t options-agent .` builds the agent (Node 22, non-root, no inbound ports). It starts `node dist/index.js`
+with the cockpit off (`UI=off`), so control it with `docker stop` (SIGTERM starts the graceful shutdown; allow a
+generous `--time`) and read the journal from a volume mounted at `/app/data/journal`. Operator scripts run through the
+same image, for example `docker run --rm --env-file .env options-agent npm run db:status`. Configuration is environment
+only; pass `CONFIG_FILE=config.paper.yml` for the paper profile. To start it beside the Rails app with a shared Postgres
+and Redis, see `deploy/unified` in `algo_scalper_api`.
+
 ### Running paper against paper_exchange
 
 `PAPER_BACKEND=exchange` sends paper orders to a running [paper_exchange](https://github.com/shubhamtaywade82/paper_exchange) server, which keeps the account, margin and ledger. Set `PAPER_EXCHANGE_URL` (https, or http on loopback), `PAPER_EXCHANGE_API_KEY` and optionally `PAPER_EXCHANGE_ACCOUNT_ID`.
@@ -336,7 +345,8 @@ Set one source. Setting two is a startup error.
   already owns the account's token, such as the Rails app (`GET /api/dhan/token`, key = its `API_OPERATOR_TOKEN`).
   Dhan invalidates the previous token on every login (DH-906), so this agent fetches the token and **never logs in**.
   It re-reads the token at least every 30 seconds, and five minutes before expiry, because the owner can replace it well before expiry (it renews 30 minutes early and force-refreshes on auth errors) and the old token dies at once. A 401 from Dhan forces a fresh read that fails loudly; it never retries the token that was just rejected. The URL must be https, or
-  http on loopback. If the owner is down, a still-valid token keeps working and a warning is logged once. At
+  http on loopback, or on a host named in `DHAN_TOKEN_AUTHORITY_TRUSTED_HOSTS` (a container on a private
+  network, such as `asa-web`). If the owner is down, a still-valid token keeps working and a warning is logged once. At
   startup the agent waits up to ten minutes for the owner, then exits with a message. It does not fall back to its
   own login, because that would invalidate the owner's token when the owner returns. To run without the owner, set
   `DHAN_PIN` and `DHAN_TOTP_SECRET` instead, and do not run the owner that day.

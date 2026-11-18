@@ -77,9 +77,23 @@ export function createAuthorityTokenProvider(options: AuthorityTokenOptions): Au
 
   // Several requests can find the token due at once. They must share one fetch.
   const fetchNow = singleFlight(async () => {
+    const previous = held;
     held = await fetchToken();
     degradedWarned = false;
+    logTokenChange(previous, held);
   });
+
+  // Operators need proof the handshake worked and a record of each rotation; the token itself is never logged.
+  const logTokenChange = (previous: HeldToken | undefined, current: HeldToken): void => {
+    if (previous?.accessToken === current.accessToken) {
+      return;
+    }
+    const expiresAt = new Date(current.expiresAt).toISOString();
+    options.logger?.info(
+      previous === undefined ? 'dhan token read from the token authority' : 'dhan token replaced by the token authority',
+      { expiresAt },
+    );
+  };
 
   const isDue = (token: HeldToken): boolean =>
     now() - token.fetchedAt >= MAX_HELD_AGE_MS || now() >= token.expiresAt - RENEW_MARGIN_MS;

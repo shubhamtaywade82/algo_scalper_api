@@ -261,8 +261,28 @@ describe('loadConfig Dhan authentication', () => {
       );
     });
 
+    it('accepts plain http to a host the operator names as trusted, such as a container on a private network', () => {
+      const config = loadConfig({
+        ...AUTHORITY,
+        DHAN_TOKEN_AUTHORITY_URL: 'http://asa-web:3011/api/dhan/token',
+        DHAN_TOKEN_AUTHORITY_TRUSTED_HOSTS: 'asa-web',
+      });
+
+      assert.deepEqual(config.dhan.auth, { kind: 'authority', url: 'http://asa-web:3011/api/dhan/token', key: 'operator-key' });
+    });
+
+    it('matches trusted hosts exactly and ignores case, so a lookalike host is still refused', () => {
+      assert.doesNotThrow(() =>
+        loadConfig({ ...AUTHORITY, DHAN_TOKEN_AUTHORITY_URL: 'http://ASA-Web:3011/x', DHAN_TOKEN_AUTHORITY_TRUSTED_HOSTS: ' other , asa-web ' }),
+      );
+      assert.throws(
+        () => loadConfig({ ...AUTHORITY, DHAN_TOKEN_AUTHORITY_URL: 'http://asa-web.evil.example/x', DHAN_TOKEN_AUTHORITY_TRUSTED_HOSTS: 'asa-web' }),
+        /must be https, or http on loopback or a trusted host/,
+      );
+    });
+
     it('accepts https, or http only on loopback, since the reply carries a live-order token', () => {
-      assert.throws(() => loadConfig({ ...AUTHORITY, DHAN_TOKEN_AUTHORITY_URL: 'http://rails.internal/api/dhan/token' }), /must be https, or http on loopback/);
+      assert.throws(() => loadConfig({ ...AUTHORITY, DHAN_TOKEN_AUTHORITY_URL: 'http://rails.internal/api/dhan/token' }), /must be https, or http on loopback or a trusted host/);
       assert.doesNotThrow(() => loadConfig({ ...AUTHORITY, DHAN_TOKEN_AUTHORITY_URL: 'https://rails.internal/api/dhan/token' }));
     });
   });

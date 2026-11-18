@@ -36,22 +36,23 @@ function tokenBody(token: string, expiresAtMs: number, clientId = CLIENT_ID): Re
   return { status: 200, body: { access_token: token, expires_at: new Date(expiresAtMs).toISOString(), client_id: clientId } };
 }
 
-function recordingLogger(): { logger: Logger; warnings: string[] } {
+function recordingLogger(): { logger: Logger; warnings: string[]; infos: string[] } {
   const warnings: string[] = [];
+  const infos: string[] = [];
   const logger = {
     debug: () => undefined,
-    info: () => undefined,
+    info: (message: string) => infos.push(message),
     warn: (message: string) => warnings.push(message),
     error: () => undefined,
   } as unknown as Logger;
-  return { logger, warnings };
+  return { logger, warnings, infos };
 }
 
 function provider(replies: Reply[], options: { waitMs?: number } = {}) {
   const scripted = scriptedFetch(replies);
   const slept: number[] = [];
   const clock = { now: 0 };
-  const { logger, warnings } = recordingLogger();
+  const { logger, warnings, infos } = recordingLogger();
   const made = createAuthorityTokenProvider({
     url: URL_,
     key: OPERATOR_KEY,
@@ -66,7 +67,7 @@ function provider(replies: Reply[], options: { waitMs?: number } = {}) {
     logger,
     ...(options.waitMs === undefined ? {} : { startupWaitMs: options.waitMs }),
   });
-  return { ...made, calls: scripted.calls, slept, warnings, clock };
+  return { ...made, calls: scripted.calls, slept, warnings, infos, clock };
 }
 
 describe('createAuthorityTokenProvider', () => {
@@ -79,6 +80,25 @@ describe('createAuthorityTokenProvider', () => {
     assert.equal(calls.length, 1);
     assert.equal(calls[0]?.url, URL_);
     assert.equal(calls[0]?.headers['Authorization'], `Bearer ${OPERATOR_KEY}`);
+  });
+
+  it('logs when it first reads a token and when the owner replaces it, but not on every re-read', async () => {
+    const { provide, infos, clock } = provider([
+      tokenBody('tok-1', 10 * HOUR_MS),
+      tokenBody('tok-1', 10 * HOUR_MS),
+      tokenBody('tok-2', 10 * HOUR_MS),
+    ]);
+
+    await provide();
+    clock.now = 31_000;
+    await provide(); // same token re-read: no new line
+    clock.now = 62_000;
+    await provide(); // the owner replaced it
+
+    assert.equal(infos.length, 2);
+    assert.match(infos[0] ?? '', /read from the token authority/);
+    assert.match(infos[1] ?? '', /replaced/);
+    assert.doesNotMatch(infos.join(' '), /tok-/);
   });
 
   it('fetches again once the token is inside the renewal margin, so a token Rails replaced is picked up', async () => {

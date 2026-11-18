@@ -323,21 +323,30 @@ function parseTokenAuthority(env: Env): Extract<DhanAuthConfig, { kind: 'authori
   if (url === undefined || key === undefined) {
     throw new Error('DHAN_TOKEN_AUTHORITY_URL and DHAN_TOKEN_AUTHORITY_KEY must be set together');
   }
-  requireHttpsOrLoopback('DHAN_TOKEN_AUTHORITY_URL', url);
+  const trustedHosts = (optionalText(env, 'DHAN_TOKEN_AUTHORITY_TRUSTED_HOSTS') ?? '')
+    .split(',')
+    .map((host) => host.trim().toLowerCase())
+    .filter((host) => host.length > 0);
+  requireHttpsOrLoopback('DHAN_TOKEN_AUTHORITY_URL', url, trustedHosts);
   return { kind: 'authority', url, key };
 }
 
-/** The URL's reply or request carries credentials, so plain http is accepted only to this machine. */
-function requireHttpsOrLoopback(name: string, url: string): void {
+/**
+ * The URL's reply or request carries credentials, so plain http is accepted only to this machine, or to a host the
+ * operator names in `trustedHosts` (a container on a private network). Hostnames match exactly, ignoring case.
+ */
+function requireHttpsOrLoopback(name: string, url: string, trustedHosts?: readonly string[]): void {
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
     throw new Error(`${name} must be a URL`);
   }
-  const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname);
-  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && loopback)) {
-    throw new Error(`${name} must be https, or http on loopback`);
+  const hostname = parsed.hostname.toLowerCase();
+  const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(hostname);
+  const trusted = trustedHosts?.includes(hostname) === true;
+  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && (loopback || trusted))) {
+    throw new Error(`${name} must be https, or http on loopback${trustedHosts === undefined ? '' : ' or a trusted host'}`);
   }
 }
 
