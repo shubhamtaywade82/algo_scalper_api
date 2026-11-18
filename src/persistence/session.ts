@@ -11,7 +11,7 @@ import { PostgresLedger, type LedgerFence } from './ledger.js';
 import { MIGRATIONS } from './migrations.js';
 import { createPostgresPool, migrate } from './postgres.js';
 import { connectRedis } from './redis.js';
-import { MemoryRateGate, RedisRateGate, type RateGate } from './rateGate.js';
+import { MemoryRateGate, RedisRateGate, ReservationRateGate, type RateGate } from './rateGate.js';
 import { errorMessage, secretsOf } from './redact.js';
 
 /** Key namespace for everything this agent writes to Redis. Per client id, so two accounts never collide. */
@@ -35,6 +35,18 @@ export interface PersistenceSession {
    * in the journal and ledger at that moment; a non-zero count makes the next live start wait for review. Idempotent.
    */
   close(reason: string, unconfirmed?: number): Promise<void>;
+}
+
+/** Memory without Redis; the shared Rails-compatible line when asked for; otherwise this agent's own per-account gate. */
+function buildRateGate(redis: Redis | undefined, config: AgentConfig, now: () => number): RateGate {
+  if (redis === undefined) {
+    return new MemoryRateGate({ now });
+  }
+  const { sharedRateLimitKey } = config.persistence;
+  if (sharedRateLimitKey !== undefined) {
+    return new ReservationRateGate(redis, { key: sharedRateLimitKey, now });
+  }
+  return new RedisRateGate(redis, { prefix: `${KEY_ROOT}:${config.dhan.clientId}:rl:` });
 }
 
 /**
@@ -143,8 +155,7 @@ export async function openSession(
 
     // Redis holds the account rate gate and the contract cache. Neither is a trading authority.
     const cache: CacheStore = redis === undefined ? new MemoryCacheStore(input.now) : new RedisCacheStore(redis, `${KEY_ROOT}:${clientId}:cache:`);
-    const rateGate: RateGate =
-      redis === undefined ? new MemoryRateGate({ now: input.now }) : new RedisRateGate(redis, { prefix: `${KEY_ROOT}:${clientId}:rl:` });
+    const rateGate = buildRateGate(redis, config, input.now);
 
     if (ledger !== undefined) {
       await ledger.startRun({

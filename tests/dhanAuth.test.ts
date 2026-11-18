@@ -188,6 +188,35 @@ describe('createDhanClient', () => {
     return { tokenStore: isolatedStore, ...extra };
   }
 
+  describe('with a token authority', () => {
+    const AUTHORITY_DHAN = {
+      clientId: '1100000001',
+      auth: { kind: 'authority', url: 'http://127.0.0.1:3011/api/dhan/token', key: 'operator-key' },
+      baseUrl: undefined,
+      tokenCacheDir: undefined,
+    } as const;
+
+    it('takes its token from the authority at startup and never starts a Dhan login', async () => {
+      const requested: string[] = [];
+      const authorityFetch = (async (input: string | URL | Request) => {
+        requested.push(String(input));
+        return new Response(JSON.stringify({ access_token: 'owned-elsewhere', expires_at: FUTURE, client_id: '1100000001' }), { status: 200 });
+      }) as typeof fetch;
+
+      await withSdkStubs(
+        {
+          login: async () => assert.fail('the agent must not log in when a token authority owns the token'),
+          renew: async () => assert.fail('the agent must not renew a token it does not own'),
+        },
+        async () => {
+          await createDhanClient(AUTHORITY_DHAN, { authorityFetch });
+        },
+      );
+
+      assert.deepEqual(requested, ['http://127.0.0.1:3011/api/dhan/token']);
+    });
+  });
+
   interface SdkStubs {
     readonly login?: typeof DhanAuth.generateAccessToken;
     readonly renew?: typeof DhanAuth.renewWebToken;

@@ -320,7 +320,7 @@ Live mode refuses `MAX_RISK_PER_TRADE_PCT` above 2 and `MAX_DAILY_LOSS_PCT` abov
 
 ## Dhan authentication
 
-Set one source. Setting both is a startup error.
+Set one source. Setting two is a startup error.
 
 - **OTP login (preferred).** `DHAN_PIN` and `DHAN_TOTP_SECRET`. On first login (or after expiry)
   the agent sends the client id, PIN and a fresh TOTP code to `auth.dhan.co`. Valid tokens are
@@ -332,6 +332,18 @@ Set one source. Setting both is a startup error.
   instead, because the code could expire in transit.
 - **Static token.** `DHAN_ACCESS_TOKEN`, copied from the Dhan portal. It expires and is not
   renewed. Used only when neither OTP variable is set.
+- **Token authority.** `DHAN_TOKEN_AUTHORITY_URL` and `DHAN_TOKEN_AUTHORITY_KEY`, for when another process
+  already owns the account's token, such as the Rails app (`GET /api/dhan/token`, key = its `API_OPERATOR_TOKEN`).
+  Dhan invalidates the previous token on every login (DH-906), so this agent fetches the token and **never logs in**.
+  It re-reads the token at least every 30 seconds, and five minutes before expiry, because the owner can replace it well before expiry (it renews 30 minutes early and force-refreshes on auth errors) and the old token dies at once. A 401 from Dhan forces a fresh read that fails loudly; it never retries the token that was just rejected. The URL must be https, or
+  http on loopback. If the owner is down, a still-valid token keeps working and a warning is logged once. At
+  startup the agent waits up to ten minutes for the owner, then exits with a message. It does not fall back to its
+  own login, because that would invalidate the owner's token when the owner returns. To run without the owner, set
+  `DHAN_PIN` and `DHAN_TOTP_SECRET` instead, and do not run the owner that day.
+
+The option-chain gate is separate: `DHAN_SHARED_RATE_LIMIT_KEY` (opt-in, needs `REDIS_URL`) makes chain calls
+queue in one line with the Rails app, which reserves slots under `dhan:rate_limit:option_chain`. Both must use the
+same Redis database.
 
 The PIN and the TOTP secret together let anyone mint tokens for the account indefinitely.
 Keep both in `.env` (gitignored) or your secret store. Never commit them, paste them into an

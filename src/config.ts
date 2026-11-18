@@ -36,7 +36,8 @@ export const ALL_IN_LIVE_ACK_PHRASE = 'I_APPROVE_ALL_IN_RISK_ENFORCEMENT';
  */
 export type DhanAuthConfig =
   | { readonly kind: 'static'; readonly accessToken: string }
-  | { readonly kind: 'otp'; readonly pin: string; readonly totpSecret: string };
+  | { readonly kind: 'otp'; readonly pin: string; readonly totpSecret: string }
+  | { readonly kind: 'authority'; readonly url: string; readonly key: string };
 
 /**
  * Sandbox order credentials, passed to the SDK's `hybrid` mode. Market data stays on the production credentials;
@@ -185,6 +186,11 @@ export interface AgentConfig {
     readonly databaseUrl: string | undefined;
     /** Redis for the account rate gate and the contract cache. Required for live and sandbox, optional for paper. The trading lease lives in PostgreSQL. */
     readonly redisUrl: string | undefined;
+    /**
+     * Opt-in. The Redis key another process (the Rails app) reserves Dhan option-chain slots under. When set, chain calls
+     * queue in one line with that process instead of each keeping its own gate. Requires `redisUrl`.
+     */
+    readonly sharedRateLimitKey: string | undefined;
     /** Stable name for this host, recorded on every run. Defaults to the hostname at runtime. */
     readonly instanceId: string | undefined;
     /** Trading lease TTL. A crashed holder's lease expires after this, plus the order timeout. */
@@ -275,6 +281,15 @@ function parseDhanAuth(env: Env): DhanAuthConfig {
   const totpSecret = optionalText(env, 'DHAN_TOTP_SECRET');
   const accessToken = optionalText(env, 'DHAN_ACCESS_TOKEN');
 
+  const authority = parseTokenAuthority(env);
+  if (authority !== undefined) {
+    if (pin !== undefined || totpSecret !== undefined || accessToken !== undefined) {
+      throw new Error(
+        'DHAN_TOKEN_AUTHORITY_URL conflicts with DHAN_PIN, DHAN_TOTP_SECRET and DHAN_ACCESS_TOKEN; a second login would invalidate the authority\'s token',
+      );
+    }
+    return authority;
+  }
   if (pin === undefined && totpSecret === undefined) {
     if (accessToken === undefined) {
       throw new Error('DHAN_ACCESS_TOKEN is required unless DHAN_PIN and DHAN_TOTP_SECRET are set');
@@ -293,6 +308,37 @@ function parseDhanAuth(env: Env): DhanAuthConfig {
     throw new Error('DHAN_TOTP_SECRET must be a base32 secret (letters A-Z and digits 2-7)');
   }
   return { kind: 'otp', pin, totpSecret: normalizedSecret };
+}
+
+/**
+ * The Rails app owns the Dhan token: any other login invalidates it (DH-906). When these variables are set, this
+ * process fetches the token from it and never logs in.
+ */
+function parseTokenAuthority(env: Env): Extract<DhanAuthConfig, { kind: 'authority' }> | undefined {
+  const url = optionalText(env, 'DHAN_TOKEN_AUTHORITY_URL');
+  const key = optionalText(env, 'DHAN_TOKEN_AUTHORITY_KEY');
+  if (url === undefined && key === undefined) {
+    return undefined;
+  }
+  if (url === undefined || key === undefined) {
+    throw new Error('DHAN_TOKEN_AUTHORITY_URL and DHAN_TOKEN_AUTHORITY_KEY must be set together');
+  }
+  requireHttpsOrLoopback('DHAN_TOKEN_AUTHORITY_URL', url);
+  return { kind: 'authority', url, key };
+}
+
+/** The URL's reply or request carries credentials, so plain http is accepted only to this machine. */
+function requireHttpsOrLoopback(name: string, url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`${name} must be a URL`);
+  }
+  const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname);
+  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && loopback)) {
+    throw new Error(`${name} must be https, or http on loopback`);
+  }
 }
 
 function parseUnderlyings(env: Env): AgentConfig['underlyings'] {
@@ -674,16 +720,7 @@ function parsePaperBackend(env: Env): { backend: 'postgres' | 'exchange'; exchan
   if (url === undefined || apiKey === undefined) {
     throw new Error('PAPER_BACKEND=exchange requires PAPER_EXCHANGE_URL and PAPER_EXCHANGE_API_KEY');
   }
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    throw new Error('PAPER_EXCHANGE_URL must be a URL');
-  }
-  const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname);
-  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && loopback)) {
-    throw new Error('PAPER_EXCHANGE_URL must be https, or http on loopback');
-  }
+  requireHttpsOrLoopback('PAPER_EXCHANGE_URL', url);
   const accountId = optionalText(env, 'PAPER_EXCHANGE_ACCOUNT_ID') ?? text(env, 'DHAN_CLIENT_ID');
   return {
     backend: 'exchange',
@@ -711,9 +748,14 @@ function parsePersistence(env: Env, mode: TradingMode): AgentConfig['persistence
   if (mode === 'paper' && databaseUrl === undefined) {
     throw new Error('paper mode requires DATABASE_URL (the paper wallet, orders and positions are stored there)');
   }
+  const sharedRateLimitKey = optionalText(env, 'DHAN_SHARED_RATE_LIMIT_KEY');
+  if (sharedRateLimitKey !== undefined && redisUrl === undefined) {
+    throw new Error('DHAN_SHARED_RATE_LIMIT_KEY requires REDIS_URL (the shared gate lives in Redis)');
+  }
   return {
     databaseUrl,
     redisUrl,
+    sharedRateLimitKey,
     instanceId: optionalText(env, 'INSTANCE_ID'),
     leaseTtlMs: number(env, 'LEASE_TTL_MS', 30_000, { min: 5_000, max: 120_000, integer: true }),
     postgresMaxConnections: number(env, 'POSTGRES_MAX_CONNECTIONS', 5, { min: 1, max: 50, integer: true }),

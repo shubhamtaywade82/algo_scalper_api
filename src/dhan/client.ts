@@ -1,6 +1,7 @@
 import { DhanClient, FileTokenStore, TokenManager, type TokenStore } from '@nemesis-oss/dhanhq-sdk';
 import type { AgentConfig, SandboxConfig } from '../config.js';
 import type { Logger } from '../ops/logger.js';
+import { createAuthorityTokenProvider } from './authorityToken.js';
 import {
   assertUsableToken,
   clarifyDhanLoginFailure,
@@ -21,6 +22,8 @@ export interface DhanClientOptions {
    */
   readonly sandbox?: SandboxConfig;
   readonly timeoutMs?: number;
+  /** Overrides the HTTP call to the token authority (tests). */
+  readonly authorityFetch?: typeof fetch;
 }
 
 /** The SDK options that switch a client to sandbox orders. Empty for live and paper, which send orders only to production or nowhere. */
@@ -61,6 +64,27 @@ export async function createDhanClient(dhan: AgentConfig['dhan'], options: DhanC
   const timeout = options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs };
   if (dhan.auth.kind === 'static') {
     return new DhanClient({ clientId: dhan.clientId, token: dhan.auth.accessToken, ...baseURL, ...sandbox, ...timeout });
+  }
+
+  if (dhan.auth.kind === 'authority') {
+    // The authority owns the token. Logging in here too would invalidate it (DH-906), so this path has no login at all.
+    const authority = createAuthorityTokenProvider({
+      url: dhan.auth.url,
+      key: dhan.auth.key,
+      clientId: dhan.clientId,
+      ...(options.now === undefined ? {} : { now: options.now }),
+      ...(options.logger === undefined ? {} : { logger: options.logger }),
+      ...(options.authorityFetch === undefined ? {} : { fetch: options.authorityFetch }),
+    });
+    await authority.ensureReady();
+    return new DhanClient({
+      clientId: dhan.clientId,
+      tokenProvider: authority.provide,
+      onTokenExpired: authority.refresh,
+      ...baseURL,
+      ...sandbox,
+      ...timeout,
+    });
   }
 
   const { pin, totpSecret } = dhan.auth;

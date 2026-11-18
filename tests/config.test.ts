@@ -172,6 +172,24 @@ describe('loadConfig', () => {
   });
 });
 
+describe('loadConfig shared rate limit', () => {
+  const WITH_REDIS = { ...BASE, REDIS_URL: 'redis://127.0.0.1:6379/0' };
+
+  it('is off unless asked for, so the agent keeps its own per-account gate', () => {
+    assert.equal(loadConfig(WITH_REDIS).persistence.sharedRateLimitKey, undefined);
+  });
+
+  it('takes the key the Rails app reserves slots under', () => {
+    const config = loadConfig({ ...WITH_REDIS, DHAN_SHARED_RATE_LIMIT_KEY: 'dhan:rate_limit:option_chain' });
+    assert.equal(config.persistence.sharedRateLimitKey, 'dhan:rate_limit:option_chain');
+  });
+
+  it('needs Redis, because the other process can only be reached through it', () => {
+    const { REDIS_URL: _redis, ...withoutRedis } = BASE;
+    assert.throws(() => loadConfig({ ...withoutRedis, DHAN_SHARED_RATE_LIMIT_KEY: 'dhan:rate_limit:option_chain' }), /DHAN_SHARED_RATE_LIMIT_KEY requires REDIS_URL/);
+  });
+});
+
 describe('loadConfig Dhan authentication', () => {
   const OTP = { DHAN_CLIENT_ID: '1100000001', DHAN_PIN: '4321', DHAN_TOTP_SECRET: 'JBSWY3DPEHPK3PXP', DATABASE_URL: 'postgres://paper.test.invalid/agent' };
 
@@ -212,6 +230,41 @@ describe('loadConfig Dhan authentication', () => {
 
   it('still requires DHAN_CLIENT_ID for OTP login', () => {
     assert.throws(() => loadConfig({ DHAN_PIN: '4321', DHAN_TOTP_SECRET: 'JBSWY3DPEHPK3PXP' }), /DHAN_CLIENT_ID is required/);
+  });
+
+  describe('token authority', () => {
+    const AUTHORITY = {
+      DHAN_CLIENT_ID: '1100000001',
+      DHAN_TOKEN_AUTHORITY_URL: 'http://127.0.0.1:3011/api/dhan/token',
+      DHAN_TOKEN_AUTHORITY_KEY: 'operator-key',
+      DATABASE_URL: 'postgres://paper.test.invalid/agent',
+    };
+
+    it('selects the authority as the token source, so this process never logs in', () => {
+      assert.deepEqual(loadConfig(AUTHORITY).dhan.auth, {
+        kind: 'authority',
+        url: 'http://127.0.0.1:3011/api/dhan/token',
+        key: 'operator-key',
+      });
+    });
+
+    it('requires the URL and the key together', () => {
+      const { DHAN_TOKEN_AUTHORITY_KEY: _key, ...urlOnly } = AUTHORITY;
+      assert.throws(() => loadConfig(urlOnly), /DHAN_TOKEN_AUTHORITY_URL and DHAN_TOKEN_AUTHORITY_KEY must be set together/);
+    });
+
+    it('refuses a second token source alongside the authority, because two logins invalidate each other', () => {
+      assert.throws(() => loadConfig({ ...AUTHORITY, DHAN_ACCESS_TOKEN: 'stale' }), /DHAN_TOKEN_AUTHORITY_URL conflicts with/);
+      assert.throws(
+        () => loadConfig({ ...AUTHORITY, DHAN_PIN: '4321', DHAN_TOTP_SECRET: 'JBSWY3DPEHPK3PXP' }),
+        /DHAN_TOKEN_AUTHORITY_URL conflicts with/,
+      );
+    });
+
+    it('accepts https, or http only on loopback, since the reply carries a live-order token', () => {
+      assert.throws(() => loadConfig({ ...AUTHORITY, DHAN_TOKEN_AUTHORITY_URL: 'http://rails.internal/api/dhan/token' }), /must be https, or http on loopback/);
+      assert.doesNotThrow(() => loadConfig({ ...AUTHORITY, DHAN_TOKEN_AUTHORITY_URL: 'https://rails.internal/api/dhan/token' }));
+    });
   });
 });
 
