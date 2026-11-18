@@ -7,6 +7,10 @@ COPY package*.json ./
 RUN npm ci --silent
 
 COPY . .
+# Vite bakes this into the bundle: it is the dashboard-tier token (not the operator token), so serve the dashboard
+# only on a trusted interface. Empty is fine where Rails does not enforce API_DASHBOARD_TOKEN.
+ARG VITE_API_DASHBOARD_TOKEN=""
+ENV VITE_API_DASHBOARD_TOKEN=$VITE_API_DASHBOARD_TOKEN
 RUN npm run build
 
 FROM nginx:alpine
