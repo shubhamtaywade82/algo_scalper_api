@@ -1,0 +1,278 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "L3 Daily-loss breach: block entries, flatten, then the broker switch",
+    "output": "docs/architecture/10d-daily-loss-breach.html",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
+  },
+  "participants": [
+    {
+      "id": "feed",
+      "type": "messagebus",
+      "label": "Feed",
+      "sublabel": "option ticks",
+      "sources": [
+        {
+          "path": "src/dhan/feed.ts",
+          "line": 113,
+          "label": "DhanFeed"
+        }
+      ]
+    },
+    {
+      "id": "orch",
+      "type": "backend",
+      "label": "Orchestrator",
+      "sublabel": "one shared book",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 563,
+          "label": "enforceDailyLoss"
+        }
+      ]
+    },
+    {
+      "id": "book",
+      "type": "backend",
+      "label": "Day book",
+      "sublabel": "day P&L",
+      "sources": [
+        {
+          "path": "src/risk/dayBook.ts",
+          "line": 142,
+          "label": "recordDailyLossBreach"
+        }
+      ]
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "Agent",
+      "sublabel": "one per index",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1359,
+          "label": "DAILY_LOSS"
+        }
+      ]
+    },
+    {
+      "id": "venue",
+      "type": "cloud",
+      "label": "Live venue",
+      "sublabel": "orders, kill switch",
+      "sources": [
+        {
+          "path": "src/dhan/liveExecution.ts",
+          "line": 494,
+          "label": "engageBrokerKillSwitch"
+        }
+      ]
+    },
+    {
+      "id": "dhan",
+      "type": "external",
+      "label": "DhanHQ",
+      "sublabel": "orders, controls"
+    },
+    {
+      "id": "journal",
+      "type": "database",
+      "label": "Journal",
+      "sublabel": "durable events",
+      "sources": [
+        {
+          "path": "src/ops/eventLog.ts",
+          "line": 51,
+          "label": "EventLog"
+        }
+      ]
+    },
+    {
+      "id": "alerts",
+      "type": "external",
+      "label": "Alerts",
+      "sublabel": "best-effort",
+      "sources": [
+        {
+          "path": "src/ops/alerts.ts",
+          "line": 6,
+          "label": "daily_loss_breach"
+        }
+      ]
+    }
+  ],
+  "segments": [
+    {
+      "from": 160,
+      "to": 455,
+      "label": "Breach latched"
+    },
+    {
+      "from": 455,
+      "to": 775,
+      "label": "Flatten through exits"
+    },
+    {
+      "from": 775,
+      "to": 1010,
+      "label": "Broker switch, once flat"
+    }
+  ],
+  "messages": [
+    {
+      "id": "m01",
+      "from": "feed",
+      "to": "agent",
+      "y": 180,
+      "label": "option tick: open P&L moves",
+      "note": "marked to market in the day book"
+    },
+    {
+      "id": "m02",
+      "from": "orch",
+      "to": "book",
+      "y": 240,
+      "label": "enforceDailyLoss: P&L at or below -limit?",
+      "note": "orchestrator.ts:563-566"
+    },
+    {
+      "id": "m03",
+      "from": "orch",
+      "to": "book",
+      "y": 300,
+      "label": "recordDailyLossBreach: latch",
+      "variant": "security",
+      "note": "dayBook.ts:142-143"
+    },
+    {
+      "id": "m04",
+      "from": "orch",
+      "to": "journal",
+      "y": 360,
+      "label": "daily_loss_breach, durable",
+      "note": "orchestrator.ts:576"
+    },
+    {
+      "id": "m05",
+      "from": "orch",
+      "to": "alerts",
+      "y": 420,
+      "label": "daily loss breach alert",
+      "variant": "dashed"
+    },
+    {
+      "id": "m06",
+      "from": "book",
+      "to": "agent",
+      "y": 500,
+      "label": "entries blocked; breach latched",
+      "variant": "security",
+      "note": "riskEngine.ts:179"
+    },
+    {
+      "id": "m07",
+      "from": "agent",
+      "to": "venue",
+      "y": 560,
+      "label": "exit reason DAILY_LOSS: SELL",
+      "variant": "emphasis",
+      "note": "the normal exit path (underlyingAgent.ts:1359)"
+    },
+    {
+      "id": "m08",
+      "from": "venue",
+      "to": "dhan",
+      "y": 620,
+      "label": "SELL",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m09",
+      "from": "dhan",
+      "to": "venue",
+      "y": 680,
+      "label": "fill",
+      "variant": "return"
+    },
+    {
+      "id": "m10",
+      "from": "venue",
+      "to": "agent",
+      "y": 740,
+      "label": "EXIT_FILLED: position closed",
+      "variant": "return"
+    },
+    {
+      "id": "m11",
+      "from": "agent",
+      "to": "orch",
+      "y": 800,
+      "label": "flat, no pending entry",
+      "note": "orchestrator.ts:600-604"
+    },
+    {
+      "id": "m12",
+      "from": "orch",
+      "to": "venue",
+      "y": 860,
+      "label": "engageBrokerKillSwitch(reason)",
+      "variant": "security",
+      "note": "orchestrator.ts:613; skipped when BROKER_KILL_SWITCH_ON_BREACH is false"
+    },
+    {
+      "id": "m13",
+      "from": "venue",
+      "to": "dhan",
+      "y": 920,
+      "label": "setKillSwitch: ACTIVATE",
+      "variant": "security",
+      "note": "live only"
+    },
+    {
+      "id": "m14",
+      "from": "dhan",
+      "to": "venue",
+      "y": 980,
+      "label": "refused while a position is open: retry in 30 s",
+      "variant": "dashed",
+      "note": "refusal assumed (BROKER_CONTRACT 1.5)"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "The breach blocks entries first",
+      "items": [
+        "The book latches the breach, so no new entry can open",
+        "Agents flatten through their normal exits, tagged DAILY_LOSS"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "The broker switch waits until flat",
+      "items": [
+        "Engaging it first could block the exits that close the position (orchestrator.ts:62-65)",
+        "BROKER_KILL_SWITCH_ON_BREACH=false stops every engage, halts included (orchestrator.ts:618)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "A restart keeps the breach",
+      "items": [
+        "Today's breach is rebuilt from the journal or ledger at start (restoreDayBook)",
+        "The drawdown reset (r) is refused while the day is breached"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,286 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "L3 Client-side protection: stops that need ticks, and the silence watch",
+    "output": "docs/architecture/10a-client-side-protection.html",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
+  },
+  "participants": [
+    {
+      "id": "feed",
+      "type": "messagebus",
+      "label": "Feed",
+      "sublabel": "WebSocket ticks",
+      "sources": [
+        {
+          "path": "src/dhan/feed.ts",
+          "line": 113,
+          "label": "DhanFeed"
+        }
+      ]
+    },
+    {
+      "id": "orch",
+      "type": "backend",
+      "label": "Orchestrator",
+      "sublabel": "routes option ticks",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 540,
+          "label": "onOptionTick"
+        }
+      ]
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "Agent",
+      "sublabel": "one per index",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 308,
+          "label": "onOptionTick"
+        }
+      ]
+    },
+    {
+      "id": "clock",
+      "type": "backend",
+      "label": "Clock",
+      "sublabel": "loop, every bar time",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 296,
+          "label": "onClock"
+        }
+      ]
+    },
+    {
+      "id": "gateway",
+      "type": "backend",
+      "label": "Gateway port",
+      "sublabel": "CLIENT_SIDE stops",
+      "sources": [
+        {
+          "path": "src/execution/gatewayPort.ts",
+          "line": 194,
+          "label": "onOptionTick"
+        }
+      ]
+    },
+    {
+      "id": "venue",
+      "type": "cloud",
+      "label": "Venue",
+      "sublabel": "paper or sandbox",
+      "sources": [
+        {
+          "path": "src/paper/exchangeGateway.ts",
+          "line": 20,
+          "label": "PaperExchangeGateway"
+        }
+      ]
+    },
+    {
+      "id": "journal",
+      "type": "database",
+      "label": "Journal",
+      "sublabel": "events, IST day",
+      "sources": [
+        {
+          "path": "src/ops/eventLog.ts",
+          "line": 51,
+          "label": "EventLog"
+        }
+      ]
+    },
+    {
+      "id": "alerts",
+      "type": "external",
+      "label": "Alerts",
+      "sublabel": "best-effort",
+      "sources": [
+        {
+          "path": "src/ops/alerts.ts",
+          "line": 127,
+          "label": "buildAlertListener"
+        }
+      ]
+    }
+  ],
+  "segments": [
+    {
+      "from": 160,
+      "to": 575,
+      "label": "Live tick"
+    },
+    {
+      "from": 575,
+      "to": 1300,
+      "label": "Silent feed"
+    }
+  ],
+  "messages": [
+    {
+      "id": "m01",
+      "from": "feed",
+      "to": "orch",
+      "y": 180,
+      "label": "option tick",
+      "note": "routed by exchange key"
+    },
+    {
+      "id": "m02",
+      "from": "orch",
+      "to": "gateway",
+      "y": 260,
+      "label": "onOptionTick: stop or target crossed?",
+      "note": "gatewayPort.ts:214-217"
+    },
+    {
+      "id": "m03",
+      "from": "orch",
+      "to": "agent",
+      "y": 340,
+      "label": "onOptionTick: lastOptionTickAt = now",
+      "note": "underlyingAgent.ts:313"
+    },
+    {
+      "id": "m04",
+      "from": "gateway",
+      "to": "venue",
+      "y": 420,
+      "label": "protective SELL: STOP_LOSS or TARGET",
+      "variant": "emphasis",
+      "note": "exiting blocks a second sell (gatewayPort.ts:223)"
+    },
+    {
+      "id": "m05",
+      "from": "venue",
+      "to": "gateway",
+      "y": 500,
+      "label": "fill",
+      "variant": "return"
+    },
+    {
+      "id": "m06",
+      "from": "clock",
+      "to": "agent",
+      "y": 600,
+      "label": "onClock: silence past FEED_STALE_MS",
+      "variant": "security",
+      "note": "watchStaleOptionTicks, underlyingAgent.ts:1319"
+    },
+    {
+      "id": "m07",
+      "from": "agent",
+      "to": "journal",
+      "y": 680,
+      "label": "position_stale, once per episode",
+      "variant": "security",
+      "note": "entries refused (entryBlockReason, line 721)"
+    },
+    {
+      "id": "m08",
+      "from": "agent",
+      "to": "alerts",
+      "y": 760,
+      "label": "stale alert",
+      "variant": "dashed"
+    },
+    {
+      "id": "m09",
+      "from": "clock",
+      "to": "agent",
+      "y": 860,
+      "label": "silence past STALE_POSITION_GRACE_MS",
+      "variant": "security",
+      "note": "exitReason returns STALE_DATA, underlyingAgent.ts:1370"
+    },
+    {
+      "id": "m10",
+      "from": "agent",
+      "to": "journal",
+      "y": 940,
+      "label": "exit_submitted, reason STALE_DATA",
+      "note": "durable before the sell (underlyingAgent.ts:1278)"
+    },
+    {
+      "id": "m11",
+      "from": "agent",
+      "to": "gateway",
+      "y": 1020,
+      "label": "submitExit: SELL at the last mark",
+      "note": "reference: slot.lastMark, else average price (underlyingAgent.ts:1261)"
+    },
+    {
+      "id": "m12",
+      "from": "gateway",
+      "to": "venue",
+      "y": 1100,
+      "label": "SELL",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m13",
+      "from": "venue",
+      "to": "gateway",
+      "y": 1180,
+      "label": "fill",
+      "variant": "return"
+    },
+    {
+      "id": "m14",
+      "from": "gateway",
+      "to": "agent",
+      "y": 1260,
+      "label": "EXIT_FILLED",
+      "variant": "emphasis",
+      "note": "exitSent blocks a second sell (underlyingAgent.ts:1274)"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "agent",
+      "from": 320,
+      "to": 1290
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Client-side means tick-dependent",
+      "items": [
+        "Paper and sandbox hold the stop and target in the agent",
+        "Without option ticks the stop cannot fire, so the agent watches the silence"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Entries stop first, then the exit",
+      "items": [
+        "A stale position refuses entries on its underlying at once",
+        "The exit comes only after STALE_POSITION_GRACE_MS"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "The watch measures option silence",
+      "items": [
+        "Silence is counted from the later of the fill and the last option tick",
+        "A quiet strike looks like a dead feed, so keep the grace above typical trade gaps"
+      ]
+    }
+  ]
+}

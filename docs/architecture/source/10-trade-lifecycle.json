@@ -9,7 +9,7 @@
       "url": "https://github.com/shubhamtaywade82/options-trading-agent",
       "provider": "github",
       "link_mode": "local-only",
-      "revision": "e99b924b65964a0e1f3f461aef525c77d9e50d9a"
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
     }
   },
   "mainPath": [
@@ -83,7 +83,7 @@
       "sources": [
         {
           "path": "src/runtime/underlyingAgent.ts",
-          "line": 1083,
+          "line": 1124,
           "label": "onExitFilled"
         }
       ]
@@ -96,8 +96,8 @@
       "sources": [
         {
           "path": "src/runtime/underlyingAgent.ts",
-          "line": 1290,
-          "label": "onHalt"
+          "line": 1376,
+          "label": "halt"
         }
       ]
     }
@@ -165,7 +165,7 @@
       "from": "RISK_MANAGEMENT_ACTIVE",
       "to": "EXIT_PENDING",
       "label": "EXIT_SUBMITTED",
-      "note": "time stop, EOD, daily loss, manual or structure break"
+      "note": "time stop, EOD, daily loss, manual, structure break or stale data"
     },
     {
       "id": "t15",
@@ -204,7 +204,7 @@
       "from": "HALTED",
       "to": "IDLE",
       "label": "RESET",
-      "note": "operator only",
+      "note": "in the table; no runtime path dispatches it",
       "variant": "emphasis"
     }
   ],

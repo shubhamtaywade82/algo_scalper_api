@@ -9,7 +9,7 @@
       "url": "https://github.com/shubhamtaywade82/options-trading-agent",
       "provider": "github",
       "link_mode": "local-only",
-      "revision": "e99b924b65964a0e1f3f461aef525c77d9e50d9a"
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
     }
   },
   "stages": [
@@ -31,7 +31,7 @@
       "id": "api",
       "type": "external",
       "label": "Dhan option API",
-      "sublabel": "ATM strikes, 1-min bars",
+      "sublabel": "ATM strikes, bar minutes",
       "stage": 0,
       "row": 0,
       "sources": [
@@ -80,7 +80,7 @@
       "sources": [
         {
           "path": "src/research/replay.ts",
-          "line": 282,
+          "line": 307,
           "label": "replayDataset"
         }
       ]

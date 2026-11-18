@@ -5,38 +5,352 @@
     "title": "L5 Code map: where each layer lives",
     "output": "docs/architecture/16-code-map.html",
     "quality_profile": "showcase",
-    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "e99b924b65964a0e1f3f461aef525c77d9e50d9a" }
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
   },
-  "layout": { "direction": "right", "gapX": 40, "gapY": 26 },
+  "layout": {
+    "direction": "right",
+    "gapX": 40,
+    "gapY": 26
+  },
   "nodes": [
-    { "id": "root", "label": "options-trading-agent", "sublabel": "NSE and BSE index options buying" },
-    { "id": "src", "parent": "root", "label": "src", "sublabel": "application, 18 folders" },
-    { "id": "config", "parent": "src", "label": "config.ts", "sublabel": "validated env and ceilings", "sources": [{ "path": "src/config.ts", "line": 438, "label": "loadConfig" }] },
-    { "id": "domain", "parent": "src", "label": "domain", "sublabel": "trade FSM, shared types", "sources": [{ "path": "src/domain/fsm.ts", "line": 42, "label": "TRANSITIONS" }] },
-    { "id": "time", "parent": "src", "label": "time", "sublabel": "IST clock, calendar", "sources": [{ "path": "src/time/ist.ts", "line": 18, "label": "istParts" }] },
-    { "id": "dhan", "parent": "src", "label": "dhan", "sublabel": "auth, client, feed, live venue", "sources": [{ "path": "src/dhan/liveExecution.ts", "line": 184, "label": "LiveExecutionPort" }] },
-    { "id": "market", "parent": "src", "label": "market", "sublabel": "bars, indicators, stop lines", "sources": [{ "path": "src/market/barSeries.ts", "line": 51, "label": "CandleBuilder" }] },
-    { "id": "strategy", "parent": "src", "label": "strategy", "sublabel": "ORB, SuperTrend, context", "sources": [{ "path": "src/strategy/session.ts", "line": 43, "label": "StrategySession" }] },
-    { "id": "options", "parent": "src", "label": "options", "sublabel": "chain, selection, bracket, size", "sources": [{ "path": "src/options/selector.ts", "line": 101, "label": "selectContract" }] },
-    { "id": "risk", "parent": "src", "label": "risk", "sublabel": "pre-trade gate, day book", "sources": [{ "path": "src/risk/riskEngine.ts", "line": 188, "label": "evaluatePreTrade" }] },
-    { "id": "execution", "parent": "src", "label": "execution", "sublabel": "port, paper venue, gateway", "sources": [{ "path": "src/execution/ports.ts", "line": 94, "label": "ExecutionPort" }] },
-    { "id": "paper", "parent": "src", "label": "paper", "sublabel": "paper_exchange client", "sources": [{ "path": "src/paper/exchangeGateway.ts", "line": 20, "label": "PaperExchangeGateway" }] },
-    { "id": "llm", "parent": "src", "label": "llm", "sublabel": "Ollama advisor, veto only", "sources": [{ "path": "src/llm/advisor.ts", "line": 62, "label": "OllamaTradeAdvisor" }] },
-    { "id": "runtime", "parent": "src", "label": "runtime", "sublabel": "orchestrator, agent, wiring", "sources": [{ "path": "src/runtime/orchestrator.ts", "line": 66, "label": "Orchestrator" }] },
-    { "id": "persistence", "parent": "src", "label": "persistence", "sublabel": "PostgreSQL, Redis, lease", "sources": [{ "path": "src/persistence/migrations.ts", "line": 7, "label": "MIGRATIONS" }] },
-    { "id": "ops", "parent": "src", "label": "ops", "sublabel": "journal, alerts, day restore", "sources": [{ "path": "src/ops/eventLog.ts", "line": 51, "label": "EventLog" }] },
-    { "id": "exits", "parent": "src", "label": "exits", "sublabel": "trailing-stop engine", "sources": [{ "path": "src/exits/trail.ts", "label": "trail engine" }] },
-    { "id": "research", "parent": "src", "label": "research", "sublabel": "offline replay, stats, ledger", "sources": [{ "path": "src/research/timeMachine.ts", "line": 137, "label": "runTimeMachine" }] },
-    { "id": "ui", "parent": "src", "label": "ui", "sublabel": "cockpit: Ink app and renderer", "sources": [{ "path": "src/ui/App.tsx", "line": 47, "label": "App" }] },
-    { "id": "entry", "parent": "src", "label": "index.tsx", "sublabel": "cockpit on a TTY, else logs", "sources": [{ "path": "src/index.tsx", "label": "entry point" }] },
-    { "id": "scripts", "parent": "root", "label": "scripts", "sublabel": "tsx operator and research CLIs" },
-    { "id": "tm", "parent": "scripts", "label": "timemachine.ts", "sublabel": "fetch, run, portfolio", "sources": [{ "path": "scripts/timemachine.ts", "label": "timemachine CLI" }] },
-    { "id": "ledgerCli", "parent": "scripts", "label": "ledger.ts", "sublabel": "verify, register, import", "sources": [{ "path": "scripts/ledger.ts", "label": "ledger CLI" }] },
-    { "id": "tests", "parent": "root", "label": "tests", "sublabel": "node:test via tsx, offline", "sources": [{ "path": "tests/architecture.test.ts", "label": "plane boundary test" }] },
-    { "id": "docs", "parent": "root", "label": "docs", "sublabel": "ADRs, roadmap, research records", "sources": [{ "path": "docs/DECISIONS.md", "label": "ADR-001 to ADR-012" }] }
+    {
+      "id": "root",
+      "label": "options-trading-agent",
+      "sublabel": "NSE and BSE index options buying"
+    },
+    {
+      "id": "src",
+      "parent": "root",
+      "label": "src",
+      "sublabel": "application: 16 folders, 2 files"
+    },
+    {
+      "id": "config",
+      "parent": "src",
+      "label": "config.ts",
+      "sublabel": "validated env and ceilings",
+      "sources": [
+        {
+          "path": "src/config.ts",
+          "line": 476,
+          "label": "loadConfig"
+        }
+      ]
+    },
+    {
+      "id": "domain",
+      "parent": "src",
+      "label": "domain",
+      "sublabel": "trade FSM, shared types",
+      "sources": [
+        {
+          "path": "src/domain/fsm.ts",
+          "line": 42,
+          "label": "TRANSITIONS"
+        }
+      ]
+    },
+    {
+      "id": "time",
+      "parent": "src",
+      "label": "time",
+      "sublabel": "IST clock, calendar",
+      "sources": [
+        {
+          "path": "src/time/ist.ts",
+          "line": 18,
+          "label": "istParts"
+        }
+      ]
+    },
+    {
+      "id": "dhan",
+      "parent": "src",
+      "label": "dhan",
+      "sublabel": "auth, client, feed, live venue",
+      "sources": [
+        {
+          "path": "src/dhan/liveExecution.ts",
+          "line": 200,
+          "label": "LiveExecutionPort"
+        }
+      ]
+    },
+    {
+      "id": "market",
+      "parent": "src",
+      "label": "market",
+      "sublabel": "bars, indicators, stop lines",
+      "sources": [
+        {
+          "path": "src/market/barSeries.ts",
+          "line": 51,
+          "label": "CandleBuilder"
+        }
+      ]
+    },
+    {
+      "id": "strategy",
+      "parent": "src",
+      "label": "strategy",
+      "sublabel": "ORB, SuperTrend, context",
+      "sources": [
+        {
+          "path": "src/strategy/session.ts",
+          "line": 43,
+          "label": "StrategySession"
+        }
+      ]
+    },
+    {
+      "id": "options",
+      "parent": "src",
+      "label": "options",
+      "sublabel": "chain, selection, bracket, size",
+      "sources": [
+        {
+          "path": "src/options/selector.ts",
+          "line": 101,
+          "label": "selectContract"
+        }
+      ]
+    },
+    {
+      "id": "risk",
+      "parent": "src",
+      "label": "risk",
+      "sublabel": "pre-trade gate, day book",
+      "sources": [
+        {
+          "path": "src/risk/riskEngine.ts",
+          "line": 196,
+          "label": "evaluatePreTrade"
+        }
+      ]
+    },
+    {
+      "id": "execution",
+      "parent": "src",
+      "label": "execution",
+      "sublabel": "port, paper venue, gateway",
+      "sources": [
+        {
+          "path": "src/execution/ports.ts",
+          "line": 101,
+          "label": "ExecutionPort"
+        }
+      ]
+    },
+    {
+      "id": "paper",
+      "parent": "src",
+      "label": "paper",
+      "sublabel": "paper_exchange client",
+      "sources": [
+        {
+          "path": "src/paper/exchangeGateway.ts",
+          "line": 20,
+          "label": "PaperExchangeGateway"
+        }
+      ]
+    },
+    {
+      "id": "llm",
+      "parent": "src",
+      "label": "llm",
+      "sublabel": "Ollama advisor, veto only",
+      "sources": [
+        {
+          "path": "src/llm/advisor.ts",
+          "line": 62,
+          "label": "OllamaTradeAdvisor"
+        }
+      ]
+    },
+    {
+      "id": "runtime",
+      "parent": "src",
+      "label": "runtime",
+      "sublabel": "orchestrator, agent, wiring",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 66,
+          "label": "Orchestrator"
+        }
+      ]
+    },
+    {
+      "id": "persistence",
+      "parent": "src",
+      "label": "persistence",
+      "sublabel": "PostgreSQL, Redis, lease",
+      "sources": [
+        {
+          "path": "src/persistence/migrations.ts",
+          "line": 7,
+          "label": "MIGRATIONS"
+        }
+      ]
+    },
+    {
+      "id": "ops",
+      "parent": "src",
+      "label": "ops",
+      "sublabel": "journal, alerts, day restore",
+      "sources": [
+        {
+          "path": "src/ops/eventLog.ts",
+          "line": 51,
+          "label": "EventLog"
+        }
+      ]
+    },
+    {
+      "id": "exits",
+      "parent": "src",
+      "label": "exits",
+      "sublabel": "trailing-stop engine",
+      "sources": [
+        {
+          "path": "src/exits/trail.ts",
+          "line": 249,
+          "label": "onBarClosed"
+        }
+      ]
+    },
+    {
+      "id": "research",
+      "parent": "src",
+      "label": "research",
+      "sublabel": "offline replay, rolling fetch, IV context, ledger",
+      "sources": [
+        {
+          "path": "src/research/timeMachine.ts",
+          "line": 137,
+          "label": "runTimeMachine"
+        }
+      ]
+    },
+    {
+      "id": "ui",
+      "parent": "src",
+      "label": "ui",
+      "sublabel": "cockpit: Ink app, keymap, renderer",
+      "sources": [
+        {
+          "path": "src/ui/App.tsx",
+          "line": 56,
+          "label": "App"
+        }
+      ]
+    },
+    {
+      "id": "entry",
+      "parent": "src",
+      "label": "index.tsx",
+      "sublabel": "cockpit on a TTY, else logs",
+      "sources": [
+        {
+          "path": "src/index.tsx",
+          "line": 18,
+          "label": "main"
+        }
+      ]
+    },
+    {
+      "id": "scripts",
+      "parent": "root",
+      "label": "scripts",
+      "sublabel": "tsx operator and research CLIs"
+    },
+    {
+      "id": "tm",
+      "parent": "scripts",
+      "label": "timemachine.ts",
+      "sublabel": "fetch, run, portfolio",
+      "sources": [
+        {
+          "path": "scripts/timemachine.ts",
+          "line": 459,
+          "label": "main, dispatches commands"
+        }
+      ]
+    },
+    {
+      "id": "ledgerCli",
+      "parent": "scripts",
+      "label": "ledger.ts",
+      "sublabel": "verify, register, import, backfill-docs",
+      "sources": [
+        {
+          "path": "scripts/ledger.ts",
+          "line": 24,
+          "label": "command dispatch"
+        }
+      ]
+    },
+    {
+      "id": "graphify",
+      "parent": "scripts",
+      "label": "graphify.sh",
+      "sublabel": "offline code graph (ADR-013)",
+      "sources": [
+        {
+          "path": "scripts/graphify.sh",
+          "line": 2,
+          "label": "graphify.sh"
+        }
+      ]
+    },
+    {
+      "id": "tests",
+      "parent": "root",
+      "label": "tests",
+      "sublabel": "node:test via tsx, offline",
+      "sources": [
+        {
+          "path": "tests/architecture.test.ts",
+          "line": 32,
+          "label": "plane boundary (ADR-001)"
+        }
+      ]
+    },
+    {
+      "id": "docs",
+      "parent": "root",
+      "label": "docs",
+      "sublabel": "ADRs, roadmap, research records",
+      "sources": [
+        {
+          "path": "docs/DECISIONS.md",
+          "line": 11,
+          "label": "ADR-001 onwards"
+        }
+      ]
+    }
   ],
   "cards": [
-    { "dot": "cyan", "title": "Read this first", "items": ["docs/ARCHITECTURE.md for the lifecycle and invariants", "docs/DECISIONS.md for the ADRs each folder enforces"] },
-    { "dot": "rose", "title": "Boundaries are tested", "items": ["tests/architecture.test.ts blocks research imports of dhan, execution and runtime", "Only two venue adapters may place, cancel or modify orders"] }
+    {
+      "dot": "cyan",
+      "title": "Read this first",
+      "items": [
+        "docs/ARCHITECTURE.md for the lifecycle and invariants",
+        "docs/DECISIONS.md for the ADRs each folder enforces"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Boundaries are tested",
+      "items": [
+        "tests/architecture.test.ts blocks research imports of dhan, execution and runtime",
+        "Only two venue adapters may place, cancel or modify orders"
+      ]
+    }
   ]
 }

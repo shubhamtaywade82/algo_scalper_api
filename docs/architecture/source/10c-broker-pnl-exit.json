@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "L3 Broker P&L exit: arm once at start, and never resend an unknown outcome",
+    "output": "docs/architecture/10c-broker-pnl-exit.html",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
+  },
+  "participants": [
+    { "id": "runtime", "type": "backend", "label": "Orchestrator", "sublabel": "start, live only", "sources": [{ "path": "src/runtime/orchestrator.ts", "line": 209, "label": "armBrokerPnlExit" }] },
+    { "id": "venue", "type": "cloud", "label": "Live venue", "sublabel": "LiveExecutionPort", "sources": [{ "path": "src/dhan/liveExecution.ts", "line": 251, "label": "armBrokerPnlExit" }] },
+    { "id": "dhan", "type": "external", "label": "DhanHQ", "sublabel": "traderControls, orders" },
+    { "id": "agent", "type": "backend", "label": "Agent", "sublabel": "one per index", "sources": [{ "path": "src/runtime/underlyingAgent.ts", "line": 367, "label": "ENTRY_UNCONFIRMED" }] },
+    { "id": "journal", "type": "database", "label": "Journal", "sublabel": "events, IST day", "sources": [{ "path": "src/ops/eventLog.ts", "line": 51, "label": "EventLog" }] }
+  ],
+  "segments": [
+    { "from": 160, "to": 445, "label": "Start and first entry" },
+    { "from": 445, "to": 700, "label": "Refused: retried once per entry" },
+    { "from": 700, "to": 950, "label": "Ambiguous: never resent" }
+  ],
+  "messages": [
+    { "id": "m01", "from": "runtime", "to": "venue", "y": 180, "label": "armBrokerPnlExit(daily loss limit)", "note": "orchestrator.ts:209-210; live and BROKER_PNL_EXIT only" },
+    { "id": "m02", "from": "venue", "to": "dhan", "y": 240, "label": "setPnlExit: loss, kill switch off, INTRADAY", "note": "liveExecution.ts:262" },
+    { "id": "m03", "from": "dhan", "to": "venue", "y": 300, "label": "accepted: state ARMED", "variant": "return", "note": "liveExecution.ts:263" },
+    { "id": "m04", "from": "agent", "to": "venue", "y": 360, "label": "submitEntry", "note": "the gate reads the state first (liveExecution.ts:276)" },
+    { "id": "m05", "from": "venue", "to": "dhan", "y": 420, "label": "super order, only when ARMED", "variant": "emphasis" },
+    { "id": "m06", "from": "dhan", "to": "venue", "y": 490, "label": "definitive 4xx: REJECTED", "variant": "security", "note": "state NOT_ARMED (liveExecution.ts:265)" },
+    { "id": "m07", "from": "agent", "to": "venue", "y": 550, "label": "submitEntry, next entry" },
+    { "id": "m08", "from": "venue", "to": "dhan", "y": 610, "label": "setPnlExit, one more try", "variant": "dashed" },
+    { "id": "m09", "from": "venue", "to": "agent", "y": 670, "label": "ENTRY_REJECTED: not armed", "variant": "security", "note": "no order sent (liveExecution.ts:286-287)" },
+    { "id": "m10", "from": "dhan", "to": "venue", "y": 740, "label": "timeout, 5xx or network", "variant": "security", "note": "state UNKNOWN (liveExecution.ts:265)" },
+    { "id": "m11", "from": "agent", "to": "venue", "y": 800, "label": "submitEntry" },
+    { "id": "m12", "from": "venue", "to": "agent", "y": 860, "label": "ENTRY_UNCONFIRMED, setPnlExit not resent", "variant": "emphasis", "note": "no order, no re-arm (liveExecution.ts:276-281)" },
+    { "id": "m13", "from": "agent", "to": "journal", "y": 920, "label": "halt the underlying, reason journalled", "variant": "security", "note": "underlyingAgent.ts:367-368" }
+  ],
+  "activations": [
+    { "participant": "venue", "from": 215, "to": 840 }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Opt-in and live only", "items": ["BROKER_PNL_EXIT defaults to false (config.ts:600)", "Only live mode makes the call (orchestrator.ts:209)"] },
+    { "dot": "amber", "title": "The kill switch stays with the agent", "items": ["The arm request sets enableKillSwitch to false (invariant 7)", "Paper and sandbox ports have no arming method"] },
+    { "dot": "rose", "title": "An unknown outcome is never resent", "items": ["An ambiguous arming outcome leaves the port UNKNOWN for this process", "Every later entry is refused as unconfirmed, and the underlying halts"] }
+  ]
+}

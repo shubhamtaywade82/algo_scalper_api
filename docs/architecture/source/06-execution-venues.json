@@ -1,16 +1,16 @@
 {
   "schema_version": 1, "diagram_type": "architecture",
   "meta": { "title": "L2 Execution venues: one port, four destinations", "output": "docs/architecture/06-execution-venues.html", "quality_profile": "showcase",
-    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "e99b924b65964a0e1f3f461aef525c77d9e50d9a" } },
+    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "79e951f07c22d772e412cf35abf2843baa17102a" } },
   "layout": { "mode": "grid", "cols": 4, "gapX": 110, "gapY": 110, "cellW": 120, "cellH": 84 },
   "components": [
-    { "id": "port", "type": "backend", "label": "ExecutionPort", "sublabel": "submit, events only", "row": 0, "col": 1, "sources": [{ "path": "src/execution/ports.ts", "line": 94, "label": "ExecutionPort" }] },
+    { "id": "port", "type": "backend", "label": "ExecutionPort", "sublabel": "submit, events only", "row": 0, "col": 1, "sources": [{ "path": "src/execution/ports.ts", "line": 101, "label": "ExecutionPort" }] },
     { "id": "paper", "type": "backend", "label": "Paper venue", "sublabel": "simulated fills", "row": 1, "col": 0, "sources": [{ "path": "src/execution/paper.ts", "line": 34, "label": "PaperExecutionPort" }] },
-    { "id": "live", "type": "cloud", "label": "Live venue", "sublabel": "super orders", "tag": "broker writes", "row": 1, "col": 1, "sources": [{ "path": "src/dhan/liveExecution.ts", "line": 184, "label": "LiveExecutionPort" }] },
+    { "id": "live", "type": "cloud", "label": "Live venue", "sublabel": "super orders", "tag": "broker writes", "row": 1, "col": 1, "sources": [{ "path": "src/dhan/liveExecution.ts", "line": 200, "label": "LiveExecutionPort" }] },
     { "id": "gw", "type": "backend", "label": "Gateway venue", "sublabel": "sandbox or exchange", "row": 1, "col": 2, "sources": [{ "path": "src/execution/gatewayPort.ts", "line": 44, "label": "GatewayExecutionPort" }] },
     { "id": "pex", "type": "external", "label": "paper_exchange", "sublabel": "account, margin", "row": 1, "col": 3, "sources": [{ "path": "src/paper/exchangeGateway.ts", "line": 20, "label": "PaperExchangeGateway" }] },
     { "id": "pstore", "type": "database", "label": "PostgreSQL store", "sublabel": "wallet, positions", "row": 2, "col": 0, "sources": [{ "path": "src/execution/paperStore.ts", "line": 67, "label": "PostgresPaperStore" }] },
-    { "id": "wire", "type": "database", "label": "Wire recorder", "sublabel": "redacted JSONL", "row": 2, "col": 1, "sources": [{ "path": "src/dhan/wireRecorder.ts", "line": 85, "label": "recordWireCalls" }] },
+    { "id": "wire", "type": "database", "label": "Wire recorder", "sublabel": "redacted JSONL, smoke runs", "row": 2, "col": 1, "sources": [{ "path": "src/dhan/wireRecorder.ts", "line": 85, "label": "recordWireCalls" }] },
     { "id": "sandbox", "type": "external", "label": "Dhan sandbox", "sublabel": "sandbox orders", "row": 2, "col": 2, "sources": [{ "path": "src/dhan/sandboxGateway.ts", "line": 27, "label": "DhanSandboxGateway" }] },
     { "id": "dhan", "type": "external", "label": "DhanHQ live", "sublabel": "super orders, positions", "row": 3, "col": 1 }
   ],
@@ -19,13 +19,12 @@
     { "id": "to-live", "from": "port", "to": "live" },
     { "id": "to-gw", "from": "port", "to": "gw" },
     { "id": "orders-db", "from": "paper", "to": "pstore", "label": "orders" },
-    { "id": "every-call", "from": "live", "to": "wire", "label": "every call" },
-    { "id": "rest", "from": "wire", "to": "dhan", "label": "REST", "variant": "security" },
+    { "id": "rest", "from": "wire", "to": "dhan", "label": "smoke:trade only", "variant": "dashed" },
     { "id": "sb", "from": "gw", "to": "sandbox", "label": "sandbox", "variant": "dashed" },
     { "id": "px", "from": "gw", "to": "pex", "label": "paper orders", "variant": "dashed" }
   ],
   "cards": [
-    { "dot": "rose", "title": "Only two adapters write to the broker", "items": ["LiveExecutionPort and DhanSandboxGateway, enforced by tests", "Every live call passes through the wire recorder first"] },
+    { "dot": "rose", "title": "Only two adapters write to the broker", "items": ["LiveExecutionPort and DhanSandboxGateway, enforced by tests", "The wire recorder is used only by smoke:trade, which writes redacted calls to docs/sandbox/"] },
     { "dot": "amber", "title": "Placement outcomes", "items": ["A definitive 4xx is REJECTED; anything else is UNCONFIRMED", "Timeouts and 5xx are never resent"] },
     { "dot": "cyan", "title": "Paper has no broker switch", "items": ["Paper stop and target fills come from option LTP", "Kill switch is a live-only port method"] }
   ]

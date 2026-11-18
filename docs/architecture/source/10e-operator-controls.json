@@ -1,0 +1,188 @@
+{
+  "schema_version": 1,
+  "diagram_type": "tree",
+  "meta": {
+    "title": "L3 Operator controls: which keys need a second press, and what each one does",
+    "output": "docs/architecture/10e-operator-controls.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
+  },
+  "layout": {
+    "direction": "right",
+    "gapX": 40,
+    "gapY": 26
+  },
+  "nodes": [
+    {
+      "id": "root",
+      "label": "Operator keys",
+      "sublabel": "cockpit calls the orchestrator",
+      "sources": [
+        {
+          "path": "src/ui/keymap.ts",
+          "line": 18,
+          "label": "COCKPIT_KEYS"
+        }
+      ]
+    },
+    {
+      "id": "confirmed",
+      "parent": "root",
+      "label": "Second press required",
+      "sublabel": "same key and symbol, within 5 s",
+      "sources": [
+        {
+          "path": "src/ui/App.tsx",
+          "line": 24,
+          "label": "isConfirmation"
+        }
+      ]
+    },
+    {
+      "id": "immediate",
+      "parent": "root",
+      "label": "No confirmation",
+      "sublabel": "moves and help",
+      "sources": [
+        {
+          "path": "src/ui/App.tsx",
+          "line": 157,
+          "label": "nudgeCockpitChainScroll"
+        }
+      ]
+    },
+    {
+      "id": "k_close",
+      "parent": "confirmed",
+      "label": "c close",
+      "sublabel": "flags the position for a MANUAL exit",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 392,
+          "label": "requestManualExit"
+        }
+      ]
+    },
+    {
+      "id": "k_block",
+      "parent": "confirmed",
+      "label": "k block",
+      "sublabel": "blocks new entries; journalled",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 412,
+          "label": "toggleEntryBlock"
+        }
+      ]
+    },
+    {
+      "id": "k_stop",
+      "parent": "confirmed",
+      "label": "s, Ctrl+C stop",
+      "sublabel": "graceful stop; double Ctrl+C within 2 s quits at once",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 275,
+          "label": "stop"
+        },
+        {
+          "path": "src/runtime/operatorInterrupt.ts",
+          "line": 2,
+          "label": "OPERATOR_INTERRUPT_ARM_MS"
+        }
+      ]
+    },
+    {
+      "id": "k_reset",
+      "parent": "confirmed",
+      "label": "r reset dd",
+      "sublabel": "fresh loss budget; refused while breached",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 436,
+          "label": "resetDailyDrawdown"
+        }
+      ]
+    },
+    {
+      "id": "k_brake",
+      "parent": "confirmed",
+      "label": "d brake",
+      "sublabel": "toggles the daily-loss brake",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 445,
+          "label": "toggleDailyLossBrake"
+        }
+      ]
+    },
+    {
+      "id": "k_other",
+      "parent": "confirmed",
+      "label": "p, 1-5, t",
+      "sublabel": "posture, strategy, test trade",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 461,
+          "label": "cyclePosture"
+        }
+      ]
+    },
+    {
+      "id": "k_move",
+      "parent": "immediate",
+      "label": "arrows, [ ]",
+      "sublabel": "select or scroll; no trading effect",
+      "sources": [
+        {
+          "path": "src/ui/App.tsx",
+          "line": 157,
+          "label": "nudgeCockpitChainScroll"
+        }
+      ]
+    },
+    {
+      "id": "k_help",
+      "parent": "immediate",
+      "label": "?",
+      "sublabel": "shows the key table"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "A second press is per key and target",
+      "items": [
+        "The same key on the same symbol within 5 s runs the action (App.tsx:24)",
+        "Any other key or symbol arms again instead"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Refusals carry a reason",
+      "items": [
+        "Clearing a halted or breached day is refused and says why (orchestrator.ts:422)",
+        "Entry block and clear are journalled (orchestrator.ts:418, 430)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "The cockpit only calls the orchestrator",
+      "items": [
+        "Each key makes one orchestrator call and holds no trading state",
+        "The second press is decided in the cockpit, the action in the orchestrator"
+      ]
+    }
+  ]
+}

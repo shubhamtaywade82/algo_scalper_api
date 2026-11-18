@@ -6,42 +6,240 @@
     "output": "docs/architecture/13-startup-and-recovery.html",
     "quality_profile": "showcase",
     "column_fit": "spread",
-    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "e99b924b65964a0e1f3f461aef525c77d9e50d9a" }
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
   },
   "participants": [
-    { "id": "runner", "type": "external", "label": "Runner", "sublabel": "session or operator", "sources": [{ "path": "scripts/session.sh", "label": "session start" }] },
-    { "id": "runtime", "type": "backend", "label": "Runtime", "sublabel": "buildRuntime", "sources": [{ "path": "src/runtime/createRuntime.ts", "line": 59, "label": "buildRuntime" }] },
-    { "id": "lease", "type": "database", "label": "Lease", "sublabel": "PostgreSQL", "sources": [{ "path": "src/persistence/lease.ts", "line": 31, "label": "PostgresLeaseStore" }] },
-    { "id": "journal", "type": "database", "label": "Day state", "sublabel": "ledger or journal", "sources": [{ "path": "src/ops/dayState.ts", "line": 77, "label": "restoreDayBook" }] },
-    { "id": "orch", "type": "backend", "label": "Orchestrator", "sublabel": "start()", "sources": [{ "path": "src/runtime/orchestrator.ts", "line": 143, "label": "start" }] },
-    { "id": "dhan", "type": "external", "label": "DhanHQ", "sublabel": "orders, positions" },
-    { "id": "feed", "type": "messagebus", "label": "Feed", "sublabel": "DhanFeed", "sources": [{ "path": "src/dhan/feed.ts", "line": 65, "label": "DhanFeed" }] }
+    {
+      "id": "runner",
+      "type": "external",
+      "label": "Runner",
+      "sublabel": "session or operator",
+      "sources": [
+        {
+          "path": "scripts/session.sh",
+          "label": "session start"
+        }
+      ]
+    },
+    {
+      "id": "runtime",
+      "type": "backend",
+      "label": "Runtime",
+      "sublabel": "buildRuntime",
+      "sources": [
+        {
+          "path": "src/runtime/createRuntime.ts",
+          "line": 59,
+          "label": "buildRuntime"
+        }
+      ]
+    },
+    {
+      "id": "lease",
+      "type": "database",
+      "label": "Lease",
+      "sublabel": "PostgreSQL",
+      "sources": [
+        {
+          "path": "src/persistence/lease.ts",
+          "line": 31,
+          "label": "PostgresLeaseStore"
+        }
+      ]
+    },
+    {
+      "id": "journal",
+      "type": "database",
+      "label": "Day state",
+      "sublabel": "ledger or journal",
+      "sources": [
+        {
+          "path": "src/ops/dayState.ts",
+          "line": 77,
+          "label": "restoreDayBook"
+        }
+      ]
+    },
+    {
+      "id": "orch",
+      "type": "backend",
+      "label": "Orchestrator",
+      "sublabel": "start()",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 143,
+          "label": "start"
+        }
+      ]
+    },
+    {
+      "id": "dhan",
+      "type": "external",
+      "label": "DhanHQ",
+      "sublabel": "orders, positions"
+    },
+    {
+      "id": "feed",
+      "type": "messagebus",
+      "label": "Feed",
+      "sublabel": "DhanFeed",
+      "sources": [
+        {
+          "path": "src/dhan/feed.ts",
+          "line": 113,
+          "label": "DhanFeed"
+        }
+      ]
+    }
   ],
   "segments": [
-    { "from": 160, "to": 372, "label": "Authority" },
-    { "from": 372, "to": 522, "label": "Restore" },
-    { "from": 522, "to": 718, "label": "Broker check" },
-    { "from": 718, "to": 930, "label": "Warm-up and feed" }
+    {
+      "from": 160,
+      "to": 372,
+      "label": "Authority"
+    },
+    {
+      "from": 372,
+      "to": 522,
+      "label": "Restore"
+    },
+    {
+      "from": 522,
+      "to": 718,
+      "label": "Broker check"
+    },
+    {
+      "from": 718,
+      "to": 930,
+      "label": "Warm-up and feed"
+    }
   ],
   "messages": [
-    { "id": "s01", "from": "runner", "to": "runtime", "y": 180, "label": "start with config", "note": "live needs MODE=live and the acknowledgement" },
-    { "id": "s02", "from": "runtime", "to": "lease", "y": 265, "label": "acquire trading lease", "note": "one holder per client id" },
-    { "id": "s03", "from": "lease", "to": "runtime", "y": 350, "label": "lease held", "variant": "return" },
-    { "id": "s04", "from": "runtime", "to": "journal", "y": 395, "label": "load today", "note": "a malformed line refuses start" },
-    { "id": "s05", "from": "journal", "to": "runtime", "y": 480, "label": "restoreDayBook", "variant": "return", "note": "unresolved entries booked at loss" },
-    { "id": "s06", "from": "runtime", "to": "orch", "y": 565, "label": "start()" },
-    { "id": "s07", "from": "orch", "to": "dhan", "y": 610, "label": "open positions, orders", "note": "a live order refuses start" },
-    { "id": "s08", "from": "dhan", "to": "orch", "y": 695, "label": "counts and positions", "variant": "return" },
-    { "id": "s09", "from": "orch", "to": "dhan", "y": 740, "label": "warm-up candles", "note": "clock guard checks bar times" },
-    { "id": "s10", "from": "orch", "to": "feed", "y": 825, "label": "connect, subscribe" },
-    { "id": "s11", "from": "feed", "to": "orch", "y": 870, "label": "ticks", "variant": "return" },
-    { "id": "s12", "from": "orch", "to": "runtime", "y": 915, "label": "running; entries need the lease", "variant": "emphasis" }
+    {
+      "id": "s01",
+      "from": "runner",
+      "to": "runtime",
+      "y": 180,
+      "label": "start with config",
+      "note": "live needs MODE=live and the acknowledgement"
+    },
+    {
+      "id": "s02",
+      "from": "runtime",
+      "to": "lease",
+      "y": 265,
+      "label": "acquire trading lease",
+      "note": "one holder per mode and client id"
+    },
+    {
+      "id": "s03",
+      "from": "lease",
+      "to": "runtime",
+      "y": 350,
+      "label": "lease held",
+      "variant": "return"
+    },
+    {
+      "id": "s04",
+      "from": "runtime",
+      "to": "journal",
+      "y": 395,
+      "label": "load today",
+      "note": "a malformed line refuses start"
+    },
+    {
+      "id": "s05",
+      "from": "journal",
+      "to": "runtime",
+      "y": 480,
+      "label": "restoreDayBook",
+      "variant": "return",
+      "note": "unresolved entries booked at loss"
+    },
+    {
+      "id": "s06",
+      "from": "runtime",
+      "to": "orch",
+      "y": 565,
+      "label": "start()"
+    },
+    {
+      "id": "s07",
+      "from": "orch",
+      "to": "dhan",
+      "y": 610,
+      "label": "open positions, orders",
+      "note": "a live order refuses start"
+    },
+    {
+      "id": "s08",
+      "from": "dhan",
+      "to": "orch",
+      "y": 695,
+      "label": "counts and positions",
+      "variant": "return"
+    },
+    {
+      "id": "s09",
+      "from": "orch",
+      "to": "dhan",
+      "y": 740,
+      "label": "warm-up candles",
+      "note": "clock guard checks bar times"
+    },
+    {
+      "id": "s10",
+      "from": "orch",
+      "to": "feed",
+      "y": 825,
+      "label": "connect, subscribe"
+    },
+    {
+      "id": "s11",
+      "from": "feed",
+      "to": "orch",
+      "y": 870,
+      "label": "ticks",
+      "variant": "return"
+    },
+    {
+      "id": "s12",
+      "from": "orch",
+      "to": "runtime",
+      "y": 915,
+      "label": "running; entries need the lease",
+      "variant": "emphasis"
+    }
   ],
   "activations": [
-    { "participant": "orch", "from": 565, "to": 915 }
+    {
+      "participant": "orch",
+      "from": 565,
+      "to": 915
+    }
   ],
   "cards": [
-    { "dot": "rose", "title": "Refuses rather than guesses", "items": ["A live order the broker holds refuses start", "An unmatched broker position refuses start"] },
-    { "dot": "cyan", "title": "Restart books, never zeroes", "items": ["An unresolved entry is booked at its planned loss", "Day P&L survives a restart from the journal or ledger"] }
+    {
+      "dot": "rose",
+      "title": "Refuses rather than guesses",
+      "items": [
+        "A live order the broker holds refuses start",
+        "An unmatched broker position refuses start"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Restart books, never zeroes",
+      "items": [
+        "An unresolved entry is booked at its planned loss",
+        "Day P&L survives a restart from the journal or ledger"
+      ]
+    }
   ]
 }

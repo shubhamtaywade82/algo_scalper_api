@@ -2,14 +2,14 @@
   "schema_version": 1,
   "diagram_type": "erd",
   "meta": {
-    "title": "L4 Persistence schema: ledger and paper venue (migrations 001 to 006)",
+    "title": "L4 Persistence schema: ledger and paper venue",
     "output": "docs/architecture/14-persistence-schema.html",
-    "quality_profile": "standard",
+    "quality_profile": "showcase",
     "repository": {
       "url": "https://github.com/shubhamtaywade82/options-trading-agent",
       "provider": "github",
       "link_mode": "local-only",
-      "revision": "e99b924b65964a0e1f3f461aef525c77d9e50d9a"
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
     }
   },
   "layout": {
@@ -490,8 +490,9 @@
       "dot": "cyan",
       "title": "Append-only by trigger",
       "items": [
-        "trade_events, paper_orders, paper_wallet_entries and paper_withdrawals reject UPDATE, DELETE and TRUNCATE",
-        "A closed paper position cannot be reopened or edited"
+        "trade_events rejects UPDATE, DELETE and TRUNCATE (migrations.ts:84-90)",
+        "paper_orders, paper_wallet_entries and paper_withdrawals reject UPDATE and DELETE only (migrations.ts:158-161, 191-192)",
+        "A closed paper position cannot be reopened or edited (migrations.ts:172-173)"
       ]
     },
     {

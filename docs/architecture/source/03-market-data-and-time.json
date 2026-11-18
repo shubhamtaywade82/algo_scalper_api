@@ -1,18 +1,18 @@
 {
   "schema_version": 1, "diagram_type": "architecture",
   "meta": { "title": "L2 Market data and time: from login to closed bars", "output": "docs/architecture/03-market-data-and-time.html", "quality_profile": "showcase",
-    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "e99b924b65964a0e1f3f461aef525c77d9e50d9a" } },
+    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "79e951f07c22d772e412cf35abf2843baa17102a" } },
   "layout": { "mode": "grid", "cols": 3, "gapX": 170, "gapY": 110, "cellW": 120, "cellH": 84 },
   "components": [
-    { "id": "env", "type": "backend", "label": "Config", "sublabel": "env, YAML, live ack", "row": 0, "col": 0, "sources": [{ "path": "src/config.ts", "line": 438, "label": "loadConfig" }] },
+    { "id": "env", "type": "backend", "label": "Config", "sublabel": "env, YAML, live ack", "row": 0, "col": 0, "sources": [{ "path": "src/config.ts", "line": 476, "label": "loadConfig" }] },
     { "id": "auth", "type": "security", "label": "Auth", "sublabel": "PIN+TOTP, single-flight", "row": 0, "col": 1, "sources": [{ "path": "src/dhan/auth.ts", "line": 143, "label": "singleFlight" }] },
-    { "id": "client", "type": "external", "label": "DhanClient", "sublabel": "SDK 2.0.1, REST and WS", "row": 0, "col": 2, "sources": [{ "path": "src/dhan/client.ts", "label": "client factory" }] },
+    { "id": "client", "type": "external", "label": "DhanClient", "sublabel": "SDK 2.0.1, REST and WS", "row": 0, "col": 2, "sources": [{ "path": "src/dhan/client.ts", "line": 58, "label": "createDhanClient" }] },
     { "id": "md", "type": "external", "label": "Market data", "sublabel": "chains, expiries, bars", "tag": "3 s throttle", "row": 1, "col": 1, "sources": [{ "path": "src/dhan/marketData.ts", "line": 76, "label": "DhanMarketData" }, { "path": "src/dhan/marketData.ts", "line": 8, "label": "chain throttle" }] },
-    { "id": "feed", "type": "messagebus", "label": "DhanFeed", "sublabel": "WebSocket ticks", "row": 1, "col": 2, "sources": [{ "path": "src/dhan/feed.ts", "line": 65, "label": "DhanFeed" }] },
+    { "id": "feed", "type": "messagebus", "label": "DhanFeed", "sublabel": "WebSocket ticks", "row": 1, "col": 2, "sources": [{ "path": "src/dhan/feed.ts", "line": 113, "label": "DhanFeed" }] },
     { "id": "master", "type": "database", "label": "Scrip master", "sublabel": "exact symbol lookup", "row": 2, "col": 1, "sources": [{ "path": "src/dhan/instrumentMaster.ts", "line": 84, "label": "InstrumentMaster" }] },
     { "id": "route", "type": "backend", "label": "Orchestrator", "sublabel": "route by key", "row": 2, "col": 2, "sources": [{ "path": "src/runtime/orchestrator.ts", "line": 66, "label": "Orchestrator" }] },
     { "id": "time", "type": "backend", "label": "Clock guard", "sublabel": "bar time vs wall clock", "row": 3, "col": 0, "sources": [{ "path": "src/runtime/clockGuard.ts", "line": 17, "label": "assertWarmupClock" }] },
-    { "id": "builder", "type": "backend", "label": "CandleBuilder", "sublabel": "5-min closed bars", "row": 3, "col": 2, "sources": [{ "path": "src/market/barSeries.ts", "line": 51, "label": "CandleBuilder" }] },
+    { "id": "builder", "type": "backend", "label": "CandleBuilder", "sublabel": "closed bars, BAR_MINUTES", "row": 3, "col": 2, "sources": [{ "path": "src/market/barSeries.ts", "line": 51, "label": "CandleBuilder" }] },
     { "id": "ind", "type": "backend", "label": "Indicators", "sublabel": "EMA, ATR, SuperTrend", "row": 4, "col": 2, "sources": [{ "path": "src/market/indicators.ts", "line": 164, "label": "superTrend" }] }
   ],
   "connections": [

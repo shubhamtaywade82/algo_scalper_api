@@ -1,7 +1,7 @@
 {
   "schema_version": 1, "diagram_type": "architecture",
   "meta": { "title": "L2 Signal and contract: from closed bars to a sized bracket", "output": "docs/architecture/04-signal-and-contract.html", "quality_profile": "showcase",
-    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "e99b924b65964a0e1f3f461aef525c77d9e50d9a" } },
+    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "79e951f07c22d772e412cf35abf2843baa17102a" } },
   "layout": { "mode": "grid", "cols": 3, "gapX": 170, "gapY": 110, "cellW": 120, "cellH": 84 },
   "components": [
     { "id": "orb", "type": "backend", "label": "ORB + SuperTrend", "sublabel": "closed-bar signal", "tag": "pure", "row": 0, "col": 0, "sources": [{ "path": "src/strategy/orbSupertrend.ts", "line": 60, "label": "evaluateOrbSupertrend" }] },

@@ -5,7 +5,7 @@
     "title": "L2 Market data to order: the live pipeline",
     "output": "docs/architecture/02-market-to-order-pipeline.html",
     "quality_profile": "showcase",
-    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "e99b924b65964a0e1f3f461aef525c77d9e50d9a" }
+    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "79e951f07c22d772e412cf35abf2843baa17102a" }
   },
   "stages": [
     { "label": "Ingest" },
@@ -14,15 +14,15 @@
     { "label": "Execute and record" }
   ],
   "nodes": [
-    { "id": "ws", "type": "messagebus", "label": "Dhan WebSocket", "sublabel": "ticks, spot and legs", "stage": 0, "row": 0, "sources": [{ "path": "src/dhan/feed.ts", "line": 65, "label": "DhanFeed" }] },
+    { "id": "ws", "type": "messagebus", "label": "Dhan WebSocket", "sublabel": "ticks, spot and legs", "stage": 0, "row": 0, "sources": [{ "path": "src/dhan/feed.ts", "line": 113, "label": "DhanFeed" }] },
     { "id": "rest", "type": "external", "label": "Dhan REST", "sublabel": "chain, bars, funds", "stage": 0, "row": 2, "sources": [{ "path": "src/dhan/marketData.ts", "line": 76, "label": "DhanMarketData" }] },
     { "id": "bars", "type": "backend", "label": "Bar builder", "sublabel": "closed 5-min bars", "stage": 1, "row": 0, "sources": [{ "path": "src/market/barSeries.ts", "line": 51, "label": "CandleBuilder" }] },
     { "id": "signal", "type": "backend", "label": "StrategySession", "sublabel": "first enabled family", "stage": 1, "row": 1, "sources": [{ "path": "src/strategy/session.ts", "line": 43, "label": "StrategySession" }] },
     { "id": "contract", "type": "backend", "label": "Select and size", "sublabel": "contract, bracket, lots", "stage": 1, "row": 2, "sources": [{ "path": "src/options/selector.ts", "line": 101, "label": "selectContract" }, { "path": "src/options/sizing.ts", "line": 32, "label": "sizePosition" }] },
-    { "id": "gate", "type": "security", "label": "Pre-trade gate", "sublabel": "every RiskCode checked", "stage": 2, "row": 2, "sources": [{ "path": "src/risk/riskEngine.ts", "line": 188, "label": "evaluatePreTrade" }] },
+    { "id": "gate", "type": "security", "label": "Pre-trade gate", "sublabel": "every RiskCode checked", "stage": 2, "row": 2, "sources": [{ "path": "src/risk/riskEngine.ts", "line": 196, "label": "evaluatePreTrade" }] },
     { "id": "advice", "type": "external", "label": "Advisor", "sublabel": "ENTER or SKIP", "stage": 2, "row": 1, "sources": [{ "path": "src/llm/advisor.ts", "line": 62, "label": "OllamaTradeAdvisor" }] },
-    { "id": "intent", "type": "database", "label": "Durable intent", "sublabel": "written before dispatch", "stage": 3, "row": 1, "sources": [{ "path": "src/runtime/underlyingAgent.ts", "line": 641, "label": "submitPreparedOrder" }] },
-    { "id": "venue", "type": "cloud", "label": "Execution port", "sublabel": "submitEntry, LIMIT", "stage": 3, "row": 2, "sources": [{ "path": "src/execution/ports.ts", "line": 94, "label": "ExecutionPort" }] },
+    { "id": "intent", "type": "database", "label": "Durable intent", "sublabel": "entry_submitted, then dispatch", "stage": 3, "row": 1, "sources": [{ "path": "src/runtime/underlyingAgent.ts", "line": 655, "label": "submitPreparedOrder" }] },
+    { "id": "venue", "type": "cloud", "label": "Execution port", "sublabel": "submitEntry, LIMIT", "stage": 3, "row": 2, "sources": [{ "path": "src/execution/ports.ts", "line": 101, "label": "ExecutionPort" }] },
     { "id": "fsm", "type": "backend", "label": "Trade FSM", "sublabel": "fill or reject, then state", "stage": 3, "row": 3, "sources": [{ "path": "src/domain/fsm.ts", "line": 42, "label": "TRANSITIONS" }] }
   ],
   "flows": [
@@ -38,7 +38,8 @@
   ],
   "cards": [
     { "dot": "cyan", "title": "Ticks are routed by composite key", "items": ["exchangeSegment:securityId picks the agent, so spot and option ticks never mix", "A stale spot tick or option quote blocks entry"] },
-    { "dot": "rose", "title": "Intent before order", "items": ["The entry intent is durable before any broker call", "An intent that cannot be written in time drops the entry"] },
-    { "dot": "amber", "title": "Advice is a veto", "items": ["The advisor cannot create, resize or re-strike an order", "Timeout, error or bad schema is SKIP"] }
+    { "dot": "rose", "title": "Intent before order", "items": ["The entry_submitted record is awaited before any broker call", "An intent that is not durable within the deadline drops the entry"] },
+    { "dot": "amber", "title": "Advice is a veto", "items": ["The advisor cannot create, resize or re-strike an order", "Timeout, error or bad schema is SKIP"] },
+    { "dot": "violet", "title": "Client-side stops watch the feed", "items": ["Paper and sandbox hold the stop and target in the agent (CLIENT_SIDE)", "A silent option feed refuses entries, then past the grace the position is sold as STALE_DATA"] }
   ]
 }

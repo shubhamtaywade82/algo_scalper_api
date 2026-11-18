@@ -9,7 +9,7 @@
       "url": "https://github.com/shubhamtaywade82/options-trading-agent",
       "provider": "github",
       "link_mode": "local-only",
-      "revision": "e99b924b65964a0e1f3f461aef525c77d9e50d9a"
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
     }
   },
   "mainPath": [
@@ -82,7 +82,7 @@
       "sources": [
         {
           "path": "src/runtime/underlyingAgent.ts",
-          "line": 1083,
+          "line": 1124,
           "label": "onExitFilled"
         }
       ]
@@ -95,8 +95,8 @@
       "sources": [
         {
           "path": "src/runtime/underlyingAgent.ts",
-          "line": 1290,
-          "label": "onHalt"
+          "line": 1376,
+          "label": "halt"
         }
       ]
     }
@@ -170,7 +170,7 @@
       "from": "HALTED",
       "to": "IDLE",
       "label": "RESET",
-      "note": "operator only",
+      "note": "in the table; no runtime path dispatches it",
       "variant": "emphasis"
     }
   ],
@@ -185,10 +185,10 @@
     },
     {
       "dot": "amber",
-      "title": "Only the operator resets",
+      "title": "Restart is the way out of HALTED",
       "items": [
-        "RESET is the sole way out of HALTED, back to IDLE",
-        "Positions are reconciled before RESET"
+        "RESET is in the transition table (fsm.ts:81), but no runtime path dispatches it",
+        "The operator clear refuses while an underlying is halted (orchestrator.ts:422)"
       ]
     },
     {

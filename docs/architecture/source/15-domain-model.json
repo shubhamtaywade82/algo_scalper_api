@@ -5,52 +5,536 @@
     "title": "L4 Domain model: orders, events, positions and the venues",
     "output": "docs/architecture/15-domain-model.html",
     "quality_profile": "showcase",
-    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "e99b924b65964a0e1f3f461aef525c77d9e50d9a" }
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
   },
-  "layout": { "mode": "grid", "gapX": 70, "gapY": 60 },
+  "layout": {
+    "mode": "grid",
+    "gapX": 70,
+    "gapY": 60
+  },
   "types": [
-    { "id": "execPort", "label": "ExecutionPort", "kind": "interface", "row": 0, "col": 1, "sublabel": "one contract, two or three venues", "sources": [{ "path": "src/execution/ports.ts", "line": 94, "label": "ExecutionPort" }],
-      "attributes": [{ "name": "mode", "type": "TradingMode", "visibility": "public" }, { "name": "chargesInFills", "type": "boolean", "visibility": "public" }],
-      "methods": [{ "name": "submitEntry", "parameters": "order: EntryOrder", "returns": "Promise<void>", "visibility": "public" }, { "name": "submitExit", "parameters": "order: ExitOrder", "returns": "Promise<void>", "visibility": "public" }, { "name": "onEvent", "parameters": "listener", "returns": "() => void", "visibility": "public" }] },
-    { "id": "paperPort", "label": "PaperExecutionPort", "kind": "class", "row": 1, "col": 0, "sublabel": "simulated fills", "sources": [{ "path": "src/execution/paper.ts", "line": 34, "label": "PaperExecutionPort" }] },
-    { "id": "livePort", "label": "LiveExecutionPort", "kind": "class", "row": 1, "col": 1, "sublabel": "super orders, reconcile", "sources": [{ "path": "src/dhan/liveExecution.ts", "line": 184, "label": "LiveExecutionPort" }],
-      "methods": [{ "name": "engageBrokerKillSwitch", "parameters": "reason: string", "returns": "Promise<void>", "visibility": "public" }] },
-    { "id": "gatewayPort", "label": "GatewayExecutionPort", "kind": "class", "row": 1, "col": 2, "sublabel": "sandbox or paper_exchange", "sources": [{ "path": "src/execution/gatewayPort.ts", "line": 44, "label": "GatewayExecutionPort" }] },
-    { "id": "execEvent", "label": "ExecutionEvent", "kind": "record", "row": 0, "col": 2, "sublabel": "tagged union of outcomes", "sources": [{ "path": "src/execution/ports.ts", "line": 33, "label": "ExecutionEvent" }],
-      "attributes": [{ "name": "kind", "type": "ENTRY_FILLED | EXIT_FILLED | ...", "visibility": "public" }] },
-    { "id": "agent", "label": "UnderlyingAgent", "kind": "class", "row": 2, "col": 0, "sublabel": "one per index", "sources": [{ "path": "src/runtime/underlyingAgent.ts", "line": 113, "label": "UnderlyingAgent" }],
-      "methods": [{ "name": "onSpotTick", "parameters": "tick: Tick", "returns": "void", "visibility": "public" }, { "name": "onExecutionEvent", "parameters": "event: ExecutionEvent", "returns": "void", "visibility": "public" }, { "name": "requestManualExit", "parameters": "optionType?", "returns": "string", "visibility": "public" }] },
-    { "id": "fsm", "label": "TradeStateMachine", "kind": "class", "row": 2, "col": 1, "sublabel": "one per CE and PE slot", "sources": [{ "path": "src/domain/fsm.ts", "line": 102, "label": "TradeStateMachine" }],
-      "methods": [{ "name": "dispatch", "parameters": "event: TradeEvent", "returns": "TradeState", "visibility": "public" }, { "name": "can", "parameters": "event: TradeEvent", "returns": "boolean", "visibility": "public" }] },
-    { "id": "dayBook", "label": "DayBook", "kind": "class", "row": 2, "col": 2, "sublabel": "day P&L, risk, kill switch", "sources": [{ "path": "src/risk/dayBook.ts", "line": 37, "label": "DayBook" }] },
-    { "id": "orch", "label": "Orchestrator", "kind": "class", "row": 3, "col": 0, "sublabel": "owns agents, start and stop", "sources": [{ "path": "src/runtime/orchestrator.ts", "line": 66, "label": "Orchestrator" }],
-      "methods": [{ "name": "start", "parameters": "", "returns": "Promise<void>", "visibility": "public" }, { "name": "stop", "parameters": "kind", "returns": "Promise<void>", "visibility": "public" }, { "name": "snapshot", "parameters": "nowMs", "returns": "CockpitSnapshot", "visibility": "public" }] },
-    { "id": "entryOrder", "label": "EntryOrder", "kind": "record", "row": 3, "col": 1, "sublabel": "BUY only, never SELL", "sources": [{ "path": "src/execution/ports.ts", "line": 5, "label": "EntryOrder" }],
-      "attributes": [{ "name": "side", "type": "'BUY'", "visibility": "public" }, { "name": "correlationId", "type": "string", "visibility": "public" }, { "name": "quantity", "type": "number", "visibility": "public" }, { "name": "stopLossPrice", "type": "number", "visibility": "public" }, { "name": "targetPrice", "type": "number", "visibility": "public" }] },
-    { "id": "exitOrder", "label": "ExitOrder", "kind": "record", "row": 3, "col": 2, "sublabel": "SELL to close a held long", "sources": [{ "path": "src/execution/ports.ts", "line": 22, "label": "ExitOrder" }],
-      "attributes": [{ "name": "side", "type": "'SELL'", "visibility": "public" }, { "name": "positionId", "type": "string", "visibility": "public" }, { "name": "reason", "type": "ExitReason", "visibility": "public" }] },
-    { "id": "contract", "label": "OptionContract", "kind": "record", "row": 4, "col": 0, "sublabel": "security id, strike, expiry", "sources": [{ "path": "src/domain/types.ts", "line": 42, "label": "OptionContract" }],
-      "attributes": [{ "name": "securityId", "type": "string", "visibility": "public" }, { "name": "exchangeSegment", "type": "OptionSegment", "visibility": "public" }, { "name": "optionType", "type": "CE | PE", "visibility": "public" }, { "name": "lotSize", "type": "number", "visibility": "public" }, { "name": "tickSize", "type": "number", "visibility": "public" }] },
-    { "id": "openPos", "label": "OpenPosition", "kind": "record", "row": 4, "col": 1, "sublabel": "held option, bracket levels", "sources": [{ "path": "src/domain/types.ts", "line": 76, "label": "OpenPosition" }],
-      "attributes": [{ "name": "positionId", "type": "string", "visibility": "public" }, { "name": "averagePrice", "type": "number", "visibility": "public" }, { "name": "stopLossPrice", "type": "number", "visibility": "public" }, { "name": "highWaterMark", "type": "number?", "visibility": "public" }] },
-    { "id": "signal", "label": "Signal", "kind": "record", "row": 4, "col": 2, "sublabel": "direction and the closed bar", "sources": [{ "path": "src/domain/types.ts", "line": 64, "label": "Signal" }],
-      "attributes": [{ "name": "direction", "type": "BULLISH | BEARISH", "visibility": "public" }, { "name": "barTime", "type": "number", "visibility": "public" }, { "name": "strategy", "type": "string?", "visibility": "public" }] }
+    {
+      "id": "execPort",
+      "label": "ExecutionPort",
+      "kind": "interface",
+      "row": 0,
+      "col": 1,
+      "sublabel": "one contract, two or three venues",
+      "sources": [
+        {
+          "path": "src/execution/ports.ts",
+          "line": 101,
+          "label": "ExecutionPort"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "mode",
+          "type": "TradingMode",
+          "visibility": "public"
+        },
+        {
+          "name": "chargesInFills",
+          "type": "boolean",
+          "visibility": "public"
+        }
+      ],
+      "methods": [
+        {
+          "name": "submitEntry",
+          "parameters": "order: EntryOrder",
+          "returns": "Promise<void>",
+          "visibility": "public"
+        },
+        {
+          "name": "submitExit",
+          "parameters": "order: ExitOrder",
+          "returns": "Promise<void>",
+          "visibility": "public"
+        },
+        {
+          "name": "onEvent",
+          "parameters": "listener",
+          "returns": "() => void",
+          "visibility": "public"
+        }
+      ]
+    },
+    {
+      "id": "paperPort",
+      "label": "PaperExecutionPort",
+      "kind": "class",
+      "row": 1,
+      "col": 0,
+      "sublabel": "simulated fills",
+      "sources": [
+        {
+          "path": "src/execution/paper.ts",
+          "line": 34,
+          "label": "PaperExecutionPort"
+        }
+      ]
+    },
+    {
+      "id": "livePort",
+      "label": "LiveExecutionPort",
+      "kind": "class",
+      "row": 1,
+      "col": 1,
+      "sublabel": "super orders, reconcile",
+      "sources": [
+        {
+          "path": "src/dhan/liveExecution.ts",
+          "line": 200,
+          "label": "LiveExecutionPort"
+        }
+      ],
+      "methods": [
+        {
+          "name": "engageBrokerKillSwitch",
+          "parameters": "reason: string",
+          "returns": "Promise<void>",
+          "visibility": "public"
+        }
+      ]
+    },
+    {
+      "id": "gatewayPort",
+      "label": "GatewayExecutionPort",
+      "kind": "class",
+      "row": 1,
+      "col": 2,
+      "sublabel": "sandbox or paper_exchange",
+      "sources": [
+        {
+          "path": "src/execution/gatewayPort.ts",
+          "line": 44,
+          "label": "GatewayExecutionPort"
+        }
+      ]
+    },
+    {
+      "id": "execEvent",
+      "label": "ExecutionEvent",
+      "kind": "record",
+      "row": 0,
+      "col": 2,
+      "sublabel": "tagged union of outcomes",
+      "sources": [
+        {
+          "path": "src/execution/ports.ts",
+          "line": 33,
+          "label": "ExecutionEvent"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "kind",
+          "type": "ENTRY_FILLED | EXIT_FILLED | ...",
+          "visibility": "public"
+        }
+      ]
+    },
+    {
+      "id": "agent",
+      "label": "UnderlyingAgent",
+      "kind": "class",
+      "row": 2,
+      "col": 0,
+      "sublabel": "one per index",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 113,
+          "label": "UnderlyingAgent"
+        }
+      ],
+      "methods": [
+        {
+          "name": "onSpotTick",
+          "parameters": "tick: Tick",
+          "returns": "void",
+          "visibility": "public"
+        },
+        {
+          "name": "onExecutionEvent",
+          "parameters": "event: ExecutionEvent",
+          "returns": "void",
+          "visibility": "public"
+        },
+        {
+          "name": "requestManualExit",
+          "parameters": "optionType?",
+          "returns": "string",
+          "visibility": "public"
+        }
+      ]
+    },
+    {
+      "id": "fsm",
+      "label": "TradeStateMachine",
+      "kind": "class",
+      "row": 2,
+      "col": 1,
+      "sublabel": "one per CE and PE slot",
+      "sources": [
+        {
+          "path": "src/domain/fsm.ts",
+          "line": 102,
+          "label": "TradeStateMachine"
+        }
+      ],
+      "methods": [
+        {
+          "name": "dispatch",
+          "parameters": "event: TradeEvent",
+          "returns": "TradeState",
+          "visibility": "public"
+        },
+        {
+          "name": "can",
+          "parameters": "event: TradeEvent",
+          "returns": "boolean",
+          "visibility": "public"
+        }
+      ]
+    },
+    {
+      "id": "dayBook",
+      "label": "DayBook",
+      "kind": "class",
+      "row": 2,
+      "col": 2,
+      "sublabel": "day P&L, risk, kill switch",
+      "sources": [
+        {
+          "path": "src/risk/dayBook.ts",
+          "line": 37,
+          "label": "DayBook"
+        }
+      ]
+    },
+    {
+      "id": "orch",
+      "label": "Orchestrator",
+      "kind": "class",
+      "row": 3,
+      "col": 0,
+      "sublabel": "owns agents, start and stop",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 66,
+          "label": "Orchestrator"
+        }
+      ],
+      "methods": [
+        {
+          "name": "start",
+          "parameters": "",
+          "returns": "Promise<void>",
+          "visibility": "public"
+        },
+        {
+          "name": "stop",
+          "parameters": "kind",
+          "returns": "Promise<void>",
+          "visibility": "public"
+        },
+        {
+          "name": "snapshot",
+          "parameters": "nowMs",
+          "returns": "CockpitSnapshot",
+          "visibility": "public"
+        }
+      ]
+    },
+    {
+      "id": "entryOrder",
+      "label": "EntryOrder",
+      "kind": "record",
+      "row": 3,
+      "col": 1,
+      "sublabel": "BUY only, never SELL",
+      "sources": [
+        {
+          "path": "src/execution/ports.ts",
+          "line": 5,
+          "label": "EntryOrder"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "side",
+          "type": "'BUY'",
+          "visibility": "public"
+        },
+        {
+          "name": "correlationId",
+          "type": "string",
+          "visibility": "public"
+        },
+        {
+          "name": "quantity",
+          "type": "number",
+          "visibility": "public"
+        },
+        {
+          "name": "stopLossPrice",
+          "type": "number",
+          "visibility": "public"
+        },
+        {
+          "name": "targetPrice",
+          "type": "number",
+          "visibility": "public"
+        }
+      ]
+    },
+    {
+      "id": "exitOrder",
+      "label": "ExitOrder",
+      "kind": "record",
+      "row": 3,
+      "col": 2,
+      "sublabel": "SELL to close a held long",
+      "sources": [
+        {
+          "path": "src/execution/ports.ts",
+          "line": 22,
+          "label": "ExitOrder"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "side",
+          "type": "'SELL'",
+          "visibility": "public"
+        },
+        {
+          "name": "positionId",
+          "type": "string",
+          "visibility": "public"
+        },
+        {
+          "name": "reason",
+          "type": "ExitReason",
+          "visibility": "public"
+        }
+      ]
+    },
+    {
+      "id": "contract",
+      "label": "OptionContract",
+      "kind": "record",
+      "row": 4,
+      "col": 0,
+      "sublabel": "security id, strike, expiry",
+      "sources": [
+        {
+          "path": "src/domain/types.ts",
+          "line": 42,
+          "label": "OptionContract"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "securityId",
+          "type": "string",
+          "visibility": "public"
+        },
+        {
+          "name": "exchangeSegment",
+          "type": "OptionSegment",
+          "visibility": "public"
+        },
+        {
+          "name": "optionType",
+          "type": "CE | PE",
+          "visibility": "public"
+        },
+        {
+          "name": "lotSize",
+          "type": "number",
+          "visibility": "public"
+        },
+        {
+          "name": "tickSize",
+          "type": "number",
+          "visibility": "public"
+        }
+      ]
+    },
+    {
+      "id": "openPos",
+      "label": "OpenPosition",
+      "kind": "record",
+      "row": 4,
+      "col": 1,
+      "sublabel": "held option, bracket levels",
+      "sources": [
+        {
+          "path": "src/domain/types.ts",
+          "line": 76,
+          "label": "OpenPosition"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "positionId",
+          "type": "string",
+          "visibility": "public"
+        },
+        {
+          "name": "averagePrice",
+          "type": "number",
+          "visibility": "public"
+        },
+        {
+          "name": "stopLossPrice",
+          "type": "number",
+          "visibility": "public"
+        },
+        {
+          "name": "highWaterMark",
+          "type": "number?",
+          "visibility": "public"
+        }
+      ]
+    },
+    {
+      "id": "signal",
+      "label": "Signal",
+      "kind": "record",
+      "row": 4,
+      "col": 2,
+      "sublabel": "direction and the closed bar",
+      "sources": [
+        {
+          "path": "src/domain/types.ts",
+          "line": 64,
+          "label": "Signal"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "direction",
+          "type": "BULLISH | BEARISH",
+          "visibility": "public"
+        },
+        {
+          "name": "barTime",
+          "type": "number",
+          "visibility": "public"
+        },
+        {
+          "name": "strategy",
+          "type": "string?",
+          "visibility": "public"
+        }
+      ]
+    }
   ],
   "relationships": [
-    { "from": "paperPort", "to": "execPort", "kind": "realization", "fromSide": "top", "toSide": "bottom" },
-    { "from": "livePort", "to": "execPort", "kind": "realization", "fromSide": "top", "toSide": "bottom" },
-    { "from": "gatewayPort", "to": "execPort", "kind": "realization", "fromSide": "top", "toSide": "bottom" },
-    { "from": "execPort", "to": "execEvent", "kind": "dependency", "label": "emits" },
-    { "from": "agent", "to": "execPort", "kind": "dependency", "label": "submits" },
-    { "from": "agent", "to": "fsm", "kind": "composition", "label": "two slots" },
-    { "from": "agent", "to": "dayBook", "kind": "association", "label": "books" },
-    { "from": "orch", "to": "agent", "kind": "composition", "label": "one per index" },
-    { "from": "entryOrder", "to": "contract", "kind": "association", "label": "contract" },
-    { "from": "exitOrder", "to": "openPos", "kind": "association", "label": "closes" },
-    { "from": "openPos", "to": "contract", "kind": "association", "label": "contract" }
+    {
+      "from": "paperPort",
+      "to": "execPort",
+      "kind": "realization",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "from": "livePort",
+      "to": "execPort",
+      "kind": "realization",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "from": "gatewayPort",
+      "to": "execPort",
+      "kind": "realization",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "from": "execPort",
+      "to": "execEvent",
+      "kind": "dependency",
+      "label": "emits"
+    },
+    {
+      "from": "agent",
+      "to": "execPort",
+      "kind": "dependency",
+      "label": "submits"
+    },
+    {
+      "from": "agent",
+      "to": "fsm",
+      "kind": "composition",
+      "label": "two slots"
+    },
+    {
+      "from": "agent",
+      "to": "dayBook",
+      "kind": "association",
+      "label": "books"
+    },
+    {
+      "from": "orch",
+      "to": "agent",
+      "kind": "composition",
+      "label": "one per index"
+    },
+    {
+      "from": "entryOrder",
+      "to": "contract",
+      "kind": "association",
+      "label": "contract"
+    },
+    {
+      "from": "exitOrder",
+      "to": "openPos",
+      "kind": "association",
+      "label": "closes"
+    },
+    {
+      "from": "openPos",
+      "to": "contract",
+      "kind": "association",
+      "label": "contract"
+    }
   ],
   "cards": [
-    { "dot": "rose", "title": "One order shape each way", "items": ["EntryOrder.side is the literal BUY; there is no SELL-to-open type", "ExitOrder.side is the literal SELL and needs a held position"] },
-    { "dot": "cyan", "title": "Results arrive as events", "items": ["submit* never throws for a venue outcome", "The state machine is driven by ExecutionEvent only"] }
+    {
+      "dot": "rose",
+      "title": "One order shape each way",
+      "items": [
+        "EntryOrder.side is the literal BUY; there is no SELL-to-open type",
+        "ExitOrder.side is the literal SELL and needs a held position"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Results arrive as events",
+      "items": [
+        "submit* never throws for a venue outcome",
+        "The state machine is driven by ExecutionEvent only"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Venue protection",
+      "items": [
+        "ExecutionPort.protection is EXCHANGE_BRACKET (live) or CLIENT_SIDE (paper and sandbox)",
+        "CLIENT_SIDE means the agent sends the stop and target sell on option ticks (src/execution/ports.ts:93)"
+      ]
+    }
   ]
 }

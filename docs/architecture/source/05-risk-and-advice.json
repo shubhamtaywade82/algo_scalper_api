@@ -1,16 +1,16 @@
 {
   "schema_version": 1, "diagram_type": "architecture",
   "meta": { "title": "L2 Risk and advice: what must pass before an order", "output": "docs/architecture/05-risk-and-advice.html", "quality_profile": "showcase",
-    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "e99b924b65964a0e1f3f461aef525c77d9e50d9a" } },
+    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "79e951f07c22d772e412cf35abf2843baa17102a" } },
   "layout": { "mode": "grid", "cols": 3, "gapX": 170, "gapY": 110, "cellW": 120, "cellH": 84 },
   "components": [
     { "id": "gatel", "type": "security", "label": "Trading gate", "sublabel": "ledger, lease holds", "row": 0, "col": 0, "sources": [{ "path": "src/runtime/tradingGate.ts", "line": 24, "label": "ledgerAndLeaseGate" }] },
-    { "id": "policy", "type": "security", "label": "Rollout policy", "sublabel": "off, shadow, enforce", "tag": "ADR-011", "row": 0, "col": 1, "sources": [{ "path": "src/risk/riskEngine.ts", "line": 223, "label": "evaluatePreTradeUnderPolicy" }] },
-    { "id": "gate", "type": "security", "label": "Pre-trade gate", "sublabel": "22 RiskCode checks", "row": 0, "col": 2, "sources": [{ "path": "src/risk/riskEngine.ts", "line": 188, "label": "evaluatePreTrade" }] },
+    { "id": "policy", "type": "security", "label": "Rollout policy", "sublabel": "off, shadow, enforce", "tag": "ADR-011", "row": 0, "col": 1, "sources": [{ "path": "src/risk/riskEngine.ts", "line": 231, "label": "evaluatePreTradeUnderPolicy" }] },
+    { "id": "gate", "type": "security", "label": "Pre-trade gate", "sublabel": "22 RiskCode checks", "row": 0, "col": 2, "sources": [{ "path": "src/risk/riskEngine.ts", "line": 196, "label": "evaluatePreTrade" }] },
     { "id": "book", "type": "security", "label": "DayBook", "sublabel": "day P&L, trades, kill", "row": 1, "col": 0, "sources": [{ "path": "src/risk/dayBook.ts", "line": 37, "label": "DayBook" }] },
     { "id": "allin", "type": "security", "label": "All-in loss", "sublabel": "stop, costs, gaps", "row": 1, "col": 1, "sources": [{ "path": "src/risk/allInLoss.ts", "line": 45, "label": "allInAdverseLossInr" }] },
     { "id": "advice", "type": "external", "label": "Advisor", "sublabel": "ENTER or SKIP, zod", "tag": "veto only", "row": 1, "col": 2, "sources": [{ "path": "src/llm/advisor.ts", "line": 62, "label": "OllamaTradeAdvisor" }] },
-    { "id": "kill", "type": "security", "label": "Kill switch", "sublabel": "local block, retry 30 s", "row": 2, "col": 0, "sources": [{ "path": "src/runtime/orchestrator.ts", "line": 53, "label": "BROKER_KILL_RETRY_MS" }] },
+    { "id": "kill", "type": "security", "label": "Kill switch", "sublabel": "local block, retry 30 s", "row": 2, "col": 0, "sources": [{ "path": "src/runtime/orchestrator.ts", "line": 54, "label": "BROKER_KILL_RETRY_MS" }] },
     { "id": "shadow", "type": "database", "label": "Shadow journal", "sublabel": "planned vs all-in", "row": 2, "col": 1, "sources": [{ "path": "src/risk/riskShadow.ts", "line": 50, "label": "joinShadow" }] }
   ],
   "connections": [

@@ -1,14 +1,14 @@
 {
   "schema_version": 1, "diagram_type": "architecture",
   "meta": { "title": "L2 Orchestration: serial agents, one queue each", "output": "docs/architecture/07-orchestration.html", "quality_profile": "showcase",
-    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "e99b924b65964a0e1f3f461aef525c77d9e50d9a" } },
+    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "79e951f07c22d772e412cf35abf2843baa17102a" } },
   "layout": { "mode": "grid", "cols": 3, "gapX": 170, "gapY": 110, "cellW": 120, "cellH": 84 },
   "components": [
     { "id": "runtime", "type": "backend", "label": "buildRuntime", "sublabel": "wires ports, restore", "row": 0, "col": 0, "sources": [{ "path": "src/runtime/createRuntime.ts", "line": 59, "label": "buildRuntime" }] },
-    { "id": "lease", "type": "database", "label": "Trading lease", "sublabel": "one per client id", "row": 0, "col": 1, "sources": [{ "path": "src/persistence/lease.ts", "line": 144, "label": "Lease" }] },
+    { "id": "lease", "type": "database", "label": "Trading lease", "sublabel": "one per mode and client", "row": 0, "col": 1, "sources": [{ "path": "src/persistence/lease.ts", "line": 144, "label": "Lease" }] },
     { "id": "restore", "type": "backend", "label": "Day restore", "sublabel": "journal or ledger", "row": 0, "col": 2, "sources": [{ "path": "src/ops/dayState.ts", "line": 77, "label": "restoreDayBook" }] },
     { "id": "orch", "type": "backend", "label": "Orchestrator", "sublabel": "start, route, stop", "row": 1, "col": 1, "sources": [{ "path": "src/runtime/orchestrator.ts", "line": 66, "label": "Orchestrator" }] },
-    { "id": "cockpit", "type": "frontend", "label": "Snapshot", "sublabel": "read-only view", "row": 1, "col": 2, "sources": [{ "path": "src/runtime/views.ts", "line": 132, "label": "CockpitSnapshot" }] },
+    { "id": "cockpit", "type": "frontend", "label": "Snapshot", "sublabel": "read-only view", "row": 1, "col": 2, "sources": [{ "path": "src/runtime/views.ts", "line": 142, "label": "CockpitSnapshot" }] },
     { "id": "agent", "type": "backend", "label": "UnderlyingAgent", "sublabel": "one per index", "row": 2, "col": 0, "sources": [{ "path": "src/runtime/underlyingAgent.ts", "line": 113, "label": "UnderlyingAgent" }] },
     { "id": "queue", "type": "backend", "label": "SerialQueue", "sublabel": "one per underlying", "row": 2, "col": 1, "sources": [{ "path": "src/runtime/serialQueue.ts", "line": 6, "label": "SerialQueue" }] },
     { "id": "clock", "type": "backend", "label": "Clock guard", "sublabel": "bar time vs wall", "row": 2, "col": 2, "sources": [{ "path": "src/runtime/clockGuard.ts", "line": 17, "label": "assertWarmupClock" }] },
@@ -28,6 +28,6 @@
   "cards": [
     { "dot": "cyan", "title": "One queue per underlying", "items": ["Spot ticks, option ticks, clock and fills enter one queue", "Transitions never interleave for one index"] },
     { "dot": "rose", "title": "Start refuses rather than guesses", "items": ["A live order at the broker refuses start", "An unmatched broker position refuses start"] },
-    { "dot": "amber", "title": "Operator actions need two presses", "items": ["Close, block and stop each confirm within 2 s", "The cockpit reads state and never changes it"] }
+    { "dot": "amber", "title": "Operator actions need two presses", "items": ["Most operator keys need a second press within 5 s: close, block, stop, brake, reset, posture, strategy, test", "The cockpit reads a snapshot; its keys send operator actions"] }
   ]
 }

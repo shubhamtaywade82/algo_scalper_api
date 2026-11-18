@@ -6,41 +6,220 @@
     "output": "docs/architecture/12-exit-and-unknown-outcomes.html",
     "quality_profile": "showcase",
     "column_fit": "spread",
-    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "e99b924b65964a0e1f3f461aef525c77d9e50d9a" }
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
   },
   "participants": [
-    { "id": "agent", "type": "backend", "label": "Agent", "sublabel": "UnderlyingAgent", "sources": [{ "path": "src/runtime/underlyingAgent.ts", "line": 113, "label": "UnderlyingAgent" }] },
-    { "id": "journal", "type": "database", "label": "Journal", "sublabel": "EventLog", "sources": [{ "path": "src/ops/eventLog.ts", "line": 51, "label": "EventLog" }] },
-    { "id": "venue", "type": "cloud", "label": "Live venue", "sublabel": "submitExit", "sources": [{ "path": "src/dhan/liveExecution.ts", "line": 290, "label": "submitExit" }] },
-    { "id": "dhan", "type": "external", "label": "DhanHQ", "sublabel": "orders, positions" },
-    { "id": "alerts", "type": "external", "label": "Alerts", "sublabel": "Telegram, webhook", "sources": [{ "path": "src/ops/alerts.ts", "line": 124, "label": "buildAlertListener" }] }
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "Agent",
+      "sublabel": "UnderlyingAgent",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 113,
+          "label": "UnderlyingAgent"
+        }
+      ]
+    },
+    {
+      "id": "journal",
+      "type": "database",
+      "label": "Journal",
+      "sublabel": "EventLog",
+      "sources": [
+        {
+          "path": "src/ops/eventLog.ts",
+          "line": 51,
+          "label": "EventLog"
+        }
+      ]
+    },
+    {
+      "id": "venue",
+      "type": "cloud",
+      "label": "Live venue",
+      "sublabel": "submitExit",
+      "sources": [
+        {
+          "path": "src/dhan/liveExecution.ts",
+          "line": 355,
+          "label": "submitExit"
+        }
+      ]
+    },
+    {
+      "id": "dhan",
+      "type": "external",
+      "label": "DhanHQ",
+      "sublabel": "orders, positions"
+    },
+    {
+      "id": "alerts",
+      "type": "external",
+      "label": "Alerts",
+      "sublabel": "Telegram, webhook",
+      "sources": [
+        {
+          "path": "src/ops/alerts.ts",
+          "line": 124,
+          "label": "buildAlertListener"
+        }
+      ]
+    }
   ],
   "segments": [
-    { "from": 160, "to": 230, "label": "Submit" },
-    { "from": 230, "to": 430, "label": "Ambiguous" },
-    { "from": 430, "to": 610, "label": "Halt and alert" },
-    { "from": 610, "to": 820, "label": "Kill switch and reconcile" },
-    { "from": 820, "to": 920, "label": "Settle" }
+    {
+      "from": 160,
+      "to": 230,
+      "label": "Submit"
+    },
+    {
+      "from": 230,
+      "to": 430,
+      "label": "Ambiguous"
+    },
+    {
+      "from": 430,
+      "to": 610,
+      "label": "Halt and alert"
+    },
+    {
+      "from": 610,
+      "to": 820,
+      "label": "Kill switch and reconcile"
+    },
+    {
+      "from": 820,
+      "to": 920,
+      "label": "Settle"
+    }
   ],
   "messages": [
-    { "id": "x01", "from": "agent", "to": "journal", "y": 180, "label": "exit_submitted", "note": "reason: STOP_LOSS, TARGET, TIME_STOP and more" },
-    { "id": "x02", "from": "agent", "to": "venue", "y": 280, "label": "submitExit: SELL", "note": "capped at broker net long" },
-    { "id": "x03", "from": "venue", "to": "dhan", "y": 365, "label": "positions, then SELL" },
-    { "id": "x04", "from": "dhan", "to": "venue", "y": 410, "label": "timeout or 5xx", "variant": "security", "note": "ambiguous outcome" },
-    { "id": "x05", "from": "venue", "to": "agent", "y": 455, "label": "EXIT_UNCONFIRMED", "variant": "emphasis", "note": "no second SELL (ADR-005)" },
-    { "id": "x06", "from": "agent", "to": "journal", "y": 540, "label": "halted, with reason" },
-    { "id": "x07", "from": "agent", "to": "alerts", "y": 585, "label": "halt alert", "variant": "dashed" },
-    { "id": "x08", "from": "agent", "to": "venue", "y": 630, "label": "kill switch", "note": "retried every 30 s" },
-    { "id": "x09", "from": "venue", "to": "dhan", "y": 715, "label": "traderControls", "note": "refused while a position is open" },
-    { "id": "x10", "from": "venue", "to": "dhan", "y": 800, "label": "reconcile" },
-    { "id": "x11", "from": "dhan", "to": "venue", "y": 845, "label": "flat, or leg terminal", "variant": "return" },
-    { "id": "x12", "from": "venue", "to": "agent", "y": 890, "label": "late fill recorded", "note": "stays HALTED; RESET is operator-only" }
+    {
+      "id": "x01",
+      "from": "agent",
+      "to": "journal",
+      "y": 180,
+      "label": "exit_submitted",
+      "note": "reason: STOP_LOSS, TARGET, TIME_STOP and more"
+    },
+    {
+      "id": "x02",
+      "from": "agent",
+      "to": "venue",
+      "y": 280,
+      "label": "submitExit: SELL",
+      "note": "capped at broker net long"
+    },
+    {
+      "id": "x03",
+      "from": "venue",
+      "to": "dhan",
+      "y": 365,
+      "label": "positions, then SELL"
+    },
+    {
+      "id": "x04",
+      "from": "dhan",
+      "to": "venue",
+      "y": 410,
+      "label": "timeout or 5xx",
+      "variant": "security",
+      "note": "ambiguous outcome"
+    },
+    {
+      "id": "x05",
+      "from": "venue",
+      "to": "agent",
+      "y": 455,
+      "label": "EXIT_UNCONFIRMED",
+      "variant": "emphasis",
+      "note": "no second SELL (ADR-005)"
+    },
+    {
+      "id": "x06",
+      "from": "agent",
+      "to": "journal",
+      "y": 540,
+      "label": "halted, with reason"
+    },
+    {
+      "id": "x07",
+      "from": "agent",
+      "to": "alerts",
+      "y": 585,
+      "label": "halt alert",
+      "variant": "dashed"
+    },
+    {
+      "id": "x08",
+      "from": "agent",
+      "to": "venue",
+      "y": 630,
+      "label": "kill switch",
+      "note": "retried every 30 s"
+    },
+    {
+      "id": "x09",
+      "from": "venue",
+      "to": "dhan",
+      "y": 715,
+      "label": "traderControls",
+      "note": "assumed: refused while a position is open (BROKER_CONTRACT 1.5)"
+    },
+    {
+      "id": "x10",
+      "from": "venue",
+      "to": "dhan",
+      "y": 800,
+      "label": "reconcile"
+    },
+    {
+      "id": "x11",
+      "from": "dhan",
+      "to": "venue",
+      "y": 845,
+      "label": "flat, or leg terminal",
+      "variant": "return"
+    },
+    {
+      "id": "x12",
+      "from": "venue",
+      "to": "agent",
+      "y": 890,
+      "label": "late fill recorded",
+      "note": "stays HALTED until restart"
+    }
   ],
   "activations": [
-    { "participant": "agent", "from": 180, "to": 890 }
+    {
+      "participant": "agent",
+      "from": 180,
+      "to": 890
+    }
   ],
   "cards": [
-    { "dot": "rose", "title": "Definitive or ambiguous", "items": ["A definitive 4xx becomes REJECTED and the position stays managed", "Timeout, 5xx, 401, 408, 429 and network errors are UNCONFIRMED"] },
-    { "dot": "amber", "title": "Net short halts", "items": ["An exit never sends more than the broker's net long quantity", "A net short position stops trading at once"] }
+    {
+      "dot": "rose",
+      "title": "Definitive or ambiguous",
+      "items": [
+        "A definitive 4xx becomes REJECTED and the position stays managed",
+        "Timeout, 5xx, 401, 408, 429 and network errors are UNCONFIRMED"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Net short halts",
+      "items": [
+        "An exit never sends more than the broker's net long quantity",
+        "A net short position stops trading at once"
+      ]
+    }
   ]
 }

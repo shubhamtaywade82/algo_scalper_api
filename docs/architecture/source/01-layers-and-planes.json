@@ -9,23 +9,23 @@
       "url": "https://github.com/shubhamtaywade82/options-trading-agent",
       "provider": "github",
       "link_mode": "local-only",
-      "revision": "e99b924b65964a0e1f3f461aef525c77d9e50d9a"
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
     }
   },
   "layout": { "mode": "grid", "cols": 4, "gapX": 120, "gapY": 100, "cellW": 120, "cellH": 84 },
   "components": [
-    { "id": "config", "type": "backend", "label": "Config", "sublabel": "validated env, ceilings", "row": 0, "col": 0, "sources": [{ "path": "src/config.ts", "line": 438, "label": "loadConfig" }] },
+    { "id": "config", "type": "backend", "label": "Config", "sublabel": "env and YAML, ceilings", "row": 0, "col": 0, "sources": [{ "path": "src/config.ts", "line": 476, "end_line": 481, "label": "loadConfig, YAML over env" }] },
     { "id": "auth", "type": "security", "label": "Auth", "sublabel": "PIN+TOTP, token cache", "row": 0, "col": 1, "sources": [{ "path": "src/dhan/auth.ts", "line": 24, "label": "createTotpProvider" }] },
-    { "id": "market", "type": "messagebus", "label": "Market data", "sublabel": "WS feed, REST chains", "tag": "I/O", "row": 0, "col": 2, "sources": [{ "path": "src/dhan/feed.ts", "line": 65, "label": "DhanFeed" }, { "path": "src/dhan/marketData.ts", "line": 76, "label": "DhanMarketData" }] },
-    { "id": "cockpit", "type": "frontend", "label": "Cockpit", "sublabel": "read-only snapshot", "row": 0, "col": 3, "sources": [{ "path": "src/ui/App.tsx", "line": 47, "label": "App" }] },
+    { "id": "market", "type": "messagebus", "label": "Market data", "sublabel": "WS feed, REST chains", "tag": "I/O", "row": 0, "col": 2, "sources": [{ "path": "src/dhan/feed.ts", "line": 113, "label": "DhanFeed" }, { "path": "src/dhan/marketData.ts", "line": 76, "label": "DhanMarketData" }] },
+    { "id": "cockpit", "type": "frontend", "label": "Cockpit", "sublabel": "snapshot view, operator keys", "row": 0, "col": 3, "sources": [{ "path": "src/ui/App.tsx", "line": 56, "label": "App" }] },
     { "id": "time", "type": "backend", "label": "Time", "sublabel": "IST minute of day", "row": 1, "col": 0, "sources": [{ "path": "src/time/ist.ts", "line": 18, "label": "istParts" }] },
-    { "id": "orch", "type": "backend", "label": "Orchestration", "sublabel": "routes ticks, agents", "row": 1, "col": 1, "sources": [{ "path": "src/runtime/orchestrator.ts", "line": 66, "label": "Orchestrator" }] },
+    { "id": "orch", "type": "backend", "label": "Orchestration", "sublabel": "routes ticks, agents", "row": 1, "col": 1, "sources": [{ "path": "src/runtime/orchestrator.ts", "line": 67, "label": "Orchestrator" }] },
     { "id": "signal", "type": "backend", "label": "Signal", "sublabel": "ORB and SuperTrend", "tag": "pure", "row": 1, "col": 2, "sources": [{ "path": "src/strategy/session.ts", "line": 43, "label": "StrategySession" }] },
     { "id": "contract", "type": "backend", "label": "Contract", "sublabel": "select, bracket, size", "tag": "pure", "row": 1, "col": 3, "sources": [{ "path": "src/options/selector.ts", "line": 101, "label": "selectContract" }] },
     { "id": "audit", "type": "database", "label": "Audit", "sublabel": "journal, PostgreSQL", "row": 2, "col": 0, "sources": [{ "path": "src/ops/eventLog.ts", "line": 51, "label": "EventLog" }] },
-    { "id": "venue", "type": "cloud", "label": "Venue", "sublabel": "paper, sandbox, live", "tag": "broker writes", "row": 2, "col": 1, "sources": [{ "path": "src/execution/ports.ts", "line": 94, "label": "ExecutionPort" }] },
+    { "id": "venue", "type": "cloud", "label": "Venue", "sublabel": "paper, sandbox, live", "tag": "broker writes", "row": 2, "col": 1, "sources": [{ "path": "src/execution/ports.ts", "line": 101, "label": "ExecutionPort" }] },
     { "id": "advice", "type": "external", "label": "Advice", "sublabel": "Ollama, veto only", "row": 2, "col": 2, "sources": [{ "path": "src/llm/advisor.ts", "line": 62, "label": "OllamaTradeAdvisor" }] },
-    { "id": "gate", "type": "security", "label": "Risk gate", "sublabel": "all violations reported", "row": 2, "col": 3, "sources": [{ "path": "src/risk/riskEngine.ts", "line": 188, "label": "evaluatePreTrade" }] },
+    { "id": "gate", "type": "security", "label": "Risk gate", "sublabel": "all violations reported", "row": 2, "col": 3, "sources": [{ "path": "src/risk/riskEngine.ts", "line": 196, "label": "evaluatePreTrade" }] },
     { "id": "research", "type": "backend", "label": "Research", "sublabel": "offline replay, no orders", "tag": "offline", "row": 3, "col": 3, "sources": [{ "path": "src/research/timeMachine.ts", "line": 137, "label": "runTimeMachine" }] }
   ],
   "boundaries": [
@@ -44,7 +44,7 @@
     { "id": "advice-venue", "from": "advice", "to": "venue", "label": "ENTER", "variant": "emphasis" },
     { "id": "venue-orch", "from": "venue", "to": "orch", "label": "events", "variant": "security" },
     { "id": "orch-audit", "from": "orch", "to": "audit", "label": "journal" },
-    { "id": "snapshot", "from": "cockpit", "to": "orch", "label": "snapshot", "variant": "dashed" },
+    { "id": "snapshot", "from": "cockpit", "to": "orch", "label": "snapshot and keys", "variant": "dashed" },
     { "id": "reuse", "from": "research", "to": "gate", "label": "reuses code", "variant": "dashed" }
   ],
   "cards": [

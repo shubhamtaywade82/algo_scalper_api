@@ -9,25 +9,26 @@
       "url": "https://github.com/shubhamtaywade82/options-trading-agent",
       "provider": "github",
       "link_mode": "local-only",
-      "revision": "e99b924b65964a0e1f3f461aef525c77d9e50d9a"
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
     }
   },
   "layout": { "mode": "grid", "cols": 3, "gapX": 170, "gapY": 110, "cellW": 120, "cellH": 84 },
   "components": [
     { "id": "paperx", "type": "external", "label": "paper_exchange", "sublabel": "PAPER_BACKEND=exchange", "row": 0, "col": 0, "sources": [{ "path": "src/paper/exchangeGateway.ts", "line": 20, "label": "PaperExchangeGateway" }] },
-    { "id": "operator", "type": "external", "label": "Operator", "sublabel": "cockpit keys, two presses", "icon": "person", "row": 0, "col": 1 },
+    { "id": "operator", "type": "external", "label": "Operator", "sublabel": "cockpit keys, two presses", "icon": "person", "row": 0, "col": 1, "sources": [{ "path": "src/ui/keymap.ts", "line": 18, "label": "COCKPIT_KEYS" }] },
     { "id": "sandbox", "type": "external", "label": "Dhan sandbox", "sublabel": "DHAN_SANDBOX_* credentials", "row": 0, "col": 2, "sources": [{ "path": "src/dhan/sandboxGateway.ts", "line": 27, "label": "DhanSandboxGateway" }] },
-    { "id": "runner", "type": "backend", "label": "Session runner", "sublabel": "tmux and cron, IST weekdays", "row": 1, "col": 0, "sources": [{ "path": "scripts/session.sh", "label": "session start and stop" }] },
+    { "id": "runner", "type": "backend", "label": "Session runner", "sublabel": "tmux and cron, IST weekdays", "row": 1, "col": 0, "sources": [{ "path": "scripts/session.sh", "line": 2, "label": "start or stop in tmux, for cron" }] },
     { "id": "agent", "type": "backend", "label": "Trading agent", "sublabel": "one Node process, tsx", "tag": "single writer", "row": 1, "col": 1, "sources": [{ "path": "src/runtime/createRuntime.ts", "line": 59, "label": "buildRuntime" }] },
-    { "id": "dhan", "type": "external", "label": "DhanHQ", "sublabel": "REST, WebSocket, orders", "tag": "live broker", "row": 1, "col": 2, "sources": [{ "path": "src/dhan/liveExecution.ts", "line": 184, "label": "LiveExecutionPort" }, { "path": "src/dhan/feed.ts", "line": 65, "label": "DhanFeed" }] },
+    { "id": "dhan", "type": "external", "label": "DhanHQ", "sublabel": "REST, WebSocket, orders", "tag": "live broker", "row": 1, "col": 2, "sources": [{ "path": "src/dhan/liveExecution.ts", "line": 200, "label": "LiveExecutionPort" }, { "path": "src/dhan/feed.ts", "line": 113, "label": "DhanFeed" }] },
     { "id": "journal", "type": "database", "label": "Local journal", "sublabel": "events per IST day, JSONL", "row": 2, "col": 0, "sources": [{ "path": "src/ops/eventLog.ts", "line": 51, "label": "EventLog" }] },
     { "id": "pg", "type": "database", "label": "PostgreSQL", "sublabel": "ledger, leases, paper venue", "row": 2, "col": 1, "sources": [{ "path": "src/persistence/migrations.ts", "line": 7, "label": "MIGRATIONS" }] },
     { "id": "ollama", "type": "external", "label": "Ollama", "sublabel": "advice: ENTER or SKIP", "row": 2, "col": 2, "sources": [{ "path": "src/llm/advisor.ts", "line": 62, "label": "OllamaTradeAdvisor" }] },
     { "id": "redis", "type": "database", "label": "Redis", "sublabel": "rate gate, contract cache", "row": 3, "col": 0, "sources": [{ "path": "src/persistence/rateGate.ts", "line": 49, "label": "RedisRateGate" }] },
-    { "id": "alerts", "type": "external", "label": "Telegram or webhook", "sublabel": "best-effort alerts", "row": 3, "col": 2, "sources": [{ "path": "src/ops/alerts.ts", "line": 124, "label": "buildAlertListener" }] }
+    { "id": "research", "type": "backend", "label": "Time Machine", "sublabel": "research, offline replay", "row": 3, "col": 1, "sources": [{ "path": "scripts/timemachine.ts", "line": 159, "label": "createDhanClient import" }] },
+    { "id": "alerts", "type": "external", "label": "Telegram or webhook", "sublabel": "best-effort alerts", "row": 3, "col": 2, "sources": [{ "path": "src/ops/alerts.ts", "line": 127, "label": "buildAlertListener" }] }
   ],
   "boundaries": [
-    { "kind": "region", "label": "Local host", "wraps": ["runner", "agent", "journal", "pg", "redis"] }
+    { "kind": "region", "label": "Local host", "wraps": ["runner", "agent", "journal", "pg", "redis", "research"] }
   ],
   "connections": [
     { "id": "keys", "from": "operator", "to": "agent", "label": "c, k, s", "variant": "emphasis" },
@@ -41,11 +42,13 @@
     { "id": "audit", "from": "agent", "to": "journal", "label": "JSONL audit" },
     { "id": "restore", "from": "journal", "to": "agent", "label": "restore day", "variant": "dashed" },
     { "id": "alert", "from": "agent", "to": "alerts", "label": "alerts", "variant": "dashed" },
-    { "id": "paper-venue", "from": "agent", "to": "paperx", "label": "paper orders", "variant": "dashed" }
+    { "id": "paper-venue", "from": "agent", "to": "paperx", "label": "paper orders", "variant": "dashed" },
+    { "id": "research-run", "from": "operator", "to": "research", "label": "fetch, replay" },
+    { "id": "research-reads", "from": "research", "to": "dhan", "label": "read-only charts", "variant": "dashed" }
   ],
   "cards": [
-    { "dot": "rose", "title": "Trust boundary", "items": ["Only the Local host region holds credentials and state", "Broker writes leave through two venue adapters only"] },
-    { "dot": "cyan", "title": "Not connected", "items": ["Research datasets and replay never reach DhanHQ (ADR-001)", "The advisor cannot place or resize an order"] },
-    { "dot": "amber", "title": "Fails closed", "items": ["Unknown broker outcome halts the underlying", "Live mode needs an explicit acknowledgement"] }
+    { "dot": "rose", "title": "Trust boundary", "items": ["Dhan credentials come from the environment (.env, gitignored)", "Broker writes leave through two venue adapters only"] },
+    { "dot": "cyan", "title": "Not connected", "items": ["The research plane has no broker path (ADR-001): src/research never imports src/dhan", "The advisor answers ENTER or SKIP and cannot place or resize an order"] },
+    { "dot": "amber", "title": "Fails closed", "items": ["An unknown broker outcome halts the underlying (ADR-005)", "Live mode needs LIVE_TRADING_ACK; sandbox orders go to the Dhan sandbox account"] }
   ]
 }

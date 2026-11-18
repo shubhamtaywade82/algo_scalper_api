@@ -6,16 +6,16 @@
     "output": "docs/architecture/11-entry-sequence.html",
     "quality_profile": "showcase",
     "column_fit": "spread",
-    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "e99b924b65964a0e1f3f461aef525c77d9e50d9a" }
+    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "79e951f07c22d772e412cf35abf2843baa17102a" }
   },
   "participants": [
-    { "id": "feed", "type": "messagebus", "label": "Feed", "sublabel": "DhanFeed", "sources": [{ "path": "src/dhan/feed.ts", "line": 65, "label": "DhanFeed" }] },
+    { "id": "feed", "type": "messagebus", "label": "Feed", "sublabel": "DhanFeed", "sources": [{ "path": "src/dhan/feed.ts", "line": 113, "label": "DhanFeed" }] },
     { "id": "agent", "type": "backend", "label": "Agent", "sublabel": "UnderlyingAgent", "sources": [{ "path": "src/runtime/underlyingAgent.ts", "line": 113, "label": "UnderlyingAgent" }] },
     { "id": "market", "type": "external", "label": "Market", "sublabel": "chains, expiries", "sources": [{ "path": "src/dhan/marketData.ts", "line": 76, "label": "DhanMarketData" }] },
-    { "id": "risk", "type": "security", "label": "Risk gate", "sublabel": "pre-trade", "sources": [{ "path": "src/risk/riskEngine.ts", "line": 188, "label": "evaluatePreTrade" }] },
+    { "id": "risk", "type": "security", "label": "Risk gate", "sublabel": "pre-trade", "sources": [{ "path": "src/risk/riskEngine.ts", "line": 196, "label": "evaluatePreTrade" }] },
     { "id": "advisor", "type": "external", "label": "Advisor", "sublabel": "Ollama", "sources": [{ "path": "src/llm/advisor.ts", "line": 62, "label": "OllamaTradeAdvisor" }] },
     { "id": "journal", "type": "database", "label": "Journal", "sublabel": "durable intent", "sources": [{ "path": "src/ops/eventLog.ts", "line": 51, "label": "EventLog" }] },
-    { "id": "venue", "type": "cloud", "label": "Live venue", "sublabel": "LiveExecutionPort", "sources": [{ "path": "src/dhan/liveExecution.ts", "line": 224, "label": "submitEntry" }] },
+    { "id": "venue", "type": "cloud", "label": "Live venue", "sublabel": "LiveExecutionPort", "sources": [{ "path": "src/dhan/liveExecution.ts", "line": 272, "label": "submitEntry" }] },
     { "id": "dhan", "type": "external", "label": "DhanHQ", "sublabel": "super orders" }
   ],
   "segments": [
