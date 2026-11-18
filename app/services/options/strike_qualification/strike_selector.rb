@@ -87,12 +87,9 @@ module Options
 
       private
 
+      # An index without rules keeps the historical default of 50.
       def strike_step_for(index)
-        case index
-        when 'NIFTY' then 50
-        when 'SENSEX' then 100
-        else 50
-        end
+        Options::IndexRules.for(index)&.strike_step || 50
       end
 
       def round_to_step(value, step)

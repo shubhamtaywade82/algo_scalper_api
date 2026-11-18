@@ -155,13 +155,7 @@ module Options
     end
 
     def load_rules_for(index_key)
-      case index_key.to_s.upcase
-      when 'NIFTY' then IndexRules::Nifty.new
-      when 'BANKNIFTY' then IndexRules::Banknifty.new
-      when 'SENSEX' then IndexRules::Sensex.new
-      else
-        raise SelectionError, "Unknown index: #{index_key}"
-      end
+      IndexRules.for(index_key) || raise(SelectionError, "Unknown index: #{index_key}")
     end
 
     # Calculate maximum OTM depth allowed based on trend score

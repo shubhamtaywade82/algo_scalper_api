@@ -135,5 +135,35 @@ RSpec.describe Options::StrikeQualification::StrikeSelector do
       expect(result[:strike_type]).to eq(:ATM_PLUS_1)
     end
   end
-end
 
+  # BANKNIFTY strikes sit 100 apart; a 50-wide grid rounded spot onto strikes that do not exist,
+  # so the ATM was never in the chain and the selection was blocked.
+  describe 'BANKNIFTY strike grid' do
+    let(:banknifty_chain) do
+      %w[62300 62400 62500].index_with do
+        {
+          'ce' => { 'last_price' => 500, 'oi' => 100_000, 'top_bid_price' => 499, 'top_ask_price' => 501 },
+          'pe' => { 'last_price' => 500, 'oi' => 100_000, 'top_bid_price' => 499, 'top_ask_price' => 501 }
+        }
+      end
+    end
+
+    it 'rounds spot onto the 100-point grid so the ATM strike exists in the chain' do
+      result = selector.call(
+        index_key: 'BANKNIFTY', side: :CE, permission: :scale_ready,
+        spot: 62_350, option_chain: banknifty_chain, trend: :neutral
+      )
+
+      expect(result).to include(ok: true, atm_strike: 62_400, strike: 62_400, strike_type: :ATM)
+    end
+
+    it 'steps ATM+1 by 100 points' do
+      result = selector.call(
+        index_key: 'BANKNIFTY', side: :CE, permission: :full_deploy,
+        spot: 62_410, option_chain: banknifty_chain, trend: :bullish
+      )
+
+      expect(result).to include(strike: 62_500, strike_type: :ATM_PLUS_1)
+    end
+  end
+end
