@@ -22,8 +22,9 @@ module Options
 
         return blocked('sensex_execution_only_blocked') if index == 'SENSEX' && perm == :execution_only
 
-        delta = delta_bucket(index: index, strike_type: st)
-        threshold = threshold_points(index: index, permission: perm)
+        rules = Options::IndexRules.for(index)
+        delta = rules&.delta_bucket(st)
+        threshold = rules&.move_threshold_points(perm)
         return blocked('unsupported_index') unless delta && threshold
 
         expected_premium = expected_spot_move.to_f * delta
@@ -52,40 +53,6 @@ module Options
         return :ATM_MINUS_1 if sym == :ATM_MINUS_1
 
         sym
-      end
-
-      def delta_bucket(index:, strike_type:)
-        case index
-        when 'NIFTY'
-          strike_type == :ATM ? 0.48 : 0.40
-        when 'SENSEX'
-          strike_type == :ATM ? 0.50 : 0.42
-        when 'BANKNIFTY'
-          strike_type == :ATM ? 0.45 : 0.38
-        end
-      end
-
-      def threshold_points(index:, permission:)
-        case index
-        when 'NIFTY'
-          {
-            execution_only: 4.0,
-            scale_ready: 8.0,
-            full_deploy: 12.0
-          }[permission]
-        when 'SENSEX'
-          {
-            execution_only: nil, # Always blocked earlier
-            scale_ready: 15.0,
-            full_deploy: 25.0
-          }[permission]
-        when 'BANKNIFTY'
-          {
-            execution_only: 12.0,
-            scale_ready: 20.0,
-            full_deploy: 28.0
-          }[permission]
-        end
       end
 
       def ok(payload)

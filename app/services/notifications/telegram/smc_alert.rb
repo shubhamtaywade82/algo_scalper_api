@@ -285,14 +285,7 @@ module Notifications
         return index_cfg[:lot_size].to_i if index_cfg && index_cfg[:lot_size]&.to_i&.positive?
 
         # Fallback to index rules
-        case symbol_name
-        when 'NIFTY'
-          Options::IndexRules::Nifty.new.lot_size
-        when 'BANKNIFTY'
-          Options::IndexRules::Banknifty.new.lot_size
-        when 'SENSEX'
-          Options::IndexRules::Sensex.new.lot_size
-        end
+        Options::IndexRules.for(symbol_name)&.lot_size
       end
 
       def formatted_reasons

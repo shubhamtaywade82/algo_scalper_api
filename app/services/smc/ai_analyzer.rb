@@ -31,6 +31,11 @@ module Smc
 
     private
 
+    # Strike grid for the index; an index without rules keeps the historical default of 50.
+    def strike_step_for(symbol_name)
+      Options::IndexRules.for(symbol_name)&.strike_step || 50
+    end
+
     def ai_enabled?
       AlgoConfig.fetch.dig(:ai, :enabled) == true && @ai_client.enabled?
     rescue StandardError
@@ -48,11 +53,7 @@ module Smc
       symbol_name = @instrument.symbol_name.to_s.upcase
 
       # Calculate strike rounding based on index
-      strike_rounding = case symbol_name
-                        when 'NIFTY' then 50
-                        when 'SENSEX', 'BANKNIFTY' then 100
-                        else 50
-                        end
+      strike_rounding = strike_step_for(symbol_name)
 
       @messages = [
         {
@@ -237,11 +238,7 @@ module Smc
 
             # Determine strike rounding based on symbol
             symbol_name = @instrument.symbol_name.to_s.upcase
-            strike_rounding = case symbol_name
-                              when 'NIFTY' then 50
-                              when 'SENSEX', 'BANKNIFTY' then 100
-                              else 50
-                              end
+            strike_rounding = strike_step_for(symbol_name)
 
             final_prompt = if ltp_value
                              "STOP CALLING TOOLS. Provide your analysis NOW. You have the SMC market structure data and LTP (₹#{ltp_value}) for #{symbol_name}. Calculate strikes from LTP (round to nearest #{strike_rounding} for #{symbol_name}). Provide complete trading recommendation: 1) Trade Decision (BUY CE/PE or AVOID), 2) Specific Strike Selection (exact values like ₹#{((ltp_value.to_f / strike_rounding).round * strike_rounding).to_i}), 3) Entry Strategy, 4) Exit Strategy, 5) Risk Management."
@@ -802,13 +799,7 @@ module Smc
       begin
         # Get symbol name and normalize to symbol (e.g., "SENSEX" -> :sensex)
         symbol_name = @instrument.symbol_name.to_s.upcase
-        index_symbol = case symbol_name
-                       when 'NIFTY' then :nifty
-                       when 'SENSEX' then :sensex
-                       when 'BANKNIFTY' then :banknifty
-                       else
-                         symbol_name.downcase.to_sym
-                       end
+        index_symbol = symbol_name.downcase.to_sym
 
         analyzer = IndexTechnicalAnalyzer.new(index_symbol)
         result = analyzer.call(timeframes: [timeframe_minutes])

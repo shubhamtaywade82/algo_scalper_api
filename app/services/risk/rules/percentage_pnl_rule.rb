@@ -13,7 +13,7 @@ module Risk
         snapshot = context.tracker_snapshot || Live::RedisPnlCache.instance.fetch_pnl(context.tracker.id)
         return no_action_result if snapshot.nil?
 
-        if Live::UnifiedExitChecker.send(:percentage_pnl_exit_hit?, context.tracker, snapshot)
+        if Live::UnifiedExitChecker.percentage_pnl_exit_hit?(context.tracker, snapshot)
           pnl_pct = snapshot[:pnl_pct].to_f
 
           return exit_result(

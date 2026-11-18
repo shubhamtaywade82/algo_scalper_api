@@ -469,7 +469,7 @@ RSpec.describe Live::UnifiedExitChecker do
       let(:snapshot) { { pnl_pct: 0.15, ltp: 115.0, pnl: 1_500.0, hwm_pnl: 2_000.0 } }
 
       it 'suppresses TP and returns false' do
-        result = described_class.send(:profit_target_hit?, tracker, snapshot)
+        result = described_class.profit_target_hit?(tracker, snapshot)
         expect(result).to be false
       end
     end
@@ -486,7 +486,7 @@ RSpec.describe Live::UnifiedExitChecker do
       let(:snapshot) { { pnl_pct: 0.13, ltp: 113.0, pnl: 1_300.0, hwm_pnl: 200.0 } }
 
       it 'triggers TP normally' do
-        result = described_class.send(:profit_target_hit?, tracker, snapshot)
+        result = described_class.profit_target_hit?(tracker, snapshot)
         expect(result).to be true
       end
     end
@@ -522,21 +522,21 @@ RSpec.describe Live::UnifiedExitChecker do
       it 'does NOT fire — trailing manages the position, runner is preserved' do
         # trailing_armed? returns true because hwm_pnl > entry_value * activation (0.10)
         # entry_value for tracker = 276.65 * 100 = 27_665; hwm = 39_215 > 2_766.5 → armed
-        result = described_class.send(:percentage_pnl_exit_hit?, tracker, snapshot_trailing_armed)
+        result = described_class.percentage_pnl_exit_hit?(tracker, snapshot_trailing_armed)
         expect(result).to be false
       end
     end
 
     context 'when trailing is NOT armed and pnl exceeds target (trailing failed to engage)' do
       it 'fires as a safety net' do
-        result = described_class.send(:percentage_pnl_exit_hit?, tracker, snapshot_trailing_not_armed)
+        result = described_class.percentage_pnl_exit_hit?(tracker, snapshot_trailing_not_armed)
         expect(result).to be true
       end
     end
 
     context 'when pnl is below target' do
       it 'does not fire' do
-        result = described_class.send(:percentage_pnl_exit_hit?, tracker, snapshot_below_target)
+        result = described_class.percentage_pnl_exit_hit?(tracker, snapshot_below_target)
         expect(result).to be false
       end
     end
@@ -550,7 +550,7 @@ RSpec.describe Live::UnifiedExitChecker do
       end
 
       it 'does not fire regardless of pnl_pct' do
-        result = described_class.send(:percentage_pnl_exit_hit?, tracker, snapshot_trailing_not_armed)
+        result = described_class.percentage_pnl_exit_hit?(tracker, snapshot_trailing_not_armed)
         expect(result).to be false
       end
     end
@@ -1070,12 +1070,12 @@ RSpec.describe Live::UnifiedExitChecker do
         # fee-aware target = max(0.05, 3 x 0.0695) = 0.2084 (statutory fees
         # 49.48/1000 + spread 0.02); pnl 0.15 < 0.2084
         snapshot = { pnl_pct: 0.15, ltp: 57.5, pnl: 150.0, hwm_pnl: 0.0 }
-        expect(described_class.send(:percentage_pnl_exit_hit?, fee_hostile_tracker, snapshot)).to be false
+        expect(described_class.percentage_pnl_exit_hit?(fee_hostile_tracker, snapshot)).to be false
       end
 
       it 'exits once profit clears the fee-aware floor' do
         snapshot = { pnl_pct: 0.22, ltp: 61.0, pnl: 220.0, hwm_pnl: 0.0 }
-        expect(described_class.send(:percentage_pnl_exit_hit?, fee_hostile_tracker, snapshot)).to be true
+        expect(described_class.percentage_pnl_exit_hit?(fee_hostile_tracker, snapshot)).to be true
       end
     end
 
@@ -1089,7 +1089,7 @@ RSpec.describe Live::UnifiedExitChecker do
 
       it 'uses the static target — 15% profit exits again' do
         snapshot = { pnl_pct: 0.15, ltp: 57.5, pnl: 150.0, hwm_pnl: 0.0 }
-        expect(described_class.send(:percentage_pnl_exit_hit?, fee_hostile_tracker, snapshot)).to be true
+        expect(described_class.percentage_pnl_exit_hit?(fee_hostile_tracker, snapshot)).to be true
       end
     end
 
@@ -1099,7 +1099,7 @@ RSpec.describe Live::UnifiedExitChecker do
         allow(Rails.logger).to receive(:error)
 
         snapshot = { pnl_pct: 0.06, ltp: 53.0, pnl: 60.0, hwm_pnl: 0.0 }
-        expect(described_class.send(:percentage_pnl_exit_hit?, fee_hostile_tracker, snapshot)).to be true
+        expect(described_class.percentage_pnl_exit_hit?(fee_hostile_tracker, snapshot)).to be true
         expect(Rails.logger).to have_received(:error).with(/fee-aware target unavailable/)
       end
     end

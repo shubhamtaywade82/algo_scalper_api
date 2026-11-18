@@ -843,21 +843,8 @@ module Live
         Rails.logger.error("[RiskManager] advance_trade_state_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
       end
 
-      # Helper: Calculate ATR from candles
-      def calculate_atr(candles)
-        return 0.0 if candles.size < 2
-
-        true_ranges = []
-        candles.each_cons(2) do |prev, curr|
-          tr1 = curr.high - curr.low
-          tr2 = (curr.high - prev.close).abs
-          tr3 = (curr.low - prev.close).abs
-          true_ranges << [tr1, tr2, tr3].max
-        end
-
-        return 0.0 if true_ranges.empty?
-        true_ranges.sum / true_ranges.size
-      end
+      # One ATR-ratio rule for both exit paths; the checker owns it.
+      delegate :calculate_atr_ratio, to: 'Live::UnifiedExitChecker', private: true
 
       def update_peak_trend_score(tracker, position_data, pending_meta: nil)
 

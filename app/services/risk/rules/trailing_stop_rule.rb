@@ -14,7 +14,7 @@ module Risk
         pnl_pct = snapshot[:pnl_pct].to_f
 
         # First evaluate underlying context (tightens or exits trailing stop)
-        underlying_ctx = Live::UnifiedExitChecker.send(:evaluate_underlying_context, tracker, snapshot)
+        underlying_ctx = Live::UnifiedExitChecker.evaluate_underlying_context(tracker, snapshot)
 
         if underlying_ctx[:action] == :exit
           return exit_result(
@@ -27,7 +27,7 @@ module Risk
         end
 
         # Then evaluate actual trailing stop with multiplier
-        if Live::UnifiedExitChecker.send(:trailing_stop_hit?, tracker, snapshot, tightening_multiplier: underlying_ctx[:multiplier])
+        if Live::UnifiedExitChecker.trailing_stop_hit?(tracker, snapshot, tightening_multiplier: underlying_ctx[:multiplier])
           return exit_result(
             reason: 'TRAILING_STOP',
             metadata: {

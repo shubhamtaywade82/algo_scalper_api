@@ -58,11 +58,7 @@ module Options
     # @param index_key [Symbol] Index key (e.g., :NIFTY, :BANKNIFTY, :SENSEX)
     # @return [Class] IndexRules class instance
     def load_rules_for(index_key)
-      case index_key.to_s.upcase
-      when 'NIFTY' then IndexRules::Nifty.new
-      when 'BANKNIFTY' then IndexRules::Banknifty.new
-      when 'SENSEX' then IndexRules::Sensex.new
-      else
+      IndexRules.for(index_key) || begin
         Rails.logger.error("[PremiumFilter] Unknown index: #{index_key}")
         nil
       end

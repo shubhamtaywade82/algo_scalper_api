@@ -10,7 +10,7 @@ module Risk
       def evaluate(context)
         return skip_result unless context.active?
 
-        if Live::UnifiedExitChecker.send(:loss_limit_hit?, context.tracker, context.tracker_snapshot)
+        if Live::UnifiedExitChecker.loss_limit_hit?(context.tracker, context.tracker_snapshot)
           pnl_pct = context.tracker_snapshot[:pnl_pct].to_f
 
           return exit_result(
