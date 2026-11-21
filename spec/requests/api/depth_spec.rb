@@ -114,4 +114,33 @@ RSpec.describe 'API market depth' do
       end
     end
   end
+
+  describe Validators::MarketDataCache do
+    let(:redis_mock) { instance_double(Redis) }
+
+    before do
+      allow(described_class).to receive(:redis).and_return(redis_mock)
+    end
+
+    it 'reads depth snapshot from redis' do
+      payload = { best_bid: 100.0, best_ask: 101.0, best_bid_qty: 50, best_ask_qty: 50, spread: 1.0 }.to_json
+      allow(redis_mock).to receive(:get).with('depth:123').and_return(payload)
+
+      snapshot = described_class.depth_snapshot('123')
+      expect(snapshot[:best_bid]).to eq(100.0)
+    end
+
+    it 'handles redis errors gracefully in depth_snapshot' do
+      allow(redis_mock).to receive(:get).and_raise(Redis::CannotConnectError)
+
+      expect(described_class.depth_snapshot('123')).to be_nil
+    end
+
+    it 'writes depth update to redis with TTL' do
+      allow(redis_mock).to receive(:setex)
+
+      described_class.update_depth('123', best_bid: 100.0, best_ask: 101.0, best_bid_qty: 50, best_ask_qty: 50)
+      expect(redis_mock).to have_received(:setex).with('depth:123', 5, a_string_including('"spread":1.0'))
+    end
+  end
 end

@@ -55,6 +55,32 @@ RSpec.describe Dhan::TokenManager do
         expect(described_class.send(:totp_cooldown_active?)).to be true
       end
 
+      context 'with memory cache store' do
+        around do |example|
+          original_cache = Rails.cache
+          Rails.cache = ActiveSupport::Cache::MemoryStore.new
+          example.run
+        ensure
+          Rails.cache = original_cache
+        end
+
+        it 'restores cooldown from Rails.cache when memory state is nil' do
+          Rails.cache.write('dhan:totp_cooldown_until', 2.hours.from_now)
+          described_class.instance_variable_set(:@totp_refresh_cooldown_until, nil)
+
+          expect(described_class.send(:totp_cooldown_active?)).to be true
+          expect(described_class.instance_variable_get(:@totp_refresh_cooldown_until)).not_to be_nil
+        end
+
+        it 'cleans up expired cooldown from Rails.cache' do
+          Rails.cache.write('dhan:totp_cooldown_until', 2.hours.ago)
+          described_class.instance_variable_set(:@totp_refresh_cooldown_until, nil)
+
+          expect(described_class.send(:totp_cooldown_active?)).to be false
+          expect(Rails.cache.read('dhan:totp_cooldown_until')).to be_nil
+        end
+      end
+
       it 'sets 12h cooldown and returns ENV token when Too many attempts and ENV token present' do
         allow(ENV).to receive(:[]).and_call_original
         allow(ENV).to receive(:[]).with('DHAN_CLIENT_ID').and_return('1000000001')
@@ -117,6 +143,17 @@ RSpec.describe Dhan::TokenManager do
         expect(token).to eq('snake_token')
         record = DhanAccessToken.first
         expect(record&.token).to eq('snake_token')
+      end
+    end
+
+    context 'when cached token has nil expiry_time' do
+      it 'does not raise NoMethodError and attempts refresh' do
+        described_class.instance_variable_set(:@cached_token, { token: 'nil_exp_token', expiry_time: nil })
+        described_class.instance_variable_set(:@cached_at, Time.current)
+        allow(described_class).to receive(:refresh!).and_return(nil)
+
+        expect { described_class.current_token! }.not_to raise_error
+        expect(described_class.current_token!).to be_nil
       end
     end
 

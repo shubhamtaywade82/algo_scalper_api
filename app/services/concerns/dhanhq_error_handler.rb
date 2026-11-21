@@ -17,7 +17,8 @@ module DhanhqErrorHandler
 
   # Notification cooldown (prevent spam) - 1 hour
   NOTIFICATION_COOLDOWN = 1.hour
-  REFRESH_COOLDOWN = 30.seconds
+  # Dhan enforces: "Token can be generated once every 2 minutes."
+  REFRESH_COOLDOWN = 2.minutes
 
   # Make methods available as module methods (for direct calls like DhanhqErrorHandler.handle_dhanhq_error)
   # and as class methods (when included via ActiveSupport::Concern)

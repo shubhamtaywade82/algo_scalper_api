@@ -23,7 +23,7 @@ module Dhan
           return refreshed_token if refreshed_token.present?
 
           # If refresh failed and we have no token at all, or the one we have is expired, return nil
-          return nil if token_data.nil? || token_data[:expiry_time] <= Time.current
+          return nil if token_data.nil? || token_data[:expiry_time].nil? || token_data[:expiry_time] <= Time.current
         end
 
         token_data&.dig(:token)
@@ -36,7 +36,7 @@ module Dhan
       # @return [Hash, nil] { token:, expiry_time:, client_id: }, nil when there is no live token
       def snapshot
         data = cached_token
-        return nil if data.nil? || data[:token].blank? || data[:expiry_time] <= Time.current
+        return nil if data.nil? || data[:token].blank? || data[:expiry_time].nil? || data[:expiry_time] <= Time.current
 
         data.slice(:token, :expiry_time).merge(client_id: creds[:client_id])
       end
@@ -76,17 +76,12 @@ module Dhan
 
               if env_token.present?
                 cache_token(env_token, cooldown_until)
-                Rails.logger.warn(
-                  "[DHAN] TOTP rate-limited (Too many attempts); using ENV token for next #{TOTP_COOLDOWN_HOURS} hours"
-                )
+                Rails.logger.warn("[DHAN] TOTP rate-limited (Too many attempts); using ENV token for next #{TOTP_COOLDOWN_HOURS} hours")
                 return env_token
-              else
-                Rails.logger.warn(
-                  "[DHAN] TOTP rate-limited ('Too many attempts'); backoff cooldown active until #{cooldown_until}. " \
-                  "Set ENV['DHAN_ACCESS_TOKEN'] to continue trading during cooldown."
-                )
-                return nil
               end
+
+              Rails.logger.warn("[DHAN] TOTP rate-limited ('Too many attempts'); backoff cooldown active until #{cooldown_until}.")
+              return nil
             end
             Rails.logger.error("[DHAN] Token refresh failed: #{msg.presence || response.inspect}")
             return nil
@@ -101,7 +96,6 @@ module Dhan
           end
 
           expiry_time = Time.parse(expiry_time_raw)
-
           persist_token(access_token, expiry_time)
           cache_token(access_token, expiry_time)
           apply_token_to_runtime!(access_token)
@@ -120,11 +114,7 @@ module Dhan
           @cached_token = nil
           @cached_at = nil
           @totp_refresh_cooldown_until = nil
-          begin
-            Rails.cache.delete('dhan:totp_cooldown_until')
-          rescue StandardError
-            nil
-          end
+          delete_cooldown_cache
           DhanAccessToken.delete_all
         end
         true
@@ -152,6 +142,8 @@ module Dhan
       end
 
       def expiring?(token_data)
+        return true if token_data.nil? || token_data[:expiry_time].nil?
+
         token_data[:expiry_time] <= BUFFER_MINUTES.minutes.from_now
       end
 
@@ -179,50 +171,30 @@ module Dhan
 
       def generate_totp
         secret = creds[:totp_secret]
-        if secret.blank?
-          Rails.logger.error("[DHAN] TOTP Secret is blank")
-          return nil
-        end
-        unless secret.is_a?(String)
-          Rails.logger.error("[DHAN] TOTP Secret is not a String: #{secret.class}")
-          return nil
-        end
+        return Rails.logger.error('[DHAN] TOTP Secret is blank') && nil if secret.blank?
+        return Rails.logger.error("[DHAN] TOTP Secret not String: #{secret.class}") && nil unless secret.is_a?(String)
+
         DhanHQ::Auth.generate_totp(secret)
       end
 
       def creds
         @creds ||= begin
-          env = {
-            client_id: ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence,
-            pin: ENV['DHAN_PIN'].presence,
-            totp_secret: ENV['DHAN_TOTP_SECRET'].presence
-          }
-
+          env = { client_id: ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence,
+                  pin: ENV['DHAN_PIN'].presence, totp_secret: ENV['DHAN_TOTP_SECRET'].presence }
           if env.values.all?(&:present?)
             env
           else
             cred = Rails.application.credentials.dhan
-            {
-              client_id: cred&.dig(:client_id),
-              pin: cred&.dig(:pin),
-              totp_secret: cred&.dig(:totp_secret)
-            }
+            { client_id: cred&.dig(:client_id), pin: cred&.dig(:pin), totp_secret: cred&.dig(:totp_secret) }
           end
         end
       end
 
       def credentials_available?
-        missing = []
-        missing << 'client_id' if creds[:client_id].blank?
-        missing << 'pin' if creds[:pin].blank?
-        missing << 'totp_secret' if creds[:totp_secret].blank?
-
+        missing = %i[client_id pin totp_secret].select { |k| creds[k].blank? }
         return true if missing.empty?
 
-        Rails.logger.warn(
-          "[DHAN] Token refresh skipped: missing credentials #{missing.join(', ')}. " \
-          "Set DHAN_CLIENT_ID/CLIENT_ID, #{REQUIRED_ENV_KEYS.join(', ')} or Rails credentials.dhan."
-        )
+        Rails.logger.warn("[DHAN] Token refresh skipped: missing #{missing.join(', ')}")
         false
       end
 
@@ -268,7 +240,14 @@ module Dhan
         cooldown = @totp_refresh_cooldown_until || read_cooldown_cache
         return false unless cooldown
 
-        Time.current < cooldown
+        if Time.current < cooldown
+          @totp_refresh_cooldown_until = cooldown
+          true
+        else
+          @totp_refresh_cooldown_until = nil
+          delete_cooldown_cache
+          false
+        end
       end
 
       def write_cooldown_cache(cooldown_until)
@@ -279,6 +258,12 @@ module Dhan
 
       def read_cooldown_cache
         Rails.cache.read('dhan:totp_cooldown_until')
+      rescue StandardError
+        nil
+      end
+
+      def delete_cooldown_cache
+        Rails.cache.delete('dhan:totp_cooldown_until')
       rescue StandardError
         nil
       end
