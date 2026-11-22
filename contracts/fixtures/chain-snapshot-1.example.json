@@ -1,0 +1,105 @@
+{
+  "schema": "chain-snapshot/1",
+  "underlying": "NIFTY",
+  "underlying_security_id": "13",
+  "exchange_segment": "IDX_I",
+  "expiry": "2026-11-26",
+  "spot": 25453.35,
+  "fetched_at_ms": 1763766062114,
+  "source": "algo_scalper_api",
+  "strikes": [
+    {
+      "strike": 25400,
+      "ce": {
+        "security_id": "47842",
+        "ltp": 172.45,
+        "bid": 172.05,
+        "ask": 172.85,
+        "oi": 1284000,
+        "oi_change": -86000,
+        "volume": 2340000,
+        "iv": 0.128,
+        "delta": 0.61,
+        "gamma": 0.0009,
+        "theta": -8.42,
+        "vega": 26.11
+      },
+      "pe": {
+        "security_id": "47843",
+        "ltp": 118.9,
+        "bid": 118.5,
+        "ask": 119.3,
+        "oi": 940500,
+        "oi_change": 42000,
+        "volume": 1810000,
+        "iv": 0.122,
+        "delta": -0.39,
+        "gamma": 0.0009,
+        "theta": -7.95,
+        "vega": 25.87
+      }
+    },
+    {
+      "strike": 25450,
+      "ce": {
+        "security_id": "47844",
+        "ltp": 141.2,
+        "bid": 140.8,
+        "ask": 141.6,
+        "oi": 1621000,
+        "oi_change": 122000,
+        "volume": 2960000,
+        "iv": 0.126,
+        "delta": 0.52,
+        "gamma": 0.0011,
+        "theta": -9.05,
+        "vega": 27.34
+      },
+      "pe": {
+        "security_id": "47845",
+        "ltp": 137.65,
+        "bid": 137.25,
+        "ask": 138.05,
+        "oi": 1188000,
+        "oi_change": 65000,
+        "volume": 2140000,
+        "iv": 0.123,
+        "delta": -0.48,
+        "gamma": 0.0011,
+        "theta": -8.87,
+        "vega": 27.01
+      }
+    },
+    {
+      "strike": 25500,
+      "ce": {
+        "security_id": "47846",
+        "ltp": 113.75,
+        "bid": 113.35,
+        "ask": 114.15,
+        "oi": 2185000,
+        "oi_change": 210000,
+        "volume": 3450000,
+        "iv": 0.125,
+        "delta": 0.44,
+        "gamma": 0.0012,
+        "theta": -9.31,
+        "vega": 27.9
+      },
+      "pe": {
+        "security_id": "47847",
+        "ltp": 160.3,
+        "bid": 159.9,
+        "ask": 160.7,
+        "oi": 1562000,
+        "oi_change": 98000,
+        "volume": 2530000,
+        "iv": 0.124,
+        "delta": -0.56,
+        "gamma": 0.0012,
+        "theta": -9.12,
+        "vega": 27.65
+      }
+    }
+  ]
+}

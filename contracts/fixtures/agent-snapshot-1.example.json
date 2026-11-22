@@ -1,0 +1,41 @@
+{
+  "schema": "agent-snapshot/1",
+  "version": 1,
+  "mode": "paper",
+  "run_id": "run-20261123-0915-a1b2",
+  "updated_at": "2026-11-23T10:42:11.208+05:30",
+  "feed_age_ms": 812,
+  "kill_switch": {
+    "engaged": false,
+    "reason": null
+  },
+  "day_pnl": {
+    "currency": "INR",
+    "realized_inr": 4820.5,
+    "unrealized_inr": 1265.0
+  },
+  "underlyings": [
+    {
+      "underlying": "NIFTY",
+      "state": "RISK_MANAGEMENT_ACTIVE",
+      "position": {
+        "option_type": "CE",
+        "quantity_lots": 1,
+        "entry_price": 141.2,
+        "stop_price": 152.9,
+        "target_price": 211.65,
+        "unrealized_pnl_inr": 1265.0
+      }
+    },
+    {
+      "underlying": "BANKNIFTY",
+      "state": "IDLE",
+      "position": null
+    },
+    {
+      "underlying": "SENSEX",
+      "state": "IDLE",
+      "position": null
+    }
+  ]
+}
