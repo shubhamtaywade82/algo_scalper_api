@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/shubhamtaywade82/algo_scalper_api/main/contracts/schemas/iv-snapshot-1.schema.json",
+  "title": "IV / IV-rank snapshot (iv-snapshot/1)",
+  "description": "ATM implied volatility and its rolling percentile rank for one underlying, published by algo_scalper_api (IV authority: broker chain IV + Black-Scholes solver + iv_rank_tracker over a rolling window, default 20 trading days / 500 samples, plus daily iv_snapshots). Consumers (agent sizing rules, dashboards) apply their own thresholds - share data, not decisions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "underlying",
+    "atm_iv",
+    "iv_rank_pct",
+    "window_days",
+    "sample_count",
+    "computed_at_ms"
+  ],
+  "properties": {
+    "schema": {
+      "const": "iv-snapshot/1"
+    },
+    "underlying": {
+      "type": "string",
+      "examples": ["NIFTY"]
+    },
+    "expiry": {
+      "type": ["string", "null"],
+      "format": "date",
+      "description": "Expiry the ATM IV was read from; null when blended across expiries."
+    },
+    "atm_iv": {
+      "type": "number",
+      "minimum": 0,
+      "description": "At-the-money implied volatility as a fraction (0.15 = 15%)."
+    },
+    "atm_iv_ce": {
+      "type": ["number", "null"],
+      "description": "ATM call IV, when tracked separately."
+    },
+    "atm_iv_pe": {
+      "type": ["number", "null"],
+      "description": "ATM put IV, when tracked separately."
+    },
+    "iv_rank_pct": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Percentile rank of current ATM IV within the rolling window (0 = lowest ever in window, 100 = highest). Null when the window has too few samples."
+    },
+    "iv_percentile_pct": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Alternative percentile measure, when both are computed."
+    },
+    "window_days": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Rolling window length in trading days (default 20)."
+    },
+    "sample_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Samples currently in the window."
+    },
+    "computed_at_ms": {
+      "type": "integer"
+    }
+  }
+}

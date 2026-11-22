@@ -1,0 +1,13 @@
+{
+  "schema": "iv-snapshot/1",
+  "underlying": "NIFTY",
+  "expiry": "2026-11-26",
+  "atm_iv": 0.1245,
+  "atm_iv_ce": 0.126,
+  "atm_iv_pe": 0.123,
+  "iv_rank_pct": 34.2,
+  "iv_percentile_pct": 31.8,
+  "window_days": 20,
+  "sample_count": 500,
+  "computed_at_ms": 1763766062114
+}

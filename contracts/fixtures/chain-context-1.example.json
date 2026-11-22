@@ -1,0 +1,20 @@
+{
+  "schema": "chain-context/1",
+  "underlying": "NIFTY",
+  "expiry": "2026-11-26",
+  "spot": 25453.35,
+  "computed_at_ms": 1763766062114,
+  "source": "algo_scalper_api",
+  "window_strikes": 5,
+  "pcr": 1.31,
+  "atm_pcr": 1.18,
+  "call_resistance": { "strike": 25600, "oi": 2541000, "distance": 146.7 },
+  "put_support": { "strike": 25300, "oi": 1887500, "distance": 153.4 },
+  "headroom_ce": 146.7,
+  "headroom_pe": 153.4,
+  "straddle_premium": 231.15,
+  "expected_range": { "lower": 25218.85, "upper": 25468.15 },
+  "sentiment_score": 40,
+  "bias": "BULLISH",
+  "verdict": "BULLISH (score +40, PCR 1.31, ATM PCR 1.18)"
+}

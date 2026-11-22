@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/shubhamtaywade82/algo_scalper_api/main/contracts/schemas/chain-context-1.schema.json",
+  "title": "Chain context (chain-context/1)",
+  "description": "The computed analytics for one underlying's option chain - PCR, ATM PCR, OI walls (resistance/support), headroom to each wall, ATM straddle premium and its implied expected range, and a directional bias verdict. Published by algo_scalper_api (analytics authority, plan component M1 / infrastructure roadmap G1) to Redis key `dhan:chain:context:{underlying}` after every ChainWatchService refresh (~1 s), TTL 15 s. options-trading-agent consumes it read-only for its headroom/confluence gates and MUST fall back to its own local computation when the snapshot is missing or stale - share data, not decisions: the verdict is advisory input, each consumer applies its own policy. Computed over the chain watch window (ATM +/-5 strikes), which is also what the agent's own analysis uses, so the two never disagree by window size.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "underlying",
+    "expiry",
+    "spot",
+    "computed_at_ms",
+    "source",
+    "window_strikes",
+    "pcr",
+    "atm_pcr",
+    "call_resistance",
+    "put_support",
+    "headroom_ce",
+    "headroom_pe",
+    "straddle_premium",
+    "expected_range",
+    "sentiment_score",
+    "bias",
+    "verdict"
+  ],
+  "properties": {
+    "schema": {
+      "const": "chain-context/1"
+    },
+    "underlying": {
+      "type": "string",
+      "enum": ["NIFTY", "BANKNIFTY", "SENSEX"],
+      "description": "Index key, upper-case."
+    },
+    "expiry": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Nearest expiry of the watched chain, ISO date."
+    },
+    "spot": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Underlying LTP the analytics were computed against."
+    },
+    "computed_at_ms": {
+      "type": "integer",
+      "description": "Epoch milliseconds. Consumers apply their own freshness limit (agent default: 10 s)."
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Which system computed this context, e.g. 'algo_scalper_api'."
+    },
+    "window_strikes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 201,
+      "description": "How many strikes around ATM the analytics window covered (ChainWatchService uses 5)."
+    },
+    "pcr": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Put OI / Call OI over the window. 1.0 when both sides are zero."
+    },
+    "atm_pcr": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Put OI / Call OI within 3 strike-steps of ATM."
+    },
+    "call_resistance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strike", "oi", "distance"],
+      "properties": {
+        "strike": {
+          "type": "number",
+          "description": "Strike carrying the maximum call OI in the window (the resistance wall)."
+        },
+        "oi": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Open interest at that strike, in contracts."
+        },
+        "distance": {
+          "type": "number",
+          "description": "strike - spot, in index points. Negative means the wall is below spot."
+        }
+      }
+    },
+    "put_support": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strike", "oi", "distance"],
+      "properties": {
+        "strike": {
+          "type": "number",
+          "description": "Strike carrying the maximum put OI in the window (the support wall)."
+        },
+        "oi": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Open interest at that strike, in contracts."
+        },
+        "distance": {
+          "type": "number",
+          "description": "spot - strike, in index points. Negative means the wall is above spot."
+        }
+      }
+    },
+    "headroom_ce": {
+      "type": "number",
+      "description": "Points from spot up to the call resistance wall (call_resistance.distance). The BULLISH entry gate rejects a trade when this is positive but below the configured minimum."
+    },
+    "headroom_pe": {
+      "type": "number",
+      "description": "Points from spot down to the put support wall (put_support.distance). The BEARISH entry gate rejects a trade when this is positive but below the configured minimum."
+    },
+    "straddle_premium": {
+      "type": "number",
+      "minimum": 0,
+      "description": "ATM call mid + ATM put mid. 0 when the ATM row has no prices."
+    },
+    "expected_range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lower", "upper"],
+      "properties": {
+        "lower": {
+          "type": "number",
+          "description": "ATM strike - straddle premium."
+        },
+        "upper": {
+          "type": "number",
+          "description": "ATM strike + straddle premium."
+        }
+      }
+    },
+    "sentiment_score": {
+      "type": "integer",
+      "minimum": -100,
+      "maximum": 100,
+      "description": "Composite sentiment score: PCR terms (+/-25), ATM PCR (+/-20), wall distances (+/-25), call/put volume imbalance (+/-15), clamped to [-100, 100]."
+    },
+    "bias": {
+      "enum": ["BULLISH", "BEARISH", "NEUTRAL"],
+      "description": "score >= 20 -> BULLISH; score <= -20 -> BEARISH; else NEUTRAL."
+    },
+    "verdict": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "One-line human-readable summary, e.g. 'BULLISH (score +40, PCR 1.31, ATM PCR 1.18)'."
+    }
+  }
+}
