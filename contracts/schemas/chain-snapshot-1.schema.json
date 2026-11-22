@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/shubhamtaywade82/algo_scalper_api/main/contracts/schemas/chain-snapshot-1.schema.json",
+  "title": "Canonical option-chain snapshot (chain-snapshot/1)",
+  "description": "The one canonical, normalised option-chain snapshot shared between algo_scalper_api and options-trading-agent. Whoever fetches the chain under the shared account rate budget writes it to Redis at `dhan:chain:{underlying_security_id}:{expiry}`; both services read it and apply their own freshness limit against `fetched_at_ms`. Per-strike greeks/IV are populated when the broker returns them and null otherwise. This schema is the anti-drift contract: both normalisers (Ruby and TypeScript) are validated against the same fixtures in CI.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "underlying",
+    "underlying_security_id",
+    "exchange_segment",
+    "expiry",
+    "spot",
+    "fetched_at_ms",
+    "source",
+    "strikes"
+  ],
+  "properties": {
+    "schema": {
+      "const": "chain-snapshot/1"
+    },
+    "underlying": {
+      "type": "string",
+      "description": "Canonical index symbol, e.g. NIFTY, BANKNIFTY, SENSEX.",
+      "examples": ["NIFTY"]
+    },
+    "underlying_security_id": {
+      "type": "string",
+      "description": "Dhan security id of the underlying (e.g. 13 for NIFTY on IDX_I)."
+    },
+    "exchange_segment": {
+      "enum": ["IDX_I", "NSE_FNO", "BSE_FNO"]
+    },
+    "expiry": {
+      "type": "string",
+      "format": "date",
+      "description": "Expiry date of this chain, ISO 8601 date."
+    },
+    "spot": {
+      "type": "number",
+      "description": "Underlying spot at fetch time."
+    },
+    "fetched_at_ms": {
+      "type": "integer",
+      "description": "Epoch milliseconds when the REST response was received by the fetching process."
+    },
+    "source": {
+      "type": "string",
+      "description": "Which system fetched it: 'algo_scalper_api' or 'options-trading-agent'."
+    },
+    "strikes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["strike", "ce", "pe"],
+        "properties": {
+          "strike": {
+            "type": "number"
+          },
+          "ce": { "$ref": "#/$defs/leg" },
+          "pe": { "$ref": "#/$defs/leg" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "leg": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["security_id", "ltp", "bid", "ask", "oi", "volume"],
+      "properties": {
+        "security_id": {
+          "type": "string",
+          "description": "Dhan security id of this option contract."
+        },
+        "ltp": {
+          "type": ["number", "null"],
+          "description": "Last traded premium. Null when the broker returns no quote."
+        },
+        "bid": {
+          "type": ["number", "null"]
+        },
+        "ask": {
+          "type": ["number", "null"]
+        },
+        "oi": {
+          "type": ["integer", "null"],
+          "description": "Open interest in contracts."
+        },
+        "oi_change": {
+          "type": ["integer", "null"],
+          "description": "Change in OI since previous day, when tracked by the writer."
+        },
+        "volume": {
+          "type": ["integer", "null"],
+          "description": "Contracts traded today."
+        },
+        "iv": {
+          "type": ["number", "null"],
+          "description": "Implied volatility as a fraction (0.15 = 15%), when the broker populates it."
+        },
+        "delta": { "type": ["number", "null"] },
+        "gamma": { "type": ["number", "null"] },
+        "theta": {
+          "type": ["number", "null"],
+          "description": "Theta per calendar day, when populated."
+        },
+        "vega": {
+          "type": ["number", "null"],
+          "description": "Vega per 1% IV move, when populated."
+        }
+      }
+    }
+  }
+}

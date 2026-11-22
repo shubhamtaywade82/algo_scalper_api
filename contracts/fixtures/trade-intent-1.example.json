@@ -1,0 +1,18 @@
+{
+  "schema": "trade-intent/1",
+  "intent_id": "8f6c1a52-3d47-4b9a-9f2e-6c1d5a7b9e01",
+  "issued_at": "2026-11-23T09:31:02.114+05:30",
+  "expires_at": "2026-11-23T09:31:22.114+05:30",
+  "mode": "paper",
+  "underlying": "NIFTY",
+  "direction": "BULLISH",
+  "source": {
+    "system": "algo_scalper_api",
+    "strategy": "supertrend-adx",
+    "strategy_version": 3,
+    "signal_id": 79162
+  },
+  "confidence": 0.7,
+  "reasons": ["supertrend_bullish_adx_confirmed"],
+  "spot_hint": 25453.35
+}

@@ -1,0 +1,13 @@
+{
+  "schema": "vix-snapshot/1",
+  "symbol": "INDIA_VIX",
+  "ltp": 13.42,
+  "change_pct": -3.6,
+  "as_of_ms": 1763766062114,
+  "source": "dhan_ws",
+  "gate": {
+    "entry_ceiling": 20.0,
+    "force_exit_above": 22.0,
+    "state": "open"
+  }
+}

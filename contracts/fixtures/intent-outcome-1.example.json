@@ -1,0 +1,9 @@
+{
+  "schema": "intent-outcome/1",
+  "intent_id": "8f6c1a52-3d47-4b9a-9f2e-6c1d5a7b9e01",
+  "outcome": "dropped",
+  "code": "RISK_BUDGET_TOO_SMALL",
+  "detail": "one lot risks 3120 against a budget of 2400",
+  "correlation_id": "E-20261123-0931-0007",
+  "decided_at": "2026-11-23T09:31:03.402+05:30"
+}

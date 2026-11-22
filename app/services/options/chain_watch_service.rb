@@ -11,7 +11,7 @@ module Options
     # the same tick (finding #2). Unknown index_keys default to ordinal 0.
     POLL_STAGGER_ORDER = { 'NIFTY' => 0, 'BANKNIFTY' => 1, 'SENSEX' => 2 }.freeze
 
-    def initialize(index_key:)
+    def initialize(index_key:, chain_context_publisher: nil)
       @index_key = index_key.to_s.upcase
       @index_cfg = IndexConfigLoader.load_indices.find { |idx| idx[:key].to_s.upcase == @index_key }
       raise "unknown_index:#{@index_key}" unless @index_cfg
@@ -19,6 +19,10 @@ module Options
       @running = false
       @mutex = Mutex.new
       @thread = nil
+      # Injected in specs; defaults to a live publisher for the shared
+      # chain-context contract (`dhan:chain:context:<INDEX>`), which the
+      # options-trading-agent reads as its shared chain truth (roadmap G1).
+      @chain_context_publisher = chain_context_publisher || Options::ChainContextPublisher.new(index_key: @index_key)
       @snapshot = { index_key: @index_key, spot: nil, atm_strike: nil, expiry: nil, legs: [], chain_stale: true, updated_at: nil }
       @subscribed_legs = []
     end
@@ -100,6 +104,15 @@ module Options
                 index_key: @index_key, spot: spot, atm_strike: nearest_atm(spot, legs),
                 expiry: expiry, legs: legs, chain_stale: chain_stale, updated_at: Time.current.iso8601
               }
+            end
+
+            # Publish the shared chain-context snapshot (contract
+            # chain-context/1) best-effort: publish failures never break the
+            # chain watch loop - the agent's fallback is local computation.
+            begin
+              @chain_context_publisher&.publish(@mutex.synchronize { @snapshot })
+            rescue StandardError => e
+              Rails.logger.error("[ChainWatchService:#{@index_key}] context publish failed: #{e.class} - #{e.message}")
             end
 
             ActionCable.server.broadcast("option_chain_#{@index_key}", snapshot)
