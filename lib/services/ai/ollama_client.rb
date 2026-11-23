@@ -85,6 +85,12 @@ module Services
         resolved_base_url(ollama_use_cloud?)
       end
 
+      # Whether the live connection targets Ollama Cloud (serverless) rather
+      # than a local daemon. DecisionClient reads it for its own request policy.
+      def cloud?
+        ollama_use_cloud?
+      end
+
       # ------------------------------------------------------------------
       # Model discovery
       # ------------------------------------------------------------------
@@ -351,12 +357,6 @@ module Services
           sleep(delay)
           retry
         end
-      end
-
-      # Whether the live connection targets Ollama Cloud (serverless) rather
-      # than a local daemon.
-      def cloud?
-        ollama_use_cloud?
       end
 
       # Normalize messages to plain hashes with string keys for Ollama
