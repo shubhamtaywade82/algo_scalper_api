@@ -136,6 +136,7 @@ group :development do
       require: false
   gem 'ruby-lsp', require: false
   gem 'ruby-lsp-rails', require: false
+  gem 'ruby-lsp-rspec', require: false
 end
 
 gem "actionmcp", "~> 0.203"

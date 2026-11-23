@@ -590,6 +590,8 @@ GEM
       rbs (>= 3, < 5)
     ruby-lsp-rails (0.4.8)
       ruby-lsp (>= 0.26.0, < 0.27.0)
+    ruby-lsp-rspec (0.1.29)
+      ruby-lsp (~> 0.26.0)
     ruby-progressbar (1.13.0)
     ruby-technical-analysis (1.0.4)
     ruby_llm (2.2.2)
@@ -767,6 +769,7 @@ DEPENDENCIES
   rubocop-rspec_rails
   ruby-lsp
   ruby-lsp-rails
+  ruby-lsp-rspec
   ruby-technical-analysis
   ruby_llm (~> 2.2)
   rubycritic

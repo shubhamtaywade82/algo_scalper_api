@@ -2,14 +2,49 @@
   "[ruby]": {
     "editor.defaultFormatter": "Shopify.ruby-lsp",
     "editor.formatOnSave": true,
+    "editor.formatOnType": true,
+    "editor.semanticHighlighting.enabled": true,
     "editor.tabSize": 2,
     "editor.insertSpaces": true,
-    "editor.semanticHighlighting.enabled": true,
-    "editor.formatOnType": true
+    "editor.codeActionsOnSave": {
+      "source.fixAll.rubocop": "explicit"
+    }
   },
   "rubyLsp.formatter": "rubocop",
   "rubyLsp.rubyVersionManager": {
     "identifier": "rvm"
+  },
+  "rubyLsp.enabledFeatures": {
+    "codeActions": true,
+    "codeLens": true,
+    "completion": true,
+    "definition": true,
+    "diagnostics": true,
+    "documentHighlights": true,
+    "documentLink": true,
+    "documentSymbols": true,
+    "foldingRanges": true,
+    "formatting": true,
+    "hover": true,
+    "inlayHint": true,
+    "onTypeFormatting": true,
+    "selectionRanges": true,
+    "semanticHighlighting": true,
+    "signatureHelp": true,
+    "typeHierarchy": true,
+    "workspaceSymbol": true
+  },
+  "rubyLsp.featuresConfiguration": {
+    "inlayHint": {
+      "enableAll": true,
+      "implicitHashValue": true,
+      "implicitRescue": true
+    }
+  },
+  "rubyLsp.addonSettings": {
+    "Ruby LSP Rails": {
+      "enablePendingMigrationsPrompt": true
+    }
   },
   "rubyLsp.indexing": {
     "excludedPatterns": [
@@ -18,7 +53,25 @@
       "**/log/**",
       "**/storage/**",
       "**/vendor/**",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "**/public/assets/**",
+      "**/public/packs/**",
+      "**/.worktrees/**",
+      "**/graphify-out/**"
+    ],
+    "includedPatterns": [
+      "**/app/**",
+      "**/lib/**",
+      "**/config/**",
+      "**/spec/**",
+      "**/bin/**",
+      "**/db/**"
+    ],
+    "excludedGems": [
+      "rubocop",
+      "rubocop-performance",
+      "rubocop-rails",
+      "rubocop-rspec"
     ]
   },
   "files.watcherExclude": {

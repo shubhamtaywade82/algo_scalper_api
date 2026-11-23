@@ -16,6 +16,13 @@
     },
     {
       "type": "ruby_lsp",
+      "name": "Debug RSpec - Single Example",
+      "request": "launch",
+      "command": "bundle exec rspec",
+      "file": "${relativeFile}:${lineNumber}"
+    },
+    {
+      "type": "ruby_lsp",
       "name": "Attach to Debugger (rdbg)",
       "request": "attach"
     }
