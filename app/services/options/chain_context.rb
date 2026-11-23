@@ -167,7 +167,7 @@ module Options
 
       # Mirrors calculateStraddle: mid when both bid/ask exist, LTP otherwise.
       def calculate_straddle(legs, atm_strike)
-        atm_legs = legs.select { |l| l[:strike].to_f == atm_strike }
+        atm_legs = legs.select { |l| (l[:strike].to_f - atm_strike).abs < 0.001 }
         call = atm_legs.find { |l| l[:type] == 'CE' }
         put = atm_legs.find { |l| l[:type] == 'PE' }
         return 0.0 if call.nil? || put.nil?
@@ -178,7 +178,7 @@ module Options
       def mid_price(leg)
         bid = leg[:bid].to_f
         ask = leg[:ask].to_f
-        return ((bid + ask) / 2.0) if bid.positive? && ask.positive?
+        return (bid + ask) / 2.0 if bid.positive? && ask.positive?
 
         leg[:ltp].to_f
       end
@@ -226,8 +226,15 @@ module Options
         score -= 15 if pcr_data[:put_volume] > pcr_data[:call_volume] * 1.3
 
         score = score.clamp(-100, 100)
-        bias = score >= BIAS_THRESHOLD ? 'BULLISH' : (score <= -BIAS_THRESHOLD ? 'BEARISH' : 'NEUTRAL')
-        verdict = "#{bias} (score #{score.positive? ? '+' : ''}#{score}, PCR #{pcr}, ATM PCR #{atm_pcr})"
+        bias = if score >= BIAS_THRESHOLD
+                 'BULLISH'
+               elsif score <= -BIAS_THRESHOLD
+                 'BEARISH'
+               else
+                 'NEUTRAL'
+               end
+        sign = score.positive? ? '+' : ''
+        verdict = "#{bias} (score #{sign}#{score}, PCR #{pcr}, ATM PCR #{atm_pcr})"
         { score: score, bias: bias, verdict: verdict }
       end
 

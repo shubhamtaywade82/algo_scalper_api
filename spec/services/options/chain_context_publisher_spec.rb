@@ -39,24 +39,27 @@ RSpec.describe Options::ChainContextPublisher do
         expect(payload['sentiment_score']).to eq(25)
         expect(payload['bias']).to eq('BULLISH')
       end
-      expect(publisher.publish(snapshot)).to eq(true)
+      expect(publisher.publish(snapshot)).to be(true)
     end
 
     it 'returns false without writing when the snapshot is unpublishable (stale chain)' do
       expect(redis).not_to receive(:set)
-      expect(publisher.publish(snapshot.merge(chain_stale: true))).to eq(false)
+      expect(publisher.publish(snapshot.merge(chain_stale: true))).to be(false)
     end
 
     it 'returns false and does not raise when Redis is down' do
       allow(redis).to receive(:set).and_raise(Redis::ConnectionError.new('down'))
-      expect(publisher.publish(snapshot)).to eq(false)
+      expect(publisher.publish(snapshot)).to be(false)
     end
   end
 
   describe '#fetch' do
     it 'round-trips the payload through JSON' do
       stored = nil
-      allow(redis).to receive(:set) { |_k, json, _o| stored = json; 'OK' }
+      allow(redis).to receive(:set) { |_k, json, _o|
+        stored = json
+        'OK'
+      }
       allow(redis).to receive(:get) { stored }
 
       publisher.publish(snapshot)
@@ -83,8 +86,10 @@ RSpec.describe Options::ChainContextPublisher do
       allow(service).to receive(:resubscribe_legs!)
       allow(Live::TickQuery).to receive(:for_security).and_return(nil)
       allow(Options::DerivativeChainAnalyzer).to receive(:new).and_return(
-        instance_double(Options::DerivativeChainAnalyzer, spot_ltp: 25_455.0,
-                        find_nearest_expiry: '2026-11-26', fetch_api_chain: {})
+        instance_double(Options::DerivativeChainAnalyzer,
+                        spot_ltp: 25_455.0,
+                        find_nearest_expiry: '2026-11-26',
+                        fetch_api_chain: {})
       )
       allow(ActionCable.server).to receive(:broadcast)
 

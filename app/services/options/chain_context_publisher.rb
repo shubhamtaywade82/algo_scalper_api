@@ -44,7 +44,7 @@ module Options
     # for dashboards and specs; the agent reads the key directly.
     def fetch
       raw = @redis.get(key)
-      return nil if raw.nil? || raw.empty?
+      return nil if raw.blank?
 
       JSON.parse(raw)
     end
