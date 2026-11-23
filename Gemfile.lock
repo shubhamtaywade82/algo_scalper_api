@@ -576,6 +576,12 @@ GEM
       lint_roller (~> 1.1)
       rubocop (~> 1.89)
       rubocop-rspec (~> 3.5)
+    ruby-lsp (0.26.11)
+      language_server-protocol (~> 3.17.0)
+      prism (>= 1.2, < 2.0)
+      rbs (>= 3, < 5)
+    ruby-lsp-rails (0.4.8)
+      ruby-lsp (>= 0.26.0, < 0.27.0)
     ruby-progressbar (1.13.0)
     ruby-technical-analysis (1.0.4)
     ruby_llm (2.2.2)
@@ -750,6 +756,7 @@ DEPENDENCIES
   rubocop-rails (~> 2.38)
   rubocop-rspec (~> 3.8)
   rubocop-rspec_rails
+  ruby-lsp-rails
   ruby-technical-analysis
   ruby_llm (~> 2.2)
   rubycritic

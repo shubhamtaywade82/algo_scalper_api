@@ -126,6 +126,7 @@ gem "rswag-specs", "~> 2.17", groups: %i[development test]
 gem "rswag-ui", "~> 2.17"
 
 group :development do
+  gem 'ruby-lsp-rails', require: false
   # MCP server for coding agents: tests, read-only DB queries, schema, routes, logs.
   gem 'ask-rails-harness-mcp', '~> 0.2.9'
   # ask-ruby-harness 0.4.1 references Ask::Tools::Shell without requiring it; load it first.

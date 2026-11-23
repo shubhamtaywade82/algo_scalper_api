@@ -1,35 +1,57 @@
 {
-    "files.watcherExclude": {
-        ".git/objects/**": true,
-        ".git/subtree-cache/**": true,
-        ".hg/store/**": true,
-        "*/.git/objects/**": true,
-        "*/.git/subtree-cache/**": true,
-        "*/.hg/store/**": true,
-        "**/.git/objects/**": true,
-        "**/.git/subtree-cache/**": true,
-        "**/node_modules/**": true,
-        "**/tmp/**": true,
-        "**/log/**": true,
-        "**/storage/**": true,
-        "**/coverage/**": true,
-        "**/public/assets/**": true,
-        "**/public/packs/**": true,
-        "**/vendor/bundle/**": true,
-        "**/.bundle/**": true,
-        "**/.ruby-lsp/**": true
-    },
-    "search.exclude": {
-        "**/node_modules": true,
-        "**/bower_components": true,
-        "**/*.code-search": true,
-        "**/.ruby-lsp": true,
-        "**/tmp": true,
-        "**/log": true,
-        "**/storage": true,
-        "**/coverage": true,
-        "**/public/assets": true,
-        "**/public/packs": true,
-        "**/vendor/bundle": true
-    }
+  "[ruby]": {
+    "editor.defaultFormatter": "Shopify.ruby-lsp",
+    "editor.formatOnSave": true,
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.semanticHighlighting.enabled": true,
+    "editor.formatOnType": true
+  },
+  "rubyLsp.formatter": "rubocop",
+  "rubyLsp.rubyVersionManager": {
+    "identifier": "rvm"
+  },
+  "rubyLsp.indexing": {
+    "excludedPatterns": [
+      "**/coverage/**",
+      "**/tmp/**",
+      "**/log/**",
+      "**/storage/**",
+      "**/vendor/**",
+      "**/node_modules/**"
+    ]
+  },
+  "files.watcherExclude": {
+    ".git/objects/**": true,
+    ".git/subtree-cache/**": true,
+    ".hg/store/**": true,
+    "*/.git/objects/**": true,
+    "*/.git/subtree-cache/**": true,
+    "*/.hg/store/**": true,
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/tmp/**": true,
+    "**/log/**": true,
+    "**/storage/**": true,
+    "**/coverage/**": true,
+    "**/public/assets/**": true,
+    "**/public/packs/**": true,
+    "**/vendor/bundle/**": true,
+    "**/.bundle/**": true,
+    "**/.ruby-lsp/**": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/bower_components": true,
+    "**/*.code-search": true,
+    "**/.ruby-lsp": true,
+    "**/tmp": true,
+    "**/log": true,
+    "**/storage": true,
+    "**/coverage": true,
+    "**/public/assets": true,
+    "**/public/packs": true,
+    "**/vendor/bundle": true
+  }
 }
