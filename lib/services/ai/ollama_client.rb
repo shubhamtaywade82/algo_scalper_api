@@ -27,9 +27,22 @@ module Services
         end
       end
 
-      # Serialize concurrent Ollama calls so we don't overwhelm a single GPU
+      # LOCAL ONLY: serialize concurrent calls so we don't overwhelm a single GPU,
+      # and keep a minimum gap between requests (OLLAMA_REQUEST_DELAY_MS). Ollama
+      # Cloud is serverless and scales horizontally — the throttle is skipped there
+      # (see with_serialization).
       REQUEST_MUTEX = Mutex.new
       REQUEST_DELAY_MS = ENV.fetch('OLLAMA_REQUEST_DELAY_MS', '500').to_i
+
+      # CLOUD ONLY: transient-failure backoff (timeout/HTTP 429-5xx). First step
+      # OLLAMA_CLOUD_RETRY_BASE seconds, doubling per retry.
+      CLOUD_RETRY_BASE = ENV.fetch('OLLAMA_CLOUD_RETRY_BASE', '1').to_f
+
+      # keep_alive sent with every local chat (pin the model in VRAM); nil on
+      # cloud, where the serverless tier has nothing to keep warm and the gem
+      # serializes nil as "field absent".
+      LOCAL_KEEP_ALIVE = ENV.fetch('OLLAMA_KEEP_ALIVE', '30m')
+      CLOUD_KEEP_ALIVE = nil
 
       MODELS_CACHE_TTL = ENV.fetch('OLLAMA_MODELS_CACHE_TTL', '300').to_i
 
@@ -294,6 +307,8 @@ module Services
       end
 
       def with_serialization(&)
+        return yield if cloud? # no single GPU to protect on serverless cloud
+
         REQUEST_MUTEX.synchronize do
           if @last_request_time
             elapsed_ms = (Time.current - @last_request_time) * 1000
@@ -311,21 +326,37 @@ module Services
         begin
           attempt += 1
           with_serialization do
+            # keep_alive pins a model in local VRAM; serverless cloud has nothing
+            # to keep warm, so the field is omitted (the gem serializes nil as absent).
             response = @client.chat(
               messages: format_messages(messages),
               model: model,
+              keep_alive: (cloud? ? CLOUD_KEEP_ALIVE : LOCAL_KEEP_ALIVE),
               options: { temperature: temperature },
               tools: tools
             )
             extract_content(response, tools)
           end
         rescue Ollama::TimeoutError, Ollama::HTTPError => e
-          raise unless attempt < max_attempts
+          raise if attempt >= max_attempts
+          # Non-retryable client errors (401/404/…) fail immediately; the gem's
+          # own policy (408/429/500/502/503) also gates single attempts.
+          raise unless e.is_a?(Ollama::TimeoutError) || (e.respond_to?(:retryable?) && e.retryable?)
 
-          Rails.logger.warn("[OllamaClient] Retrying (#{attempt}/#{max_attempts}) after #{e.class}: #{e.message}")
-          sleep(3)
+          # Cloud 429/5xx blips clear within a second or two, so back off
+          # exponentially from CLOUD_RETRY_BASE; a flat 3 s was tuned for the
+          # local daemon and wastes a full retry budget on the cloud.
+          delay = cloud? ? CLOUD_RETRY_BASE * (2**(attempt - 1)) : 3
+          Rails.logger.warn("[OllamaClient] Retrying (#{attempt}/#{max_attempts}) after #{e.class}: #{e.message} in #{delay}s")
+          sleep(delay)
           retry
         end
+      end
+
+      # Whether the live connection targets Ollama Cloud (serverless) rather
+      # than a local daemon.
+      def cloud?
+        ollama_use_cloud?
       end
 
       # Normalize messages to plain hashes with string keys for Ollama
