@@ -112,9 +112,12 @@ module Services
         request['Authorization'] = "Bearer #{ENV['OLLAMA_API_KEY'].to_s.strip}" if cloud?
         request.body = body.to_json
 
-        response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https',
-                                             open_timeout: REQUEST_TIMEOUT,
-                                             read_timeout: REQUEST_TIMEOUT) do |http|
+        response = Net::HTTP.start(
+          uri.host, uri.port,
+          use_ssl: uri.scheme == 'https',
+          open_timeout: REQUEST_TIMEOUT,
+          read_timeout: REQUEST_TIMEOUT
+        ) do |http|
           http.request(request)
         end
         parse(response)

@@ -73,9 +73,12 @@ RSpec.describe Ai::AlphaGate do
       expect(WebMock).to have_requested(:post, URL).with { |req|
         state = JSON.parse(req.body)['state']
         state['instrument'] == 'NIFTY' && state['option_side'] == 'BUY' &&
-          state['engine_confidence_pct'] == 72.0 && state['index_price'] == 24_500.5 &&
-          state['stop_loss_distance_pct'] == 0.21 && state['strike_distance_pct'] == 0.41 &&
-          state['target_distance_pct'] == 0.41 && state['time_ist'].match?(/\A\d{2}:\d{2}\z/)
+          (state['engine_confidence_pct'] - 72.0).abs < 0.001 &&
+          (state['index_price'] - 24_500.5).abs < 0.001 &&
+          (state['stop_loss_distance_pct'] - 0.21).abs < 0.001 &&
+          (state['strike_distance_pct'] - 0.41).abs < 0.001 &&
+          (state['target_distance_pct'] - 0.41).abs < 0.001 &&
+          state['time_ist'].match?(/\A\d{2}:\d{2}\z/)
       }.once
     end
 
