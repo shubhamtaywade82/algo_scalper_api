@@ -36,7 +36,9 @@ module Entries
         instrument = Instruments::LegacyResolver.resolve_pick(pick)
         return false unless instrument
 
-        instrument.expiry_flag.to_s.upcase.start_with?('W')
+        # During monthly expiry weeks, the nearest contract is flagged 'M', replacing the weekly.
+        instrument.expiry_flag.to_s.upcase.start_with?('W') ||
+          (instrument.expiry_date.present? && instrument.expiry_date <= Time.zone.today + Signal::ExpiryGate.max_expiry_days.days)
       rescue StandardError
         false
       end

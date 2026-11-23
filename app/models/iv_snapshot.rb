@@ -11,9 +11,14 @@ class IvSnapshot < ApplicationRecord
 
   def self.historical_iv(index_key:, days: 30)
     for_index(index_key)
+      .where(snapshot_date: days.days.ago.to_date..)
       .latest
       .limit(days)
       .pluck(:implied_volatility)
       .compact
+  end
+
+  def self.latest_for(index_key:)
+    for_index(index_key).latest.first
   end
 end

@@ -122,7 +122,12 @@ module Options
       future = parsed.select { |date| date >= today }.sort
       return nil if future.empty?
 
-      # Weekly expiry only (hard rule) for NIFTY/SENSEX.
+      # If the nearest upcoming expiry is within the active entry window (≤ 7 days),
+      # trade it directly. During monthly expiry weeks, the contract is flagged 'M'
+      # (not 'W') and replaces the weekly expiry for that week.
+      return future.first.strftime('%Y-%m-%d') if (future.first - today).to_i <= Signal::ExpiryGate.max_expiry_days
+
+      # Weekly expiry only (hard rule) for NIFTY/SENSEX when looking beyond the current week.
       # Query once for all candidates to avoid N+1 exists queries in a loop.
       if %w[NIFTY SENSEX].include?(@index_key)
         weekly_dates = weekly_expiries_in_db(future)
@@ -146,8 +151,9 @@ module Options
       end
       return Set.new if dates.empty?
 
+      max_days = Signal::ExpiryGate.max_expiry_days
       Instrument.options.where(underlying_symbol: @index_key, expiry_date: dates)
-                .where("expiry_flag ILIKE 'W%'")
+                .where("expiry_flag ILIKE 'W%' OR expiry_date <= ?", Time.zone.today + max_days.days)
                 .distinct
                 .pluck(:expiry_date)
                 .to_set
@@ -157,8 +163,9 @@ module Options
 
     def weekly_expiry_in_db?(expiry_date)
       expiry = expiry_date.is_a?(Date) ? expiry_date : Date.parse(expiry_date.to_s)
+      max_days = Signal::ExpiryGate.max_expiry_days
       Instrument.options.where(underlying_symbol: @index_key, expiry_date: expiry)
-               .where("expiry_flag ILIKE 'W%'")
+               .where("expiry_flag ILIKE 'W%' OR expiry_date <= ?", Time.zone.today + max_days.days)
                .exists?
     rescue StandardError
       false

@@ -61,12 +61,21 @@ RSpec.describe Entries::Guards::WeeklyExpiryGuard do
         end
       end
 
-      context 'and contract is NOT a weekly expiry (monthly)' do
-        let(:derivative) { instance_double(Instrument, expiry_flag: 'NIFTY') }
+      context 'and contract is NOT a weekly expiry (monthly beyond weekly window)' do
+        let(:derivative) { instance_double(Instrument, expiry_flag: 'NIFTY', expiry_date: 30.days.from_now.to_date) }
 
         it 'blocks entry' do
           result = described_class.call(context)
           expect(result).to eq(blocked: 'weekly_only_expiry_rule')
+        end
+      end
+
+      context 'and contract is a monthly expiry occurring within the weekly window' do
+        let(:derivative) { instance_double(Instrument, expiry_flag: 'NIFTY', expiry_date: Time.zone.today + 2.days) }
+
+        it 'allows entry' do
+          result = described_class.call(context)
+          expect(result).to eq(Entries::EntryGuardPipeline::PASS)
         end
       end
 
