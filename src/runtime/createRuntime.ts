@@ -408,12 +408,27 @@ function buildAdvisor(config: AgentConfig, logger: Logger): TradeAdvisor | undef
   if (config.llm.model === undefined) {
     throw new Error('LLM_ADVISOR=on requires OLLAMA_MODEL');
   }
+  // Ollama Cloud without a key fails closed on every review (401), silently turning the
+  // advisor into a permanent SKIP. That is a misconfiguration, not a trade decision —
+  // warn loudly at startup instead of discovering it from missing entries.
+  if (config.llm.keepAlive === false && config.llm.apiKey === undefined) {
+    logger.warn('llm advisor targets Ollama Cloud without OLLAMA_API_KEY; every review will fail closed to SKIP');
+  }
   const client = new OllamaClient({
     baseUrl: config.llm.host,
     ...(config.llm.apiKey === undefined ? {} : { apiKey: config.llm.apiKey }),
   });
-  logger.info('llm advisor enabled', { host: config.llm.host, model: config.llm.model });
-  return new OllamaTradeAdvisor(client, config.llm.model, config.llm.timeoutMs);
+  logger.info('llm advisor enabled', {
+    host: config.llm.host,
+    model: config.llm.model,
+    retryAttempts: config.llm.retryAttempts,
+    keepAlive: config.llm.keepAlive === false ? 'omitted' : config.llm.keepAlive,
+  });
+  return new OllamaTradeAdvisor(client, config.llm.model, config.llm.timeoutMs, {
+    maxAttempts: config.llm.retryAttempts,
+    backoffMs: config.llm.retryBackoffMs,
+    keepAlive: config.llm.keepAlive,
+  });
 }
 
 /**

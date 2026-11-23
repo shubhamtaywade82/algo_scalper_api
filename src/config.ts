@@ -165,6 +165,12 @@ export interface AgentConfig {
     readonly model: string | undefined;
     readonly apiKey: string | undefined;
     readonly timeoutMs: number;
+    /** Total attempts for transient failures (429/5xx/network). 1 = single attempt, the local default. */
+    readonly retryAttempts: number;
+    /** Base delay for exponential backoff between attempts, ms. */
+    readonly retryBackoffMs: number;
+    /** keep_alive hint; false omits the field (cloud: serverless, nothing to pin). */
+    readonly keepAlive: string | false;
   };
   readonly ops: {
     /** Directory holding one `events-YYYY-MM-DD.jsonl` file per IST trading day. */
@@ -253,6 +259,15 @@ function flag(env: Env, key: string, fallback: boolean): boolean {
     return false;
   }
   throw new Error(`${key} must be a boolean flag (true/false), got "${raw}"`);
+}
+
+/**
+ * Ollama Cloud (serverless, https://ollama.com) is the one host whose failure
+ * profile differs: no local VRAM to keep warm, and transient 429/5xx blips on a
+ * shared tier. Trailing-slash and case variants included.
+ */
+function isCloudHost(host: string): boolean {
+  return host.replace(/\/+$/, '').toLowerCase() === 'https://ollama.com';
 }
 
 function minuteOfDay(env: Env, key: string, fallback: string): number {
@@ -647,6 +662,14 @@ export function loadConfig(env: Env = process.env, configPath?: string): AgentCo
       model: optionalText(env, 'OLLAMA_MODEL'),
       apiKey: optionalText(env, 'OLLAMA_API_KEY'),
       timeoutMs: number(env, 'LLM_TIMEOUT_MS', 8_000, { min: 500, max: 60_000, integer: true }),
+      // Local daemon: single attempt, the failure mode is a down GPU box, not a transient blip.
+      retryAttempts: number(env, 'LLM_RETRY_ATTEMPTS', 1, { min: 1, max: 5, integer: true }),
+      retryBackoffMs: number(env, 'LLM_RETRY_BACKOFF_MS', 250, { min: 50, max: 30_000, integer: true }),
+      // keep_alive only pins a model in local VRAM. Ollama Cloud (https://ollama.com) is serverless —
+      // omit the field there; any other host is assumed local and keeps the 30m warm window.
+      keepAlive: isCloudHost(text(env, 'OLLAMA_HOST', 'http://127.0.0.1:11434'))
+        ? false
+        : text(env, 'OLLAMA_KEEP_ALIVE', '30m'),
     },
     ops: {
       eventLogDir: text(env, 'EVENT_LOG_DIR', 'data/journal'),
