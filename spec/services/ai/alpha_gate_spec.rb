@@ -11,7 +11,7 @@ RSpec.describe Ai::AlphaGate do
   # The decision model is stubbed with WebMock; the chat gem client is doubled,
   # as in spec/lib/services/ai/ollama_client_cloud_spec.rb.
 
-  URL = 'https://ollama.com/v1/systemone'
+  URL = 'https://ollama.com/v1/systemone' # rubocop:disable RSpec/LeakyConstantDeclaration, Lint/ConstantDefinitionInBlock
 
   let(:signal) do
     { index_key: 'nifty', direction: 'bullish', alpha_source: 'momentum_breakout',

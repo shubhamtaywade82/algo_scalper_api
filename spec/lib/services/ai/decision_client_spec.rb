@@ -11,13 +11,13 @@ RSpec.describe Services::Ai::DecisionClient do
   #
   # HTTP is stubbed with WebMock against the real Net::HTTP call.
 
-  URL = 'https://ollama.com/v1/systemone'
-  QUESTION = {
+  URL = 'https://ollama.com/v1/systemone' # rubocop:disable RSpec/LeakyConstantDeclaration, Lint/ConstantDefinitionInBlock
+  QUESTION = { # rubocop:disable RSpec/LeakyConstantDeclaration, Lint/ConstantDefinitionInBlock
     'type' => 'noul',
     'instructions' => 'Is the trade sound?',
     'criteria' => { 'true' => 'yes', 'false' => 'no' }
   }.freeze
-  STATE = { 'instrument' => 'NIFTY', 'strike_distance_pct' => 0.41 }.freeze
+  STATE = { 'instrument' => 'NIFTY', 'strike_distance_pct' => 0.41 }.freeze # rubocop:disable RSpec/LeakyConstantDeclaration, Lint/ConstantDefinitionInBlock
 
   def with_env(overrides)
     keys = overrides.keys

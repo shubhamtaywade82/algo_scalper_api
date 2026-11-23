@@ -61,9 +61,7 @@ module Services
         end
       end
 
-      def model
-        self.class.model
-      end
+      delegate :model, to: :'self.class'
 
       # Shares the chat client's conditions: AI switched on, and a key when on the cloud.
       def enabled?
@@ -115,7 +113,8 @@ module Services
         request.body = body.to_json
 
         response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https',
-                                             open_timeout: REQUEST_TIMEOUT, read_timeout: REQUEST_TIMEOUT) do |http|
+                                             open_timeout: REQUEST_TIMEOUT,
+                                             read_timeout: REQUEST_TIMEOUT) do |http|
           http.request(request)
         end
         parse(response)
