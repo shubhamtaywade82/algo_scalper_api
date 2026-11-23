@@ -14,6 +14,8 @@ spec/failed_examples.txt
 /temp_rspec_output.txt
 .env
 .env*.local
+.env.production
+.env.staging
 
 # Node sidecar
 node-sidecar/node_modules/
