@@ -12,14 +12,24 @@ the infrastructure able to *measure and protect* whichever strategy earns its pl
 - Unified runtime: `deploy/unified` compose stack (PG roles, Redis, Rails web/jobs/trading/dashboard,
   agent container) with bring-up checklist and staged rollout.
 - Plan + corrections appendix written from a real docker bring-up (2026-11-18).
-- Contracts seed: 7 JSON Schemas + fixtures in [`contracts/`](../../contracts/README.md) (this PR).
+- Contracts seed: 8 JSON Schemas + fixtures in [`contracts/`](../../contracts/README.md) (this PR).
+- **G1 (shared chain truth) implemented end-to-end (this PR)**:
+  - Rails: `Options::ChainContext` + `Options::ChainContextPublisher` publish
+    `chain-context/1` to Redis `dhan:chain:context:<INDEX>` from the ChainWatch broadcast cycle
+    (TTL 15 s, publish failures isolated from the chain watch loop) + specs.
+  - Agent: `src/options/sharedChainContext.ts` (zod-validated, 10 s freshness) wired into the
+    OI-resistance gate (`underlyingAgent.ts` `sharedChainContext` dep; shared-first, local fallback)
+    + 13 tests; full agent suite 1658/1658 green.
+  - Backend PCR, walls, ATM straddle, expected range and sentiment score now have one shared
+    implementation (Rails) instead of a frontend-only dashboard calc.
+  - Remaining from G1: payout-minimising max pain (G1b) and `json_schemer` CI wiring (G0).
 
 ## Workstream items
 
 | ID | Item | Size | Gate |
 |---|---|---|---|
 | G7 | **Arm the analytics jobs**: add `IvSnapshotJob` + `PreMarketIvBaselineJob` to `config/recurring.yml` (optionally `VixGateJob` for periodic re-evaluation; boot + guard evaluation already cover VixGate). Today the IV-rank guards are no-ops by their own comment. | **S - do immediately** | `iv_snapshots` rows appear daily; `iv_history:*` accumulates; `iv_vol_gate_guard` / `selling_iv_rank_guard` become active; `iv-snapshot/1` rank non-null after 30+ samples |
-| G1 | **Backend PCR + true max pain** in the analytics hub: move PCR out of `dashboard/src/views/OptionChain.jsx` into a service; implement the payout-minimising max-pain strike (the dashboard's current "max pain" is just the max-call-OI strike); publish both with the chain snapshot metadata | S-M | PCR values match the agent's `chainAnalyzer` on the same fixture chains to within rounding; max pain recomputable from published OI; dashboard reads from the API |
+| G1b | **True max pain**: payout-minimising strike (the dashboard's current "max pain" is just the max-call-OI strike) in `Options::ChainContext`, published with the context | S | Max pain recomputable from published OI; dashboard reads from the API |
 | G0 | **Wire contract CI**: run `contracts/` fixtures through this repo's validator (`json_schemer`) in CI; the agent vendors `contracts/` and a drift job fails on any diff vs this repo's `main` | S | Both CIs fail on a deliberate schema break; fixtures pass on both stacks |
 | G4 | **Canonical chain snapshots (S3)**: `dhan:chain:{sid}:{expiry}` writer/reader on both sides, fixture-validated normalisers, per-reader freshness | M | Dhan chain calls per hour measurably reduced at equal coverage; zero freshness regressions in the agent's gate |
 | G5 | **Rate-budget extension (S2)**: agent joins `data_api`/`quote_api` Redis keys; cross-repo Lua contract test | S | Both implementations produce identical spacing against one Redis in CI |

@@ -13,6 +13,7 @@ contracts live in this repo (the control-plane repo); the agent vendors and drif
 
 | Schema | Direction | Transport | Status |
 |---|---|---|---|
+| [`chain-context-1`](schemas/chain-context-1.schema.json) | Rails -> agent (Redis) | Redis key `dhan:chain:context:{underlying}`, TTL 15 s | **implemented** (Phase 1 / roadmap G1) |
 | [`chain-snapshot-1`](schemas/chain-snapshot-1.schema.json) | either -> both (Redis) | Redis key `dhan:chain:{underlying_security_id}:{expiry}` | proposed (plan S3) |
 | [`trade-intent-1`](schemas/trade-intent-1.schema.json) | Rails -> agent | `GET /api/trade_intents?after=<cursor>&mode=<mode>` (operator token) | proposed (plan §7.1, Phase 3) |
 | [`intent-outcome-1`](schemas/intent-outcome-1.schema.json) | agent -> Rails | `POST /api/trade_intents/:intent_id/outcome` (operator token) | proposed (plan §7.2, Phase 3) |
@@ -81,5 +82,5 @@ pip install jsonschema
 python3 contracts/scripts/validate_contracts.py
 ```
 
-Validates every fixture against its schema (currently 7/7 OK). The Ruby-side validator (json_schemer)
+Validates every fixture against its schema (currently 8/8 OK). The Ruby-side validator (json_schemer)
 lands with the G0 CI wiring.

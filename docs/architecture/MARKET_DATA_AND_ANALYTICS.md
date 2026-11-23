@@ -71,15 +71,30 @@ freshness limit against `fetched_at_ms`. This:
 
 | Analysis | Rails today | Agent today | Unified |
 |---|---|---|---|
-| OI support/resistance (walls) | implicit (chain radar, gamma ramp) | **full** - max call OI = resistance, max put OI = support, with point distances | Rails analytics hub computes and publishes alongside the snapshot; agent keeps its entry-time confluence gate |
-| PCR (full chain + ATM) | **frontend-only** (`dashboard/src/views/OptionChain.jsx`: `pcr = putOi/callOi`, with sparklines) - no backend service, no API | **full** - plus gates (PCR < 0.55 no long CE, > 1.8 no long PE) | Backend PCR in the analytics hub (G1) serving dashboards/reports; the agent keeps its own gate version (data shared, decisions not) |
-| Max pain | **frontend-only and not max pain** - the dashboard plots the max-call-OI strike, which is not the payout-minimising strike | **missing** | **Gap G1**: proper payout-minimising max pain in the analytics hub, published with snapshot metadata |
+| OI support/resistance (walls) | implicit (chain radar, gamma ramp) | **full** - max call OI = resistance, max put OI = support, with point distances | **Implemented (Phase 1 / G1)**: `Options::ChainContext` computes walls + PCR + straddle + sentiment from the ChainWatch snapshot and `ChainContextPublisher` writes `chain-context/1` to Redis `dhan:chain:context:<INDEX>` after every refresh (TTL 15 s). The agent's OI-resistance gate reads it; missing/stale falls back to its own local computation |
+| PCR (full chain + ATM) | **backend now** (G1, `Options::ChainContext#analyze_pcr`) replacing the frontend-only dashboard calc (`dashboard/src/views/OptionChain.jsx`) | **full** - plus gates (PCR < 0.55 no long CE, > 1.8 no long PE) | Backend PCR is published with the context; the agent keeps its own gate version (data shared, decisions not) |
+| Max pain | **frontend-only and not max pain** - the dashboard plots the max-call-OI strike, which is not the payout-minimising strike | **missing** | **Gap G1b**: proper payout-minimising max pain in the analytics hub, published with snapshot metadata |
 | OI flow / unusual activity | **partial** - flow score (OI change 50 % + volume spike 30 % + price change 20 %, 5-sample rolling window), gamma-ramp detector, delta acceleration | missing (recorder only) | Rails owns; publish flow score per strike with snapshot metadata. Deeper OI analytics (buildup classification matrix, GEX profile, longer OI-change series) remain open extensions |
-| ATM straddle / expected range | missing | **full** (straddle premium -> expected range band) | Compute in the analytics hub for both |
-| Sentiment score | missing | **full** (-100..100 bull/bear/neutral) | Keep agent-side (it feeds its gate); mirror into dashboards via reports |
+| ATM straddle / expected range | **backend now** (G1, `Options::ChainContext#calculate_straddle`) | **full** (straddle premium -> expected range band) | Published with the context; both sides agree by construction (same math, mirrored deliberately) |
+| Sentiment score | **backend now** (G1, `Options::ChainContext#compute_sentiment`, thresholds mirrored from the agent's chainAnalyzer.ts) | **full** (-100..100 bull/bear/neutral) | Shared measurement; the agent's entry gates keep applying it with its own thresholds |
 
 **Principle.** *Measurements* (PCR value, max-pain strike, flow score) belong to the analytics hub and
 are published as data. *Thresholds* (PCR > 1.8 forbids a short) stay with whoever trades.
+
+**Phase 1 reality (implemented in this drop).** The chain-context pipeline runs both ways:
+
+- Rails: `app/services/options/chain_context.rb` (pure computation, mirrors the agent's
+  `chainAnalyzer.ts` math - same PCR bands, wall selection, straddle mids, sentiment
+  contributions) + `chain_context_publisher.rb` (Redis write, TTL 15 s, failure-isolated from the
+  chain watch loop) + the `ChainWatchService` broadcast-cycle hook + specs
+  (`spec/services/options/chain_context_spec.rb`, `chain_context_publisher_spec.rb`).
+- Agent: `src/options/sharedChainContext.ts` (zod-validated reader over the session's Redis,
+  freshness window 10 s, contract-drift and Redis failures degrade to local computation) wired
+  into the OI-resistance gate in `underlyingAgent.ts` (`sharedChainContext` dependency;
+  `chainRejection` prefers the shared snapshot and falls back to `analyzeOptionChain`).
+- Fail-closed direction: Rails down / Redis down / stale key / contract drift -> the agent computes
+  locally, exactly as before the contract existed. Nothing new can *block* trading; the only new
+  behaviour is shared numbers where they exist.
 
 ## 3.4 VIX
 
