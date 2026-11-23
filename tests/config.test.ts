@@ -148,6 +148,17 @@ describe('loadConfig', () => {
     assert.equal(loadConfig({ ...BASE, LLM_ADVISOR: 'on' }).llm.enabled, true);
   });
 
+  it('names a decision model only when asked, and bounds the ENTER threshold', () => {
+    assert.equal(loadConfig(BASE).llm.decisionModel, undefined);
+    assert.equal(loadConfig(BASE).llm.decisionEnterThreshold, 0.5);
+    const decision = loadConfig({ ...BASE, OLLAMA_DECISION_MODEL: 'clef', LLM_DECISION_ENTER_THRESHOLD: '0.7' }).llm;
+    assert.equal(decision.decisionModel, 'clef');
+    assert.equal(decision.decisionEnterThreshold, 0.7);
+    assert.throws(() => loadConfig({ ...BASE, LLM_DECISION_ENTER_THRESHOLD: '1.5' }), /LLM_DECISION_ENTER_THRESHOLD/);
+    assert.throws(() => loadConfig({ ...BASE, LLM_DECISION_ENTER_THRESHOLD: '0' }), /LLM_DECISION_ENTER_THRESHOLD/);
+    assert.throws(() => loadConfig({ ...BASE, LLM_DECISION_ENTER_THRESHOLD: 'likely' }), /LLM_DECISION_ENTER_THRESHOLD/);
+  });
+
   it('rejects bar sizes that Dhan intraday charts do not offer', () => {
     assert.throws(() => loadConfig({ ...BASE, BAR_MINUTES: '3' }), /BAR_MINUTES/);
     assert.equal(loadConfig({ ...BASE, BAR_MINUTES: '15' }).strategy.barMinutes, 15);

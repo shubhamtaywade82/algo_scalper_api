@@ -263,6 +263,34 @@ structured snapshot of one entry candidate and must reply with a schema-validate
 - Structured output uses `chatWithSchema` with Zod validation. A second `safeParse` is applied
   to the result.
 
+### Decision-model advisor
+
+`OLLAMA_DECISION_MODEL` replaces the chat advisor with an Ollama decision model (System One,
+`POST /v1/systemone`). The model does not generate an answer. It returns the probability that
+the entry may proceed, and `LLM_DECISION_ENTER_THRESHOLD` (default `0.5`) turns that number into the
+verdict: ENTER at or above it, SKIP below it.
+
+```bash
+LLM_ADVISOR=on
+OLLAMA_HOST=https://ollama.com
+OLLAMA_API_KEY=...
+OLLAMA_DECISION_MODEL=clef
+```
+
+- Veto-only and fail-closed are unchanged, and the retry settings above apply. The advisor calls
+  System One through `@nemesis-oss/ollama-sdk`'s `client.decision.noul()` helper (needs SDK ≥ 1.26:
+  earlier pins marked the operation local-only and refused cloud hosts), which validates the reply
+  shape and maps HTTP failures onto typed errors; this advisor classifies and retries them with the
+  same policy as the chat advisor. The journal's
+  `advisor_verdict` event carries `source: "decision"`, and its reason holds the probability, the
+  threshold and the input-token count. The chat advisor's reason was the model's own explanation;
+  a probability is all this advisor has.
+- On Ollama Cloud, `clef` is the decision model. It is billed per input token only, and it needs a
+  paid plan or usage credits. A refusal such as 401, 402 or 404 fails closed at once, and the
+  `ADVISOR_SKIP` detail carries the server's message.
+- Whether the model judges entries well is not something this repository has measured. Run it in
+  paper mode first and compare its SKIPs with what the entries did.
+
 ## Configuration
 
 Every key, its type and its bounds are in `src/config.ts`. [`.env.example`](.env.example) lists every
@@ -426,7 +454,7 @@ paper-exchange suite only when `PAPER_EXCHANGE_E2E_URL` is set. `npm test` print
 - the paper venue (gap-through stops, targets fired once, rejected unknown exits)
 - the live adapter against a fake broker: placement classification, fill confirmation,
   exit net-quantity guard, short-position halt, reconciliation, and duplicate suppression
-- the Ollama advisor's fail-closed behaviour
+- the Ollama advisor's fail-closed behaviour, for the chat advisor and the decision-model advisor
 - the Time Machine: rolling-option parsing and strike pivot, dataset validation, replay fills (target, stop,
   ambiguous bar, gap-through, time stop, EOD, data gap, spread), the live gate inside the replay, Wilson and
   bootstrap intervals, path drawdowns, and every verdict
@@ -554,7 +582,7 @@ src/
   options/             bracket pricing, lot sizing, contract selection, option-chain analysis
   risk/                pre-trade gate, day book, all-in risk and its shadow journal
   execution/           ExecutionPort contract, paper venues (in-memory and Postgres), gateway port
-  llm/                 Ollama advisor
+  llm/                 Ollama advisors (chat and decision model) and their shared retry timing
   ops/                 event log, console logger, alerts, day state, journal summary, performance report
   persistence/         PostgreSQL and Redis access, rate gate, trading lease, migrations
   paper/               paper_exchange client and gateway (PAPER_BACKEND=exchange)

@@ -39,7 +39,7 @@
   },
   "dependencies": {
     "@nemesis-oss/dhanhq-sdk": "2.0.1",
-    "@nemesis-oss/ollama-sdk": "^1.13.0",
+    "@nemesis-oss/ollama-sdk": "^1.26.0",
     "@nemesis-oss/tg-format": "^0.1.0",
     "chalk": "^5.6.2",
     "cli-truncate": "^4.0.0",

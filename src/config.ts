@@ -163,6 +163,8 @@ export interface AgentConfig {
     readonly enabled: boolean;
     readonly host: string;
     readonly model: string | undefined;
+    /** When set, the advisor is the decision-model advisor (POST /v1/systemone) instead of the chat one. */
+    readonly decisionModel: string | undefined;
     readonly apiKey: string | undefined;
     readonly timeoutMs: number;
     /** Total attempts for transient failures (429/5xx/network). 1 = single attempt, the local default. */
@@ -171,6 +173,8 @@ export interface AgentConfig {
     readonly retryBackoffMs: number;
     /** keep_alive hint; false omits the field (cloud: serverless, nothing to pin). */
     readonly keepAlive: string | false;
+    /** Minimum P(enter) from the decision model for an ENTER verdict. */
+    readonly decisionEnterThreshold: number;
   };
   readonly ops: {
     /** Directory holding one `events-YYYY-MM-DD.jsonl` file per IST trading day. */
@@ -660,6 +664,7 @@ export function loadConfig(env: Env = process.env, configPath?: string): AgentCo
       enabled: flag(env, 'LLM_ADVISOR', false),
       host: text(env, 'OLLAMA_HOST', 'http://127.0.0.1:11434'),
       model: optionalText(env, 'OLLAMA_MODEL'),
+      decisionModel: optionalText(env, 'OLLAMA_DECISION_MODEL'),
       apiKey: optionalText(env, 'OLLAMA_API_KEY'),
       timeoutMs: number(env, 'LLM_TIMEOUT_MS', 8_000, { min: 500, max: 60_000, integer: true }),
       // Local daemon: single attempt, the failure mode is a down GPU box, not a transient blip.
@@ -670,6 +675,8 @@ export function loadConfig(env: Env = process.env, configPath?: string): AgentCo
       keepAlive: isCloudHost(text(env, 'OLLAMA_HOST', 'http://127.0.0.1:11434'))
         ? false
         : text(env, 'OLLAMA_KEEP_ALIVE', '30m'),
+      // The decision model answers with P(enter); 0.5 makes the verdict follow the more likely side.
+      decisionEnterThreshold: number(env, 'LLM_DECISION_ENTER_THRESHOLD', 0.5, { min: 0.01, max: 1 }),
     },
     ops: {
       eventLogDir: text(env, 'EVENT_LOG_DIR', 'data/journal'),

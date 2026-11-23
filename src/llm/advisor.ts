@@ -7,6 +7,7 @@ import {
   OllamaServerError,
 } from '@nemesis-oss/ollama-sdk';
 import { z } from 'zod';
+import { backoffDelayMs, cappedRetryAfterMs, delay } from './retry.js';
 
 /**
  * The advisor is a veto, never an originator. It receives a snapshot of a
@@ -22,7 +23,8 @@ export const ADVISORY_SCHEMA = z.object({
 export type AdvisoryDecision = z.infer<typeof ADVISORY_SCHEMA>;
 
 export interface AdvisoryVerdict extends AdvisoryDecision {
-  readonly source: 'llm' | 'fail_closed';
+  /** `llm`: chat advisor; `decision`: decision-model advisor; `fail_closed`: no model answered. */
+  readonly source: 'llm' | 'decision' | 'fail_closed';
 }
 
 export interface EntrySnapshot {
@@ -73,7 +75,6 @@ export interface AdvisorOptions {
 const DEFAULT_MAX_ATTEMPTS = 1;
 const DEFAULT_BACKOFF_MS = 250;
 const DEFAULT_KEEP_ALIVE = '30m';
-const MAX_RETRY_DELAY_MS = 8_000;
 
 const SYSTEM_PROMPT = [
   'You review one proposed NSE index option BUY (long premium only).',
@@ -93,7 +94,7 @@ export function describeAdvisorError(error: unknown): string {
 export type AdvisorChatClient = Pick<OllamaClient, 'chatWithSchema'>;
 
 /** Transient failures worth another attempt: 429, 503/overloaded, 5xx and proxy blips, instant network errors. */
-function isTransient(error: unknown): boolean {
+export function isTransient(error: unknown): boolean {
   return (
     error instanceof OllamaRateLimitError ||
     error instanceof OllamaOverloadedError ||
@@ -104,21 +105,14 @@ function isTransient(error: unknown): boolean {
 }
 
 /** Exponential backoff with jitter; a server 429 Retry-After hint wins when present (capped). */
-function retryDelayMs(error: unknown, attempt: number, baseMs: number): number {
+export function retryDelayMs(error: unknown, attempt: number, baseMs: number): number {
   if (error instanceof OllamaRateLimitError) {
-    const hint = error.retryAfterMs;
-    if (typeof hint === 'number' && hint > 0) {
-      return Math.min(hint, MAX_RETRY_DELAY_MS);
+    const hint = cappedRetryAfterMs(error.retryAfterMs);
+    if (hint !== undefined) {
+      return hint;
     }
   }
-  const jitter = 0.8 + Math.random() * 0.4;
-  return Math.round(Math.min(baseMs * 2 ** (attempt - 1), MAX_RETRY_DELAY_MS) * jitter);
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
+  return backoffDelayMs(attempt, baseMs);
 }
 
 export class OllamaTradeAdvisor implements TradeAdvisor {
