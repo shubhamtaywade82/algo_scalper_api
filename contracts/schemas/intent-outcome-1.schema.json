@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/shubhamtaywade82/algo_scalper_api/main/contracts/schemas/intent-outcome-1.schema.json",
+  "title": "Intent outcome (intent-outcome/1)",
+  "description": "What options-trading-agent did with a trade intent, posted back to `POST /api/trade_intents/:intent_id/outcome` (operator token). Every intent gets exactly one outcome, so Rails can show WHY a signal did or did not trade. Codes reuse the agent's existing drop codes plus the intake-specific ones.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "intent_id", "outcome", "correlation_id", "decided_at"],
+  "properties": {
+    "schema": {
+      "const": "intent-outcome/1"
+    },
+    "intent_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "outcome": {
+      "enum": ["accepted", "dropped", "expired", "duplicate"]
+    },
+    "code": {
+      "type": "string",
+      "description": "Machine-readable reason. Examples: ENTRY_BLOCKED, STALE_AT_SUBMIT, NO_EXPIRY, RISK_BUDGET_TOO_SMALL, SLOT_BUSY, CIRCUIT_BREAKER, INTENT_EXPIRED, SCHEMA_INVALID.",
+      "examples": ["RISK_BUDGET_TOO_SMALL"]
+    },
+    "detail": {
+      "type": "string",
+      "description": "Human-readable detail, e.g. 'one lot risks 3120 against a budget of 2400'."
+    },
+    "correlation_id": {
+      "type": "string",
+      "description": "The agent's entry correlation id (e.g. E-20261118-0931-0007). Carried into entry_submitted events so one id traces signal -> order -> fill -> exit."
+    },
+    "decided_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

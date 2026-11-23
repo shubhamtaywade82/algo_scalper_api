@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/shubhamtaywade82/algo_scalper_api/main/contracts/schemas/greeks-snapshot-1.schema.json",
+  "title": "Position-level Greeks snapshot (greeks-snapshot/1)",
+  "description": "Net greeks for ONE position, aggregated by the analytics owner (algo_scalper_api: broker values first, Black-Scholes fallback with Newton-Raphson IV solve, legacy ATM-heuristic last). Per-strike greeks already travel inside chain-snapshot/1; this contract covers the portfolio view of an open position. Status: proposed (gap G3 in docs/architecture/INFRASTRUCTURE_ROADMAP.md) - the agent currently manages risk in premium terms only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "position_id",
+    "underlying",
+    "option_type",
+    "expiry",
+    "signed_quantity",
+    "spot",
+    "computed_at_ms",
+    "source",
+    "net"
+  ],
+  "properties": {
+    "schema": {
+      "const": "greeks-snapshot/1"
+    },
+    "position_id": {
+      "type": "string",
+      "description": "Owning system's position identifier (agent correlation id or Rails position_tracker id)."
+    },
+    "underlying": {
+      "type": "string",
+      "examples": ["NIFTY"]
+    },
+    "option_type": {
+      "enum": ["CE", "PE"]
+    },
+    "expiry": {
+      "type": "string",
+      "format": "date"
+    },
+    "strike": {
+      "type": ["number", "null"],
+      "description": "Strike for single-leg positions; null for multi-leg aggregates."
+    },
+    "signed_quantity": {
+      "type": "integer",
+      "description": "Signed quantity in units (lot_size x lots); positive = long, negative = short."
+    },
+    "entry_price": {
+      "type": ["number", "null"],
+      "description": "Average entry premium per unit, when known."
+    },
+    "spot": {
+      "type": "number"
+    },
+    "computed_at_ms": {
+      "type": "integer"
+    },
+    "source": {
+      "enum": ["broker", "bsm", "heuristic", "mixed"],
+      "description": "Where the greeks came from: broker chain values, Black-Scholes model, ATM heuristic, or a mix across legs."
+    },
+    "net": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["delta", "gamma", "theta_per_day", "vega_per_1pct", "rho"],
+      "properties": {
+        "delta": { "type": ["number", "null"] },
+        "gamma": { "type": ["number", "null"] },
+        "theta_per_day": {
+          "type": ["number", "null"],
+          "description": "Theta per calendar day in rupees for the whole position."
+        },
+        "vega_per_1pct": {
+          "type": ["number", "null"],
+          "description": "Vega per 1% IV move in rupees for the whole position."
+        },
+        "rho": {
+          "type": ["number", "null"],
+          "description": "Rho per 1% rate move. The Rails BSM uses r = 0.065 (India 91-day T-bill default)."
+        }
+      }
+    }
+  }
+}
