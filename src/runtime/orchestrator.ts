@@ -11,6 +11,7 @@ import { assertWarmupClock } from './clockGuard.js';
 import type { DiscoveredOpenPosition, FeedPort, MarketPort } from './ports.js';
 import { CockpitChainWatch } from './cockpitChainWatch.js';
 import { UnderlyingAgent } from './underlyingAgent.js';
+import type { SharedChainContextReader } from '../options/sharedChainContext.js';
 import type { CockpitSnapshot, FeedStatusView } from './views.js';
 import type { TradingGate } from './tradingGate.js';
 import { withDeadline } from './deadline.js';
@@ -40,6 +41,15 @@ export interface OrchestratorServices {
   readonly shutdownTimeoutMs?: number;
   /** Conditions beyond the book that stop orders: the leader lock and unconfirmed events. Open when omitted. */
   readonly gate?: TradingGate;
+  /**
+   * Builds the per-underlying reader for the shared chain truth (contract
+   * chain-context/1) that the Rails analytics authority publishes to Redis.
+   * When omitted (or when the builder returns undefined) the agents fall
+   * back to their own local chain computation, which is the pre-existing
+   * behaviour. Failure isolation stays per-underlying: one index's stale
+   * context never blocks another's local gate.
+   */
+  readonly sharedChainContextFor?: (underlying: string) => SharedChainContextReader | undefined;
   /**
    * Runs once, after the final event flush. Ends the run record, releases the leader lock and closes the
    * database and Redis connections. It must not throw, and it must be safe to call twice.
@@ -509,6 +519,7 @@ export class Orchestrator {
         this.services.feed.unsubscribe(refs);
       },
     };
+    const sharedChainContext = this.services.sharedChainContextFor?.(spec.symbol);
     return new UnderlyingAgent({
       spec,
       config: this.config,
@@ -524,6 +535,7 @@ export class Orchestrator {
       strategySession: this.strategySession,
       ...(this.services.openingCapitalInr === undefined ? {} : { openingCapitalInr: this.services.openingCapitalInr }),
       ...(this.services.gate === undefined ? {} : { gate: this.services.gate }),
+      ...(sharedChainContext === undefined ? {} : { sharedChainContext }),
     });
   }
 

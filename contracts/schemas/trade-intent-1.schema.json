@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/shubhamtaywade82/algo_scalper_api/main/contracts/schemas/trade-intent-1.schema.json",
+  "title": "Trade intent (trade-intent/1)",
+  "description": "A signal forwarded by algo_scalper_api to options-trading-agent over the pull endpoint `GET /api/trade_intents?after=<cursor>&mode=<mode>` (operator token). Deliberately a SIGNAL, not an order: strike, quantity, stop, target and order type are absent - the agent decides all of them (its ADR-004 mandatory bracket stays intact). The poll response wraps intents in an envelope documented in contracts/README.md (cursor + control block with circuit-breaker state, intake_enabled and server_time).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "intent_id",
+    "issued_at",
+    "expires_at",
+    "mode",
+    "underlying",
+    "direction",
+    "source",
+    "confidence"
+  ],
+  "properties": {
+    "schema": {
+      "const": "trade-intent/1"
+    },
+    "intent_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Idempotency key. A repeated id is acknowledged as 'duplicate' and never re-processed."
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Default TTL 20 s. The agent drops late intents with code INTENT_EXPIRED, on receipt and again at submit."
+    },
+    "mode": {
+      "enum": ["paper", "sandbox", "live"],
+      "description": "live requires explicit human promotion (LIVE_TRADING_ACK on the agent side)."
+    },
+    "underlying": {
+      "type": "string",
+      "examples": ["NIFTY", "BANKNIFTY", "SENSEX"]
+    },
+    "direction": {
+      "enum": ["BULLISH", "BEARISH"],
+      "description": "BULLISH -> long CE, BEARISH -> long PE (buy-to-open only)."
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["system", "strategy"],
+      "properties": {
+        "system": {
+          "const": "algo_scalper_api"
+        },
+        "strategy": {
+          "type": "string",
+          "examples": ["supertrend-adx"]
+        },
+        "strategy_version": {
+          "type": "integer"
+        },
+        "signal_id": {
+          "type": "integer",
+          "description": "Rails strategy_signals row id, for traceability."
+        }
+      }
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "reasons": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Machine-readable reasons, e.g. ['supertrend_bullish_adx_confirmed']."
+    },
+    "spot_hint": {
+      "type": "number",
+      "description": "Spot at signal time, informational only. The agent always re-reads its own feed."
+    }
+  }
+}

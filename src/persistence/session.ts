@@ -26,6 +26,12 @@ export interface PersistenceSession {
   readonly fence: LedgerFence | undefined;
   readonly cache: CacheStore;
   readonly rateGate: RateGate;
+  /**
+   * The Redis client whenever REDIS_URL is set. Read-only consumers (the shared
+   * chain-context reader) may use it directly; closing it stays the session's
+   * job, consumers must not disconnect it.
+   */
+  readonly redis: Redis | undefined;
   /** Present whenever DATABASE_URL is set. The trading right for this account, held in PostgreSQL. */
   readonly lease: Lease | undefined;
   /** Strings that must never appear in a log line or error message. */
@@ -197,7 +203,7 @@ export async function openSession(
       lease.onLost((reason) => logger.error('trading lease lost; no new entries will be sent', { reason }));
     }
 
-    return { runId, ledger, pool, fence, cache, rateGate, lease, secrets, close };
+    return { runId, ledger, pool, fence, cache, rateGate, redis, lease, secrets, close };
   } catch (error) {
     await close('startup failed');
     throw new Error(`persistence startup failed: ${errorMessage(error, secrets)}`);

@@ -19,6 +19,7 @@ import type { EntrySnapshot, TradeAdvisor } from '../llm/advisor.js';
 import { BarSeries, CandleBuilder } from '../market/barSeries.js';
 import { calculateTrailingStop, roundTripChargesInr, type BracketLevels } from '../options/pricing.js';
 import { analyzeOptionChain, checkOptionBuyingConfluence } from '../options/chainAnalyzer.js';
+import { checkSharedChainConfluence, sharedChainAnalysis, type SharedChainContextReader } from '../options/sharedChainContext.js';
 import { contextVerdict, marketContext, structureTurnedAgainst, type MarketContext } from '../strategy/marketContext.js';
 import { pickExpiry, selectContract, type ChainSnapshot } from '../options/selector.js';
 import { sizePosition, type SizingResult } from '../options/sizing.js';
@@ -62,6 +63,14 @@ export interface AgentDependencies {
   readonly strategySession?: StrategySession;
   /** Account capital at the start of the day, after earlier P&L and withdrawals. CAPITAL_INR when omitted. */
   readonly openingCapitalInr?: number;
+  /**
+   * The shared chain truth from the Rails analytics authority (contract
+   * chain-context/1, Redis `dhan:chain:context:{UNDERLYING}`). When present
+   * and fresh, the OI-resistance gate runs on the analytics Rails already
+   * computed; when absent, stale, or invalid it falls back to the agent's
+   * own local computation, which is the pre-existing behaviour.
+   */
+  readonly sharedChainContext?: SharedChainContextReader;
 }
 
 type Rejection = { readonly ok: false; readonly code: string; readonly detail: string };
@@ -812,7 +821,7 @@ export class UnderlyingAgent {
       return rejected('NO_EXPIRY', `no expiry ${window}`);
     }
     const chain = await market.optionChain(spec.spot, expiry);
-    const chainRejection = this.chainRejection(signal, chain);
+    const chainRejection = await this.chainRejection(signal, chain);
     if (chainRejection !== undefined) {
       return chainRejection;
     }
@@ -837,11 +846,18 @@ export class UnderlyingAgent {
     return { ok: true, expiry, contract, quote: { ...quote, ask: quote.ask, bid: quote.bid } };
   }
 
-  /** The OI-resistance gate and the market-context gate, both read off the same chain. */
-  private chainRejection(signal: Signal, chain: ChainSnapshot): Rejection | undefined {
+  /**
+   * The OI-resistance gate and the market-context gate, both read off the same chain. The OI-resistance
+   * numbers prefer the shared chain context (contract chain-context/1) published by the Rails
+   * analytics authority; a missing, stale, or invalid snapshot falls back to local computation.
+   */
+  private async chainRejection(signal: Signal, chain: ChainSnapshot): Promise<Rejection | undefined> {
     const { config } = this.deps;
+    const shared = this.deps.sharedChainContext === undefined ? undefined : await this.deps.sharedChainContext.read();
     if (config.chainAnalysis.enabled) {
-      const confluence = checkOptionBuyingConfluence(analyzeOptionChain(chain, signal.spot), signal.direction, config.chainAnalysis.minHeadroomPts);
+      const confluence = shared === undefined
+        ? checkOptionBuyingConfluence(analyzeOptionChain(chain, signal.spot), signal.direction, config.chainAnalysis.minHeadroomPts)
+        : checkSharedChainConfluence(sharedChainAnalysis(shared), signal.direction, config.chainAnalysis.minHeadroomPts);
       if (!confluence.ok) {
         return rejected('OPTION_CHAIN_RESISTANCE', confluence.reason ?? 'option chain resistance detected');
       }

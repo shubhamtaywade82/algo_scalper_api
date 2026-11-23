@@ -33,6 +33,7 @@ import { openSession, type PersistenceSession } from '../persistence/session.js'
 import { istParts, shiftDateKey } from '../time/ist.js';
 import type { MarketPort } from './ports.js';
 import { Orchestrator } from './orchestrator.js';
+import { createSharedChainContextReader } from '../options/sharedChainContext.js';
 import { ledgerAndLeaseGate } from './tradingGate.js';
 
 export interface Runtime {
@@ -214,6 +215,14 @@ async function compose(
     leaseHolds: () => session.lease === undefined || session.lease.holds(),
   });
 
+  // Shared chain truth (contract chain-context/1): when the session's Redis
+  // is the unified one Rails publishes to, each agent's OI-resistance gate
+  // reads Rails' analytics. No Redis (paper without REDIS_URL), or a
+  // missing/stale key, falls back to local computation everywhere.
+  const sharedChainContextFor = session.redis === undefined
+    ? undefined
+    : (underlying: string) => createSharedChainContextReader({ redis: session.redis!, underlying });
+
   const orchestrator = new Orchestrator(config, specs, {
     dayBook,
     openingCapitalInr,
@@ -225,6 +234,7 @@ async function compose(
     logger,
     now,
     gate,
+    ...(sharedChainContextFor === undefined ? {} : { sharedChainContextFor }),
     closeSession: (reason) => session.close(reason, events.unconfirmedEvents()),
   });
   startChainRecorder(config, specs, market, logger, now);
