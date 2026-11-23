@@ -533,7 +533,7 @@ module Live
         circuit_breaker: Risk::CircuitBreaker.instance.status,
         system: Live::SystemStatusCache.instance.all_statuses.merge(
           pnl_updater_running: running?,
-          ws_order_update: Live::OrderUpdateHub.instance.running?
+          ws_order_update: AlgoConfig.paper_trading_enabled? || Live::OrderUpdateHub.instance.running?
         ),
         timestamp: Time.current.iso8601
       }

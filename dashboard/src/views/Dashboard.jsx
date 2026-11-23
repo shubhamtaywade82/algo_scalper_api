@@ -112,7 +112,7 @@ export default function Dashboard() {
     const sys = system() || {}
     return [
       { name: 'WebSocket Feed', status: sys.ws_market_feed ? 'Live' : 'Inactive', class: sys.ws_market_feed ? 'text-emerald-400' : 'text-rose-400' },
-      { name: 'Order Updates', status: sys.ws_order_update ? 'Connected' : 'Inactive', class: sys.ws_order_update ? 'text-emerald-400' : 'text-gray-500' },
+      { name: 'Order Updates', status: sys.ws_order_update ? (mode?.() === 'paper' ? 'Simulated' : 'Connected') : 'Inactive', class: sys.ws_order_update ? 'text-emerald-400' : 'text-gray-500' },
       { name: 'Risk Engine', status: sys.pnl_updater_running ? 'Operational' : 'Inactive', class: sys.pnl_updater_running ? 'text-emerald-400' : 'text-gray-500' },
       { name: 'Scheduler', status: sys.scheduler === 'running' ? 'Running' : 'Stopped', class: sys.scheduler === 'running' ? 'text-emerald-400' : 'text-gray-500' }
     ]

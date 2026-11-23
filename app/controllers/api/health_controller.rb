@@ -20,7 +20,7 @@ module Api
         websocket: {
           market_feed_connected: statuses[:ws_market_feed],
           market_feed_last_tick_at: last_index_tick_at,
-          order_update_connected: statuses[:ws_order_update],
+          order_update_connected: AlgoConfig.paper_trading_enabled? || statuses[:ws_order_update],
           pnl_updater_running: statuses[:pnl_updater_running],
           tick_cache_size: Live::TickCache.all.size,
           sample_ltps: {

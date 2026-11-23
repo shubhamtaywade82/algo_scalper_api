@@ -156,6 +156,7 @@ indices:
 trade_limits:
   global_max_trades_per_day: 10
   global_max_concurrent_positions: 3
+  max_concurrent_same_direction: 1
 broker_fees:
   enabled: true
   fee_per_order: 20
@@ -282,7 +283,7 @@ risk:
       early_sl_offset: -0.1
       breakeven_trigger: 0.12
       activation_trigger: 0.18
-      trailing_distance: 0.8
+      trailing_distance: 0.35
     banknifty:
       early_trigger: 0.06
       early_sl_offset: -0.15
@@ -322,7 +323,7 @@ risk:
       max_tp_rupees: 2000
     trend_continuation:
       start: '09:45'
-      end: '11:30'
+      end: '10:30'
       sl_multiplier: 1.0
       tp_multiplier: 1.0
       allow_trailing: true
@@ -336,7 +337,7 @@ risk:
         BANKNIFTY: 40.0
       max_tp_rupees: 
     chop_decay:
-      start: '11:30'
+      start: '10:30'
       end: '13:45'
       sl_multiplier: 1.0
       tp_multiplier: 0.8
@@ -543,12 +544,16 @@ position_sizing:
 profit_lock:
   enabled: true
   levels:
-  - trigger: 20000
+  - trigger: 5000
     lock_ratio: 0.6
-  - trigger: 35000
+  - trigger: 10000
+    lock_ratio: 0.65
+  - trigger: 20000
     lock_ratio: 0.7
+  - trigger: 35000
+    lock_ratio: 0.75
   - trigger: 50000
-    lock_ratio: 0.73
+    lock_ratio: 0.8
 market_context:
   enabled: false
   regime_scoring:
