@@ -1,3 +1,11 @@
+GIT
+  remote: https://github.com/shubhamtaywade82/railsforge.git
+  revision: 30e3a26e8ef4b3711aead2ff1b7087eae47a3a5a
+  glob: ruby-lsp-addon/*.gemspec
+  specs:
+    railsforge-ruby-lsp (0.2.0)
+      ruby-lsp (>= 0.19)
+
 GEM
   remote: https://rubygems.org/
   specs:
@@ -745,6 +753,7 @@ DEPENDENCIES
   rails (~> 8.1.4)
   rails-ai-context (>= 5.35.0)
   rails_best_practices
+  railsforge-ruby-lsp!
   redis (~> 6.0)
   rspec-rails
   rswag-api (~> 2.17)
@@ -756,6 +765,7 @@ DEPENDENCIES
   rubocop-rails (~> 2.38)
   rubocop-rspec (~> 3.8)
   rubocop-rspec_rails
+  ruby-lsp
   ruby-lsp-rails
   ruby-technical-analysis
   ruby_llm (~> 2.2)

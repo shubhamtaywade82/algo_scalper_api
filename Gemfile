@@ -126,11 +126,16 @@ gem "rswag-specs", "~> 2.17", groups: %i[development test]
 gem "rswag-ui", "~> 2.17"
 
 group :development do
-  gem 'ruby-lsp-rails', require: false
   # MCP server for coding agents: tests, read-only DB queries, schema, routes, logs.
   gem 'ask-rails-harness-mcp', '~> 0.2.9'
   # ask-ruby-harness 0.4.1 references Ask::Tools::Shell without requiring it; load it first.
   gem 'ask-tools-shell', require: 'ask/tools/shell'
+  gem 'railsforge-ruby-lsp',
+      git: 'https://github.com/shubhamtaywade82/railsforge.git',
+      glob: 'ruby-lsp-addon/*.gemspec',
+      require: false
+  gem 'ruby-lsp', require: false
+  gem 'ruby-lsp-rails', require: false
 end
 
 gem "actionmcp", "~> 0.203"
