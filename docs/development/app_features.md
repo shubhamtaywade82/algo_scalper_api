@@ -32,7 +32,7 @@ This document details the functional features, architectural subsystems, and cap
     *   FVG (Fair Value Gaps) and order blocks
     *   Liquidity sweeps and pullback thresholds
 *   **Trade Scoring Engine**: Compiles a composite setup score (0–100) combining structural confluence, VIX, participation index, and ADX/Supertrend alignment.
-*   **Generative AI Alpha Gate**: Ollama-backed [AlphaGate](file:///app/services/ai/alpha_gate.rb) acts as an automated risk check, prompting local open-weights models to ALLOW or BLOCK trading signals.
+*   **Generative AI Alpha Gate**: Ollama-backed [AlphaGate](file:///app/services/ai/alpha_gate.rb) acts as an automated risk check, prompting local open-weights models to ALLOW or BLOCK trading signals. With `OLLAMA_DECISION_MODEL` set, the same check goes to an Ollama decision model (`POST /v1/systemone`) that returns the probability the trade is sound; [DecisionClient](file:///lib/services/ai/decision_client.rb) makes that call. Both paths fail open when Ollama does not answer.
 
 ---
 
