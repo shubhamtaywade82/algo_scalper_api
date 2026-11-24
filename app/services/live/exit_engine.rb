@@ -327,7 +327,7 @@ module Live
       return unless tracker&.exited?
       return if TradeTelemetry.exists?(tracker_id: tracker.id)
 
-      entry_risk_rupees = tracker.entry_risk_rupees
+      entry_risk_rupees = telemetry_value(tracker, :entry_risk_rupees)
       return if entry_risk_rupees.nil?
 
       entry_risk = BigDecimal(entry_risk_rupees.to_s)
@@ -346,12 +346,12 @@ module Live
         exit_time: tracker.exited_at || Time.current,
         entry_tf: resolved_entry_tf(tracker),
         htf_tf: tracker.htf_tf || '15m', # Default to 15m if missing
-        bos_age_at_entry: tracker.bos_age_at_entry,
-        retrace_pct: tracker.retrace_pct,
-        pullback_candles: tracker.pullback_candles,
-        entry_distance_r: tracker.entry_distance_r,
-        continuation_body_position: tracker.continuation_body_position,
-        time_from_bos_to_entry: tracker.time_from_bos_to_entry,
+        bos_age_at_entry: telemetry_value(tracker, :bos_age_at_entry),
+        retrace_pct: telemetry_value(tracker, :retrace_pct),
+        pullback_candles: telemetry_value(tracker, :pullback_candles),
+        entry_distance_r: telemetry_value(tracker, :entry_distance_r),
+        continuation_body_position: telemetry_value(tracker, :continuation_body_position),
+        time_from_bos_to_entry: telemetry_value(tracker, :time_from_bos_to_entry),
         max_r_reached: max_r&.round(3),
         exit_r: exit_r&.round(3),
         exit_path: tracker.exit_path.presence || reason,
@@ -360,6 +360,12 @@ module Live
       )
     rescue StandardError => e
       Rails.logger.error("[ExitEngine] Failed to record trade telemetry for #{tracker&.order_no}: #{e.class} - #{e.message}")
+    end
+
+    # EntryGuard writes these into meta; the same-named columns on position_trackers are never
+    # populated, so reading only the column silently skipped every telemetry row.
+    def telemetry_value(tracker, key)
+      tracker.public_send(key).presence || tracker.meta&.dig(key.to_s)
     end
 
     def resolved_entry_tf(tracker)
