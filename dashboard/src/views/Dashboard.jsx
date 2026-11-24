@@ -41,7 +41,7 @@ function saveRunningPeak(n) {
 export default function Dashboard() {
   const {
     balance, stats, open, closed, circuitBreaker, positionsConnected, positionsStale,
-    closeOpenPosition, closingPositionId, marketStatus, mode, indices, recentSignals, strategiesSummary, system
+    closeOpenPosition, closingPositionId, marketStatus, marketInfo, mode, indices, recentSignals, strategiesSummary, system
   } = useDashboardContext()
 
   const [runningPeakPnl, setRunningPeakPnl] = createSignal(loadRunningPeak())
@@ -125,6 +125,11 @@ export default function Dashboard() {
 
   return (
     <div class="space-y-8">
+      <Show when={marketInfo() && !marketInfo().is_trading_day}>
+        <div class="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-wider text-rose-300">
+          Market closed{marketInfo().holiday_name ? `: ${marketInfo().holiday_name}` : ' (weekend)'} — prices are from the last session. Next session {marketInfo().next_trading_day}, 09:15 IST.
+        </div>
+      </Show>
       {/* 1. KPI Top StatsBar */}
       <StatsBar
         balance={balance()}

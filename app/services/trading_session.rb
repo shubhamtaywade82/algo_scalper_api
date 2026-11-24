@@ -23,7 +23,9 @@ module TradingSession
         minute = current_ist.min
 
         # Entry allowed: 9:20 AM to 3:15 PM IST
-        if hour < ENTRY_START_HOUR || (hour == ENTRY_START_HOUR && minute < ENTRY_START_MINUTE)
+        if !Market::Calendar.trading_day?(current_ist.to_date)
+          { allowed: false, reason: 'Entry not allowed: exchange holiday or weekend' }
+        elsif hour < ENTRY_START_HOUR || (hour == ENTRY_START_HOUR && minute < ENTRY_START_MINUTE)
           {
             allowed: false,
             reason: "Entry not allowed before #{ENTRY_START_HOUR}:#{format_minute(ENTRY_START_MINUTE)} IST"
@@ -105,6 +107,7 @@ module TradingSession
         hour = current_ist.hour
         minute = current_ist.min
 
+        return true unless Market::Calendar.trading_day?(current_ist.to_date)
         return true if hour < ENTRY_START_HOUR || (hour == ENTRY_START_HOUR && minute < ENTRY_START_MINUTE)
         return true if hour > MARKET_CLOSE_HOUR || (hour == MARKET_CLOSE_HOUR && minute >= MARKET_CLOSE_MINUTE)
 

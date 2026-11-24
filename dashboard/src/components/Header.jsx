@@ -70,7 +70,7 @@ export default function Header(props) {
             <span class="text-[10px] font-bold text-gray-500 tracking-widest mt-0.5 uppercase">Active Terminal</span>
           </div>
 
-          <div class="hidden xl:flex items-center gap-2 border-l border-white/10 pl-3 min-w-0">
+          <div class="hidden xl:flex items-center gap-2 border-l border-white/10 pl-3 min-w-0 overflow-hidden">
             {/* Nifty 50 Card */}
             <a
               href="/charts?symbol=NIFTY"
@@ -188,19 +188,19 @@ export default function Header(props) {
             title={isIpVerified() ? `Verified: ${publicIpv4()}` : `Not Registered: ${publicIpv4()}`}
           >
             <div class={`w-2 h-2 rounded-full shadow-[0_0_8px] transition-colors ${isIpVerified() ? 'bg-emerald-400 shadow-emerald-400/40' : 'bg-rose-500 shadow-rose-500/40'}`}></div>
-            <span class="text-gray-500 font-bold tracking-widest group-hover:text-gray-300 transition-colors">NET IDENTITY</span>
+            <span class="hidden 2xl:inline text-gray-500 font-bold tracking-widest group-hover:text-gray-300 transition-colors">NET IDENTITY</span>
           </div>
           <div class="hidden lg:flex items-center gap-2 group cursor-help">
             <div class={`w-2 h-2 rounded-full shadow-[0_0_8px] transition-colors ${props.system?.ws_market_feed ? 'bg-emerald-400 shadow-emerald-400/40' : 'bg-gray-700'}`}></div>
-            <span class="text-gray-500 font-bold tracking-widest group-hover:text-gray-300 transition-colors">MD FEED</span>
+            <span class="hidden 2xl:inline text-gray-500 font-bold tracking-widest group-hover:text-gray-300 transition-colors">MD FEED</span>
           </div>
           <div class="hidden lg:flex items-center gap-2 group cursor-help">
             <div class={`w-2 h-2 rounded-full shadow-[0_0_8px] transition-colors ${props.system?.scheduler === 'running' ? 'bg-emerald-400 shadow-emerald-400/40' : 'bg-rose-500 shadow-rose-500/40'}`}></div>
-            <span class="text-gray-500 font-bold tracking-widest group-hover:text-gray-300 transition-colors">STG ENGINE</span>
+            <span class="hidden 2xl:inline text-gray-500 font-bold tracking-widest group-hover:text-gray-300 transition-colors">STG ENGINE</span>
           </div>
           <div class="hidden lg:flex items-center gap-2 group cursor-help">
             <div class={`w-2 h-2 rounded-full shadow-[0_0_8px] transition-colors ${props.system?.pnl_updater_running ? 'bg-emerald-400 shadow-emerald-400/40' : 'bg-gray-700'}`}></div>
-            <span class="text-gray-500 font-bold tracking-widest group-hover:text-gray-300 transition-colors">PNL UPDATER</span>
+            <span class="hidden 2xl:inline text-gray-500 font-bold tracking-widest group-hover:text-gray-300 transition-colors">PNL UPDATER</span>
           </div>
           <div class={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-500 whitespace-nowrap ${props.connected ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
             <span class={`w-2 h-2 rounded-full ${props.connected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`}></span>

@@ -29,6 +29,7 @@ export function useDashboard(onPositionChange) {
   })
   const [subscribedIndices, setSubscribedIndices] = createSignal([])
   const [optionsBuying, setOptionsBuying] = createSignal({ nifty: {}, banknifty: {}, sensex: {} })
+  const [marketInfo, setMarketInfo] = createSignal(null)
   const [isStale, setIsStale] = createSignal(false)
   const [system, setSystem] = createSignal({ ws_market_feed: false, ws_order_update: false, scheduler: 'unknown' })
   const [publicIpv4, setPublicIpv4] = createSignal('Unknown')
@@ -71,6 +72,7 @@ export function useDashboard(onPositionChange) {
       setIndices(current)
     }
 
+    if (data.market_status) setMarketInfo(data.market_status)
     if (data.system) setSystem(prev => ({ ...prev, ...data.system }))
     if (data.public_ipv4) setPublicIpv4(data.public_ipv4)
     if (data.public_ipv6) setPublicIpv6(data.public_ipv6)
@@ -145,8 +147,10 @@ export function useDashboard(onPositionChange) {
   return {
     mode, connected, isStale, stats, balance, indices, subscribedIndices, system,
     optionsBuying,
-    publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, strategiesSummary, config,
+    marketInfo, publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, strategiesSummary, config,
     marketStatus: () => {
+      const info = marketInfo()
+      if (info) return info.market_open ? 'open' : (info.is_trading_day ? 'closed' : 'holiday')
       const sys = system()
       if (sys?.market_status) return sys.market_status
       const now = new Date()

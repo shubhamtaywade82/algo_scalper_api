@@ -218,4 +218,14 @@ RSpec.describe TradingSession::Service do
       expect(time.time_zone.name).to eq('Asia/Kolkata')
     end
   end
+
+  describe 'exchange holidays and weekends' do
+    it 'reports market closed and entry blocked on a holiday during session hours' do
+      allow(Market::Calendar).to receive(:trading_day?).and_return(false)
+      travel_to Time.zone.parse('2025-01-15 11:00:00 +05:30') do
+        expect(described_class.market_closed?).to be true
+        expect(described_class.entry_allowed?[:allowed]).to be false
+      end
+    end
+  end
 end
