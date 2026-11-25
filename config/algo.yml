@@ -46,6 +46,11 @@ feature_flags:
   enable_peak_drawdown_activation: true
 dhanhq:
   enable_orders: false
+# rails: this app places entries itself. agent: every entry signal becomes a trade intent that
+# options-trading-agent pulls and executes (paper only); Rails places no entries.
+execution:
+  engine: agent
+  intent_ttl_seconds: 20
 indices:
 - key: NIFTY
   capital_alloc_pct: 0.25

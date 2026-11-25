@@ -74,6 +74,30 @@ do
   force_stop_project_processes "$pattern"
 done
 
+# options-trading-agent runs from its own repo (Procfile.dev `agent`), so the cwd filter above skips it. SIGTERM starts
+# its graceful shutdown, which closes paper positions through the normal exit path; give it time before forcing.
+AGENT_ROOT="$(cd "$ROOT/../options-trading-agent" 2>/dev/null && pwd || true)"
+if [[ -n "$AGENT_ROOT" ]]; then
+  mapfile -t agent_pids < <(pgrep -f "src/index.tsx" 2>/dev/null || true)
+  live_agents=()
+  for pid in "${agent_pids[@]:-}"; do
+    [[ -z "$pid" ]] && continue
+    [[ "$(readlink -f "/proc/$pid/cwd" 2>/dev/null)" == "$AGENT_ROOT" ]] || continue
+    echo "Stopping options-trading-agent (pid $pid)..."
+    kill "$pid" 2>/dev/null || true
+    live_agents+=("$pid")
+  done
+  for _ in $(seq 1 60); do
+    alive=0
+    for pid in "${live_agents[@]:-}"; do [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && alive=1; done
+    [[ $alive -eq 0 ]] && break
+    sleep 1
+  done
+  for pid in "${live_agents[@]:-}"; do
+    [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && { echo "Warning: agent pid $pid did not stop in 60s, forcing"; kill -9 "$pid" 2>/dev/null || true; }
+  done
+fi
+
 if command -v ss >/dev/null 2>&1; then
   for port in 3011 62770; do
     if ss -tlnp 2>/dev/null | grep -q ":$port"; then

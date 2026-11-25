@@ -328,6 +328,8 @@ module Strategies
 
       index_cfg = IndexConfigLoader.load_indices.find { |c| c[:key].to_s.upcase == instrument_key.to_s.upcase }
       return record.update!(outcome: "blocked_by_guard", reason: "no_index_cfg") unless index_cfg
+      # Forwarded before strike selection: the agent picks its own contract, so the chain call would be wasted.
+      return forward_to_agent(record, index_cfg, action) if TradeIntents::Forwarder.agent_engine?
 
       # Same rule as Signal::Scheduler; without it the runners bought a 21-day BANKNIFTY monthly.
       return record.update!(outcome: "blocked_by_guard", reason: "expiry_beyond_entry_window") if ::Signal::ExpiryGate.beyond_entry_window?(index_cfg)
@@ -354,6 +356,17 @@ module Strategies
     rescue StandardError => e
       record.update!(outcome: "blocked_by_guard", reason: "exception: #{e.class}")
       Rails.logger.error("[Strategies::Manager] entry attempt failed for #{instrument_key}: #{e.class} - #{e.message}")
+    end
+
+    def forward_to_agent(record, index_cfg, action)
+      result = TradeIntents::Forwarder.forward(
+        index_cfg: index_cfg, direction: DIRECTION_BY_ACTION.fetch(action),
+        signal: { strategy: record.strategy_record&.slug || "unknown", strategy_version: record.strategy_version&.version,
+                  signal_id: record.id, confidence: record.confidence&.to_f, reasons: [record.reason] }
+      )
+      verdict = result.forwarded? ? "forwarded_to_agent:#{result.intent.intent_id}" : result.blocked_reason
+      record.update!(outcome: result.forwarded? ? "forwarded" : "blocked_by_guard",
+                     metadata: record.metadata.merge("entry_result_reason" => verdict))
     end
 
     def auto_entry_enabled?

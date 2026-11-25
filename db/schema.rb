@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_16_183034) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_25_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1585,6 +1585,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_16_183034) do
     t.index ["position_tracker_id"], name: "index_trade_analytics_on_position_tracker_id"
   end
 
+  create_table "trade_intents", force: :cascade do |t|
+    t.uuid "intent_id", null: false
+    t.string "mode", null: false
+    t.string "underlying", null: false
+    t.string "direction", null: false
+    t.string "source_strategy", null: false
+    t.decimal "confidence", precision: 5, scale: 4, null: false
+    t.jsonb "payload", default: {}, null: false
+    t.datetime "expires_at", null: false
+    t.string "outcome"
+    t.string "outcome_code"
+    t.string "outcome_detail"
+    t.string "correlation_id"
+    t.datetime "decided_at"
+    t.bigint "strategy_signal_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["intent_id"], name: "index_trade_intents_on_intent_id", unique: true
+    t.index ["mode", "outcome", "expires_at"], name: "index_trade_intents_on_mode_and_outcome_and_expires_at"
+    t.index ["strategy_signal_id"], name: "index_trade_intents_on_strategy_signal_id"
+    t.index ["underlying", "direction", "expires_at"], name: "index_trade_intents_on_underlying_and_direction_and_expires_at"
+  end
+
   create_table "trade_memories", force: :cascade do |t|
     t.bigint "position_tracker_id", null: false
     t.bigint "trade_analytic_id"
@@ -1746,6 +1769,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_16_183034) do
   add_foreign_key "solid_queue_recurring_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "trade_analytics", "position_trackers"
+  add_foreign_key "trade_intents", "strategy_signals"
   add_foreign_key "trade_memories", "position_trackers"
   add_foreign_key "trade_memories", "trade_analytics"
   add_foreign_key "trade_telemetry", "position_trackers", column: "tracker_id"

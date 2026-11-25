@@ -56,6 +56,11 @@ Rails.application.routes.draw do
     # Requires API_OPERATOR_TOKEN — never expose this endpoint without that env var set
     resource :dhan_access_token, only: :show, controller: 'dhan_access_token'
     resource :dhan_token, path: 'dhan/token', only: :show
+    # options-trading-agent execution bridge: the agent pulls intents and posts one outcome per intent.
+    resources :trade_intents, only: :index, param: :intent_id do
+      resource :outcome, only: :create, controller: 'trade_intent_outcomes'
+    end
+    resource :agent_status, path: 'agent/status', only: :show
     resource :smc_decision, path: 'smc/decision', only: :show
 
     scope 'alpha', as: 'alpha' do

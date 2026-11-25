@@ -15,8 +15,9 @@ contracts live in this repo (the control-plane repo); the agent vendors and drif
 |---|---|---|---|
 | [`chain-context-1`](schemas/chain-context-1.schema.json) | Rails -> agent (Redis) | Redis key `dhan:chain:context:{underlying}`, TTL 15 s | **implemented** (Phase 1 / roadmap G1) |
 | [`chain-snapshot-1`](schemas/chain-snapshot-1.schema.json) | either -> both (Redis) | Redis key `dhan:chain:{underlying_security_id}:{expiry}` | proposed (plan S3) |
-| [`trade-intent-1`](schemas/trade-intent-1.schema.json) | Rails -> agent | `GET /api/trade_intents?after=<cursor>&mode=<mode>` (operator token) | proposed (plan §7.1, Phase 3) |
-| [`intent-outcome-1`](schemas/intent-outcome-1.schema.json) | agent -> Rails | `POST /api/trade_intents/:intent_id/outcome` (operator token) | proposed (plan §7.2, Phase 3) |
+| [`trade-intents-1`](schemas/trade-intents-1.schema.json) | Rails -> agent | poll envelope of `GET /api/trade_intents` (cursor, intents, control) | **implemented** (Rails side) |
+| [`trade-intent-1`](schemas/trade-intent-1.schema.json) | Rails -> agent | `GET /api/trade_intents?after=<cursor>&mode=<mode>` (operator token) | **implemented** (Rails side) |
+| [`intent-outcome-1`](schemas/intent-outcome-1.schema.json) | agent -> Rails | `POST /api/trade_intents/:intent_id/outcome` (operator token) | **implemented** (Rails side) |
 | [`agent-snapshot-1`](schemas/agent-snapshot-1.schema.json) | agent -> Rails (Redis) | Redis key `trading:agent:snapshot`, TTL 10 s | proposed (plan §7.4 / S15) |
 | [`vix-snapshot-1`](schemas/vix-snapshot-1.schema.json) | Rails -> consumers | `GET /api/market/vix` (dashboard token; endpoint exists) | proposed (advisory; roadmap G2) |
 | [`iv-snapshot-1`](schemas/iv-snapshot-1.schema.json) | Rails -> consumers | REST (endpoint lands with G2) | proposed (advisory; roadmap G2) |
@@ -31,12 +32,13 @@ Already-deployed integrations that are **not** JSON Schema contracts (byte-level
 
 ## Envelope: trade-intent polling
 
-`GET /api/trade_intents?after=<cursor>&mode=<mode>` returns oldest-first intents plus a control block:
+`GET /api/trade_intents?after=<cursor>&mode=<mode>` returns oldest-first pending intents plus a control block
+(schema [`trade-intents-1`](schemas/trade-intents-1.schema.json); the cursor is opaque, pass it back as `after`):
 
 ```json
 {
   "schema": "trade-intents/1",
-  "cursor": "8f6c1a52-3d47-4b9a-9f2e-6c1d5a7b9e01",
+  "cursor": "1042",
   "intents": [ { "...": "trade-intent/1 objects" } ],
   "control": {
     "circuit_breaker": { "tripped": false },

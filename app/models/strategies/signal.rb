@@ -5,7 +5,7 @@ module Strategies
     self.table_name = "strategy_signals"
 
     ACTIONS = %w[buy_call buy_put exit hold].freeze
-    OUTCOMES = %w[executed blocked_by_guard ignored_hold shadow].freeze
+    OUTCOMES = %w[executed blocked_by_guard ignored_hold shadow forwarded].freeze
 
     belongs_to :strategy_record, class_name: "Strategies::Record", foreign_key: :strategy_id,
                                  inverse_of: :signals

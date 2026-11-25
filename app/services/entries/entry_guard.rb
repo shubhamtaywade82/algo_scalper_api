@@ -18,6 +18,15 @@ module Entries
 
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil, signal: nil,
                     position_side: 'long')
+        # Single choke point for every Rails entry path: with the agent engine Rails never places an entry.
+        if TradeIntents::Forwarder.agent_engine?
+          return forward_to_agent(index_cfg, direction, entry_metadata, signal) unless position_side.to_s == 'short'
+
+          # The agent only buys options; a selling signal must not turn into a buy intent.
+          signal&.record_entry_outcome('blocked', 'agent_engine_buy_only')
+          return false
+        end
+
         entry_attempt_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         Entries::AdvisoryLock.with_index_lock(index_cfg[:key]) do
           EventStore::DecisionTrace.with_trace(index_key: index_cfg[:key], direction: direction, metadata: entry_metadata || {}) do |trace|
@@ -330,6 +339,19 @@ module Entries
       end
 
       private
+
+      # Returns false so callers keep their usual "not entered" flow; a second pick for the same signal is
+      # refused by the forwarder (intent_already_pending), so one signal yields at most one intent.
+      def forward_to_agent(index_cfg, direction, entry_metadata, signal)
+        result = TradeIntents::Forwarder.forward(
+          index_cfg: index_cfg, direction: direction,
+          signal: { strategy: entry_metadata&.dig(:entry_contract).presence || 'signal-engine',
+                    confidence: signal.try(:confidence)&.to_f }
+        )
+        reason = result.forwarded? ? "forwarded_to_agent:#{result.intent.intent_id}" : result.blocked_reason
+        signal&.record_entry_outcome('blocked', reason)
+        false
+      end
 
       # The pipeline always normalizes a block into a DecisionRejection, so the old
       # Hash check could never match and every block was persisted as the literal

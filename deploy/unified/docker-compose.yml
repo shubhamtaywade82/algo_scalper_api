@@ -148,6 +148,11 @@ services:
       DATABASE_URL: postgres://agent:${OTA_DB_PASSWORD:?set OTA_DB_PASSWORD}@postgres:5432/trading
       REDIS_URL: redis://redis:6379/0
       DHAN_SHARED_RATE_LIMIT_KEY: dhan:rate_limit:option_chain
+      # Rails bridge (agent ADR-015): intake is opt-in and paper/sandbox only; the heartbeat is display-only.
+      RAILS_INTENT_URL: ${OTA_RAILS_INTENT_URL:-}
+      RAILS_INTENT_KEY: ${OTA_RAILS_INTENT_KEY:-}
+      RAILS_INTENT_TRUSTED_HOSTS: asa-web
+      AGENT_SNAPSHOT_ENABLED: "true"
       LIVE_TRADING_ACK: ${OTA_LIVE_ACK:-}
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
     volumes:

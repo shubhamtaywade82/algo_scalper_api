@@ -1,6 +1,7 @@
 import { For, Show } from 'solid-js';
 import { fmtP, fmtS, fmtT, fmtD } from '../../lib/confluence/renderer';
 import { StraddleCard, GreeksCard, LadderCard } from './OptionsPanel';
+import AgentCard from '../agent/AgentCard';
 
 const signed = (n, digits = 2) => `${n >= 0 ? '+' : ''}${Number(n).toFixed(digits)}`;
 const tone = (up) => (up ? 'text-[#19E3B1]' : 'text-[#FF4D6D]');
@@ -158,6 +159,7 @@ export default function TerminalSidebar(props) {
   return (
     <aside class="w-80 shrink-0 border-l border-[#182742] bg-[#0B1424] overflow-y-auto z-10 max-md:hidden">
       <InstrumentCard symbol={props.symbol} spot={props.spot} />
+      <AgentCard status={props.agentStatus} />
       <PositionsCard positions={props.positions} onExit={props.onExit} closingId={props.closingId} />
       <Show when={props.options} fallback={<Section title="Option chain"><span class="text-[11px] text-[#5A6C8C]">waiting for option chain…</span></Section>}>
         <StraddleCard view={props.options} />

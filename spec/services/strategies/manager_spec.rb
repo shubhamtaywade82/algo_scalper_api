@@ -119,4 +119,31 @@ RSpec.describe Strategies::Manager do
       expect(Entries::EntryGuard).not_to have_received(:try_enter)
     end
   end
+
+  describe '#attempt_entry with the agent engine' do
+    let(:record) do
+      create(:strategy_signal, action: 'buy_put', confidence: 0.81, reason: 'st_flip', metadata: {})
+    end
+    let(:intent) { instance_double(TradeIntent, intent_id: 'abc') }
+
+    before do
+      allow(manager).to receive(:auto_entry_enabled?).and_return(true)
+      allow(IndexConfigLoader).to receive(:load_indices).and_return([{ key: 'NIFTY' }])
+      allow(TradeIntents::Forwarder).to receive_messages(agent_engine?: true,
+                                                         forward: TradeIntents::Forwarder::Result.new(intent: intent, blocked_reason: nil))
+      allow(Options::ChainAnalyzer).to receive(:pick_strikes)
+    end
+
+    it 'forwards before strike selection and marks the signal forwarded' do
+      manager.send(:attempt_entry, record, 'NIFTY', 'buy_put')
+
+      expect(Options::ChainAnalyzer).not_to have_received(:pick_strikes)
+      expect(TradeIntents::Forwarder).to have_received(:forward).with(
+        index_cfg: { key: 'NIFTY' }, direction: :bearish,
+        signal: hash_including(strategy: record.strategy_record.slug, signal_id: record.id, confidence: 0.81, reasons: ['st_flip'])
+      )
+      expect(record.reload).to have_attributes(outcome: 'forwarded', reason: 'st_flip')
+      expect(record.metadata['entry_result_reason']).to eq('forwarded_to_agent:abc')
+    end
+  end
 end

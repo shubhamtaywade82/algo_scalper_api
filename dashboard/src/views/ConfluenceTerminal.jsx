@@ -4,6 +4,7 @@ import { dashboardApiHeaders } from '../lib/dashboardApi';
 import { useDashboard } from '../stores/useDashboard';
 import { usePositions } from '../stores/usePositions';
 import { useOptionChain } from '../stores/useOptionChain';
+import { useAgent } from '../stores/useAgent';
 import { deriveOptionsView, optionLevels } from '../lib/confluence/optionsMetrics';
 import {
   SYMBOL_CONFIG, TF_MS, clamp, createSessionState, getAggregatedBook,
@@ -44,6 +45,7 @@ export default function ConfluenceTerminal() {
   const buyingState = createMemo(() => (optionsBuying() ? optionsBuying()[symbol().toLowerCase()] : null));
   const chartPositions = createMemo(() => (openPositions() || []).filter((p) => (p.index_key || '').toUpperCase() === symbol().toUpperCase()));
   const { chain } = useOptionChain(symbol);
+  const { status: agentStatus } = useAgent();
   const optionsView = createMemo(() => deriveOptionsView(chain()));
   const chartLevels = createMemo(() => (layers().opt ? optionLevels(optionsView()) : []));
   const isLive = createMemo(() => marketStatus() === 'open' && connected() && system()?.ws_market_feed !== false);
@@ -324,7 +326,7 @@ export default function ConfluenceTerminal() {
         </div>
 
         <TerminalSidebar symbol={symbol()} spot={spot()} bar={shownBar()} hovering={!!hoverBar()} buyingState={buyingState()}
-          options={optionsView()} positions={chartPositions()} onExit={closeOpenPosition} closingId={closingPositionId()} depth={depth()} />
+          options={optionsView()} agentStatus={agentStatus()} positions={chartPositions()} onExit={closeOpenPosition} closingId={closingPositionId()} depth={depth()} />
       </div>
 
       <footer class="h-14 border-t border-[#182742] bg-[#070D1A]/95 px-4 flex items-center justify-between text-xs z-20">
