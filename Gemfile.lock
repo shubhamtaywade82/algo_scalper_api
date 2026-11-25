@@ -1,6 +1,6 @@
 GIT
   remote: https://github.com/shubhamtaywade82/railsforge.git
-  revision: 30e3a26e8ef4b3711aead2ff1b7087eae47a3a5a
+  revision: 93976d5d49d5b54eb28c5a5816755920676cf180
   glob: ruby-lsp-addon/*.gemspec
   specs:
     railsforge-ruby-lsp (0.2.0)
