@@ -68,7 +68,7 @@ RSpec.describe TradeIntents::Forwarder do
     expect(forward.intent.confidence).to eq(described_class::UNSCORED_CONFIDENCE)
   end
 
-  describe '.agent_engine?' do
+  describe '.agent_engine?', :real_execution_engine do
     it 'is true only when execution.engine is agent' do
       expect(described_class.agent_engine?).to be(true)
 

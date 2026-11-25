@@ -79,10 +79,14 @@ done
 AGENT_ROOT="$(cd "$ROOT/../options-trading-agent" 2>/dev/null && pwd || true)"
 if [[ -n "$AGENT_ROOT" ]]; then
   mapfile -t agent_pids < <(pgrep -f "src/index.tsx" 2>/dev/null || true)
+  # npm/sh/tsx wrappers all match the pattern. The agent handles only one SIGTERM (process.once) and tsx relays signals
+  # to its child, so signal only the leaf process that runs the app; the wrappers exit with it.
+  parents=" $(for pid in "${agent_pids[@]:-}"; do [[ -n "$pid" ]] && ps -o ppid= -p "$pid" 2>/dev/null; done | tr -d ' ' | tr '\n' ' ') "
   live_agents=()
   for pid in "${agent_pids[@]:-}"; do
     [[ -z "$pid" ]] && continue
     [[ "$(readlink -f "/proc/$pid/cwd" 2>/dev/null)" == "$AGENT_ROOT" ]] || continue
+    [[ "$parents" == *" $pid "* ]] && continue
     echo "Stopping options-trading-agent (pid $pid)..."
     kill "$pid" 2>/dev/null || true
     live_agents+=("$pid")
