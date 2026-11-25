@@ -52,14 +52,15 @@ export function StraddleCard(props) {
 const GREEK_ROWS = [
   ['Delta', (l) => num(l?.delta, 3)],
   ['Gamma', (l) => num(l?.gamma, 4)],
-  ['Theta / day', (l) => num(l?.theta, 1)],
+  ['Theta', (l) => num(l?.theta, 1)],
   ['Vega', (l) => num(l?.vega, 1)],
   ['IV %', (l) => num(l?.iv, 1)],
   ['Bid-ask %', (l) => (l?.ltp > 0 && l.ask > 0 && l.bid > 0 ? num(((l.ask - l.bid) / l.ltp) * 100, 2) : '--')],
-  ['OI (Δ)', (l) => (l ? `${fmtS(l.oi)} (${l.oi_change >= 0 ? '+' : ''}${fmtS(l.oi_change)})` : '--')],
+  ['OI', (l) => (l ? fmtS(l.oi) : '--')],
+  ['OI change', (l) => (l ? `${l.oi_change >= 0 ? '+' : ''}${fmtS(l.oi_change)}` : '--')],
   ['Volume', (l) => (l ? fmtS(l.volume) : '--')],
-  ['1 lot cost', (l) => rupees(l?.ltp * l?.lot_size)],
-  ['Theta ₹/lot/day', (l) => rupees(l?.theta * l?.lot_size)]
+  ['Lot cost', (l) => rupees(l?.ltp * l?.lot_size)],
+  ['Θ ₹/lot', (l) => rupees(l?.theta * l?.lot_size)]
 ];
 
 export function GreeksCard(props) {
