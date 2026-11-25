@@ -1,5 +1,6 @@
 import { For, Show } from 'solid-js';
 import { fmtP, fmtS, fmtT, fmtD } from '../../lib/confluence/renderer';
+import { StraddleCard, GreeksCard, LadderCard } from './OptionsPanel';
 
 const signed = (n, digits = 2) => `${n >= 0 ? '+' : ''}${Number(n).toFixed(digits)}`;
 const tone = (up) => (up ? 'text-[#19E3B1]' : 'text-[#FF4D6D]');
@@ -97,10 +98,13 @@ function PositionsCard(props) {
             <div class="p-2 rounded bg-[#101C30] border border-[#182742] text-[10px]">
               <div class="flex justify-between font-bold">
                 <span class="text-[#3FC1FF] truncate max-w-[150px]">{p.trading_symbol || p.symbol || p.index_key}</span>
-                <span class={`tabular-nums ${tone(Number(p.pnl || 0) >= 0)}`}>{signed(p.pnl || 0)}</span>
+                <span class={`tabular-nums ${tone(Number(p.pnl || 0) >= 0)}`}>{signed(p.pnl || 0)} ({signed(p.pnl_pct || 0, 1)}%)</span>
               </div>
-              <div class="flex justify-between items-center text-[#8CA0BF] mt-1">
-                <span>Entry {fmtP(p.entry_price || p.buy_price)}</span>
+              <div class="flex justify-between text-[#8CA0BF] mt-1 tabular-nums">
+                <span>{fmtP(p.entry_price)} → <b class="text-[#E9EFFA]">{fmtP(p.ltp)}</b></span>
+                <span><span class="text-[#FF4D6D]">SL {p.sl_price ? fmtP(p.sl_price) : '--'}</span> · <span class="text-[#19E3B1]">TP {p.tp_price ? fmtP(p.tp_price) : '--'}</span></span>
+              </div>
+              <div class="flex justify-end mt-1">
                 <button onClick={() => props.onExit(p.id)} disabled={props.closingId === p.id}
                   class="px-2 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold border border-rose-500/30 disabled:opacity-50">
                   {props.closingId === p.id ? '...' : 'EXIT'}
@@ -154,10 +158,15 @@ export default function TerminalSidebar(props) {
   return (
     <aside class="w-80 shrink-0 border-l border-[#182742] bg-[#0B1424] overflow-y-auto z-10 max-md:hidden">
       <InstrumentCard symbol={props.symbol} spot={props.spot} />
+      <PositionsCard positions={props.positions} onExit={props.onExit} closingId={props.closingId} />
+      <Show when={props.options} fallback={<Section title="Option chain"><span class="text-[11px] text-[#5A6C8C]">waiting for option chain…</span></Section>}>
+        <StraddleCard view={props.options} />
+        <LadderCard view={props.options} />
+        <GreeksCard view={props.options} />
+      </Show>
+      <DepthCard depth={props.depth} />
       <BarCard bar={props.bar} hovering={props.hovering} />
       <RegimeCard state={props.buyingState} />
-      <PositionsCard positions={props.positions} onExit={props.onExit} closingId={props.closingId} />
-      <DepthCard depth={props.depth} />
     </aside>
   );
 }

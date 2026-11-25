@@ -3,6 +3,8 @@ import { A, useSearchParams } from '@solidjs/router';
 import { dashboardApiHeaders } from '../lib/dashboardApi';
 import { useDashboard } from '../stores/useDashboard';
 import { usePositions } from '../stores/usePositions';
+import { useOptionChain } from '../stores/useOptionChain';
+import { deriveOptionsView, optionLevels } from '../lib/confluence/optionsMetrics';
 import {
   SYMBOL_CONFIG, TF_MS, clamp, createSessionState, getAggregatedBook,
   getFormingValues, loadRealCandlesIntoSession, pushLiveTick, isCandleBoundary
@@ -11,15 +13,16 @@ import { createAudioEngine } from '../lib/confluence/audio';
 import {
   C, fmtP, fmtT, fmtD, fmtCountdown, buildLUT, getY,
   drawGrid, drawHeatmap, drawFvgAndRays, drawCandlesAndVolume, drawLastPriceLine,
-  drawChips, drawDepthProfile, drawCrosshair, fitViewPrices, drawKeyLevelsAndPositions
+  drawChips, drawDepthProfile, drawCrosshair, fitViewPrices, drawKeyLevels, drawOptionLevels
 } from '../lib/confluence/renderer';
+import { createGestures, followCenter, hitZone } from '../lib/confluence/interaction';
 import TerminalSidebar from '../components/charts/TerminalSidebar';
 
 const SYMBOLS = ['NIFTY', 'BANKNIFTY', 'SENSEX'];
 const TIMEFRAMES = [{ id: '1', lbl: '1m' }, { id: '5', lbl: '5m' }, { id: '15', lbl: '15m' }, { id: '25', lbl: '25m' }, { id: '60', lbl: '1h' }];
-const LAYERS = [['heat', 'VOLMAP'], ['fvg', 'FVG'], ['ob', 'OB'], ['vol', 'VOL'], ['sr', 'S/R'], ['pos', 'POS']];
+const LAYERS = [['heat', 'VOLMAP'], ['fvg', 'FVG'], ['ob', 'OB'], ['vol', 'VOL'], ['sr', 'S/R'], ['opt', 'OPTIONS']];
 const DEPTH_POLL_MS = 4000;
-const DEPTH_TIMEOUT_MS = 15000;
+const DEPTH_TIMEOUT_MS = 30000;
 const AXIS_W = 64;
 const EMPTY_DEPTH = { bid: [], ask: [], totalBid: 0, totalAsk: 0, bidPct: 50, spread: '--', at: 0, error: false };
 const EMPTY_SPOT = { price: 0, base: 0, change: 0, pct: 0, up: true, dayHigh: 0, dayLow: 0 };
@@ -32,18 +35,21 @@ export default function ConfluenceTerminal() {
   const [tf, setTf] = createSignal(searchParams.tf || localStorage.getItem('smc_interval') || '5');
   const [playing, setPlaying] = createSignal(false), [halted, setHalted] = createSignal(false), [speed, setSpeed] = createSignal(1);
   const [palette, setPalette] = createSignal(localStorage.getItem('smc_palette') || 'ion'), [candleStyle, setCandleStyle] = createSignal('hollow');
-  const [layers, setLayers] = createSignal({ heat: false, fvg: true, ob: true, vol: true, sr: true, pos: true });
+  const [layers, setLayers] = createSignal({ heat: false, fvg: true, ob: true, vol: true, sr: true, opt: true });
   const [spot, setSpot] = createSignal(EMPTY_SPOT), [depth, setDepth] = createSignal(EMPTY_DEPTH);
   const [loading, setLoading] = createSignal(false), [loadError, setLoadError] = createSignal(null), [barCount, setBarCount] = createSignal(0);
-  const [formingBar, setFormingBar] = createSignal(null), [hoverBar, setHoverBar] = createSignal(null), [following, setFollowing] = createSignal(true);
+  const [formingBar, setFormingBar] = createSignal(null), [hoverBar, setHoverBar] = createSignal(null), [following, setFollowing] = createSignal(true), [autoScale, setAutoScale] = createSignal(true);
   const { indices, optionsBuying, connected, system, marketStatus } = useDashboard();
   const { open: openPositions, closeOpenPosition, closingPositionId } = usePositions();
   const buyingState = createMemo(() => (optionsBuying() ? optionsBuying()[symbol().toLowerCase()] : null));
   const chartPositions = createMemo(() => (openPositions() || []).filter((p) => (p.index_key || '').toUpperCase() === symbol().toUpperCase()));
+  const { chain } = useOptionChain(symbol);
+  const optionsView = createMemo(() => deriveOptionsView(chain()));
+  const chartLevels = createMemo(() => (layers().opt ? optionLevels(optionsView()) : []));
   const isLive = createMemo(() => marketStatus() === 'open' && connected() && system()?.ws_market_feed !== false);
   let state = createSessionState(1337, tf(), symbol()), aggCache = { bin: 10, sig: '', data: [], symbol: symbol() }, lut = buildLUT(palette());
   let view = { center: 50, visible: 70, minP: 24000, maxP: 26000 }, plot = { x: 8, y: 8, w: 800, h: 500, r: 808, b: 508 };
-  let dirty = true, dpr = Math.min(2, window.devicePixelRatio || 1), hover = null, hoverIdx = -1, drag = null, animId = null, prevT = performance.now();
+  let dirty = true, dpr = Math.min(2, window.devicePixelRatio || 1), hover = null, hoverIdx = -1, animId = null, prevT = performance.now();
 
   function resize() {
     if (!wrapRef || !sceneRef || !overRef) return;
@@ -126,7 +132,7 @@ export default function ConfluenceTerminal() {
   }
 
   function switchMarket(nextSymbol, nextTf) {
-    setSymbol(nextSymbol); setTf(nextTf); setDepth(EMPTY_DEPTH); setFollowing(true);
+    setSymbol(nextSymbol); setTf(nextTf); setDepth(EMPTY_DEPTH); setFollowing(true); setAutoScale(true);
     loadData(nextSymbol, nextTf); fetchDepthData(nextSymbol);
   }
 
@@ -143,6 +149,7 @@ export default function ConfluenceTerminal() {
   });
 
   createEffect(() => { indices(); if (!playing()) applyLiveTick(); });
+  createEffect(() => { chartLevels(); dirty = true; });
 
   function animate(now) {
     const dt = Math.min(50, now - prevT); prevT = now;
@@ -152,10 +159,10 @@ export default function ConfluenceTerminal() {
       else { updateStats(); dirty = true; }
     }
     if (following()) {
-      const head = playing() ? state.playhead : state.bars.length, target = head + view.visible * 0.15 - view.visible / 2;
+      const target = followCenter(view, playing() ? state.playhead + 1 : state.bars.length);
       if (view.center !== target) { view.center = target; dirty = true; }
     }
-    if (state.bars.length) { fitViewPrices(view, state.bars, state.playhead); renderFrame(); }
+    if (state.bars.length) { if (autoScale()) fitViewPrices(view, state.bars, state.playhead); renderFrame(); }
     else clearCanvases();
     animId = requestAnimationFrame(animate);
   }
@@ -173,7 +180,8 @@ export default function ConfluenceTerminal() {
       drawGrid(sc, view, plot, state.bars, dpr, bw, AXIS_W);
       drawHeatmap(sc, view, plot, state, { heat: layers().heat, bin: cfg.defaultBin, gamma: 0.8 }, aggData, lut, bw);
       drawFvgAndRays(sc, view, plot, state, layers());
-      if (layers().sr || layers().pos) drawKeyLevelsAndPositions(sc, view, plot, { levels: layers().sr ? buyingState() : null, positions: layers().pos ? chartPositions() : [] });
+      if (layers().sr) drawKeyLevels(sc, view, plot, { levels: buyingState() });
+      drawOptionLevels(sc, view, plot, chartLevels());
       drawCandlesAndVolume(sc, view, plot, state, { vol: layers().vol, candle: candleStyle() }, 0, state.bars.length - 1, bw);
       dirty = false;
     }
@@ -189,11 +197,9 @@ export default function ConfluenceTerminal() {
     const bs = layers().sr ? buyingState() : null;
     if (bs?.support) chips.push({ y0: getY(bs.support, view, plot), h: 15, bg: '#10B981', fg: '#04070F', txt: `S ${bs.support.toFixed(0)}` });
     if (bs?.resistance) chips.push({ y0: getY(bs.resistance, view, plot), h: 15, bg: '#FF4D6D', fg: '#04070F', txt: `R ${bs.resistance.toFixed(0)}` });
-    if (layers().pos) {
-      for (const p of chartPositions()) {
-        const entry = Number(p.entry_price || p.buy_price);
-        if (Number.isFinite(entry)) chips.push({ y0: getY(entry, view, plot), h: 15, bg: p.pnl >= 0 ? '#10B981' : '#FF4D6D', fg: '#FFF', txt: `POS ${entry.toFixed(1)}` });
-      }
+    for (const lv of chartLevels()) {
+      const y0 = getY(lv.price, view, plot);
+      if (y0 > plot.y && y0 < plot.b) chips.push({ y0, h: 14, bg: lv.color, fg: '#04070F', txt: lv.label });
     }
     return chips;
   }
@@ -204,23 +210,35 @@ export default function ConfluenceTerminal() {
     if (layers().heat) drawDepthProfile(oc, plot, view, aggData[Math.floor(state.playhead)] || new Map(), fv.cur, cfg.defaultBin, 90);
     drawLastPriceLine(oc, plot, getY(fv.cur, view, plot), fv.cur >= fv.b.o ? C.bid : C.ask);
     drawChips(oc, plot, AXIS_W, levelChips(fv));
-    if (hover && !drag) drawCrosshair(oc, hover, plot, view, AXIS_W, state.bars, bw);
+    if (hover && !gestures.isDragging()) drawCrosshair(oc, hover, plot, view, AXIS_W, state.bars, bw);
   }
 
-  function onPointerMove(e) {
-    if (drag) { setFollowing(false); view.center = drag.center - (e.offsetX - drag.x) / (plot.w / view.visible); dirty = true; }
-    hover = { px: e.offsetX, py: e.offsetY };
-    const idx = clamp(Math.floor(view.center - view.visible / 2 + (e.offsetX - plot.x) / (plot.w / view.visible)), 0, state.bars.length - 1);
+  function setHover(point) {
+    hover = point ? { px: point.x, py: point.y } : null;
+    const idx = point ? clamp(Math.floor(view.center - view.visible / 2 + (point.x - plot.x) / (plot.w / view.visible)), 0, state.bars.length - 1) : -1;
     if (idx !== hoverIdx) { hoverIdx = idx; setHoverBar(state.bars[idx] ? { ...state.bars[idx] } : null); }
   }
+
+  function onDoubleClick(e) {
+    const r = wrapRef.getBoundingClientRect(), zone = hitZone(e.clientX - r.left, e.clientY - r.top, plot);
+    if (zone === 'priceAxis') { setAutoScale(true); dirty = true; }
+    else if (zone === 'timeAxis') resetView();
+  }
+
+  const resetView = () => { setAutoScale(true); view.visible = 70; goLive(); };
+  const gestures = createGestures({
+    view: () => view, plot: () => plot, barCount: () => state.bars.length, following, setFollowing, autoScale, setAutoScale,
+    markDirty: () => { dirty = true; }, setHover, setCursor: (c) => { if (wrapRef) wrapRef.style.cursor = c; }, goLive, resetView
+  });
 
   onMount(() => {
     resize(); loadData(symbol(), tf()); window.addEventListener('resize', resize);
     animId = requestAnimationFrame(animate); pollDepth(); scheduleNextMinuteFetch();
+    window.addEventListener('keydown', gestures.onKeyDown);
   });
   onCleanup(() => {
     disposed = true;
-    window.removeEventListener('resize', resize);
+    window.removeEventListener('resize', resize); window.removeEventListener('keydown', gestures.onKeyDown);
     if (animId) cancelAnimationFrame(animId);
     clearTimeout(depthTimer); clearTimeout(boundaryTimer);
   });
@@ -263,15 +281,14 @@ export default function ConfluenceTerminal() {
       </header>
 
       <div class="flex-1 flex min-h-0 relative">
-        <div ref={wrapRef} class="flex-1 relative overflow-hidden bg-gradient-to-b from-[#070D1A] to-[#04070F]"
-          onPointerDown={(e) => { audio.init(); audio.resume(); e.currentTarget.setPointerCapture(e.pointerId); drag = { x: e.offsetX, center: view.center }; }}
-          onPointerMove={onPointerMove}
-          onPointerUp={() => { drag = null; }}
-          onPointerLeave={() => { hover = null; hoverIdx = -1; setHoverBar(null); }}
-          onDblClick={goLive}
-          onWheel={(e) => { e.preventDefault(); view.visible = clamp(view.visible * (e.deltaY > 0 ? 1.08 : 0.92), 20, 300); dirty = true; }}>
+        <div ref={wrapRef} class="flex-1 relative overflow-hidden touch-none bg-gradient-to-b from-[#070D1A] to-[#04070F]"
+          onPointerDown={(e) => { audio.init(); audio.resume(); gestures.onPointerDown(e); }}
+          onPointerMove={gestures.onPointerMove} onPointerUp={gestures.onPointerEnd} onPointerCancel={gestures.onPointerEnd}
+          onPointerLeave={() => { if (!gestures.isDragging()) setHover(null); }}
+          onDblClick={onDoubleClick}
+          onWheel={gestures.onWheel}>
           <canvas ref={sceneRef} class="absolute inset-0 pointer-events-none" />
-          <canvas ref={overRef} class="absolute inset-0 cursor-crosshair" />
+          <canvas ref={overRef} class="absolute inset-0" />
 
           <Show when={shownBar()}>
             <div class="absolute top-2 left-3 z-10 flex items-center gap-3 text-[11px] tabular-nums pointer-events-none">
@@ -294,13 +311,20 @@ export default function ConfluenceTerminal() {
             </div>
           </Show>
 
-          <Show when={!following() && barCount() > 0}>
-            <button onClick={goLive} class="absolute bottom-10 right-24 z-10 px-3 py-1.5 rounded-full bg-[#3FC1FF]/20 border border-[#3FC1FF]/50 text-[#3FC1FF] text-[10px] font-bold hover:bg-[#3FC1FF]/30">⇥ LATEST</button>
+          <Show when={barCount() > 0}>
+            <div class="absolute bottom-9 right-20 z-10 flex gap-2 text-[10px] font-bold">
+              <Show when={!following()}>
+                <button onClick={goLive} class="px-3 py-1.5 rounded-full bg-[#3FC1FF]/20 border border-[#3FC1FF]/50 text-[#3FC1FF] hover:bg-[#3FC1FF]/30">⇥ LATEST</button>
+              </Show>
+              <button onClick={() => { setAutoScale(!autoScale()); dirty = true; }} title="Auto-fit price scale to visible bars (drag the chart vertically or the price axis to turn off)"
+                class={`px-2.5 py-1.5 rounded-full border ${autoScale() ? 'border-[#3FC1FF]/50 text-[#3FC1FF] bg-[#3FC1FF]/10' : 'border-[#24375E] text-[#8CA0BF] bg-[#101C30]'}`}>AUTO</button>
+              <button onClick={resetView} title="Reset zoom and scroll to latest (Alt+R)" class="px-2.5 py-1.5 rounded-full border border-[#24375E] text-[#8CA0BF] bg-[#101C30] hover:text-white">RESET</button>
+            </div>
           </Show>
         </div>
 
         <TerminalSidebar symbol={symbol()} spot={spot()} bar={shownBar()} hovering={!!hoverBar()} buyingState={buyingState()}
-          positions={chartPositions()} onExit={closeOpenPosition} closingId={closingPositionId()} depth={depth()} />
+          options={optionsView()} positions={chartPositions()} onExit={closeOpenPosition} closingId={closingPositionId()} depth={depth()} />
       </div>
 
       <footer class="h-14 border-t border-[#182742] bg-[#070D1A]/95 px-4 flex items-center justify-between text-xs z-20">

@@ -96,6 +96,17 @@ function drawDaySeparators(ctx, view, plot, bars, i0, i1) {
   ctx.font = '10px monospace';
 }
 
+export function drawOptionLevels(ctx, view, plot, levels) {
+  ctx.lineWidth = 1; ctx.globalAlpha = 0.7;
+  for (const lv of levels) {
+    const y = Math.round(getY(lv.price, view, plot)) + 0.5;
+    if (y < plot.y || y > plot.b) continue;
+    ctx.strokeStyle = lv.color; ctx.setLineDash(lv.dash);
+    ctx.beginPath(); ctx.moveTo(plot.x, y); ctx.lineTo(plot.r, y); ctx.stroke();
+  }
+  ctx.setLineDash([]); ctx.globalAlpha = 1;
+}
+
 export function drawLastPriceLine(ctx, plot, y, color) {
   if (y < plot.y || y > plot.b) return;
   ctx.strokeStyle = color; ctx.globalAlpha = 0.55; ctx.setLineDash([2, 3]);
@@ -127,6 +138,8 @@ export function drawHeatmap(ctx, view, plot, state, params, aggData, lut, bw) {
 }
 
 const MAX_ZONES_PER_KIND = 4;
+// A zone taller than this share of the view is a gap, not a tradeable level, and just paints over the chart.
+const MAX_ZONE_HEIGHT_FRACTION = 0.25;
 
 function firstBarIndexAt(bars, timeMs) {
   let lo = 0, hi = bars.length;
@@ -155,7 +168,8 @@ function drawZone(ctx, view, plot, x0, zone, rgb) {
 // Zones start at the bar that formed them and only the few nearest to price are drawn, so the chart stays readable.
 function drawZones(ctx, view, plot, state, zones, rgbBySide, isAlive) {
   const mid = (view.minP + view.maxP) / 2;
-  const live = zones.map((z) => ({ z, from: firstBarIndexAt(state.bars, z.startTime) })).filter(({ z, from }) => isAlive(z, from));
+  const maxHeight = (view.maxP - view.minP) * MAX_ZONE_HEIGHT_FRACTION;
+  const live = zones.filter((z) => z.hi - z.lo <= maxHeight).map((z) => ({ z, from: firstBarIndexAt(state.bars, z.startTime) })).filter(({ z, from }) => isAlive(z, from));
   live.sort((a, b) => Math.abs((a.z.lo + a.z.hi) / 2 - mid) - Math.abs((b.z.lo + b.z.hi) / 2 - mid));
   for (const { z, from } of live.slice(0, MAX_ZONES_PER_KIND)) drawZone(ctx, view, plot, getX(from, view, plot), z, rgbBySide[z.side]);
 }
@@ -173,7 +187,7 @@ export function drawFvgAndRays(ctx, view, plot, state, params) {
   }
 }
 
-export function drawKeyLevelsAndPositions(ctx, view, plot, { levels, positions } = {}) {
+export function drawKeyLevels(ctx, view, plot, { levels } = {}) {
   if (levels?.support) {
     const y = Math.round(getY(levels.support, view, plot)) + 0.5;
     if (y >= plot.y && y <= plot.b) {
@@ -186,17 +200,6 @@ export function drawKeyLevelsAndPositions(ctx, view, plot, { levels, positions }
     const y = Math.round(getY(levels.resistance, view, plot)) + 0.5;
     if (y >= plot.y && y <= plot.b) {
       ctx.strokeStyle = '#FF4D6D'; ctx.setLineDash([4, 4]);
-      ctx.beginPath(); ctx.moveTo(plot.x, y); ctx.lineTo(plot.r, y); ctx.stroke();
-      ctx.setLineDash([]);
-    }
-  }
-  if (positions?.length) {
-    for (const p of positions) {
-      const entry = Number(p.entry_price || p.buy_price);
-      if (!Number.isFinite(entry)) continue;
-      const y = Math.round(getY(entry, view, plot)) + 0.5;
-      if (y < plot.y || y > plot.b) continue;
-      ctx.strokeStyle = '#3FC1FF'; ctx.setLineDash([3, 3]);
       ctx.beginPath(); ctx.moveTo(plot.x, y); ctx.lineTo(plot.r, y); ctx.stroke();
       ctx.setLineDash([]);
     }
@@ -245,7 +248,7 @@ export function drawChips(ctx, plot, axisW, chips) {
   ctx.textBaseline = 'middle';
   for (const ch of chips) {
     const tw = ctx.measureText(ch.txt).width + 10, x = plot.r + 2;
-    roundRect(ctx, x, ch.y, Math.min(axisW - 4, tw), ch.h, 4);
+    roundRect(ctx, x, ch.y, Math.min(axisW + 8, tw), ch.h, 4);
     ctx.fillStyle = ch.bg;
     ctx.fill();
     ctx.fillStyle = ch.fg;
@@ -268,11 +271,14 @@ export function drawDepthProfile(ctx, plot, view, aggMap, lastPrice, bin, maxDep
 }
 
 export function drawCrosshair(ctx, hover, plot, view, axisW, bars, bw) {
-  const { px, py } = hover;
-  if (px <= plot.x || px >= plot.r || py <= plot.y || py >= plot.b) return;
+  const { py } = hover;
+  if (hover.px <= plot.x || hover.px >= plot.r || py <= plot.y || py >= plot.b) return;
+  const idx = clamp(Math.floor(view.center - view.visible / 2 + (hover.px - plot.x) / bw), 0, bars.length - 1);
+  // Magnet: the vertical line snaps to the centre of the bar under the cursor, as in TradingView.
+  const px = Math.round(getX(idx, view, plot) + bw / 2) + 0.5;
   ctx.strokeStyle = C.muted; ctx.globalAlpha = 0.5; ctx.setLineDash([3, 4]);
   ctx.beginPath();
-  ctx.moveTo(px + 0.5, plot.y); ctx.lineTo(px + 0.5, plot.b);
+  ctx.moveTo(px, plot.y); ctx.lineTo(px, plot.b);
   ctx.moveTo(plot.x, py + 0.5); ctx.lineTo(plot.r, py + 0.5);
   ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
   const price = view.maxP - ((py - plot.y) / plot.h) * (view.maxP - view.minP);
@@ -280,9 +286,8 @@ export function drawCrosshair(ctx, hover, plot, view, axisW, bars, bw) {
   ctx.fillStyle = C.grid2; ctx.fill(); ctx.fillStyle = C.text;
   ctx.textAlign = 'left'; ctx.font = '10px monospace';
   ctx.fillText(fmtP(price), plot.r + 7, py + 0.5);
-  const hi = clamp(Math.floor(view.center - view.visible / 2 + (px - plot.x) / bw), 0, bars.length - 1);
-  if (!bars[hi]) return;
-  const tt = fmtT(bars[hi].t), tw = ctx.measureText(tt).width + 12;
+  if (!bars[idx]) return;
+  const tt = `${fmtD(bars[idx].t)} ${fmtT(bars[idx].t)}`, tw = ctx.measureText(tt).width + 12;
   roundRect(ctx, clamp(px - tw / 2, plot.x, plot.r - tw), plot.b + 2, tw, 17, 4);
   ctx.fillStyle = C.grid2; ctx.fill(); ctx.fillStyle = C.text;
   ctx.textAlign = 'center';
