@@ -6,9 +6,16 @@ module Api
 
     before_action :authenticate_dashboard_token!
 
+    DEPTH_CACHE_TTL = 4.seconds
+
     def show
-      symbol = params[:symbol] || 'NIFTY'
-      depth = fetch_depth(symbol)
+      symbol = (params[:symbol] || 'NIFTY').to_s.upcase
+
+      # Upstream quote/expiry calls queue on the account-wide Dhan rate limit (up to 10s each);
+      # without this, every polling tab holds a Puma thread and starves the other endpoints.
+      depth = Rails.cache.fetch("depth/#{symbol}", expires_in: DEPTH_CACHE_TTL, race_condition_ttl: 5.seconds) do
+        fetch_depth(symbol)
+      end
 
       render json: depth
     end

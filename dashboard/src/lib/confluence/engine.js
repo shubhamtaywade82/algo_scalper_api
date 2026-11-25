@@ -101,32 +101,49 @@ export function loadRealCandlesIntoSession(state, apiCandles, symbolKey = 'NIFTY
   state.playhead = Math.max(0, state.bars.length - 1);
 }
 
-export function applyLiveDepth(state, depthData) {
-  if (!depthData) return;
-  state.liveDepth = depthData;
-  const f = Math.floor(state.playhead);
-  const bids = depthData.bid || [];
-  const asks = depthData.ask || [];
-  if (bids.length && bids[0].qty > 200) {
-    state.events.push({ bar: f, type: 'wall', price: bids[0].price, size: bids[0].qty, side: 'bid', time: Date.now() });
-  }
-  if (asks.length && asks[0].qty > 200) {
-    state.events.push({ bar: f, type: 'wall', price: asks[0].price, size: asks[0].qty, side: 'ask', time: Date.now() });
-  }
-  if (state.events.length > 40) state.events.splice(0, state.events.length - 40);
+const IST_OFFSET_MS = 330 * 60e3;
+const SESSION_OPEN_MIN = 9 * 60 + 15;
+const SESSION_CLOSE_MIN = 15 * 60 + 30;
+
+function istMinuteOfDay(ms) {
+  return Math.floor(((ms + IST_OFFSET_MS) % 864e5) / 6e4);
 }
 
-export function pushLiveTick(state, price) {
-  if (!state.bars.length || !Number.isFinite(price) || price <= 0) return;
+function isInSession(ms) {
+  const minute = istMinuteOfDay(ms);
+  return minute >= SESSION_OPEN_MIN && minute < SESSION_CLOSE_MIN;
+}
+
+/**
+ * Applies a live index LTP to the forming bar and rolls a new bar when its interval has elapsed.
+ * Returns 'reload' when the series is too stale to patch locally (tab slept, feed gap).
+ */
+export function pushLiveTick(state, price, nowMs = Date.now()) {
+  if (!state.bars.length || !Number.isFinite(price) || price <= 0) return null;
+  const tfMs = TF_MS[state.tf] || 300e3;
   const lastBar = state.bars[state.bars.length - 1];
+  const nextStart = lastBar.t + tfMs;
+
+  if (nowMs >= nextStart && isInSession(nextStart) && isInSession(nowMs)) {
+    if (nowMs >= nextStart + tfMs) return 'reload';
+    const wasLive = state.playhead >= state.bars.length - 1;
+    const path = new Array(12).fill(price);
+    state.bars.push({ t: nextStart, o: price, h: price, l: price, c: price, v: 0, buyR: 0.5, path });
+    if (wasLive) state.playhead = state.bars.length - 1;
+    return 'rolled';
+  }
+
   lastBar.c = price;
   lastBar.h = Math.max(lastBar.h, price);
   lastBar.l = Math.min(lastBar.l, price);
-  if (lastBar.path && lastBar.path.length) lastBar.path[lastBar.path.length - 1] = price;
+  if (lastBar.path?.length) lastBar.path[lastBar.path.length - 1] = price;
+  return 'updated';
 }
 
 export function getAggregatedBook(state, binSize, cache) {
-  if (cache.bin === binSize && cache.len === state.bars.length && cache.symbol === state.symbol) return cache.data;
+  const last = state.bars[state.bars.length - 1];
+  const sig = last ? `${state.bars.length}:${last.h}:${last.l}` : '0';
+  if (cache.bin === binSize && cache.sig === sig && cache.symbol === state.symbol) return cache.data;
   const data = [];
   let maxV = 1;
   for (let i = 0; i < state.bars.length; i++) {
@@ -145,7 +162,7 @@ export function getAggregatedBook(state, binSize, cache) {
     data[i] = m;
   }
   cache.data = data;
-  cache.len = state.bars.length;
+  cache.sig = sig;
   cache.bin = binSize;
   cache.symbol = state.symbol;
   return data;
@@ -156,6 +173,8 @@ export function getFormingValues(state) {
   const b = state.bars[i];
   if (!b) return { i: 0, b: null, f: 0, cur: 0, h: 0, l: 0 };
   const f = clamp(state.playhead - i, 0, 1);
+  const isLiveBar = i === state.bars.length - 1 && f === 0;
+  if (isLiveBar) return { i, b, f, cur: b.c, h: b.h, l: b.l };
   const k = f * 11;
   const i0 = Math.floor(k);
   const i1 = Math.min(11, i0 + 1);

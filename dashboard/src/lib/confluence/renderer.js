@@ -11,11 +11,17 @@ export const C = {
   text: '#E9EFFA', muted: '#8CA0BF', faint: '#5A6C8C', grid: '#131F36', grid2: '#1B2B4A', surface: '#0B1424', surface2: '#101C30'
 };
 
-export const fmtP = (p) => (p != null ? Number(p).toFixed(2) : '--');
+const INR_FMT = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export const fmtP = (p) => (Number.isFinite(Number(p)) && p != null ? INR_FMT.format(Number(p)) : '--');
 export const fmtS = (s) => (s >= 1000 ? (s / 1000).toFixed(1) + 'k' : Math.round(s) + '');
-export const fmtT = (t) => {
-  const d = new Date(t);
-  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+// Bars are NSE session times; format in IST regardless of the viewer's timezone.
+const IST_TIME = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
+const IST_DAY = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });
+export const fmtT = (t) => IST_TIME.format(new Date(t));
+export const fmtD = (t) => IST_DAY.format(new Date(t));
+export const fmtCountdown = (ms) => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
 };
 
 const hexRGB = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
@@ -66,7 +72,8 @@ export function drawGrid(ctx, view, plot, bars, dpr, bw, axisW) {
   }
   const k = Math.max(1, Math.ceil(84 / bw)), left = view.center - view.visible / 2;
   const i0 = Math.max(0, Math.floor(left) - 1), i1 = Math.min(bars.length - 1, Math.ceil(left + view.visible) + 1);
-  for (let i = Math.ceil(i0 / k) * k; i <= i1; i++) {
+  drawDaySeparators(ctx, view, plot, bars, i0, i1);
+  for (let i = Math.ceil(i0 / k) * k; i <= i1; i += k) {
     if (!bars[i]) continue;
     const x = Math.round(getX(i, view, plot) + bw / 2) + 0.5;
     ctx.strokeStyle = C.grid;
@@ -74,6 +81,26 @@ export function drawGrid(ctx, view, plot, bars, dpr, bw, axisW) {
     ctx.fillStyle = C.faint; ctx.textAlign = 'center';
     ctx.fillText(fmtT(bars[i].t), x, plot.b + 13);
   }
+}
+
+function drawDaySeparators(ctx, view, plot, bars, i0, i1) {
+  ctx.strokeStyle = C.grid2; ctx.fillStyle = C.muted; ctx.textAlign = 'left'; ctx.font = '600 9px monospace';
+  for (let i = Math.max(1, i0); i <= i1; i++) {
+    if (!bars[i] || fmtD(bars[i].t) === fmtD(bars[i - 1].t)) continue;
+    const x = Math.round(getX(i, view, plot)) + 0.5;
+    ctx.setLineDash([2, 4]);
+    ctx.beginPath(); ctx.moveTo(x, plot.y); ctx.lineTo(x, plot.b); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillText(fmtD(bars[i].t), x + 4, plot.y + 10);
+  }
+  ctx.font = '10px monospace';
+}
+
+export function drawLastPriceLine(ctx, plot, y, color) {
+  if (y < plot.y || y > plot.b) return;
+  ctx.strokeStyle = color; ctx.globalAlpha = 0.55; ctx.setLineDash([2, 3]);
+  ctx.beginPath(); ctx.moveTo(plot.x, Math.round(y) + 0.5); ctx.lineTo(plot.r, Math.round(y) + 0.5); ctx.stroke();
+  ctx.setLineDash([]); ctx.globalAlpha = 1;
 }
 
 export function drawHeatmap(ctx, view, plot, state, params, aggData, lut, bw) {
@@ -99,46 +126,50 @@ export function drawHeatmap(ctx, view, plot, state, params, aggData, lut, bw) {
   }
 }
 
+const MAX_ZONES_PER_KIND = 4;
+
+function firstBarIndexAt(bars, timeMs) {
+  let lo = 0, hi = bars.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (bars[mid].t < timeMs) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+
+// An order block is dead once a later bar closes through it.
+function isOrderBlockAlive(ob, bars, from) {
+  for (let i = from + 1; i < bars.length; i++) {
+    if (ob.side === 'bull' ? bars[i].c < ob.lo : bars[i].c > ob.hi) return false;
+  }
+  return true;
+}
+
+function drawZone(ctx, view, plot, x0, zone, rgb) {
+  const y0 = getY(zone.hi, view, plot), y1 = getY(zone.lo, view, plot);
+  if (y1 < plot.y || y0 > plot.b || x0 > plot.r) return;
+  const x = Math.max(plot.x, x0);
+  ctx.fillStyle = `rgba(${rgb},0.10)`; ctx.fillRect(x, y0, plot.r - x, y1 - y0);
+  ctx.strokeStyle = `rgba(${rgb},0.55)`; ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(x, y0 + 0.5); ctx.lineTo(plot.r, y0 + 0.5); ctx.moveTo(x, y1 - 0.5); ctx.lineTo(plot.r, y1 - 0.5); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// Zones start at the bar that formed them and only the few nearest to price are drawn, so the chart stays readable.
+function drawZones(ctx, view, plot, state, zones, rgbBySide, isAlive) {
+  const mid = (view.minP + view.maxP) / 2;
+  const live = zones.map((z) => ({ z, from: firstBarIndexAt(state.bars, z.startTime) })).filter(({ z, from }) => isAlive(z, from));
+  live.sort((a, b) => Math.abs((a.z.lo + a.z.hi) / 2 - mid) - Math.abs((b.z.lo + b.z.hi) / 2 - mid));
+  for (const { z, from } of live.slice(0, MAX_ZONES_PER_KIND)) drawZone(ctx, view, plot, getX(from, view, plot), z, rgbBySide[z.side]);
+}
+
 export function drawFvgAndRays(ctx, view, plot, state, params) {
-  if (params.ob && state.orderBlocks) {
-    for (const ob of state.orderBlocks) {
-      const y0 = getY(ob.hi, view, plot), y1 = getY(ob.lo, view, plot);
-      if (y1 < plot.y || y0 > plot.b) continue;
-      ctx.fillStyle = ob.side === 'bull' ? 'rgba(25,227,177,0.15)' : 'rgba(255,77,109,0.15)';
-      ctx.fillRect(plot.x, y0, plot.w, y1 - y0);
-      ctx.strokeStyle = ob.side === 'bull' ? C.bid : C.ask;
-      ctx.strokeRect(plot.x, y0, plot.w, y1 - y0);
-    }
-  }
-  if (params.fvg && state.zones) {
-    for (const z of state.zones) {
-      const y0 = getY(z.hi, view, plot), y1 = getY(z.lo, view, plot);
-      if (y1 < plot.y || y0 > plot.b) continue;
-      const a = z.filled ? 0.04 : 0.12;
-      ctx.fillStyle = z.side === 'bull' ? `rgba(25,227,177,${a})` : `rgba(255,77,109,${a})`;
-      ctx.fillRect(plot.x, y0, plot.w, y1 - y0);
-      ctx.strokeStyle = z.side === 'bull' ? C.bid : C.ask;
-      ctx.globalAlpha = 0.35;
-      ctx.setLineDash([4, 4]);
-      ctx.strokeRect(plot.x, y0, plot.w, y1 - y0);
-      ctx.setLineDash([]);
-      ctx.globalAlpha = 1;
-    }
-  }
-  if (state.pools) {
-    for (const p of state.pools) {
-      const y = Math.round(getY(p.level, view, plot)) + 0.5;
-      if (y < plot.y || y > plot.b) continue;
-      ctx.strokeStyle = p.type === 'BSL' ? C.cyan : C.amber;
-      ctx.globalAlpha = p.swept ? 0.2 : 0.6;
-      ctx.setLineDash([2, 3]);
-      ctx.beginPath();
-      ctx.moveTo(plot.x, y);
-      ctx.lineTo(plot.r, y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.globalAlpha = 1;
-    }
+  const rgb = { bull: '25,227,177', bear: '255,77,109' };
+  if (params.ob && state.orderBlocks) drawZones(ctx, view, plot, state, state.orderBlocks, rgb, (ob, from) => isOrderBlockAlive(ob, state.bars, from));
+  if (params.fvg && state.zones) drawZones(ctx, view, plot, state, state.zones, rgb, (z) => !z.filled);
+  for (const p of state.pools || []) {
+    const y = Math.round(getY(p.level, view, plot)) + 0.5;
+    if (p.swept || y < plot.y || y > plot.b) continue;
+    ctx.strokeStyle = p.type === 'BSL' ? C.cyan : C.amber; ctx.globalAlpha = 0.5; ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.moveTo(plot.x, y); ctx.lineTo(plot.r, y); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
   }
 }
 
@@ -223,24 +254,7 @@ export function drawChips(ctx, plot, axisW, chips) {
   }
 }
 
-export function drawDepthProfile(ctx, plot, view, liveDepth, aggMap, lastPrice, bin, maxDepthW) {
-  if (liveDepth && (liveDepth.bid?.length || liveDepth.ask?.length)) {
-    const bids = liveDepth.bid || [], asks = liveDepth.ask || [];
-    let maxQty = 1;
-    for (const b of bids) if (b.qty > maxQty) maxQty = b.qty;
-    for (const a of asks) if (a.qty > maxQty) maxQty = a.qty;
-    for (const b of bids) {
-      if (b.price < view.minP || b.price > view.maxP) continue;
-      ctx.fillStyle = 'rgba(25,227,177,0.7)';
-      ctx.fillRect(plot.r - (b.qty / maxQty) * maxDepthW, getY(b.price, view, plot) - 2, (b.qty / maxQty) * maxDepthW, 4);
-    }
-    for (const a of asks) {
-      if (a.price < view.minP || a.price > view.maxP) continue;
-      ctx.fillStyle = 'rgba(255,77,109,0.7)';
-      ctx.fillRect(plot.r - (a.qty / maxQty) * maxDepthW, getY(a.price, view, plot) - 2, (a.qty / maxQty) * maxDepthW, 4);
-    }
-    return;
-  }
+export function drawDepthProfile(ctx, plot, view, aggMap, lastPrice, bin, maxDepthW) {
   const range = view.maxP - view.minP, binPx = Math.max(1.5, (bin / range) * plot.h - 1);
   let maxS = 1;
   for (const s of aggMap.values()) maxS = Math.max(maxS, s);
