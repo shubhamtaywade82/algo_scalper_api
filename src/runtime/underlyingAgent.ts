@@ -96,6 +96,31 @@ function describe(error: unknown): string {
 }
 
 /**
+ * A signal from outside the agent: algo_scalper_api forwards one as trade-intent/1 (ADR-015). It is a signal,
+ * never an order: it runs the same pipeline as the agent's own signals, so every gate can still refuse it.
+ */
+export interface ExternalSignalRequest {
+  readonly direction: Direction;
+  /** Reported per strategy, e.g. `rails:supertrend-adx`, so the performance report keeps the sources apart. */
+  readonly strategy: string;
+  readonly reasons: readonly string[];
+  /** Epoch ms after which the signal must not become an order. Checked on receipt and again at submit. */
+  readonly expiresAt: number;
+}
+
+/** What happened to an external signal: an entry order went out, or a stable code saying why not. */
+export interface ExternalSignalResult {
+  readonly outcome: 'accepted' | 'dropped' | 'expired';
+  readonly code?: string;
+  readonly detail?: string;
+  readonly correlationId?: string;
+}
+
+function refused(code: string, detail: string): ExternalSignalResult {
+  return { outcome: code === 'INTENT_EXPIRED' ? 'expired' : 'dropped', code, detail };
+}
+
+/**
  * One deterministic trading agent per index. It owns the trade state machine
  * for its underlying and is the only component that mutates that state.
  *
@@ -121,6 +146,8 @@ interface SideSlot {
   staleAlerted: boolean;
   lastTradedFlipBarTime?: number | undefined;
   lastTradedBarTime?: number | undefined;
+  /** Set while an external signal owns this slot; settled exactly once, when it is submitted, dropped or halted. */
+  external?: { readonly expiresAt: number; readonly settle: (result: ExternalSignalResult) => void } | undefined;
 }
 
 export class UnderlyingAgent {
@@ -593,6 +620,56 @@ export class UnderlyingAgent {
     return `${this.symbol}: test ${dir} signal triggered at spot ${spot}`;
   }
 
+  /** Runs an external signal on the queue, so its IDLE check is ordered with every other event on this underlying. */
+  submitExternalSignal(request: ExternalSignalRequest): Promise<ExternalSignalResult> {
+    return new Promise((resolve) => {
+      this.queue.run(async () => {
+        const slot = this.slotForDirection(request.direction);
+        const refusal = this.externalRefusal(request, slot);
+        if (refusal !== undefined || this.lastSpot === undefined) {
+          resolve(refusal ?? refused('DATA_UNAVAILABLE', 'no spot tick received yet'));
+          return;
+        }
+        slot.external = { expiresAt: request.expiresAt, settle: resolve };
+        const signal: Signal = {
+          underlying: this.symbol,
+          direction: request.direction,
+          barTime: this.now(),
+          spot: this.lastSpot.price,
+          reasons: request.reasons,
+          strategy: request.strategy,
+        };
+        await this.processSignal(signal, slot);
+      });
+    });
+  }
+
+  private externalRefusal(request: ExternalSignalRequest, slot: SideSlot): ExternalSignalResult | undefined {
+    const now = this.now();
+    if (now >= request.expiresAt) {
+      return refused('INTENT_EXPIRED', `expired ${now - request.expiresAt} ms before it reached the agent`);
+    }
+    const blocked = this.entryBlockReason();
+    if (blocked !== undefined) {
+      return refused('ENTRY_BLOCKED', blocked);
+    }
+    const { session } = this.deps.config;
+    const minute = istParts(now).minuteOfDay;
+    if (minute < session.entryStartMinute || minute >= session.entryEndMinute) {
+      return refused('ENTRY_WINDOW_CLOSED', `minute ${minute} is outside the entry window ${session.entryStartMinute}-${session.entryEndMinute}`);
+    }
+    if (slot.fsm.state !== 'IDLE') {
+      return refused('SLOT_BUSY', `${this.symbol} ${slot.optionType} side is ${slot.fsm.state}`);
+    }
+    return undefined;
+  }
+
+  private settleExternal(slot: SideSlot, result: ExternalSignalResult): void {
+    const external = slot.external;
+    slot.external = undefined;
+    external?.settle(result);
+  }
+
   private async processSignal(signal: Signal, slot: SideSlot): Promise<void> {
     slot.fsm.dispatch('SIGNAL_FOUND');
     this.lastSignal = { direction: signal.direction, barTime: signal.barTime, spot: signal.spot, reasons: signal.reasons, at: this.now() };
@@ -638,6 +715,10 @@ export class UnderlyingAgent {
     const stale = this.staleAtSubmit();
     if (stale !== undefined) {
       this.drop('STALE_AT_SUBMIT', stale, slot);
+      return;
+    }
+    if (slot.external !== undefined && this.now() >= slot.external.expiresAt) {
+      this.drop('INTENT_EXPIRED', `expired ${this.now() - slot.external.expiresAt} ms before submit`, slot);
       return;
     }
     await this.submitPreparedOrder(prepared.order, prepared.snapshot, prepared.risk, slot);
@@ -707,6 +788,7 @@ export class UnderlyingAgent {
 
   private dispatchEntry(order: EntryOrder, slot: SideSlot): void {
     slot.fsm.dispatch('ENTRY_SUBMITTED');
+    this.settleExternal(slot, { outcome: 'accepted', correlationId: order.correlationId });
     slot.pending = order;
     this.deps.book.recordEntry(this.symbol, slot.optionType);
     this.deps.book.setOpenRisk(this.symbol, this.budgetRiskAtStop(order.contract, order.quantity, order.entryReference, order.stopLossPrice), slot.optionType);
@@ -754,6 +836,9 @@ export class UnderlyingAgent {
     }
     this.record('signal_dropped', { code, detail });
     this.deps.logger.info('signal dropped', { underlying: this.symbol, code, detail });
+    if (slot !== undefined) {
+      this.settleExternal(slot, refused(code, detail));
+    }
   }
 
   /** A journal write that must reach the ledger. The caller decides what a failure means. */
@@ -1391,6 +1476,7 @@ export class UnderlyingAgent {
   /** Enters HALTED (or applies the given event) and tells the orchestrator, which may disengage the book. */
   private halt(reason: string, event: TradeEvent = 'HALT'): void {
     for (const slot of this.allSlots()) {
+      this.settleExternal(slot, refused('HALTED', reason));
       if (slot.fsm.can(event)) {
         slot.fsm.dispatch(event);
       } else if (slot.fsm.state !== 'HALTED' && slot.fsm.can('HALT')) {
@@ -1432,6 +1518,7 @@ function positionView(
     strike: position.contract.strike,
     expiry: position.contract.expiry,
     quantity: position.quantity,
+    lotSize: position.contract.lotSize,
     averagePrice: position.averagePrice,
     stopLossPrice: position.stopLossPrice,
     targetPrice: position.targetPrice,

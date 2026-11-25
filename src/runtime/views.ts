@@ -52,6 +52,8 @@ export interface PositionView {
   readonly strike: number;
   readonly expiry: string;
   readonly quantity: number;
+  /** Shares per lot, so readers can show lots. Absent on views from older snapshots. */
+  readonly lotSize?: number;
   readonly averagePrice: number;
   readonly stopLossPrice: number;
   readonly targetPrice: number;

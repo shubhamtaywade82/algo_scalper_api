@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/shubhamtaywade82/algo_scalper_api/main/contracts/schemas/trade-intents-1.schema.json",
+  "title": "Trade intent poll envelope (trade-intents/1)",
+  "description": "Response of `GET /api/trade_intents?after=<cursor>&mode=<mode>` (operator token). Pending, unexpired intents oldest-first plus a control block. The agent stops accepting when circuit_breaker.tripped is true, intake_enabled is false, or server_time skews more than its configured limit from its own clock.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "cursor", "intents", "control"],
+  "properties": {
+    "schema": { "const": "trade-intents/1" },
+    "cursor": {
+      "type": "string",
+      "description": "Opaque. Pass back as `after` on the next poll; only intents after it are returned."
+    },
+    "intents": {
+      "type": "array",
+      "description": "Each item is a trade-intent/1 object; validate it against trade-intent-1.schema.json (no cross-file $ref, so every validator stays standalone).",
+      "items": { "type": "object" }
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["circuit_breaker", "intake_enabled", "server_time"],
+      "properties": {
+        "circuit_breaker": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tripped"],
+          "properties": { "tripped": { "type": "boolean" } }
+        },
+        "intake_enabled": {
+          "type": "boolean",
+          "description": "True only while Rails runs with execution.engine = agent."
+        },
+        "server_time": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

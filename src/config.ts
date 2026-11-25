@@ -207,6 +207,23 @@ export interface AgentConfig {
     readonly leaseTtlMs: number;
     readonly postgresMaxConnections: number;
   };
+  /** ADR-015: the link to algo_scalper_api. Off unless configured. */
+  readonly railsBridge: {
+    /** Pulls trade-intent/1 signals from Rails and reports one intent-outcome/1 each. Paper and sandbox only. */
+    readonly intake: RailsIntakeConfig | undefined;
+    /** Publishes agent-snapshot/1 to Redis `trading:agent:snapshot` so the Rails dashboard can show this agent. */
+    readonly snapshotEnabled: boolean;
+  };
+}
+
+export interface RailsIntakeConfig {
+  /** Rails base URL, without a trailing slash. */
+  readonly url: string;
+  /** Rails `API_OPERATOR_TOKEN`. A secret: never logged. */
+  readonly key: string;
+  readonly pollMs: number;
+  /** The intake pauses while Rails' clock differs from this one by more than this. */
+  readonly maxClockSkewMs: number;
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -342,12 +359,45 @@ function parseTokenAuthority(env: Env): Extract<DhanAuthConfig, { kind: 'authori
   if (url === undefined || key === undefined) {
     throw new Error('DHAN_TOKEN_AUTHORITY_URL and DHAN_TOKEN_AUTHORITY_KEY must be set together');
   }
-  const trustedHosts = (optionalText(env, 'DHAN_TOKEN_AUTHORITY_TRUSTED_HOSTS') ?? '')
+  requireHttpsOrLoopback('DHAN_TOKEN_AUTHORITY_URL', url, hostList(optionalText(env, 'DHAN_TOKEN_AUTHORITY_TRUSTED_HOSTS')));
+  return { kind: 'authority', url, key };
+}
+
+function hostList(raw: string | undefined): string[] {
+  return (raw ?? '')
     .split(',')
     .map((host) => host.trim().toLowerCase())
     .filter((host) => host.length > 0);
-  requireHttpsOrLoopback('DHAN_TOKEN_AUTHORITY_URL', url, trustedHosts);
-  return { kind: 'authority', url, key };
+}
+
+/**
+ * ADR-015. The intake sends the Rails operator token, so the same https-or-loopback rule as the token authority
+ * applies. Live mode refuses it until a separate promotion; the snapshot heartbeat is display-only and needs Redis.
+ */
+function parseRailsBridge(env: Env, mode: TradingMode, redisUrl: string | undefined): AgentConfig['railsBridge'] {
+  const snapshotEnabled = flag(env, 'AGENT_SNAPSHOT_ENABLED', false);
+  if (snapshotEnabled && redisUrl === undefined) {
+    throw new Error('AGENT_SNAPSHOT_ENABLED requires REDIS_URL (the snapshot is written to Redis)');
+  }
+  const url = optionalText(env, 'RAILS_INTENT_URL');
+  const key = optionalText(env, 'RAILS_INTENT_KEY');
+  if (url === undefined && key === undefined) {
+    return { intake: undefined, snapshotEnabled };
+  }
+  if (url === undefined || key === undefined) {
+    throw new Error('RAILS_INTENT_URL and RAILS_INTENT_KEY must be set together');
+  }
+  if (mode === 'live') {
+    throw new Error('RAILS_INTENT_URL is refused in live mode: the Rails intake is paper and sandbox only (ADR-015)');
+  }
+  requireHttpsOrLoopback('RAILS_INTENT_URL', url, hostList(optionalText(env, 'RAILS_INTENT_TRUSTED_HOSTS')));
+  const intake = {
+    url: url.replace(/\/+$/, ''),
+    key,
+    pollMs: number(env, 'INTENT_POLL_MS', 1_000, { min: 250, max: 10_000, integer: true }),
+    maxClockSkewMs: number(env, 'INTENT_MAX_CLOCK_SKEW_MS', 5_000, { min: 500, max: 60_000, integer: true }),
+  };
+  return { intake, snapshotEnabled };
 }
 
 /**
@@ -689,6 +739,7 @@ export function loadConfig(env: Env = process.env, configPath?: string): AgentCo
       telegram: parseTelegramConfig(env),
     },
     persistence: parsePersistence(env, mode),
+    railsBridge: parseRailsBridge(env, mode, optionalText(env, 'REDIS_URL')),
   };
 
   validateCrossFields(config);

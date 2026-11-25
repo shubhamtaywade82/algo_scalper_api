@@ -210,6 +210,40 @@ at start'), `tests/gatewayPort.test.ts` ('GatewayExecutionPort protection, trail
 `tests/liveExecution.test.ts` ('LiveExecutionPort protection and the broker P&L exit'), `tests/config.test.ts`
 ('stale-position grace and broker P&L exit settings'), `tests/cockpit.test.ts` ('position protection label').
 
+## ADR-015 algo_scalper_api forwards signals, never orders, and the agent pulls them
+
+**Context.** algo_scalper_api (Rails) and this agent ran as two bots on one Dhan account, each with its own signals and its
+own execution. Rails has the broader signal and dashboard side (a strategy platform, SMC, regime, guards); this agent has the
+stricter execution side (one transition table, a mandatory bracket, unconfirmed outcomes never replayed, fail-closed
+restart, fixed live ceilings). With Rails' `execution.engine: agent`, Rails stops placing entries and forwards each entry
+signal as `trade-intent/1` instead.
+
+**Decision.** `src/runtime/intentIntake.ts` polls `GET /api/trade_intents` (envelope `trade-intents/1`) with the Rails
+operator token (`RAILS_INTENT_URL`, `RAILS_INTENT_KEY`; https, or http on loopback or a host in
+`RAILS_INTENT_TRUSTED_HOSTS`). The agent opens no port. Each intent is journalled durably (`intent_received`) before anything
+else and replayed on restart, so it runs at most once; a failed write drops it as `INTENT_NOT_DURABLE`. An intent is a
+signal, not an order: it carries an underlying, a direction and a strategy name, and runs through
+`UnderlyingAgent.submitExternalSignal`, the same pipeline as the agent's own signals, so contract choice, sizing, the risk
+gate, the advisor veto and the bracket stay the agent's. It is refused when Rails reports the circuit breaker tripped
+(`CIRCUIT_BREAKER`), forwarding off (`INTAKE_DISABLED`), the clocks differ by more than `INTENT_MAX_CLOCK_SKEW_MS`
+(`CLOCK_SKEW`), the mode differs (`MODE_MISMATCH`), the slot is not IDLE (`SLOT_BUSY`), outside the entry window
+(`ENTRY_WINDOW_CLOSED`), or after `expires_at`, which is checked on receipt and again at submit (`INTENT_EXPIRED`). Every
+intent gets exactly one `intent-outcome/1` POST, with the entry correlation id when an order went out. Reports carry the
+strategy as `rails:<slug>`. With `AGENT_SNAPSHOT_ENABLED=true` (needs `REDIS_URL`) the agent writes `agent-snapshot/1` to
+Redis `trading:agent:snapshot` every 2 s with a 10 s TTL, for the Rails dashboard only.
+
+**Consequences.** Rails down means no intents, so no new entries; open positions are unaffected. A run that has lost the trading lease
+stops polling, so it never takes an intent it cannot record, and its snapshot reports `TRADING_LEASE_LOST` as an engaged
+kill switch. In paper only, a run that lost its lease tries to take it back every `LEASE_TTL_MS` (`Lease.reacquireAfterLoss`);
+acquisition still waits for expiry plus the margin, a new epoch fences older writes, and a run that took over keeps it. Live
+keeps a lost lease lost for a human to review. The snapshot also carries the agent's `entry_window`, so Rails stops forwarding
+outside it. The agent's own strategies
+keep running; the first signal on a slot wins. The intake is refused in live mode, at config load and again in
+`Orchestrator.submitExternalSignal`, until a separate promotion. Contracts are vendored from the Rails repo and must not drift.
+
+**Enforced by.** tests: `tests/runtime.test.ts` ('external signals forwarded by algo_scalper_api'), `tests/intentIntake.test.ts`,
+`tests/agentSnapshot.test.ts`, `tests/config.test.ts` ('Rails bridge (ADR-015)').
+
 ## Deliberately not decided yet
 
 Each waits for a concrete need, as `docs/ROADMAP.md` states: a strategy registry service, a Zod schema for every domain

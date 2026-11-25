@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/shubhamtaywade82/algo_scalper_api/main/contracts/schemas/agent-snapshot-1.schema.json",
   "title": "Agent snapshot (agent-snapshot/1)",
-  "description": "Read-only cockpit view of options-trading-agent, written to Redis `trading:agent:snapshot` every ~2 s with a 10 s TTL. Display-only: no trading decision ever reads it. Doubles as the agent heartbeat - a stale snapshot during market hours raises the dead-man alert.",
+  "description": "Read-only cockpit view of options-trading-agent, written to Redis `trading:agent:snapshot` every ~2 s with a 10 s TTL. Display-only: no trading decision ever reads it. Doubles as the agent heartbeat - a stale snapshot during market hours raises the dead-man alert. Changelog: entry_window added (optional, additive).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -25,7 +25,11 @@
       "description": "Snapshot schema/shape version, incremented on breaking changes."
     },
     "mode": {
-      "enum": ["paper", "sandbox", "live"]
+      "enum": [
+        "paper",
+        "sandbox",
+        "live"
+      ]
     },
     "run_id": {
       "type": "string",
@@ -36,17 +40,27 @@
       "format": "date-time"
     },
     "feed_age_ms": {
-      "type": ["integer", "null"],
+      "type": [
+        "integer",
+        "null"
+      ],
       "description": "Age of the freshest market tick. Null when no tick has been received."
     },
     "kill_switch": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["engaged"],
+      "required": [
+        "engaged"
+      ],
       "properties": {
-        "engaged": { "type": "boolean" },
+        "engaged": {
+          "type": "boolean"
+        },
         "reason": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "description": "Why the kill switch engaged, e.g. DAILY_LOSS_BREACH."
         }
       }
@@ -54,11 +68,42 @@
     "day_pnl": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["currency", "realized_inr", "unrealized_inr"],
+      "required": [
+        "currency",
+        "realized_inr",
+        "unrealized_inr"
+      ],
       "properties": {
-        "currency": { "const": "INR" },
-        "realized_inr": { "type": "number" },
-        "unrealized_inr": { "type": "number" }
+        "currency": {
+          "const": "INR"
+        },
+        "realized_inr": {
+          "type": "number"
+        },
+        "unrealized_inr": {
+          "type": "number"
+        }
+      }
+    },
+    "entry_window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start_minute",
+        "end_minute"
+      ],
+      "description": "IST minutes of day [start, end) in which the agent accepts entries. Rails stops forwarding intents outside it.",
+      "properties": {
+        "start_minute": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440
+        },
+        "end_minute": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440
+        }
       }
     },
     "underlyings": {
@@ -66,11 +111,16 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["underlying", "state"],
+        "required": [
+          "underlying",
+          "state"
+        ],
         "properties": {
           "underlying": {
             "type": "string",
-            "examples": ["NIFTY"]
+            "examples": [
+              "NIFTY"
+            ]
           },
           "state": {
             "enum": [
@@ -86,16 +136,48 @@
             "description": "Per-(underlying, direction) slot FSM state. See src/domain/fsm.ts in the agent."
           },
           "position": {
-            "type": ["object", "null"],
+            "type": [
+              "object",
+              "null"
+            ],
             "additionalProperties": false,
-            "required": ["option_type", "quantity_lots", "entry_price"],
+            "required": [
+              "option_type",
+              "quantity_lots",
+              "entry_price"
+            ],
             "properties": {
-              "option_type": { "enum": ["CE", "PE"] },
-              "quantity_lots": { "type": "integer", "minimum": 1 },
-              "entry_price": { "type": "number" },
-              "stop_price": { "type": ["number", "null"] },
-              "target_price": { "type": ["number", "null"] },
-              "unrealized_pnl_inr": { "type": ["number", "null"] }
+              "option_type": {
+                "enum": [
+                  "CE",
+                  "PE"
+                ]
+              },
+              "quantity_lots": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "entry_price": {
+                "type": "number"
+              },
+              "stop_price": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "target_price": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "unrealized_pnl_inr": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
             }
           }
         }

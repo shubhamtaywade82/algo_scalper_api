@@ -146,6 +146,8 @@ export class Lease {
   private renewing: Promise<void> | undefined;
   private lastRenewedSentAt = Number.NEGATIVE_INFINITY;
   private timer: unknown;
+  private reacquireTimer: unknown;
+  private reacquiring = false;
   private readonly lostListeners: LeaseLostListener[] = [];
   private readonly now: () => number;
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
@@ -190,7 +192,44 @@ export class Lease {
     this.lostListeners.push(listener);
   }
 
+  /**
+   * After each loss, tries to take the lease back every `intervalMs`. Acquisition still waits for expiry plus the
+   * margin, so an order sent before the loss is covered, and a run that took over keeps it. A new epoch fences
+   * every write from before the loss. Meant for paper, where a run that lost its lease is otherwise idle for good.
+   */
+  reacquireAfterLoss(intervalMs: number, onReacquired: () => void): void {
+    this.onLost(() => {
+      this.stopReacquiring();
+      this.reacquireTimer = this.setTimer(() => void this.tryReacquire(onReacquired), intervalMs);
+    });
+  }
+
+  private async tryReacquire(onReacquired: () => void): Promise<void> {
+    if (this.reacquiring || this.epochValue !== undefined) {
+      return;
+    }
+    this.reacquiring = true;
+    try {
+      if (await this.acquire()) {
+        this.stopReacquiring();
+        onReacquired();
+      }
+    } catch {
+      // The next interval tries again.
+    } finally {
+      this.reacquiring = false;
+    }
+  }
+
+  private stopReacquiring(): void {
+    if (this.reacquireTimer !== undefined) {
+      this.clearTimer(this.reacquireTimer);
+      this.reacquireTimer = undefined;
+    }
+  }
+
   async release(immediateHandoff = false): Promise<void> {
+    this.stopReacquiring();
     this.stopTimer();
     const epoch = this.epochValue;
     if (epoch === undefined) {

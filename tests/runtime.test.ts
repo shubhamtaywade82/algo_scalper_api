@@ -8,6 +8,7 @@ import type { AdvisoryVerdict, TradeAdvisor } from '../src/llm/advisor.js';
 import type { EventLog } from '../src/ops/eventLog.js';
 import type { Logger } from '../src/ops/logger.js';
 import { Orchestrator, type OrchestratorFeed } from '../src/runtime/orchestrator.js';
+import type { ExternalSignalRequest } from '../src/runtime/underlyingAgent.js';
 import type { DiscoveredOpenPosition } from '../src/runtime/ports.js';
 import { ledgerAndLeaseGate, type TradingGate } from '../src/runtime/tradingGate.js';
 import type { ChainSnapshot } from '../src/options/selector.js';
@@ -1480,5 +1481,115 @@ describe('broker P&L exit arming at start', () => {
     const harness = build({ BROKER_PNL_EXIT: 'on' }, { brokerPnlExitArm: armed });
     await harness.orchestrator.start();
     assert.deepEqual(armed, []);
+  });
+});
+
+describe('runtime: external signals forwarded by algo_scalper_api', () => {
+  function request(harness: Harness, overrides: Partial<ExternalSignalRequest> = {}): ExternalSignalRequest {
+    return {
+      direction: 'BULLISH',
+      strategy: 'rails:supertrend-adx',
+      reasons: ['supertrend_bullish_adx_confirmed'],
+      expiresAt: harness.now() + 20_000,
+      ...overrides,
+    };
+  }
+
+  async function started(env: Record<string, string> = {}, options: Parameters<typeof build>[1] = {}): Promise<Harness> {
+    const harness = build(env, options);
+    await harness.orchestrator.start();
+    harness.feed.emit({ exchangeSegment: 'IDX_I', securityId: '13', ltp: 101.2, ltt: harness.now() });
+    return harness;
+  }
+
+  it('should run an external signal through the normal entry pipeline and report it accepted', async () => {
+    const harness = await started();
+
+    const outcome = harness.orchestrator.submitExternalSignal('NIFTY', request(harness));
+    await settle(harness.orchestrator);
+
+    const result = await outcome;
+    const submitted = harness.events.find((event) => event.type === 'entry_submitted');
+    assert.equal(result.outcome, 'accepted');
+    assert.equal(result.correlationId, submitted?.payload['correlationId']);
+    assert.equal(submitted?.payload['strategy'], 'rails:supertrend-adx');
+  });
+
+  it('should report SLOT_BUSY when that side already holds a position', async () => {
+    const harness = await started();
+    void harness.orchestrator.submitExternalSignal('NIFTY', request(harness));
+    await settle(harness.orchestrator);
+
+    const second = await harness.orchestrator.submitExternalSignal('NIFTY', request(harness));
+
+    assert.deepEqual([second.outcome, second.code], ['dropped', 'SLOT_BUSY']);
+  });
+
+  it('should report the pipeline drop code when the agent refuses the entry itself', async () => {
+    const harness = await started({}, { funds: 1 });
+
+    const outcome = harness.orchestrator.submitExternalSignal('NIFTY', request(harness));
+    await settle(harness.orchestrator);
+
+    const result = await outcome;
+    assert.equal(result.outcome, 'dropped');
+    assert.equal(result.code, harness.events.find((event) => event.type === 'signal_dropped')?.payload['code']);
+    assert.ok(!harness.events.some((event) => event.type === 'entry_submitted'));
+  });
+
+  it('should drop an intent that expired before it reached the agent', async () => {
+    const harness = await started();
+
+    const result = await harness.orchestrator.submitExternalSignal('NIFTY', request(harness, { expiresAt: harness.now() - 1 }));
+
+    assert.deepEqual([result.outcome, result.code], ['expired', 'INTENT_EXPIRED']);
+    assert.ok(!harness.events.some((event) => event.type === 'signal_detected'));
+  });
+
+  it('should drop an intent that expired while the entry was being prepared', async () => {
+    // The funds call is the last REST call before the risk gate; the clock passes the expiry while it runs.
+    let passExpiry = (): void => undefined;
+    const harness = await started({}, { onFunds: () => passExpiry() });
+    passExpiry = () => harness.setClock('09:50:05');
+    const outcome = harness.orchestrator.submitExternalSignal('NIFTY', request(harness, { expiresAt: harness.now() + 1_000 }));
+    await settle(harness.orchestrator);
+
+    const result = await outcome;
+    assert.deepEqual([result.outcome, result.code], ['expired', 'INTENT_EXPIRED']);
+    assert.ok(!harness.events.some((event) => event.type === 'entry_submitted'));
+  });
+
+  it('should refuse an intent outside the entry window', async () => {
+    const harness = await started();
+    harness.setClock('15:00');
+
+    const result = await harness.orchestrator.submitExternalSignal('NIFTY', request(harness, { expiresAt: harness.now() + 20_000 }));
+
+    assert.deepEqual([result.outcome, result.code], ['dropped', 'ENTRY_WINDOW_CLOSED']);
+  });
+
+  it('should refuse an intent before the first spot tick', async () => {
+    const harness = build();
+    await harness.orchestrator.start();
+
+    const result = await harness.orchestrator.submitExternalSignal('NIFTY', request(harness));
+
+    assert.deepEqual([result.outcome, result.code], ['dropped', 'DATA_UNAVAILABLE']);
+  });
+
+  it('should refuse an unknown underlying', async () => {
+    const harness = await started();
+
+    const result = await harness.orchestrator.submitExternalSignal('FINNIFTY', request(harness));
+
+    assert.deepEqual([result.outcome, result.code], ['dropped', 'UNKNOWN_UNDERLYING']);
+  });
+
+  it('should refuse external signals in live mode', async () => {
+    const harness = build({ MODE: 'live', LIVE_TRADING_ACK: 'I_ACCEPT_LIVE_ORDER_RISK', REDIS_URL: 'redis://test.invalid' });
+
+    const result = await harness.orchestrator.submitExternalSignal('NIFTY', request(harness));
+
+    assert.deepEqual([result.outcome, result.code], ['dropped', 'LIVE_INTAKE_DISABLED']);
   });
 });

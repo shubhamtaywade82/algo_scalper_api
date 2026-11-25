@@ -10,7 +10,7 @@ import { istParts, shiftDateKey } from '../time/ist.js';
 import { assertWarmupClock } from './clockGuard.js';
 import type { DiscoveredOpenPosition, FeedPort, MarketPort } from './ports.js';
 import { CockpitChainWatch } from './cockpitChainWatch.js';
-import { UnderlyingAgent } from './underlyingAgent.js';
+import { UnderlyingAgent, type ExternalSignalRequest, type ExternalSignalResult } from './underlyingAgent.js';
 import type { SharedChainContextReader } from '../options/sharedChainContext.js';
 import type { CockpitSnapshot, FeedStatusView } from './views.js';
 import type { TradingGate } from './tradingGate.js';
@@ -485,6 +485,19 @@ export class Orchestrator {
     this.services.logger.info('strategy toggled', { id, result });
     this.notifyView();
     return result;
+  }
+
+  /** Runs a signal forwarded by algo_scalper_api (trade-intent/1) through one agent's normal entry pipeline. */
+  submitExternalSignal(symbol: string, request: ExternalSignalRequest): Promise<ExternalSignalResult> {
+    // ADR-015: Rails intake is paper and sandbox only until a separate live promotion.
+    if (this.config.mode === 'live') {
+      return Promise.resolve({ outcome: 'dropped', code: 'LIVE_INTAKE_DISABLED', detail: 'external signals are refused in live mode' });
+    }
+    const agent = this.agents.get(symbol);
+    if (agent === undefined) {
+      return Promise.resolve({ outcome: 'dropped', code: 'UNKNOWN_UNDERLYING', detail: `${symbol} is not traded by this agent` });
+    }
+    return agent.submitExternalSignal(request).finally(() => this.notifyView());
   }
 
   /** Triggers an immediate test trade on the live market for fast end-to-end verification without waiting for candle closes. */

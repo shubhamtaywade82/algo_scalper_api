@@ -438,3 +438,41 @@ describe('stale-position grace and broker P&L exit settings', () => {
     assert.equal(loadConfig({ ...STALE_ENV, BROKER_PNL_EXIT: 'on' }).ops.brokerPnlExit, true);
   });
 });
+
+describe('loadConfig: Rails bridge (ADR-015)', () => {
+  const INTAKE = { ...BASE, RAILS_INTENT_URL: 'http://127.0.0.1:3011/', RAILS_INTENT_KEY: 'operator-key' };
+
+  it('should leave the bridge off by default', () => {
+    const config = loadConfig(BASE);
+    assert.equal(config.railsBridge.intake, undefined);
+    assert.equal(config.railsBridge.snapshotEnabled, false);
+  });
+
+  it('should read the intake URL, key and timing with defaults', () => {
+    const { intake } = loadConfig(INTAKE).railsBridge;
+    assert.deepEqual(intake, { url: 'http://127.0.0.1:3011', key: 'operator-key', pollMs: 1_000, maxClockSkewMs: 5_000 });
+  });
+
+  it('should require the URL and key together', () => {
+    assert.throws(() => loadConfig({ ...BASE, RAILS_INTENT_URL: 'http://127.0.0.1:3011' }), /RAILS_INTENT_URL and RAILS_INTENT_KEY must be set together/);
+  });
+
+  it('should refuse plain http to another host unless it is trusted', () => {
+    assert.throws(() => loadConfig({ ...INTAKE, RAILS_INTENT_URL: 'http://asa-web:3011' }), /RAILS_INTENT_URL must be https/);
+    const config = loadConfig({ ...INTAKE, RAILS_INTENT_URL: 'http://asa-web:3011', RAILS_INTENT_TRUSTED_HOSTS: 'asa-web' });
+    assert.equal(config.railsBridge.intake?.url, 'http://asa-web:3011');
+  });
+
+  it('should refuse the intake in live mode', () => {
+    assert.throws(
+      () => loadConfig({ ...INTAKE, MODE: 'live', LIVE_TRADING_ACK: LIVE_ACK_PHRASE }),
+      /RAILS_INTENT_URL is refused in live mode/,
+    );
+  });
+
+  it('should require Redis for the snapshot heartbeat', () => {
+    const { REDIS_URL: _redis, ...withoutRedis } = BASE;
+    assert.equal(loadConfig({ ...BASE, AGENT_SNAPSHOT_ENABLED: 'true' }).railsBridge.snapshotEnabled, true);
+    assert.throws(() => loadConfig({ ...withoutRedis, AGENT_SNAPSHOT_ENABLED: 'true' }), /AGENT_SNAPSHOT_ENABLED requires REDIS_URL/);
+  });
+});

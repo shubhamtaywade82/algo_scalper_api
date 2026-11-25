@@ -242,6 +242,41 @@ describe('Lease', () => {
     assert.match(lost[0] ?? '', /held by another run|expired/);
   });
 
+  it('takes the lease back after a loss once it is free, and leaves it to a run that took over', async () => {
+    let clock = 0;
+    const now = () => clock;
+    const store = new MemoryLeaseStore(now);
+    const timers: (() => void)[] = [];
+    const options = { clientId: CLIENT, ttlMs: 900, marginMs: 200, now, setTimer: (fn: () => void) => timers.push(fn), clearTimer: () => undefined };
+    const a = new Lease(store, { ...options, runId: 'run-a' });
+    let reacquired = 0;
+    a.reacquireAfterLoss(300, () => { reacquired += 1; });
+    await a.acquire();
+
+    clock += 1_000;
+    await a.renewTick();
+    assert.equal(a.holds(), false, 'the lease expired, so it is lost');
+    const retry = timers.at(-1)!;
+    retry();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(reacquired, 0, 'not before expiry plus the margin');
+
+    clock += 200;
+    retry();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(reacquired, 1);
+    assert.equal(a.holds(), true);
+    assert.equal(a.epoch(), 2, 'a new epoch fences writes from before the loss');
+
+    clock += 1_200;
+    const b = new Lease(store, { ...options, runId: 'run-b' });
+    await a.renewTick();
+    assert.equal(await b.acquire(), true, 'once lost again, another run can take it');
+    timers.at(-2)?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(reacquired, 1, 'a run that took over keeps it');
+  });
+
   it('lets the next holder acquire at once after an immediate handoff release', async () => {
     const f = fixture(900, 200);
     const a = f.run('run-a');

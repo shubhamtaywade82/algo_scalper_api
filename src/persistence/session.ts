@@ -201,6 +201,10 @@ export async function openSession(
         }
       }
       lease.onLost((reason) => logger.error('trading lease lost; no new entries will be sent', { reason }));
+      // Live keeps a lost lease lost: a human checks the account first. Paper takes it back once it is free.
+      if (isPaper) {
+        lease.reacquireAfterLoss(config.persistence.leaseTtlMs, () => logger.info('trading lease re-acquired', { account, runId }));
+      }
     }
 
     return { runId, ledger, pool, fence, cache, rateGate, redis, lease, secrets, close };
