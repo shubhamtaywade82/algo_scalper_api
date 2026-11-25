@@ -257,7 +257,7 @@ GEM
       dry-types (~> 1.8, >= 1.8.2)
       ice_nine (~> 0.11)
       zeitwerk (~> 2.6)
-    dry-types (1.9.1)
+    dry-types (1.9.2)
       bigdecimal (>= 3.0)
       concurrent-ruby (~> 1.0)
       dry-core (~> 1.0)
@@ -677,7 +677,7 @@ GEM
       state_machines (>= 0.301.0)
       state_machines-activemodel (>= 0.300.0)
     technical-analysis (0.2.4)
-    telegram-bot-ruby (2.8.1)
+    telegram-bot-ruby (2.9.0)
       dry-struct (~> 1.6)
       faraday (~> 2.0)
       faraday-multipart (~> 1.0)
@@ -786,7 +786,7 @@ DEPENDENCIES
   solid_queue
   sqlite3 (~> 2.10)
   technical-analysis
-  telegram-bot-ruby (~> 2.8)
+  telegram-bot-ruby (~> 2.9)
   thruster
   tzinfo-data
   vcr
