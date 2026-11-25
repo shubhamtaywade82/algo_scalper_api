@@ -7,6 +7,7 @@ const OUTCOME_TONE = { accepted: 'text-[#19E3B1]', dropped: 'text-[#FFB224]', ex
 
 const inr = (n) => (Number.isFinite(n) ? `${n >= 0 ? '+' : '-'}₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}` : '--')
 const pnlTone = (n) => (n >= 0 ? 'text-[#19E3B1]' : 'text-[#FF4D6D]')
+const hhmm = (minute) => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`
 const time = (iso) => new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false })
 
 function Header(props) {
@@ -96,6 +97,9 @@ export default function AgentCard(props) {
             <div class="text-[10px] font-bold text-[#FF4D6D] mb-2">KILL SWITCH: {props.status.snapshot.kill_switch.reason || 'engaged'}</div>
           </Show>
           <Summary snapshot={props.status.snapshot} />
+          <Show when={props.status.snapshot.entry_window}>
+            <div class="text-[10px] text-[#5A6C8C] mb-2">Entry window {hhmm(props.status.snapshot.entry_window.start_minute)}–{hhmm(props.status.snapshot.entry_window.end_minute)} IST</div>
+          </Show>
           <Underlyings items={props.status.snapshot.underlyings} />
         </Show>
         <Intents items={intents()} />

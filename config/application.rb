@@ -51,6 +51,11 @@ module AlgoScalperApi
     # Skip views, helpers and assets when generating a new resource.
     config.api_only = true
 
+    # The options agent polls trade intents every second and the dashboard polls agent status every 2s; logging
+    # each request buried everything else. Errors from these paths are still logged (silence keeps ERROR).
+    config.middleware.insert_before Rails::Rack::Logger, Rails::Rack::SilenceRequest,
+                                    path: %r{\A/api/(trade_intents|agent/status)\z}
+
     config.active_job.queue_adapter = :solid_queue
   end
 end

@@ -441,6 +441,15 @@ module Signal
         end
         # ===== END EXPIRY DAY SESSION FILTER =====
 
+        # The agent picks its own contract, so the gamma-ramp chain read and strike qualification below would only
+        # spend the account's shared option-chain budget. The BOS path keeps its picks for the pullback state machine
+        # and forwards later, from EntryGuard.try_enter.
+        if TradeIntents::Forwarder.agent_engine? && position_side != 'short' && (entry_primary == 'supertrend' || exit_testing_mode?)
+          Entries::EntryGuard.try_enter(index_cfg: index_cfg, pick: {}, direction: final_direction,
+                                        entry_metadata: { entry_contract: 'supertrend_machine_v1' })
+          return
+        end
+
         # ===== GAMMA RAMP DETECTION =====
         # Detect if price is approaching an OI cluster for explosive potential
         expiry_date = Signal::ExpiryGate.resolve_nearest_expiry_date(index_cfg: index_cfg, no_trade_gate: nil)

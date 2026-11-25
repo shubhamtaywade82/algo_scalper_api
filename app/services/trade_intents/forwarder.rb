@@ -13,6 +13,9 @@ module TradeIntents
       Entries::Guards::EarliestEntryGuard,
       Entries::Guards::DailyLimitsGuard
     ].freeze
+    # The agent refuses entries once its spot feed is older than its own FEED_STALE_MS (5 s by default).
+    AGENT_FEED_STALE_MS = 10_000
+    OPPOSITE_OPTION_TYPE = { 'BULLISH' => 'PE', 'BEARISH' => 'CE' }.freeze
     DIRECTIONS = { 'bullish' => 'BULLISH', 'long' => 'BULLISH', 'bearish' => 'BEARISH', 'short' => 'BEARISH' }.freeze
 
     Result = Data.define(:intent, :blocked_reason) do
@@ -48,11 +51,47 @@ module TradeIntents
         return 'agent_intake_paper_only' unless mode == 'paper'
         return 'market_closed' if TradingSession::Service.market_closed?
 
-        # ponytail: check-then-insert can race between runner threads; the agent's per-slot IDLE check drops the extra.
-        if TradeIntent.pending.exists?(underlying: index_cfg[:key].to_s.upcase, direction: intent_direction)
-          return 'intent_already_pending'
-        end
+        underlying = index_cfg[:key].to_s.upcase
+        agent_refusal(underlying, intent_direction) || pending_conflict(underlying, intent_direction) ||
+          guard_failure(index_cfg, strategy)
+      end
 
+      # Signals the agent would refuse anyway are not sent: it is offline, halted, without live ticks, outside its entry window, or
+      # already holds the other side (two strategies disagreeing must not buy a CE and a PE on one index).
+      def agent_refusal(underlying, intent_direction)
+        snapshot = AgentSnapshot.read
+        age_ms = snapshot && AgentSnapshot.age_ms(snapshot)
+        return 'agent_offline' unless age_ms && age_ms < AgentSnapshot::STALE_AFTER_MS
+        return "agent_kill_switch:#{snapshot.dig('kill_switch', 'reason')}" if snapshot.dig('kill_switch', 'engaged')
+        return 'agent_feed_stale' unless snapshot['feed_age_ms'] && snapshot['feed_age_ms'] < AGENT_FEED_STALE_MS
+        return 'outside_agent_entry_window' unless inside_entry_window?(snapshot['entry_window'])
+
+        'agent_holds_opposite_side' if holds_side?(snapshot, underlying, OPPOSITE_OPTION_TYPE.fetch(intent_direction))
+      end
+
+      def inside_entry_window?(window)
+        return true unless window
+
+        now = Time.current.in_time_zone('Asia/Kolkata')
+        minute = (now.hour * 60) + now.min
+        minute >= window['start_minute'].to_i && minute < window['end_minute'].to_i
+      end
+
+      def holds_side?(snapshot, underlying, option_type)
+        Array(snapshot['underlyings']).any? do |entry|
+          entry['underlying'] == underlying && entry.dig('position', 'option_type') == option_type
+        end
+      end
+
+      # ponytail: check-then-insert can race between runner threads; the agent's per-slot IDLE check drops the extra.
+      def pending_conflict(underlying, intent_direction)
+        pending = TradeIntent.pending.where(underlying: underlying).pick(:direction)
+        return unless pending
+
+        pending == intent_direction ? 'intent_already_pending' : 'opposite_intent_pending'
+      end
+
+      def guard_failure(index_cfg, strategy)
         context = { index_cfg: index_cfg, strategy_slug: strategy }
         PRE_CHECKS.each do |guard|
           verdict = guard.call(context)
