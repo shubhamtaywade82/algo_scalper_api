@@ -57,18 +57,11 @@ export function drawGrid(ctx, view, plot, bars, dpr, bw, axisW) {
   const range = view.maxP - view.minP;
   const steps = [0.05, 0.1, 0.5, 1, 2, 5, 10, 25, 50, 100, 200, 500];
   const pstep = steps.find((s) => range / s <= 10) || 50;
-  ctx.font = '10px monospace';
-  ctx.strokeStyle = C.grid;
-  ctx.lineWidth = 1;
-  ctx.fillStyle = C.faint;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
+  ctx.font = '10px monospace'; ctx.strokeStyle = C.grid; ctx.lineWidth = 1;
+  ctx.fillStyle = C.faint; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   for (let p = Math.ceil(view.minP / pstep) * pstep; p <= view.maxP; p += pstep) {
     const y = Math.round(getY(p, view, plot)) + 0.5;
-    ctx.beginPath();
-    ctx.moveTo(plot.x, y);
-    ctx.lineTo(plot.r, y);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(plot.x, y); ctx.lineTo(plot.r, y); ctx.stroke();
     ctx.fillText(fmtP(p), plot.r + 7, y);
   }
   const k = Math.max(1, Math.ceil(84 / bw)), left = view.center - view.visible / 2;
@@ -77,12 +70,8 @@ export function drawGrid(ctx, view, plot, bars, dpr, bw, axisW) {
     if (!bars[i]) continue;
     const x = Math.round(getX(i, view, plot) + bw / 2) + 0.5;
     ctx.strokeStyle = C.grid;
-    ctx.beginPath();
-    ctx.moveTo(x, plot.y);
-    ctx.lineTo(x, plot.b);
-    ctx.stroke();
-    ctx.fillStyle = C.faint;
-    ctx.textAlign = 'center';
+    ctx.beginPath(); ctx.moveTo(x, plot.y); ctx.lineTo(x, plot.b); ctx.stroke();
+    ctx.fillStyle = C.faint; ctx.textAlign = 'center';
     ctx.fillText(fmtT(bars[i].t), x, plot.b + 13);
   }
 }
@@ -111,6 +100,16 @@ export function drawHeatmap(ctx, view, plot, state, params, aggData, lut, bw) {
 }
 
 export function drawFvgAndRays(ctx, view, plot, state, params) {
+  if (params.ob && state.orderBlocks) {
+    for (const ob of state.orderBlocks) {
+      const y0 = getY(ob.hi, view, plot), y1 = getY(ob.lo, view, plot);
+      if (y1 < plot.y || y0 > plot.b) continue;
+      ctx.fillStyle = ob.side === 'bull' ? 'rgba(25,227,177,0.15)' : 'rgba(255,77,109,0.15)';
+      ctx.fillRect(plot.x, y0, plot.w, y1 - y0);
+      ctx.strokeStyle = ob.side === 'bull' ? C.bid : C.ask;
+      ctx.strokeRect(plot.x, y0, plot.w, y1 - y0);
+    }
+  }
   if (params.fvg && state.zones) {
     for (const z of state.zones) {
       const y0 = getY(z.hi, view, plot), y1 = getY(z.lo, view, plot);
@@ -139,6 +138,36 @@ export function drawFvgAndRays(ctx, view, plot, state, params) {
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;
+    }
+  }
+}
+
+export function drawKeyLevelsAndPositions(ctx, view, plot, { levels, positions } = {}) {
+  if (levels?.support) {
+    const y = Math.round(getY(levels.support, view, plot)) + 0.5;
+    if (y >= plot.y && y <= plot.b) {
+      ctx.strokeStyle = '#10B981'; ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(plot.x, y); ctx.lineTo(plot.r, y); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+  if (levels?.resistance) {
+    const y = Math.round(getY(levels.resistance, view, plot)) + 0.5;
+    if (y >= plot.y && y <= plot.b) {
+      ctx.strokeStyle = '#FF4D6D'; ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(plot.x, y); ctx.lineTo(plot.r, y); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+  if (positions?.length) {
+    for (const p of positions) {
+      const entry = Number(p.entry_price || p.buy_price);
+      if (!Number.isFinite(entry)) continue;
+      const y = Math.round(getY(entry, view, plot)) + 0.5;
+      if (y < plot.y || y > plot.b) continue;
+      ctx.strokeStyle = '#3FC1FF'; ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(plot.x, y); ctx.lineTo(plot.r, y); ctx.stroke();
+      ctx.setLineDash([]);
     }
   }
 }
@@ -227,32 +256,21 @@ export function drawDepthProfile(ctx, plot, view, liveDepth, aggMap, lastPrice, 
 export function drawCrosshair(ctx, hover, plot, view, axisW, bars, bw) {
   const { px, py } = hover;
   if (px <= plot.x || px >= plot.r || py <= plot.y || py >= plot.b) return;
-  ctx.strokeStyle = C.muted;
-  ctx.globalAlpha = 0.5;
-  ctx.setLineDash([3, 4]);
+  ctx.strokeStyle = C.muted; ctx.globalAlpha = 0.5; ctx.setLineDash([3, 4]);
   ctx.beginPath();
-  ctx.moveTo(px + 0.5, plot.y);
-  ctx.lineTo(px + 0.5, plot.b);
-  ctx.moveTo(plot.x, py + 0.5);
-  ctx.lineTo(plot.r, py + 0.5);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.globalAlpha = 1;
+  ctx.moveTo(px + 0.5, plot.y); ctx.lineTo(px + 0.5, plot.b);
+  ctx.moveTo(plot.x, py + 0.5); ctx.lineTo(plot.r, py + 0.5);
+  ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
   const price = view.maxP - ((py - plot.y) / plot.h) * (view.maxP - view.minP);
   roundRect(ctx, plot.r + 2, py - 9, axisW - 4, 18, 4);
-  ctx.fillStyle = C.grid2;
-  ctx.fill();
-  ctx.fillStyle = C.text;
-  ctx.textAlign = 'left';
-  ctx.font = '10px monospace';
+  ctx.fillStyle = C.grid2; ctx.fill(); ctx.fillStyle = C.text;
+  ctx.textAlign = 'left'; ctx.font = '10px monospace';
   ctx.fillText(fmtP(price), plot.r + 7, py + 0.5);
   const hi = clamp(Math.floor(view.center - view.visible / 2 + (px - plot.x) / bw), 0, bars.length - 1);
   if (!bars[hi]) return;
   const tt = fmtT(bars[hi].t), tw = ctx.measureText(tt).width + 12;
   roundRect(ctx, clamp(px - tw / 2, plot.x, plot.r - tw), plot.b + 2, tw, 17, 4);
-  ctx.fillStyle = C.grid2;
-  ctx.fill();
-  ctx.fillStyle = C.text;
+  ctx.fillStyle = C.grid2; ctx.fill(); ctx.fillStyle = C.text;
   ctx.textAlign = 'center';
   ctx.fillText(tt, clamp(px, plot.x + tw / 2, plot.r - tw / 2), plot.b + 11);
 }

@@ -73,7 +73,7 @@ export default function Header(props) {
           <div class="hidden xl:flex items-center gap-2 border-l border-white/10 pl-3 min-w-0 overflow-hidden">
             {/* Nifty 50 Card */}
             <a
-              href="/charts?symbol=NIFTY"
+              href="/confluence-terminal?symbol=NIFTY"
               target="_blank"
               rel="noopener noreferrer"
               class="flex items-center gap-3 bg-white/[0.02] border border-white/5 rounded-xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
@@ -109,7 +109,7 @@ export default function Header(props) {
 
             {/* Bank Nifty Card */}
             <a
-              href="/charts?symbol=BANKNIFTY"
+              href="/confluence-terminal?symbol=BANKNIFTY"
               target="_blank"
               rel="noopener noreferrer"
               class="flex items-center gap-3 bg-white/[0.02] border border-white/5 rounded-xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
@@ -145,7 +145,7 @@ export default function Header(props) {
 
             {/* Sensex Card */}
             <a
-              href="/charts?symbol=SENSEX"
+              href="/confluence-terminal?symbol=SENSEX"
               target="_blank"
               rel="noopener noreferrer"
               class="flex items-center gap-3 bg-white/[0.02] border border-white/5 rounded-xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"

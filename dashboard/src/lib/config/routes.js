@@ -46,7 +46,7 @@ export const ROUTES = {
   OPTION_SCALPER: '/option-scalper',
   ANALYSIS: '/analysis',
   LEDGER: '/ledger',
-  CHARTS: '/charts',
+  CHARTS: '/confluence-terminal',
   TRAIL_ENGINE: '/trail-engine',
   CONFLUENCE_TERMINAL: '/confluence-terminal',
 }
@@ -76,7 +76,6 @@ export const navigationConfig = [
       { id: 'option-chain', label: 'Option Chain', href: ROUTES.OPTION_CHAIN, icon: 'optionChain' },
       { id: 'market-watch', label: 'Market Watch', href: ROUTES.MARKET_WATCH, icon: 'marketWatch' },
       { id: 'analysis', label: 'Analysis', href: ROUTES.ANALYSIS, icon: 'analysis' },
-      { id: 'market-data', label: 'Market Data', href: ROUTES.CHARTS, icon: 'charts' },
       { id: 'confluence-terminal', label: 'SMC Terminal', href: ROUTES.CONFLUENCE_TERMINAL, icon: 'terminal' }
     ],
   },

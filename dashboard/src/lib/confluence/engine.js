@@ -1,4 +1,4 @@
-import { detectFVGs, detectLiquidityPools } from '../smc/smcEngine';
+import { detectFVGs, detectLiquidityPools, detectOrderBlocks } from '../smc/smcEngine';
 
 export const SEEDS = [1337, 4242, 9001, 2718, 3141, 8080];
 export const BASE_BIN = 0.05;
@@ -7,7 +7,7 @@ export const REF = NORMAL * 9;
 export const SESSION_BARS = 240;
 export const START_PLAY = 200;
 export const MAX_BARS = 900;
-export const TF_MS = { 1: 60e3, 5: 300e3, 15: 900e3, 60: 3600e3 };
+export const TF_MS = { 1: 60e3, 5: 300e3, 15: 900e3, 25: 1500e3, 60: 3600e3 };
 
 export const SYMBOL_CONFIG = {
   NIFTY: { baseBin: 5, defaultBin: 10, roundStep: 50, exch: 'NSE INDEX' },
@@ -21,7 +21,8 @@ export const lerp = (a, b, t) => a + (b - a) * t;
 
 export function createSessionState(seed = SEEDS[0], tf = 5, symbol = 'NIFTY') {
   const cfg = SYMBOL_CONFIG[symbol] || SYMBOL_CONFIG.NIFTY;
-  const startTime = Math.floor(Date.now() / TF_MS[tf]) * TF_MS[tf] - SESSION_BARS * TF_MS[tf];
+  const tfMs = TF_MS[tf] || 300e3;
+  const startTime = Math.floor(Date.now() / tfMs) * tfMs - SESSION_BARS * tfMs;
   return {
     seed,
     tf,
@@ -32,6 +33,7 @@ export function createSessionState(seed = SEEDS[0], tf = 5, symbol = 'NIFTY') {
     events: [],
     zones: [],
     pools: [],
+    orderBlocks: [],
     liveDepth: null,
     playhead: 0,
     halted: false
@@ -46,6 +48,7 @@ export function loadRealCandlesIntoSession(state, apiCandles, symbolKey = 'NIFTY
   state.bars = [];
   state.zones = [];
   state.pools = [];
+  state.orderBlocks = [];
 
   for (let i = 0; i < apiCandles.length; i++) {
     const c = apiCandles[i];
@@ -84,6 +87,15 @@ export function loadRealCandlesIntoSession(state, apiCandles, symbolKey = 'NIFTY
     type: p.type,
     startTime: p.startTime * 1000,
     swept: p.status === 'SWEPT'
+  }));
+
+  // Detect structural Order Blocks on actual market candles
+  const realObs = detectOrderBlocks(apiCandles);
+  state.orderBlocks = realObs.map((ob) => ({
+    lo: ob.bottom,
+    hi: ob.top,
+    startTime: ob.startTime * 1000,
+    side: ob.type === 'BULLISH' ? 'bull' : 'bear'
   }));
 
   state.playhead = Math.max(0, state.bars.length - 1);
@@ -155,4 +167,13 @@ export function getFormingValues(state) {
     l = Math.min(l, b.path[j]);
   }
   return { i, b, f, cur, h: Math.max(h, cur), l: Math.min(l, cur) };
+}
+
+export function isCandleBoundary(intervalStr, date) {
+  const ival = parseInt(intervalStr, 10) || 5;
+  if (ival === 1) return true;
+  if (ival === 5 || ival === 15) return date.getMinutes() % ival === 0;
+  if (ival === 60) return date.getMinutes() === 15;
+  const istMins = ((date.getTime() + (date.getTimezoneOffset() + 330) * 60000) / 60000) % 1440 - (9 * 60 + 15);
+  return istMins < 0 || istMins % ival === 0;
 }
