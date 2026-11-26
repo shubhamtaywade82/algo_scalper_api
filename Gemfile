@@ -31,7 +31,7 @@ gem 'connection_pool', '~> 3.0'
 # column cast at boot (db:prepare/seeds die with ArgumentError). Stay on 2.x
 # until Rails ships json-3 compatibility.
 gem 'json', '~> 3.1'
-gem 'redis', '~> 6.0'
+gem 'redis', '~> 6.1'
 gem 'ruby-technical-analysis'
 gem 'technical-analysis'
 
