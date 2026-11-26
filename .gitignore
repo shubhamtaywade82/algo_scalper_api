@@ -27,6 +27,12 @@ dashboard/node_modules/
 dashboard/.next/
 dashboard/out/
 
+# Options trading agent
+agent/node_modules/
+agent/dist/
+agent/.env
+agent/.remember/
+
 # System and editor files
 .DS_Store
 *.swp
