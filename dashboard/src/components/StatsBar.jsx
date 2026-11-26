@@ -40,7 +40,7 @@ export default function StatsBar(props) {
   const marginUsed = () => balance().margin_used ?? 0
 
   return (
-    <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-7 gap-4">
+    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-7 gap-3 sm:gap-4">
       {/* 1. Net P&L */}
       <div class="glass p-4.5 rounded-2xl flex flex-col justify-between relative overflow-hidden group hover:border-white/10 transition-all duration-300">
         <div class="flex items-center justify-between mb-2">

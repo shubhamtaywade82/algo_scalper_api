@@ -8,7 +8,11 @@ const [activeModal, setActiveModal] = createSignal(null)
 
 export function useUIStore() {
   function toggleSidebar() {
-    setSidebarCollapsed(prev => !prev)
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setSidebarMobileOpen(prev => !prev)
+    } else {
+      setSidebarCollapsed(prev => !prev)
+    }
   }
 
   function openModal(modalId) {

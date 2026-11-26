@@ -31,10 +31,10 @@ function QuoteCard(props) {
 export default function MarketWatch() {
   const { indices, marketStatus } = useDashboardContext()
   const [selectedSymbol, setSelectedSymbol] = createSignal('NIFTY')
-  const { depth, loading, error, fetchDepth } = useDepth(selectedSymbol())
+  const { depth, loading, error, fetchDepth } = useDepth(selectedSymbol)
 
   createEffect(() => {
-    const symbol = selectedSymbol()
+    selectedSymbol()
     fetchDepth()
   })
 

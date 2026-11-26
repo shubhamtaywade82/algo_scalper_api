@@ -10,10 +10,13 @@ export function useDepth(symbol = 'NIFTY') {
 
   let timer
 
+  const getSymbol = () => (typeof symbol === 'function' ? symbol() : symbol)
+
   async function fetchDepth() {
     setLoading(true)
     try {
-      const res = await apiClient.get(`/depth?symbol=${encodeURIComponent(symbol)}`)
+      const sym = getSymbol()
+      const res = await apiClient.get(`/depth?symbol=${encodeURIComponent(sym)}`)
       setDepth(res.data)
       setError(null)
     } catch (e) {

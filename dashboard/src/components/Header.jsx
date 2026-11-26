@@ -11,9 +11,15 @@ function SidebarToggle(props) {
       onClick={props.onToggle}
       class="p-2 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/[0.05] transition-all duration-200 mr-2"
       title={props.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      aria-label="Toggle navigation menu"
     >
+      {/* Mobile hamburger icon */}
+      <svg class="w-5 h-5 md:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path d="M4 6h16M4 12h16M4 18h16" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      {/* Desktop collapse chevron */}
       <svg
-        class={`w-5 h-5 transition-transform duration-300 ${props.collapsed ? '' : 'rotate-180'}`}
+        class={`w-5 h-5 hidden md:block transition-transform duration-300 ${props.collapsed ? '' : 'rotate-180'}`}
         fill="none" stroke="currentColor" viewBox="0 0 24 24"
       >
         <path d="M9 18l6-6-6-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -80,6 +86,27 @@ export default function Header(props) {
           <div class="flex flex-col shrink-0">
             <span class="text-[10px] font-black text-primary-400 tracking-[0.3em] uppercase">{props.mode} ENGINE</span>
             <span class="text-[10px] font-bold text-gray-500 tracking-widest mt-0.5 uppercase">Active Terminal</span>
+          </div>
+          {/* Compact mobile/tablet tickers */}
+          <div class="flex xl:hidden items-center gap-1.5 border-l border-white/10 pl-2.5 min-w-0">
+            <a
+              href="/confluence-terminal?symbol=NIFTY"
+              class="flex items-center gap-1.5 bg-white/[0.02] border border-white/5 rounded-lg px-2 py-1 hover:bg-white/[0.05] transition-colors"
+            >
+              <span class="text-[9px] font-black text-gray-400">NIFTY</span>
+              <span class={`text-[11px] font-black text-white text-data rounded px-0.5 ${niftyFlash()}`}>
+                <AnimatedNumber value={props.indices?.nifty} decimals={0} nullDisplay="—" />
+              </span>
+            </a>
+            <a
+              href="/confluence-terminal?symbol=BANKNIFTY"
+              class="flex items-center gap-1.5 bg-white/[0.02] border border-white/5 rounded-lg px-2 py-1 hover:bg-white/[0.05] transition-colors"
+            >
+              <span class="text-[9px] font-black text-gray-400">BN</span>
+              <span class={`text-[11px] font-black text-white text-data rounded px-0.5 ${bankniftyFlash()}`}>
+                <AnimatedNumber value={props.indices?.banknifty} decimals={0} nullDisplay="—" />
+              </span>
+            </a>
           </div>
 
           <div class="hidden xl:flex items-center gap-2 border-l border-white/10 pl-3 min-w-0 overflow-hidden">

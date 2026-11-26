@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node src/lib/responsiveCheck.cjs && vite build",
     "preview": "vite preview",
     "verify:brief-pdf": "node scripts/verify-market-brief-pdf.mjs",
     "test": "vitest run"

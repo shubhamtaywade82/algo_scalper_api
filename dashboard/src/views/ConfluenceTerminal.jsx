@@ -39,7 +39,7 @@ export default function ConfluenceTerminal() {
   const [layers, setLayers] = createSignal({ heat: false, fvg: true, ob: true, vol: true, sr: true, opt: true });
   const [spot, setSpot] = createSignal(EMPTY_SPOT), [depth, setDepth] = createSignal(EMPTY_DEPTH);
   const [loading, setLoading] = createSignal(false), [loadError, setLoadError] = createSignal(null), [barCount, setBarCount] = createSignal(0);
-  const [formingBar, setFormingBar] = createSignal(null), [hoverBar, setHoverBar] = createSignal(null), [following, setFollowing] = createSignal(true), [autoScale, setAutoScale] = createSignal(true);
+  const [formingBar, setFormingBar] = createSignal(null), [hoverBar, setHoverBar] = createSignal(null), [following, setFollowing] = createSignal(true), [autoScale, setAutoScale] = createSignal(true), [mobileSidebarOpen, setMobileSidebarOpen] = createSignal(false);
   const { indices, optionsBuying, connected, system, marketStatus } = useDashboard();
   const { open: openPositions, closeOpenPosition, closingPositionId } = usePositions();
   const buyingState = createMemo(() => (optionsBuying() ? optionsBuying()[symbol().toLowerCase()] : null));
@@ -279,6 +279,10 @@ export default function ConfluenceTerminal() {
           <button onClick={() => audio.setMuted(audio.isSoundOn())} class="px-2.5 py-1 rounded border border-[#24375E] bg-[#101C30] text-[10px]">{audio.isSoundOn() ? '🔊 SOUND' : '🔇 MUTED'}</button>
           <button onClick={() => { setHalted(!halted()); audio.kill(); }} title="Pauses chart replay and alert sounds only — does not touch trading"
             class={`px-2.5 py-1 rounded border text-[10px] font-bold ${halted() ? 'border-[#19E3B1] text-[#19E3B1]' : 'border-[#FFB224] text-[#FFB224]'}`}>{halted() ? '⏻ RESUME REPLAY' : '⏻ HALT REPLAY'}</button>
+          <button onClick={() => setMobileSidebarOpen(!mobileSidebarOpen())}
+            class="md:hidden px-2.5 py-1 rounded border border-[#3FC1FF]/50 bg-[#101C30] text-[10px] font-bold text-[#3FC1FF] hover:bg-[#3FC1FF]/10">
+            📊 {mobileSidebarOpen() ? 'CLOSE' : 'PANEL'}
+          </button>
         </div>
       </header>
 
@@ -326,7 +330,8 @@ export default function ConfluenceTerminal() {
         </div>
 
         <TerminalSidebar symbol={symbol()} spot={spot()} bar={shownBar()} hovering={!!hoverBar()} buyingState={buyingState()}
-          options={optionsView()} agentStatus={agentStatus()} positions={chartPositions()} onExit={closeOpenPosition} closingId={closingPositionId()} depth={depth()} />
+          options={optionsView()} agentStatus={agentStatus()} positions={chartPositions()} onExit={closeOpenPosition} closingId={closingPositionId()} depth={depth()}
+          mobileOpen={mobileSidebarOpen()} onClose={() => setMobileSidebarOpen(false)} />
       </div>
 
       <footer class="h-14 border-t border-[#182742] bg-[#070D1A]/95 px-4 flex items-center justify-between text-xs z-20">

@@ -1,11 +1,23 @@
 import { createSignal, createMemo, For, Show, createEffect } from 'solid-js'
+import { useNavigate } from '@solidjs/router'
 import { useOptionChain } from '../stores/useOptionChain'
 import { useDashboardContext } from '../context/DashboardContext'
 import AnimatedNumber from '../components/AnimatedNumber'
+import { shouldShowColumn } from '../lib/optionChainColumns'
 
 export default function OptionChain() {
+  const navigate = useNavigate()
   const [selectedAsset, setSelectedAsset] = createSignal('NIFTY')
   const [viewMode, setViewMode] = createSignal('Greeks')
+
+  const sideColSpan = createMemo(() => {
+    switch (viewMode()) {
+      case 'LTP': return 2
+      case 'OI': return 5
+      case 'Greeks':
+      default: return 9
+    }
+  })
 
   // Wire Option Chain ActionCable store
   const { chain, isStale, connected } = useOptionChain(selectedAsset)
@@ -247,10 +259,16 @@ export default function OptionChain() {
               {connected() ? 'Feed Connected' : 'Feed Closed'}
             </span>
           </div>
-          <button class="px-4 py-2 bg-white/[0.03] border border-white/5 rounded-xl text-xs font-bold uppercase tracking-wider text-gray-300 hover:bg-white/[0.06] hover:text-white transition-all">
+          <button
+            onClick={() => navigate('/settings')}
+            class="px-4 py-2 bg-white/[0.03] border border-white/5 rounded-xl text-xs font-bold uppercase tracking-wider text-gray-300 hover:bg-white/[0.06] hover:text-white transition-all cursor-pointer"
+          >
             Settings
           </button>
-          <button class="px-5 py-2.5 bg-primary-600 hover:bg-primary-500 rounded-xl text-xs font-black uppercase tracking-wider text-white shadow-lg transition-all">
+          <button
+            onClick={() => navigate('/strategies/creator')}
+            class="px-5 py-2.5 bg-primary-600 hover:bg-primary-500 rounded-xl text-xs font-black uppercase tracking-wider text-white shadow-lg transition-all cursor-pointer"
+          >
             Strategy Builder
           </button>
         </div>
@@ -348,30 +366,30 @@ export default function OptionChain() {
             <table class="w-full text-center border-collapse text-[10px]">
               <thead>
                 <tr class="border-b border-white/5">
-                  <th colspan="9" class="py-2.5 text-emerald-400 font-black uppercase tracking-[0.2em] bg-emerald-500/5 rounded-tl-xl">CALLS</th>
+                  <th colspan={sideColSpan()} class="py-2.5 text-emerald-400 font-black uppercase tracking-[0.2em] bg-emerald-500/5 rounded-tl-xl">CALLS</th>
                   <th class="py-2.5 font-black uppercase tracking-wider bg-white/5">STRIKE</th>
-                  <th colspan="9" class="py-2.5 text-rose-400 font-black uppercase tracking-[0.2em] bg-rose-500/5 rounded-tr-xl">PUTS</th>
+                  <th colspan={sideColSpan()} class="py-2.5 text-rose-400 font-black uppercase tracking-[0.2em] bg-rose-500/5 rounded-tr-xl">PUTS</th>
                 </tr>
                 <tr class="text-gray-500 font-black uppercase border-b border-white/5 bg-white/[0.01]">
-                  <th class="py-2.5">OI</th>
-                  <th>Chg OI</th>
-                  <th>Vol</th>
-                  <th>Vega</th>
-                  <th>Theta</th>
-                  <th>Delta</th>
-                  <th>IV</th>
-                  <th>Chg %</th>
-                  <th class="text-emerald-400">LTP</th>
+                  <Show when={shouldShowColumn('oi', viewMode())}><th class="py-2.5">OI</th></Show>
+                  <Show when={shouldShowColumn('choi', viewMode())}><th>Chg OI</th></Show>
+                  <Show when={shouldShowColumn('vol', viewMode())}><th>Vol</th></Show>
+                  <Show when={shouldShowColumn('vega', viewMode())}><th>Vega</th></Show>
+                  <Show when={shouldShowColumn('theta', viewMode())}><th>Theta</th></Show>
+                  <Show when={shouldShowColumn('delta', viewMode())}><th>Delta</th></Show>
+                  <Show when={shouldShowColumn('iv', viewMode())}><th>IV</th></Show>
+                  <Show when={shouldShowColumn('chg', viewMode())}><th>Chg %</th></Show>
+                  <Show when={shouldShowColumn('ltp', viewMode())}><th class="text-emerald-400">LTP</th></Show>
                   <th class="text-white bg-white/5">Price</th>
-                  <th class="text-rose-400">LTP</th>
-                  <th>Chg %</th>
-                  <th>IV</th>
-                  <th>Delta</th>
-                  <th>Theta</th>
-                  <th>Vega</th>
-                  <th>Vol</th>
-                  <th>Chg OI</th>
-                  <th>OI</th>
+                  <Show when={shouldShowColumn('ltp', viewMode())}><th class="text-rose-400">LTP</th></Show>
+                  <Show when={shouldShowColumn('chg', viewMode())}><th>Chg %</th></Show>
+                  <Show when={shouldShowColumn('iv', viewMode())}><th>IV</th></Show>
+                  <Show when={shouldShowColumn('delta', viewMode())}><th>Delta</th></Show>
+                  <Show when={shouldShowColumn('theta', viewMode())}><th>Theta</th></Show>
+                  <Show when={shouldShowColumn('vega', viewMode())}><th>Vega</th></Show>
+                  <Show when={shouldShowColumn('vol', viewMode())}><th>Vol</th></Show>
+                  <Show when={shouldShowColumn('choi', viewMode())}><th>Chg OI</th></Show>
+                  <Show when={shouldShowColumn('oi', viewMode())}><th>OI</th></Show>
                 </tr>
               </thead>
               <tbody>
@@ -379,27 +397,45 @@ export default function OptionChain() {
                   {(r) => (
                     <tr class={`border-b border-white/5 transition-colors ${r.isATM ? 'bg-violet-500/10 hover:bg-violet-500/15 font-black' : ''}`}>
                       {/* CALLS */}
-                      <td class={`py-2 text-data text-gray-400 ${callsTdClass(r.strike)}`}>
-                        <AnimatedNumber value={r.c_oi} decimals={0} />
-                      </td>
-                      <td class={`text-data ${r.c_choi >= 0 ? 'text-emerald-400' : 'text-rose-400'} ${callsTdClass(r.strike)}`}>
-                        {r.c_choi >= 0 ? '+' : ''}<AnimatedNumber value={r.c_choi} decimals={0} />
-                      </td>
-                      <td class={`text-data text-gray-500 ${callsTdClass(r.strike)}`}>
-                        <AnimatedNumber value={r.c_vol} decimals={0} />
-                      </td>
-                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_vega.toFixed(2)}</td>
-                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_theta.toFixed(2)}</td>
-                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_delta.toFixed(2)}</td>
-                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>
-                        <AnimatedNumber value={r.c_iv} decimals={2} />%
-                      </td>
-                      <td class={`text-data ${r.c_chg >= 0 ? 'text-emerald-400' : 'text-rose-500'} ${callsTdClass(r.strike)}`}>
-                        {r.c_chg >= 0 ? '+' : ''}<AnimatedNumber value={r.c_chg} decimals={2} />%
-                      </td>
-                      <td class={`text-data font-black text-white ${callsTdClass(r.strike)}`}>
-                        ₹<AnimatedNumber value={r.c_ltp} decimals={2} />
-                      </td>
+                      <Show when={shouldShowColumn('oi', viewMode())}>
+                        <td class={`py-2 text-data text-gray-400 ${callsTdClass(r.strike)}`}>
+                          <AnimatedNumber value={r.c_oi} decimals={0} />
+                        </td>
+                      </Show>
+                      <Show when={shouldShowColumn('choi', viewMode())}>
+                        <td class={`text-data ${r.c_choi >= 0 ? 'text-emerald-400' : 'text-rose-400'} ${callsTdClass(r.strike)}`}>
+                          {r.c_choi >= 0 ? '+' : ''}<AnimatedNumber value={r.c_choi} decimals={0} />
+                        </td>
+                      </Show>
+                      <Show when={shouldShowColumn('vol', viewMode())}>
+                        <td class={`text-data text-gray-500 ${callsTdClass(r.strike)}`}>
+                          <AnimatedNumber value={r.c_vol} decimals={0} />
+                        </td>
+                      </Show>
+                      <Show when={shouldShowColumn('vega', viewMode())}>
+                        <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_vega.toFixed(2)}</td>
+                      </Show>
+                      <Show when={shouldShowColumn('theta', viewMode())}>
+                        <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_theta.toFixed(2)}</td>
+                      </Show>
+                      <Show when={shouldShowColumn('delta', viewMode())}>
+                        <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_delta.toFixed(2)}</td>
+                      </Show>
+                      <Show when={shouldShowColumn('iv', viewMode())}>
+                        <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>
+                          <AnimatedNumber value={r.c_iv} decimals={2} />%
+                        </td>
+                      </Show>
+                      <Show when={shouldShowColumn('chg', viewMode())}>
+                        <td class={`text-data ${r.c_chg >= 0 ? 'text-emerald-400' : 'text-rose-500'} ${callsTdClass(r.strike)}`}>
+                          {r.c_chg >= 0 ? '+' : ''}<AnimatedNumber value={r.c_chg} decimals={2} />%
+                        </td>
+                      </Show>
+                      <Show when={shouldShowColumn('ltp', viewMode())}>
+                        <td class={`text-data font-black text-white ${callsTdClass(r.strike)}`}>
+                          ₹<AnimatedNumber value={r.c_ltp} decimals={2} />
+                        </td>
+                      </Show>
 
                       {/* STRIKE */}
                       <td class={`py-2 text-data font-black text-white bg-white/5 border-x border-white/5`}>
@@ -407,27 +443,45 @@ export default function OptionChain() {
                       </td>
 
                       {/* PUTS */}
-                      <td class={`text-data font-black text-white ${putsTdClass(r.strike)}`}>
-                        ₹<AnimatedNumber value={r.p_ltp} decimals={2} />
-                      </td>
-                      <td class={`text-data ${r.p_chg >= 0 ? 'text-emerald-400' : 'text-rose-500'} ${putsTdClass(r.strike)}`}>
-                        {r.p_chg >= 0 ? '+' : ''}<AnimatedNumber value={r.p_chg} decimals={2} />%
-                      </td>
-                      <td class={`text-data text-gray-400 ${putsTdClass(r.strike)}`}>
-                        <AnimatedNumber value={r.p_iv} decimals={2} />%
-                      </td>
-                      <td class={`text-data text-gray-400 ${putsTdClass(r.strike)}`}>{r.p_delta.toFixed(2)}</td>
-                      <td class={`text-data text-gray-400 ${putsTdClass(r.strike)}`}>{r.p_theta.toFixed(2)}</td>
-                      <td class={`text-data text-gray-400 ${putsTdClass(r.strike)}`}>{r.p_vega.toFixed(2)}</td>
-                      <td class={`text-data text-gray-500 ${putsTdClass(r.strike)}`}>
-                        <AnimatedNumber value={r.p_vol} decimals={0} />
-                      </td>
-                      <td class={`text-data ${r.p_choi >= 0 ? 'text-emerald-400' : 'text-rose-400'} ${putsTdClass(r.strike)}`}>
-                        {r.p_choi >= 0 ? '+' : ''}<AnimatedNumber value={r.p_choi} decimals={0} />
-                      </td>
-                      <td class={`text-data text-gray-400 ${putsTdClass(r.strike)}`}>
-                        <AnimatedNumber value={r.p_oi} decimals={0} />
-                      </td>
+                      <Show when={shouldShowColumn('ltp', viewMode())}>
+                        <td class={`text-data font-black text-white ${putsTdClass(r.strike)}`}>
+                          ₹<AnimatedNumber value={r.p_ltp} decimals={2} />
+                        </td>
+                      </Show>
+                      <Show when={shouldShowColumn('chg', viewMode())}>
+                        <td class={`text-data ${r.p_chg >= 0 ? 'text-emerald-400' : 'text-rose-500'} ${putsTdClass(r.strike)}`}>
+                          {r.p_chg >= 0 ? '+' : ''}<AnimatedNumber value={r.p_chg} decimals={2} />%
+                        </td>
+                      </Show>
+                      <Show when={shouldShowColumn('iv', viewMode())}>
+                        <td class={`text-data text-gray-400 ${putsTdClass(r.strike)}`}>
+                          <AnimatedNumber value={r.p_iv} decimals={2} />%
+                        </td>
+                      </Show>
+                      <Show when={shouldShowColumn('delta', viewMode())}>
+                        <td class={`text-data text-gray-400 ${putsTdClass(r.strike)}`}>{r.p_delta.toFixed(2)}</td>
+                      </Show>
+                      <Show when={shouldShowColumn('theta', viewMode())}>
+                        <td class={`text-data text-gray-400 ${putsTdClass(r.strike)}`}>{r.p_theta.toFixed(2)}</td>
+                      </Show>
+                      <Show when={shouldShowColumn('vega', viewMode())}>
+                        <td class={`text-data text-gray-400 ${putsTdClass(r.strike)}`}>{r.p_vega.toFixed(2)}</td>
+                      </Show>
+                      <Show when={shouldShowColumn('vol', viewMode())}>
+                        <td class={`text-data text-gray-500 ${putsTdClass(r.strike)}`}>
+                          <AnimatedNumber value={r.p_vol} decimals={0} />
+                        </td>
+                      </Show>
+                      <Show when={shouldShowColumn('choi', viewMode())}>
+                        <td class={`text-data ${r.p_choi >= 0 ? 'text-emerald-400' : 'text-rose-400'} ${putsTdClass(r.strike)}`}>
+                          {r.p_choi >= 0 ? '+' : ''}<AnimatedNumber value={r.p_choi} decimals={0} />
+                        </td>
+                      </Show>
+                      <Show when={shouldShowColumn('oi', viewMode())}>
+                        <td class={`text-data text-gray-400 ${putsTdClass(r.strike)}`}>
+                          <AnimatedNumber value={r.p_oi} decimals={0} />
+                        </td>
+                      </Show>
                     </tr>
                   )}
                 </For>

@@ -1,5 +1,5 @@
 // dashboard/src/views/StrategiesHub.jsx
-import { createSignal, Show } from 'solid-js'
+import { createSignal, createEffect, Show } from 'solid-js'
 import { useSearchParams } from '@solidjs/router'
 import Strategies from './Strategies'
 import Alpha from './Alpha'
@@ -19,6 +19,13 @@ export default function StrategiesHub(props) {
   const [searchParams, setSearchParams] = useSearchParams()
   const currentTab = () => props.defaultTab || searchParams.tab || 'strategies'
   const [activeTab, setActiveTab] = createSignal(currentTab())
+
+  createEffect(() => {
+    const tab = currentTab()
+    if (tab && tab !== activeTab()) {
+      setActiveTab(tab)
+    }
+  })
 
   const handleSelect = (id) => {
     setActiveTab(id)

@@ -57,7 +57,7 @@ function AppShell(props) {
     marketStatus, marketInfo
   } = useDashboard(() => fetchPositions())
 
-  const { sidebarCollapsed, toggleSidebar } = useUIStore()
+  const { sidebarCollapsed, sidebarMobileOpen, toggleSidebar, setSidebarMobileOpen } = useUIStore()
 
   const ctx = {
     mode, connected, dashboardStale, stats, balance, indices, subscribedIndices, engineDiagnostics, system,
@@ -76,7 +76,11 @@ function AppShell(props) {
     <DashboardContext.Provider value={ctx}>
       <div class="min-h-screen bg-transparent text-gray-100 font-sans selection:bg-primary-500/30 flex">
         <Toaster position="bottom-right" gutter={8} toastOptions={{ className: '!bg-gray-800 !text-gray-100 !border !border-white/10 !rounded-xl !shadow-2xl' }} />
-        <Sidebar collapsed={sidebarCollapsed()} />
+        <Sidebar
+          collapsed={sidebarCollapsed()}
+          drawerOpen={sidebarMobileOpen()}
+          onClose={() => setSidebarMobileOpen(false)}
+        />
         <div class="flex-1 flex flex-col min-w-0">
           <Header
             mode={mode()}

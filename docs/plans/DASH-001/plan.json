@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "featureId": "DASH-001",
+  "title": "Dashboard UI/UX and Functional Fixes",
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "title": "Fix useDepth reactive symbol closure bug in MarketWatch and useDepth store",
+      "description": "Allow useDepth to accept a reactive accessor or update its internal symbol so switching symbols updates depth",
+      "acceptanceCriteria": ["ACC-001"],
+      "likelyFiles": [
+        "dashboard/src/stores/useDepth.js",
+        "dashboard/src/views/MarketWatch.jsx"
+      ],
+      "estimatedScope": "s",
+      "risk": "low",
+      "dependencies": [],
+      "verification": {
+        "command": ["npm", "--prefix", "dashboard", "test"],
+        "expectedStatus": "passed"
+      }
+    },
+    {
+      "id": "TASK-002",
+      "title": "Implement column filtering and wire action button in OptionChain",
+      "description": "Filter columns based on viewMode (LTP, OI, Greeks) and wire Strategy Builder navigation",
+      "acceptanceCriteria": ["ACC-002", "ACC-003"],
+      "likelyFiles": [
+        "dashboard/src/views/OptionChain.jsx"
+      ],
+      "estimatedScope": "s",
+      "risk": "low",
+      "dependencies": ["TASK-001"],
+      "verification": {
+        "command": ["npm", "--prefix", "dashboard", "test"],
+        "expectedStatus": "passed"
+      }
+    },
+    {
+      "id": "TASK-003",
+      "title": "Synchronize tab state in Portfolio and StrategiesHub",
+      "description": "Ensure tab signal updates reactively when defaultTab prop or search params change",
+      "acceptanceCriteria": ["ACC-003"],
+      "likelyFiles": [
+        "dashboard/src/views/Portfolio.jsx",
+        "dashboard/src/views/StrategiesHub.jsx"
+      ],
+      "estimatedScope": "s",
+      "risk": "low",
+      "dependencies": ["TASK-002"],
+      "verification": {
+        "command": ["npm", "--prefix", "dashboard", "test"],
+        "expectedStatus": "passed"
+      }
+    },
+    {
+      "id": "TASK-004",
+      "title": "Enhance mobile responsive layout across Sidebar, Header, StatsBar, and ConfluenceTerminal",
+      "description": "Add mobile overlay drawer for sidebar, mobile ticker in header, mobile toggle for terminal sidebar, and responsive stats grid",
+      "acceptanceCriteria": ["ACC-004", "ACC-005", "ACC-006"],
+      "likelyFiles": [
+        "dashboard/src/components/layout/Sidebar.jsx",
+        "dashboard/src/components/Header.jsx",
+        "dashboard/src/components/StatsBar.jsx",
+        "dashboard/src/views/ConfluenceTerminal.jsx"
+      ],
+      "estimatedScope": "m",
+      "risk": "low",
+      "dependencies": ["TASK-003"],
+      "verification": {
+        "command": ["npm", "--prefix", "dashboard", "run", "build"],
+        "expectedStatus": "passed"
+      }
+    }
+  ],
+  "edges": [
+    { "from": "TASK-001", "to": "TASK-002", "reason": "OptionChain follows MarketWatch data fixes" },
+    { "from": "TASK-002", "to": "TASK-003", "reason": "Hub tabs follow component fixes" },
+    { "from": "TASK-003", "to": "TASK-004", "reason": "Mobile responsiveness applied over consolidated views" }
+  ],
+  "verticalSlices": [
+    ["TASK-001", "TASK-002"],
+    ["TASK-003", "TASK-004"]
+  ]
+}

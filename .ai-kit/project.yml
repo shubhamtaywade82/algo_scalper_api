@@ -1,0 +1,7 @@
+schemaVersion: 1
+name: algo-scalper-dashboard
+stack:
+  - node
+commands:
+  test:
+    - ['npm', '--prefix', 'dashboard', 'test']

@@ -1,5 +1,5 @@
 // dashboard/src/views/Portfolio.jsx
-import { createSignal, Show } from 'solid-js'
+import { createSignal, createEffect, Show } from 'solid-js'
 import { useSearchParams } from '@solidjs/router'
 import Positions from './Positions'
 import Ledger from './Ledger'
@@ -17,6 +17,13 @@ export default function Portfolio(props) {
   const [searchParams, setSearchParams] = useSearchParams()
   const currentTab = () => props.defaultTab || searchParams.tab || 'positions'
   const [activeTab, setActiveTab] = createSignal(currentTab())
+
+  createEffect(() => {
+    const tab = currentTab()
+    if (tab && tab !== activeTab()) {
+      setActiveTab(tab)
+    }
+  })
 
   const handleSelect = (id) => {
     setActiveTab(id)

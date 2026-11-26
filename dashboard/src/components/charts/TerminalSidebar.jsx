@@ -157,18 +157,41 @@ function DepthCard(props) {
 
 export default function TerminalSidebar(props) {
   return (
-    <aside class="w-80 shrink-0 border-l border-[#182742] bg-[#0B1424] overflow-y-auto z-10 max-md:hidden">
-      <InstrumentCard symbol={props.symbol} spot={props.spot} />
-      <AgentCard status={props.agentStatus} />
-      <PositionsCard positions={props.positions} onExit={props.onExit} closingId={props.closingId} />
-      <Show when={props.options} fallback={<Section title="Option chain"><span class="text-[11px] text-[#5A6C8C]">waiting for option chain…</span></Section>}>
-        <StraddleCard view={props.options} />
-        <LadderCard view={props.options} />
-        <GreeksCard view={props.options} />
+    <>
+      <Show when={props.mobileOpen}>
+        <div
+          class="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden transition-opacity"
+          onClick={props.onClose}
+        />
       </Show>
-      <DepthCard depth={props.depth} />
-      <BarCard bar={props.bar} hovering={props.hovering} />
-      <RegimeCard state={props.buyingState} />
-    </aside>
+      <aside
+        class={`w-80 shrink-0 border-l border-[#182742] bg-[#0B1424] overflow-y-auto transition-transform duration-300 z-50 md:z-10 ${
+          props.mobileOpen
+            ? 'fixed inset-y-0 right-0 shadow-2xl translate-x-0'
+            : 'max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:translate-x-full max-md:pointer-events-none'
+        }`}
+      >
+        <div class="md:hidden flex justify-between items-center px-4 py-3 border-b border-[#182742] bg-[#070D1A]">
+          <span class="text-xs font-bold text-[#8CA0BF] uppercase tracking-wider">{props.symbol} Terminal Panel</span>
+          <button
+            onClick={props.onClose}
+            class="text-[10px] text-[#8CA0BF] hover:text-white px-2 py-1 rounded bg-[#101C30] border border-[#24375E] uppercase font-bold"
+          >
+            ✕ Close
+          </button>
+        </div>
+        <InstrumentCard symbol={props.symbol} spot={props.spot} />
+        <AgentCard status={props.agentStatus} />
+        <PositionsCard positions={props.positions} onExit={props.onExit} closingId={props.closingId} />
+        <Show when={props.options} fallback={<Section title="Option chain"><span class="text-[11px] text-[#5A6C8C]">waiting for option chain…</span></Section>}>
+          <StraddleCard view={props.options} />
+          <LadderCard view={props.options} />
+          <GreeksCard view={props.options} />
+        </Show>
+        <DepthCard depth={props.depth} />
+        <BarCard bar={props.bar} hovering={props.hovering} />
+        <RegimeCard state={props.buyingState} />
+      </aside>
+    </>
   );
 }
