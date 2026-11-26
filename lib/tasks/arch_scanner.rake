@@ -386,7 +386,7 @@ class ArchScanner
         { layer: 'Queue Store', technology: 'Redis 7' },
         { layer: 'Broker API', technology: 'DhanHQ v2' },
         { layer: 'LLM Runtime', technology: 'Ollama (local)' },
-        { layer: 'AI Framework', technology: 'ruby_llm-agents' },
+        { layer: 'AI Framework', technology: 'ruby_llm (~> 2.2)' },
         { layer: 'Frontend', technology: 'Vite + SolidJS/Vue (main), Next.js (arch)' },
         { layer: 'Deployment', technology: 'Docker Compose (6 processes)' },
       ]
