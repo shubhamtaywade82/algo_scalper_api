@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "featureId": "ENG-001",
+  "title": "Real Engineering Foundation and Architecture Deepening",
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "title": "Author GLOSSARY.md defining ubiquitous domain language",
+      "description": "Establish a single authoritative glossary for Indian F&O options scalping covering underlyings, regimes, postures, trade intents, and risk stops",
+      "acceptanceCriteria": ["ACC-001"],
+      "likelyFiles": [
+        "GLOSSARY.md"
+      ],
+      "estimatedScope": "s",
+      "risk": "low",
+      "dependencies": [],
+      "verification": {
+        "command": ["node", "scripts/verify-engineering-docs.mjs", "glossary"],
+        "expectedStatus": "passed"
+      }
+    },
+    {
+      "id": "TASK-002",
+      "title": "Author foundational Architecture Decision Records in docs/adr",
+      "description": "Record ADR-001 (polyglot split), ADR-002 (intraday session cutoffs), and ADR-003 (time-stop invariant) in docs/adr",
+      "acceptanceCriteria": ["ACC-002"],
+      "likelyFiles": [
+        "docs/adr/ADR-001-polyglot-signal-execution-split.md",
+        "docs/adr/ADR-002-intraday-session-cutoffs.md",
+        "docs/adr/ADR-003-option-long-time-stop-invariant.md"
+      ],
+      "estimatedScope": "s",
+      "risk": "low",
+      "dependencies": ["TASK-001"],
+      "verification": {
+        "command": ["node", "scripts/verify-engineering-docs.mjs", "adrs"],
+        "expectedStatus": "passed"
+      }
+    },
+    {
+      "id": "TASK-003",
+      "title": "Deepen Entries::EntryGuard by extracting direct order execution",
+      "description": "Extract legacy order execution into Entries::DirectOrderPlacer, shrinking EntryGuard to a clean dispatcher under 250 lines while preserving all tests",
+      "acceptanceCriteria": ["ACC-003"],
+      "likelyFiles": [
+        "app/services/entries/entry_guard.rb",
+        "app/services/entries/direct_order_placer.rb"
+      ],
+      "estimatedScope": "m",
+      "risk": "medium",
+      "dependencies": ["TASK-002"],
+      "verification": {
+        "command": ["bundle", "exec", "rspec", "spec/services/entries/entry_guard_try_enter_agent_engine_spec.rb"],
+        "expectedStatus": "passed"
+      }
+    },
+    {
+      "id": "TASK-004",
+      "title": "Verify multi-stack fast test suites across Dashboard, Agent, and Rails smoke",
+      "description": "Run the multi-stack fast verification to ensure all 3 runtime environments pass seamlessly",
+      "acceptanceCriteria": ["ACC-004"],
+      "likelyFiles": [
+        "Procfile.dev",
+        ".ai-kit/project.yml"
+      ],
+      "estimatedScope": "s",
+      "risk": "low",
+      "dependencies": ["TASK-003"],
+      "verification": {
+        "command": ["npm", "--prefix", "dashboard", "test"],
+        "expectedStatus": "passed"
+      }
+    }
+  ],
+  "edges": [
+    { "from": "TASK-001", "to": "TASK-002", "reason": "ADRs build upon the ubiquitous vocabulary in GLOSSARY.md" },
+    { "from": "TASK-002", "to": "TASK-003", "reason": "Module refactoring aligns with ADR architectural boundaries" },
+    { "from": "TASK-003", "to": "TASK-004", "reason": "Multi-stack validation follows code deepening" }
+  ],
+  "verticalSlices": [
+    ["TASK-001", "TASK-002"],
+    ["TASK-003", "TASK-004"]
+  ]
+}

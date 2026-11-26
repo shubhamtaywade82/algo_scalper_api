@@ -34,4 +34,11 @@ RSpec.describe Entries::EntryGuard, '#try_enter agent engine' do
     expect(TradeIntents::Forwarder).not_to have_received(:forward)
     expect(signal).to have_received(:record_entry_outcome).with('blocked', 'agent_engine_buy_only')
   end
+
+  it 'delegates non-agent direct order execution to Entries::DirectOrderPlacer' do
+    allow(TradeIntents::Forwarder).to receive(:agent_engine?).and_return(false)
+    allow(described_class.entry_guard_pipeline).to receive(:run).and_return(Entries::EntryGuardPipeline::PASS)
+    allow(Entries::DirectOrderPlacer).to receive(:execute).and_return(:order_placed)
+    expect(try_enter).to eq(:order_placed)
+  end
 end

@@ -1,7 +1,10 @@
 schemaVersion: 1
-name: algo-scalper-dashboard
+name: algo-scalper
 stack:
+  - ruby
   - node
 commands:
   test:
     - ['npm', '--prefix', 'dashboard', 'test']
+    - ['bundle', 'exec', 'rspec', 'spec/smoke']
+    - ['npm', '--prefix', 'agent', 'test']

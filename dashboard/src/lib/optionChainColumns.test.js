@@ -20,4 +20,8 @@ describe('shouldShowColumn', () => {
     expect(shouldShowColumn('gamma', 'Greeks')).toBe(true)
     expect(shouldShowColumn('oi', 'Greeks')).toBe(true)
   })
+
+  it('rejects unknown columns when viewMode is invalid', () => {
+    expect(shouldShowColumn('unknown_column', 'INVALID_MODE')).toBe(false)
+  })
 })

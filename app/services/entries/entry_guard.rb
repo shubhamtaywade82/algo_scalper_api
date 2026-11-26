@@ -53,6 +53,11 @@ module Entries
               return false
             end
 
+            if defined?(Entries::DirectOrderPlacer)
+              direct_result = Entries::DirectOrderPlacer.execute(context)
+              return direct_result unless direct_result == :unhandled
+            end
+
             instrument = context[:instrument] || find_instrument(index_cfg)
             ltp = context[:ltp] || pick[:ltp] || (instrument ? resolve_entry_ltp(instrument: instrument, pick: pick, index_cfg: index_cfg) : nil)
             dir_sym = direction.to_s.downcase.to_sym
