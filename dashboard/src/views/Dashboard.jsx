@@ -171,15 +171,16 @@ export default function Dashboard() {
 
       {/* 2. Main Positions Hub (Active & Closed Positions) */}
       <div class="glass rounded-2xl p-3 border border-white/5 space-y-2">
-        <div class="flex items-center justify-between border-b border-white/5 pb-2 flex-wrap gap-2">
-          <div class="flex items-center gap-2">
+        <div class="flex items-center border-b border-white/5 pb-2 gap-2">
+          {/* Left: Section Title */}
+          <div class="flex-1 flex items-center gap-2">
             <div class="w-1.5 h-4 bg-primary-500 rounded-full" />
             <h2 class="text-xs font-bold text-gray-300 uppercase tracking-wide">
               Positions Hub
             </h2>
           </div>
 
-          {/* Positions Tab Controls */}
+          {/* Center: Positions Tab Controls (permanently centered) */}
           <div class="flex items-center gap-1 bg-white/5 p-0.5 rounded-lg border border-white/5">
             <button
               type="button"
@@ -205,9 +206,9 @@ export default function Dashboard() {
             </button>
           </div>
 
-          {/* Contextual status for the active tab */}
-          <Show when={positionsTab() === 'open'}>
-            <div class="flex items-center gap-1.5">
+          {/* Right: Contextual status for active or closed tab */}
+          <div class="flex-1 flex items-center justify-end gap-1.5">
+            <Show when={positionsTab() === 'open'}>
               <div class={`flex items-center gap-1.5 text-[9px] font-bold tracking-wide px-2 py-0.5 rounded-full border ${isWsLive() ? 'text-cyan-300 bg-cyan-500/10 border-cyan-500/30' : 'text-amber-300 bg-amber-500/10 border-amber-500/30'}`}>
                 <span class={`w-1.5 h-1.5 rounded-full ${isWsLive() ? 'bg-cyan-300' : 'bg-amber-300 animate-pulse'}`} />
                 {isWsLive() ? 'WS LIVE' : 'WS STALE'}
@@ -216,8 +217,13 @@ export default function Dashboard() {
                 <span class={`w-1.5 h-1.5 rounded-full ${isCircuitSafe() ? 'bg-emerald-400' : 'bg-rose-400 animate-pulse'}`} />
                 {isCircuitSafe() ? 'OPTIMAL' : 'TRIPPED'}
               </div>
-            </div>
-          </Show>
+            </Show>
+            <Show when={positionsTab() === 'closed'}>
+              <span class="text-[9px] font-bold tracking-wide text-gray-500 uppercase px-2 py-0.5">
+                Session Trades
+              </span>
+            </Show>
+          </div>
         </div>
 
         {/* Tab View */}
