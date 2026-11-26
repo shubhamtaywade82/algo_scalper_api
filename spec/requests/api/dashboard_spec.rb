@@ -23,6 +23,7 @@ RSpec.describe 'GET /api/dashboard' do
     allow(IndexConfigLoader).to receive(:load_indices).and_return([])
     allow(PositionTracker).to receive(:paper_trading_stats_with_pct).and_return({})
     allow(Risk::CircuitBreaker.instance).to receive(:status).and_return({ tripped: false })
+    allow(AnalysisStore).to receive(:read).and_return(nil)
   end
 
   it 'includes pnl_updater_running in the system hash' do
@@ -47,6 +48,17 @@ RSpec.describe 'GET /api/dashboard' do
     expect(response).to have_http_status(:ok)
     body = response.parsed_body
     expect(body['subscribed_indices']).to eq([])
+  end
+
+  it 'includes engine_diagnostics with status and session information' do
+    get '/api/dashboard'
+    expect(response).to have_http_status(:ok)
+    diag = response.parsed_body['engine_diagnostics']
+    expect(diag).to be_present
+    expect(diag).to have_key('status')
+    expect(diag).to have_key('overall_summary')
+    expect(diag).to have_key('recent_intents')
+    expect(diag['session_regime']).to eq('regular')
   end
 
   context 'when SMC confluence digest is enabled' do
@@ -93,6 +105,24 @@ RSpec.describe 'GET /api/dashboard' do
       row = body['subscribed_indices'].find { |r| r['key'] == 'NIFTY' }
       expect(row['smc_confluence_ltf']['long_score']).to eq(4)
       expect(row['smc_confluence_ltf']['long_signal']).to be(true)
+    end
+
+    it 'includes market_analysis and gate_status on subscribed_indices' do
+      allow(AnalysisStore).to receive(:read).with('NIFTY', :regime).and_return(
+        data: {
+          regime: 'TRENDING_UP',
+          confidence: 75.0,
+          supertrend: { direction: 'bullish', line: 24_450.0 },
+          metrics: { adx_value: 32.5 }
+        }
+      )
+      get '/api/dashboard'
+      expect(response).to have_http_status(:ok)
+      row = response.parsed_body['subscribed_indices'].find { |r| r['key'] == 'NIFTY' }
+      expect(row['bias']).to eq('BULLISH')
+      expect(row['regime']).to eq('TRENDING_UP')
+      expect(row['is_trending']).to be(true)
+      expect(row['gate_status']['status']).to eq('SCANNING')
     end
 
     it 'exposes confluence flags in config.signals' do

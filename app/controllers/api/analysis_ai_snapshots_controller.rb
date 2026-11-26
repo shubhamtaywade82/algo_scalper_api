@@ -5,7 +5,7 @@ module Api
   class AnalysisAiSnapshotsController < ApplicationController
     include Api::TokenAuthenticatable
 
-    before_action :authenticate_operator_token!
+    before_action :authenticate_dashboard_or_operator_token!
 
     # POST /api/analysis/:index_key/ai_snapshots
     # On-demand AI analysis using current market context. Synchronous — may take up to 120s.

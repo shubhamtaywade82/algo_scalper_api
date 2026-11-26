@@ -112,4 +112,33 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshots' do # rubocop:disable
       expect(response).to have_http_status(:not_found)
     end
   end
+
+  context 'with authentication' do
+    let(:client) { instance_double(Services::Ai::OllamaClient, enabled?: true, chat: 'OK') }
+
+    before do
+      allow(Services::Ai::OllamaClient).to receive(:instance).and_return(client)
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('API_OPERATOR_TOKEN', nil).and_return('op-secret')
+      allow(ENV).to receive(:fetch).with('API_DASHBOARD_TOKEN', nil).and_return('dash-secret')
+      allow(ENV).to receive(:[]).and_call_original
+      allow(ENV).to receive(:[]).with('API_OPERATOR_TOKEN').and_return('op-secret')
+      allow(ENV).to receive(:[]).with('API_DASHBOARD_TOKEN').and_return('dash-secret')
+    end
+
+    it 'allows access with valid operator token' do
+      post '/api/analysis/NIFTY/ai_snapshots', headers: { 'Authorization' => 'Bearer op-secret' }
+      expect(response).to have_http_status(:ok)
+    end
+
+    it 'allows access with valid dashboard token' do
+      post '/api/analysis/NIFTY/ai_snapshots', headers: { 'X-Api-Key' => 'dash-secret' }
+      expect(response).to have_http_status(:ok)
+    end
+
+    it 'denies access with invalid token' do
+      post '/api/analysis/NIFTY/ai_snapshots', headers: { 'Authorization' => 'Bearer bad-secret' }
+      expect(response).to have_http_status(:unauthorized)
+    end
+  end
 end

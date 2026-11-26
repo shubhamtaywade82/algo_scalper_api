@@ -18,6 +18,13 @@ module Api
       require_api_token!(ENV.fetch('API_OPERATOR_TOKEN', nil), tier: :operator)
     end
 
+    def authenticate_dashboard_or_operator_token!
+      expected_operator = ENV['API_OPERATOR_TOKEN'].presence
+      return if expected_operator && token_matches?(provided_api_token, expected_operator)
+
+      authenticate_dashboard_token!
+    end
+
     # Algo-config writes. Mandatory in production; optional elsewhere when SETTINGS_UPDATE_TOKEN is unset.
     def authenticate_settings_token!
       if Rails.env.production? && ENV['SETTINGS_UPDATE_TOKEN'].blank?

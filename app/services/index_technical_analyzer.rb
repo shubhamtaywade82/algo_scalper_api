@@ -391,16 +391,19 @@ class IndexTechnicalAnalyzer < ApplicationService
     # Generate a simple bias summary from fallback indicators using configured thresholds
     return nil unless @indicators&.any?
 
+    frames = @indicators[:indicators] || @indicators['indicators'] || @indicators
+    return nil unless frames.is_a?(Hash) && frames.any?
+
     thresholds = @config[:bias_thresholds]
     bullish_count = 0
     bearish_count = 0
     total_count = 0
 
-    @indicators.each_value do |tf_data|
+    frames.each_value do |tf_data|
       next unless tf_data.is_a?(Hash)
 
       # Use configured RSI thresholds for bias determination
-      rsi = tf_data[:rsi]
+      rsi = tf_data[:rsi] || tf_data['rsi']
       next unless rsi
 
       bullish_count += 1 if rsi < thresholds[:rsi_bullish_threshold]
@@ -412,7 +415,7 @@ class IndexTechnicalAnalyzer < ApplicationService
     min_timeframes = thresholds[:min_timeframes_for_signal]
     if total_count < min_timeframes
       return {
-        meta: { source: :fallback, timeframes: @indicators.keys },
+        meta: { source: :fallback, timeframes: frames.keys },
         summary: {
           bias: :neutral,
           confidence: 0.0,
@@ -438,12 +441,12 @@ class IndexTechnicalAnalyzer < ApplicationService
     confidence = [base_confidence + (agreement_ratio * (1.0 - base_confidence)), 1.0].min
 
     {
-      meta: { source: :fallback, timeframes: @indicators.keys },
+      meta: { source: :fallback, timeframes: frames.keys },
       summary: {
         bias: bias,
         confidence: confidence,
         rationale: {
-          rsi: "RSI analysis across #{@indicators.keys.join(', ')}min timeframes " \
+          rsi: "RSI analysis across #{frames.keys.join(', ')}min timeframes " \
                "(bullish: #{bullish_count}, bearish: #{bearish_count})",
           method: 'fallback_analysis',
           thresholds: {
@@ -488,7 +491,11 @@ class IndexTechnicalAnalyzer < ApplicationService
   end
 
   def valid_analysis_payload?(payload)
-    payload.is_a?(Hash) && payload[:meta].present? && payload[:indicators].present?
+    return false unless payload.is_a?(Hash)
+
+    meta = payload[:meta] || payload['meta']
+    indicators = payload[:indicators] || payload['indicators']
+    meta.present? && indicators.present?
   end
 
   def sanitize_timeframes(timeframes)

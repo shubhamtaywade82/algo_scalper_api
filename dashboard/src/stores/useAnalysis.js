@@ -87,12 +87,13 @@ export function useAnalysis() {
     setSnapshotLoading(true)
     setSnapshotError(null)
     try {
-      const res = await fetch(`/api/analysis/${index}/ai_snapshots`, { method: 'POST' })
+      const res = await fetch(`/api/analysis/${index}/ai_snapshots`, {
+        method: 'POST',
+        headers: dashboardApiHeaders()
+      })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        const msg = res.status === 401 || res.status === 403
-          ? 'AI snapshot needs the operator token, which the browser never holds. Trigger it from the server.'
-          : data.message || data.error || `HTTP ${res.status}`
+        const msg = data.message || data.error || `HTTP ${res.status}`
         throw new Error(msg)
       }
       const data = await res.json()

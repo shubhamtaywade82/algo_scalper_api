@@ -59,6 +59,18 @@ export default function Header(props) {
     return expiryBadgeMeta(row)
   }
 
+  function biasBlock(indexKey) {
+    const row = subscribedRowByKey(props.subscribedIndices, indexKey)
+    if (!row?.bias) return null
+    const b = row.bias.toUpperCase()
+    const color = b === 'BULLISH'
+      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+      : b === 'BEARISH'
+      ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+      : 'bg-gray-500/15 text-gray-400 border-gray-500/30'
+    return { text: b, className: color, regime: row.regime }
+  }
+
   return (
     <div class="sticky top-0 z-50">
       <header class="relative glass border-b border-white/5 px-6 py-2.5 flex items-center justify-between gap-4">
@@ -79,7 +91,17 @@ export default function Header(props) {
               class="flex items-center gap-3 bg-white/[0.02] border border-white/5 rounded-xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
             >
               <div class="flex flex-col">
-                <span class="text-[10px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Nifty 50</span>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[10px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Nifty 50</span>
+                  {(() => {
+                    const bias = biasBlock('NIFTY')
+                    return bias ? (
+                      <span class={`text-[7px] font-black uppercase tracking-tight px-1 py-0.5 rounded border leading-none ${bias.className}`}>
+                        {bias.text}
+                      </span>
+                    ) : null
+                  })()}
+                </div>
                 <span class={`text-[16px] font-black text-white text-data transition-all duration-300 rounded px-0.5 ${niftyFlash()}`}>
                   <AnimatedNumber value={props.indices?.nifty} decimals={2} nullDisplay="—" />
                 </span>
@@ -115,7 +137,17 @@ export default function Header(props) {
               class="flex items-center gap-3 bg-white/[0.02] border border-white/5 rounded-xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
             >
               <div class="flex flex-col">
-                <span class="text-[10px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Bank Nifty</span>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[10px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Bank Nifty</span>
+                  {(() => {
+                    const bias = biasBlock('BANKNIFTY')
+                    return bias ? (
+                      <span class={`text-[7px] font-black uppercase tracking-tight px-1 py-0.5 rounded border leading-none ${bias.className}`}>
+                        {bias.text}
+                      </span>
+                    ) : null
+                  })()}
+                </div>
                 <span class={`text-[16px] font-black text-white text-data transition-all duration-300 rounded px-0.5 ${bankniftyFlash()}`}>
                   <AnimatedNumber value={props.indices?.banknifty} decimals={2} nullDisplay="—" />
                 </span>
@@ -151,7 +183,17 @@ export default function Header(props) {
               class="flex items-center gap-3 bg-white/[0.02] border border-white/5 rounded-xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
             >
               <div class="flex flex-col">
-                <span class="text-[10px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Sensex</span>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[10px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Sensex</span>
+                  {(() => {
+                    const bias = biasBlock('SENSEX')
+                    return bias ? (
+                      <span class={`text-[7px] font-black uppercase tracking-tight px-1 py-0.5 rounded border leading-none ${bias.className}`}>
+                        {bias.text}
+                      </span>
+                    ) : null
+                  })()}
+                </div>
                 <span class={`text-[16px] font-black text-white text-data transition-all duration-300 rounded px-0.5 ${sensexFlash()}`}>
                   <AnimatedNumber value={props.indices?.sensex} decimals={2} nullDisplay="—" />
                 </span>

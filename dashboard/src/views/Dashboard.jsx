@@ -41,7 +41,8 @@ function saveRunningPeak(n) {
 export default function Dashboard() {
   const {
     balance, stats, open, closed, circuitBreaker, positionsConnected, positionsStale,
-    closeOpenPosition, closingPositionId, marketStatus, marketInfo, mode, indices, recentSignals, strategiesSummary, system
+    closeOpenPosition, closingPositionId, marketStatus, marketInfo, mode, indices, recentSignals, strategiesSummary, system,
+    subscribedIndices, engineDiagnostics
   } = useDashboardContext()
 
   const [runningPeakPnl, setRunningPeakPnl] = createSignal(loadRunningPeak())
@@ -101,6 +102,32 @@ export default function Dashboard() {
   const signalsFeed = createMemo(() => {
     return (recentSignals() || []).slice(0, 5)
   })
+
+  const marketIndicesList = createMemo(() => {
+    const list = subscribedIndices() || []
+    if (list.length > 0) return list
+    return [
+      { key: 'NIFTY', name: 'Nifty 50', ltp: indices()?.nifty, bias: 'NEUTRAL', regime: 'SCANNING' },
+      { key: 'BANKNIFTY', name: 'Bank Nifty', ltp: indices()?.banknifty, bias: 'NEUTRAL', regime: 'SCANNING' },
+      { key: 'SENSEX', name: 'Sensex', ltp: indices()?.sensex, bias: 'NEUTRAL', regime: 'SCANNING' }
+    ]
+  })
+
+  const biasBadgeClass = (bias) => {
+    const b = (bias || '').toUpperCase()
+    if (b === 'BULLISH') return 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+    if (b === 'BEARISH') return 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+    return 'bg-gray-500/15 text-gray-400 border border-gray-500/30'
+  }
+
+  const regimeBadgeClass = (regime) => {
+    const r = (regime || '').toUpperCase()
+    if (r.startsWith('TRENDING_UP')) return 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+    if (r.startsWith('TRENDING_DOWN')) return 'bg-rose-500/10 text-rose-300 border border-rose-500/20'
+    if (r === 'CHOPPY') return 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+    if (r === 'RANGING') return 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/30'
+    return 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+  }
 
   const alertSeverityColor = (severity) => {
     if (severity === 'error') return 'text-rose-400 bg-rose-400'
@@ -286,35 +313,136 @@ export default function Dashboard() {
         {/* Market Overview Card */}
         <div class="glass p-5 rounded-2xl flex flex-col justify-between h-[300px]">
           <div class="flex items-center justify-between border-b border-white/5 pb-2">
-            <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Market Overview</span>
+            <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Market Overview & Bias</span>
+            <span class="text-[9px] uppercase tracking-wider text-gray-500 font-bold">
+              Market: <span class={marketStatus() === 'open' ? 'text-emerald-400 font-black' : 'text-rose-400 font-black'}>{marketStatus() ?? 'Unknown'}</span>
+            </span>
           </div>
-          <div class="flex-1 divide-y divide-white/5 overflow-y-auto text-[10px]">
-            <div class="py-2.5 flex items-center justify-between">
-              <div class="flex flex-col">
-                <span class="font-black text-white uppercase tracking-wider">Nifty 50</span>
-                <span class="text-gray-400 text-data mt-0.5">
-                  <AnimatedNumber value={indices()?.nifty || 0} decimals={2} />
-                </span>
-              </div>
+          <div class="flex-1 divide-y divide-white/5 overflow-y-auto text-[10px] py-1">
+            <For each={marketIndicesList()}>
+              {(idx) => (
+                <div class="py-2 flex flex-col gap-1">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <span class="font-black text-white uppercase tracking-wider">{idx.name || idx.key}</span>
+                      <span class={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${biasBadgeClass(idx.bias)}`}>
+                        {idx.bias || 'NEUTRAL'}
+                      </span>
+                      <span class={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${regimeBadgeClass(idx.regime)}`}>
+                        {idx.regime ? idx.regime.replace('_', ' ') : 'SCANNING'}
+                      </span>
+                    </div>
+                    <div class="text-right font-mono font-bold text-white text-data">
+                      <AnimatedNumber value={idx.ltp || (indices() && indices()[idx.key?.toLowerCase()]) || 0} decimals={2} />
+                    </div>
+                  </div>
+                  <div class="flex items-center justify-between text-[9px] text-gray-400">
+                    <span class="truncate max-w-[210px] text-gray-400" title={idx.gate_status?.message}>
+                      {idx.gate_status?.message || 'Scanning for setup'}
+                    </span>
+                    <Show when={idx.adx}>
+                      <span class="text-[8px] text-gray-500 font-mono">ADX {Number(idx.adx).toFixed(1)}</span>
+                    </Show>
+                  </div>
+                </div>
+              )}
+            </For>
+          </div>
+          <div class="pt-2 border-t border-white/5 flex items-center justify-between text-[9px] text-gray-500 font-bold">
+            <span>Session: <span class="text-gray-300 uppercase">{engineDiagnostics()?.session_regime || 'REGULAR'}</span></span>
+            <span class={engineDiagnostics()?.entry_allowed ? 'text-emerald-400' : 'text-amber-400'}>
+              {engineDiagnostics()?.entry_allowed ? '● Entries Allowed' : '○ Entries Blocked'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Engine Gate Diagnostics: Why Are Trades Taken / Not Taken? */}
+      <div class="glass p-5 rounded-2xl border border-white/5">
+        <div class="flex flex-col md:flex-row md:items-center justify-between pb-3 border-b border-white/5 gap-2">
+          <div class="flex items-center gap-2.5">
+            <span class="w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
+            <span class="text-[10px] font-black text-gray-300 uppercase tracking-widest">
+              Execution Gating & Trade Intent Diagnostics
+            </span>
+            <span class="text-[8px] font-bold text-gray-500 bg-white/5 px-2 py-0.5 rounded uppercase">
+              Why Are Trades Blocked or Allowed?
+            </span>
+          </div>
+          <div class="flex items-center gap-3 text-[9px] font-bold">
+            <span class="text-gray-400">
+              Engine Status: <span class={engineDiagnostics()?.status === 'ACTIVE_SCANNING' ? 'text-emerald-400 uppercase font-black' : 'text-amber-400 uppercase font-black'}>{engineDiagnostics()?.status || 'SCANNING'}</span>
+            </span>
+            <span class="text-gray-600">|</span>
+            <span class="text-gray-400">
+              Session: <span class="text-white uppercase">{engineDiagnostics()?.session_regime || 'Regular'}</span>
+            </span>
+            <span class="text-gray-600">|</span>
+            <span class="text-gray-400">
+              Entries: <span class={engineDiagnostics()?.entry_allowed ? 'text-emerald-400' : 'text-amber-400'}>{engineDiagnostics()?.entry_allowed ? 'Allowed' : 'Disallowed'}</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-4 text-[10px]">
+          {/* Current Engine Gate Summary */}
+          <div class="bg-white/[0.02] p-3.5 rounded-xl border border-white/5 flex flex-col justify-between">
+            <div>
+              <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest">Active Gate Policy</span>
+              <p class="text-gray-300 font-medium mt-1 leading-relaxed text-[10px]">
+                {engineDiagnostics()?.overall_summary || 'Evaluating market structure, supertrend direction, and options trading context.'}
+              </p>
             </div>
-            <div class="py-2.5 flex items-center justify-between">
-              <div class="flex flex-col">
-                <span class="font-black text-white uppercase tracking-wider">Bank Nifty</span>
-                <span class="text-gray-400 text-data mt-0.5">
-                  <AnimatedNumber value={indices()?.banknifty || 0} decimals={2} />
-                </span>
-              </div>
+            <div class="mt-3 pt-2.5 border-t border-white/5 flex items-center justify-between text-[9px] text-gray-500 font-semibold">
+              <span>Circuit Breaker: <span class={isCircuitSafe() ? 'text-emerald-400' : 'text-rose-400'}>{isCircuitSafe() ? 'Safe' : 'Tripped'}</span></span>
+              <span>Feed Heartbeat: <span class={isWsLive() ? 'text-emerald-400' : 'text-amber-400'}>{isWsLive() ? 'Live' : 'Stale'}</span></span>
             </div>
-            <div class="py-2.5 flex items-center justify-between">
-              <div class="flex flex-col">
-                <span class="font-black text-white uppercase tracking-wider">Sensex</span>
-                <span class="text-gray-400 text-data mt-0.5">
-                  <AnimatedNumber value={indices()?.sensex || 0} decimals={2} />
-                </span>
-              </div>
+          </div>
+
+          {/* Latest Trade Decisions & Dropped Intent Explanations */}
+          <div class="lg:col-span-2 bg-white/[0.02] p-3.5 rounded-xl border border-white/5 flex flex-col justify-between">
+            <div class="flex items-center justify-between pb-1.5 border-b border-white/5">
+              <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest">Recent Trade Intent Evaluations</span>
+              <span class="text-[8px] text-gray-500">Live Agent Feedback</span>
             </div>
-            <div class="py-2.5 text-[9px] uppercase tracking-wider text-gray-500 font-black">
-              Market Status: <span class={`${marketStatus() === 'open' ? 'text-emerald-400' : 'text-rose-400'}`}>{marketStatus() ?? 'Unknown'}</span>
+
+            <div class="divide-y divide-white/5 overflow-y-auto max-h-[110px] mt-1 text-[9px]">
+              <Show when={engineDiagnostics()?.recent_intents?.length > 0} fallback={
+                <div class="py-4 text-center text-gray-600 font-bold uppercase tracking-wider">
+                  No trade intents evaluated yet today. Waiting for setup triggers.
+                </div>
+              }>
+                <For each={engineDiagnostics()?.recent_intents}>
+                  {(intent) => (
+                    <div class="py-1.5 flex flex-col gap-0.5">
+                      <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                          <span class="font-bold text-white uppercase">{intent.underlying}</span>
+                          <span class={`px-1 rounded text-[8px] font-black uppercase ${
+                            intent.direction === 'BULLISH' ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'
+                          }`}>
+                            {intent.direction}
+                          </span>
+                          <span class={`px-1 rounded text-[8px] font-black uppercase ${
+                            intent.outcome === 'accepted' ? 'text-emerald-400 bg-emerald-500/10' :
+                            intent.outcome === 'dropped' ? 'text-rose-400 bg-rose-500/10' : 'text-amber-400 bg-amber-500/10'
+                          }`}>
+                            {intent.outcome} {intent.code ? `(${intent.code})` : ''}
+                          </span>
+                        </div>
+                        <span class="text-gray-500 font-mono text-[8px]">
+                          {intent.issued_at ? new Date(intent.issued_at).toLocaleTimeString() : ''}
+                        </span>
+                      </div>
+                      <Show when={intent.detail}>
+                        <p class="text-gray-400 text-[9px] truncate" title={intent.detail}>
+                          {intent.detail}
+                        </p>
+                      </Show>
+                    </div>
+                  )}
+                </For>
+              </Show>
             </div>
           </div>
         </div>

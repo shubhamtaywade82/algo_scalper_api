@@ -51,7 +51,7 @@ function AppShell(props) {
   } = usePositions()
 
   const {
-    mode, connected, isStale: dashboardStale, stats, balance, indices, subscribedIndices, system,
+    mode, connected, isStale: dashboardStale, stats, balance, indices, subscribedIndices, engineDiagnostics, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker,
     lastUpdated, recentSignals, strategiesSummary, config,
     marketStatus, marketInfo
@@ -60,7 +60,7 @@ function AppShell(props) {
   const { sidebarCollapsed, toggleSidebar } = useUIStore()
 
   const ctx = {
-    mode, connected, dashboardStale, stats, balance, indices, subscribedIndices, system,
+    mode, connected, dashboardStale, stats, balance, indices, subscribedIndices, engineDiagnostics, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker,
     lastUpdated, recentSignals, strategiesSummary, config,
     open, closed,
