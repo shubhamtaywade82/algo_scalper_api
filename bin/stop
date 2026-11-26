@@ -79,27 +79,39 @@ done
 AGENT_ROOT="$(cd "$ROOT/../options-trading-agent" 2>/dev/null && pwd || true)"
 if [[ -n "$AGENT_ROOT" ]]; then
   mapfile -t agent_pids < <(pgrep -f "src/index.tsx" 2>/dev/null || true)
-  # npm/sh/tsx wrappers all match the pattern. The agent handles only one SIGTERM (process.once) and tsx relays signals
-  # to its child, so signal only the leaf process that runs the app; the wrappers exit with it.
-  parents=" $(for pid in "${agent_pids[@]:-}"; do [[ -n "$pid" ]] && ps -o ppid= -p "$pid" 2>/dev/null; done | tr -d ' ' | tr '\n' ' ') "
-  live_agents=()
+  filtered_pids=()
   for pid in "${agent_pids[@]:-}"; do
-    [[ -z "$pid" ]] && continue
-    [[ "$(readlink -f "/proc/$pid/cwd" 2>/dev/null)" == "$AGENT_ROOT" ]] || continue
-    [[ "$parents" == *" $pid "* ]] && continue
-    echo "Stopping options-trading-agent (pid $pid)..."
-    kill "$pid" 2>/dev/null || true
-    live_agents+=("$pid")
+    [[ -n "$pid" ]] && filtered_pids+=("$pid")
   done
-  for _ in $(seq 1 60); do
-    alive=0
-    for pid in "${live_agents[@]:-}"; do [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && alive=1; done
-    [[ $alive -eq 0 ]] && break
-    sleep 1
-  done
-  for pid in "${live_agents[@]:-}"; do
-    [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && { echo "Warning: agent pid $pid did not stop in 60s, forcing"; kill -9 "$pid" 2>/dev/null || true; }
-  done
+
+  if [[ ${#filtered_pids[@]} -gt 0 ]]; then
+    # tsx relays signals to its child; signaling only leaf node avoids interrupting graceful shutdown.
+    parents=" $(for pid in "${filtered_pids[@]}"; do ps -o ppid= -p "$pid" 2>/dev/null || true; done | tr -d ' ' | tr '\n' ' ') "
+    live_agents=()
+    for pid in "${filtered_pids[@]}"; do
+      [[ "$(readlink -f "/proc/$pid/cwd" 2>/dev/null)" == "$AGENT_ROOT" ]] || continue
+      [[ "$parents" == *" $pid "* ]] && continue
+      echo "Stopping options-trading-agent (pid $pid)..."
+      kill "$pid" 2>/dev/null || true
+      live_agents+=("$pid")
+    done
+    for _ in $(seq 1 60); do
+      alive=0
+      for pid in "${live_agents[@]}"; do
+        if kill -0 "$pid" 2>/dev/null; then
+          alive=1
+        fi
+      done
+      [[ $alive -eq 0 ]] && break
+      sleep 1
+    done
+    for pid in "${live_agents[@]}"; do
+      if kill -0 "$pid" 2>/dev/null; then
+        echo "Warning: agent pid $pid did not stop in 60s, forcing"
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+    done
+  fi
 fi
 
 if command -v ss >/dev/null 2>&1; then
