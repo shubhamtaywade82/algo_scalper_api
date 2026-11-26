@@ -1,0 +1,515 @@
+{
+  "schema_version": 1,
+  "diagram_type": "erd",
+  "meta": {
+    "title": "L4 Persistence schema: ledger and paper venue",
+    "output": "docs/architecture/14-persistence-schema.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "gapX": 50,
+    "gapY": 50,
+    "entityW": 265
+  },
+  "entities": [
+    {
+      "id": "runs",
+      "label": "runs",
+      "sublabel": "one row per process run",
+      "tag": "ledger",
+      "row": 0,
+      "col": 0,
+      "sources": [
+        {
+          "path": "src/persistence/migrations.ts",
+          "line": 11,
+          "label": "CREATE TABLE runs"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "run_id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "instance_id",
+          "type": "text"
+        },
+        {
+          "name": "mode",
+          "type": "text"
+        },
+        {
+          "name": "client_id",
+          "type": "text"
+        },
+        {
+          "name": "config_fingerprint",
+          "type": "text"
+        },
+        {
+          "name": "started_at",
+          "type": "timestamptz"
+        },
+        {
+          "name": "ended_at",
+          "type": "timestamptz"
+        },
+        {
+          "name": "ended_reason",
+          "type": "text"
+        },
+        {
+          "name": "unconfirmed_at_end",
+          "type": "integer"
+        },
+        {
+          "name": "acknowledged",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "id": "trade_events",
+      "label": "trade_events",
+      "sublabel": "append-only JSONL mirror",
+      "tag": "ledger",
+      "row": 1,
+      "col": 0,
+      "sources": [
+        {
+          "path": "src/persistence/migrations.ts",
+          "line": 24,
+          "label": "CREATE TABLE trade_events"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "id",
+          "type": "bigserial",
+          "key": "pk"
+        },
+        {
+          "name": "source_key",
+          "type": "text",
+          "key": "uk"
+        },
+        {
+          "name": "run_id",
+          "type": "uuid",
+          "key": "fk",
+          "references": "runs.run_id"
+        },
+        {
+          "name": "seq",
+          "type": "integer"
+        },
+        {
+          "name": "trading_day",
+          "type": "date"
+        },
+        {
+          "name": "ts",
+          "type": "timestamptz"
+        },
+        {
+          "name": "event_type",
+          "type": "text"
+        },
+        {
+          "name": "underlying",
+          "type": "text"
+        },
+        {
+          "name": "correlation_id",
+          "type": "text"
+        },
+        {
+          "name": "record",
+          "type": "jsonb"
+        }
+      ]
+    },
+    {
+      "id": "leases",
+      "label": "leases",
+      "sublabel": "one trading authority per client",
+      "tag": "ledger",
+      "row": 2,
+      "col": 0,
+      "sources": [
+        {
+          "path": "src/persistence/migrations.ts",
+          "line": 62,
+          "label": "CREATE TABLE leases"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "client_id",
+          "type": "text",
+          "key": "pk"
+        },
+        {
+          "name": "holder_run",
+          "type": "uuid"
+        },
+        {
+          "name": "epoch",
+          "type": "bigint"
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamptz"
+        }
+      ]
+    },
+    {
+      "id": "paper_wallets",
+      "label": "paper_wallets",
+      "sublabel": "simulated cash per client",
+      "tag": "paper venue",
+      "row": 0,
+      "col": 1,
+      "sources": [
+        {
+          "path": "src/persistence/migrations.ts",
+          "line": 102,
+          "label": "CREATE TABLE paper_wallets"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "client_id",
+          "type": "text",
+          "key": "pk"
+        },
+        {
+          "name": "initial_inr",
+          "type": "numeric(18,2)"
+        },
+        {
+          "name": "balance_inr",
+          "type": "numeric(18,2)"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz"
+        }
+      ]
+    },
+    {
+      "id": "paper_positions",
+      "label": "paper_positions",
+      "sublabel": "one row per simulated position",
+      "tag": "paper venue",
+      "row": 1,
+      "col": 1,
+      "sources": [
+        {
+          "path": "src/persistence/migrations.ts",
+          "line": 109,
+          "label": "CREATE TABLE paper_positions"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "position_id",
+          "type": "text",
+          "key": "pk"
+        },
+        {
+          "name": "client_id",
+          "type": "text",
+          "key": "fk",
+          "references": "paper_wallets.client_id"
+        },
+        {
+          "name": "underlying",
+          "type": "text"
+        },
+        {
+          "name": "security_id",
+          "type": "text"
+        },
+        {
+          "name": "exchange_segment",
+          "type": "text"
+        },
+        {
+          "name": "tick_size",
+          "type": "numeric(10,4)"
+        },
+        {
+          "name": "quantity",
+          "type": "integer"
+        },
+        {
+          "name": "average_price",
+          "type": "numeric(14,4)"
+        },
+        {
+          "name": "stop_loss_price",
+          "type": "numeric(14,4)"
+        },
+        {
+          "name": "target_price",
+          "type": "numeric(14,4)"
+        },
+        {
+          "name": "status",
+          "type": "text"
+        },
+        {
+          "name": "opened_at",
+          "type": "timestamptz"
+        },
+        {
+          "name": "closed_at",
+          "type": "timestamptz"
+        },
+        {
+          "name": "exit_price",
+          "type": "numeric(14,4)"
+        },
+        {
+          "name": "exit_reason",
+          "type": "text"
+        },
+        {
+          "name": "realized_pnl_inr",
+          "type": "numeric(18,2)"
+        },
+        {
+          "name": "expiry",
+          "type": "date"
+        },
+        {
+          "name": "strike",
+          "type": "numeric(14,4)"
+        },
+        {
+          "name": "option_type",
+          "type": "text"
+        }
+      ]
+    },
+    {
+      "id": "paper_orders",
+      "label": "paper_orders",
+      "sublabel": "entry, exit, protective, expiry",
+      "tag": "paper venue",
+      "row": 2,
+      "col": 1,
+      "sources": [
+        {
+          "path": "src/persistence/migrations.ts",
+          "line": 130,
+          "label": "CREATE TABLE paper_orders"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "correlation_id",
+          "type": "text",
+          "key": "pk"
+        },
+        {
+          "name": "position_id",
+          "type": "text",
+          "key": "fk",
+          "references": "paper_positions.position_id"
+        },
+        {
+          "name": "client_id",
+          "type": "text"
+        },
+        {
+          "name": "kind",
+          "type": "text"
+        },
+        {
+          "name": "side",
+          "type": "text"
+        },
+        {
+          "name": "quantity",
+          "type": "integer"
+        },
+        {
+          "name": "price",
+          "type": "numeric(14,4)"
+        },
+        {
+          "name": "reason",
+          "type": "text"
+        },
+        {
+          "name": "at",
+          "type": "timestamptz"
+        }
+      ]
+    },
+    {
+      "id": "paper_wallet_entries",
+      "label": "paper_wallet_entries",
+      "sublabel": "every cash movement",
+      "tag": "paper cash",
+      "row": 0,
+      "col": 2,
+      "sources": [
+        {
+          "path": "src/persistence/migrations.ts",
+          "line": 143,
+          "label": "CREATE TABLE paper_wallet_entries"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "id",
+          "type": "bigserial",
+          "key": "pk"
+        },
+        {
+          "name": "client_id",
+          "type": "text",
+          "key": "fk",
+          "references": "paper_wallets.client_id"
+        },
+        {
+          "name": "correlation_id",
+          "type": "text",
+          "key": "uk"
+        },
+        {
+          "name": "delta_inr",
+          "type": "numeric(18,2)"
+        },
+        {
+          "name": "balance_after_inr",
+          "type": "numeric(18,2)"
+        },
+        {
+          "name": "at",
+          "type": "timestamptz"
+        }
+      ]
+    },
+    {
+      "id": "paper_withdrawals",
+      "label": "paper_withdrawals",
+      "sublabel": "profit taken, per week or month",
+      "tag": "paper cash",
+      "row": 1,
+      "col": 2,
+      "sources": [
+        {
+          "path": "src/persistence/migrations.ts",
+          "line": 183,
+          "label": "CREATE TABLE paper_withdrawals"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "client_id",
+          "type": "text",
+          "key": [
+            "pk",
+            "fk"
+          ],
+          "references": "paper_wallets.client_id"
+        },
+        {
+          "name": "period",
+          "type": "text",
+          "key": "pk"
+        },
+        {
+          "name": "period_pnl_inr",
+          "type": "numeric(18,2)"
+        },
+        {
+          "name": "amount_inr",
+          "type": "numeric(18,2)"
+        },
+        {
+          "name": "at",
+          "type": "timestamptz"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "from": "runs",
+      "to": "trade_events",
+      "fromCardinality": "one",
+      "toCardinality": "many",
+      "toOptional": true,
+      "label": "run_id"
+    },
+    {
+      "from": "paper_wallets",
+      "to": "paper_positions",
+      "fromCardinality": "one",
+      "toCardinality": "many",
+      "label": "client_id"
+    },
+    {
+      "from": "paper_positions",
+      "to": "paper_orders",
+      "fromCardinality": "one",
+      "toCardinality": "many",
+      "label": "position_id"
+    },
+    {
+      "from": "paper_wallets",
+      "to": "paper_wallet_entries",
+      "fromCardinality": "one",
+      "toCardinality": "many",
+      "label": "client_id"
+    },
+    {
+      "from": "paper_wallets",
+      "to": "paper_withdrawals",
+      "fromCardinality": "one",
+      "toCardinality": "many",
+      "label": "client_id"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Append-only by trigger",
+      "items": [
+        "trade_events rejects UPDATE, DELETE and TRUNCATE (migrations.ts:84-90)",
+        "paper_orders, paper_wallet_entries and paper_withdrawals reject UPDATE and DELETE only (migrations.ts:158-161, 191-192)",
+        "A closed paper position cannot be reopened or edited (migrations.ts:172-173)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Not foreign keys, by design",
+      "items": [
+        "paper_wallet_entries.correlation_id is unique but has no foreign key since migration 005",
+        "Withdrawal entries carry WITHDRAWAL:<period> instead of an order id"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Money types",
+      "items": [
+        "Cash is numeric(18,2) rupees; prices are numeric(14,4)",
+        "The view v_closed_trades is derived from trade_events and is not drawn"
+      ]
+    }
+  ]
+}

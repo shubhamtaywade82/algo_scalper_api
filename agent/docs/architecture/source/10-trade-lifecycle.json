@@ -1,0 +1,238 @@
+{
+  "schema_version": 3,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "L3 Trade lifecycle: normal path, one machine per option side",
+    "output": "docs/architecture/10-trade-lifecycle.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
+  },
+  "mainPath": [
+    "IDLE",
+    "SIGNAL_DETECTED",
+    "ENTRY_PENDING"
+  ],
+  "states": [
+    {
+      "id": "IDLE",
+      "type": "start",
+      "label": "Idle",
+      "sublabel": "IDLE",
+      "sources": [
+        {
+          "path": "src/domain/fsm.ts",
+          "line": 42,
+          "label": "TRANSITIONS table"
+        }
+      ]
+    },
+    {
+      "id": "SIGNAL_DETECTED",
+      "type": "active",
+      "label": "Signal",
+      "sublabel": "SIGNAL_DETECTED"
+    },
+    {
+      "id": "ENTRY_PENDING",
+      "type": "waiting",
+      "label": "Entry pending",
+      "sublabel": "ENTRY_PENDING"
+    },
+    {
+      "id": "POSITION_OPEN",
+      "type": "active",
+      "label": "Open",
+      "sublabel": "POSITION_OPEN",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1021,
+          "label": "onEntryFilled"
+        }
+      ]
+    },
+    {
+      "id": "RISK_MANAGEMENT_ACTIVE",
+      "type": "active",
+      "label": "Protected",
+      "sublabel": "RISK_MANAGEMENT_ACTIVE"
+    },
+    {
+      "id": "EXIT_PENDING",
+      "type": "waiting",
+      "label": "Exit pending",
+      "sublabel": "EXIT_PENDING",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1233,
+          "label": "exitSent set before submit"
+        }
+      ]
+    },
+    {
+      "id": "POSITION_CLOSED",
+      "type": "success",
+      "label": "Closed",
+      "sublabel": "POSITION_CLOSED",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1124,
+          "label": "onExitFilled"
+        }
+      ]
+    },
+    {
+      "id": "HALTED",
+      "type": "failure",
+      "label": "Halted",
+      "sublabel": "HALTED",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1376,
+          "label": "halt"
+        }
+      ]
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t01",
+      "from": "IDLE",
+      "to": "SIGNAL_DETECTED",
+      "label": "SIGNAL_FOUND"
+    },
+    {
+      "id": "t03",
+      "from": "SIGNAL_DETECTED",
+      "to": "IDLE",
+      "label": "SIGNAL_DROPPED",
+      "note": "a gate dropped the candidate"
+    },
+    {
+      "id": "t04",
+      "from": "SIGNAL_DETECTED",
+      "to": "ENTRY_PENDING",
+      "label": "ENTRY_SUBMITTED"
+    },
+    {
+      "id": "t06",
+      "from": "ENTRY_PENDING",
+      "to": "POSITION_OPEN",
+      "label": "ENTRY_FILLED"
+    },
+    {
+      "id": "t07",
+      "from": "ENTRY_PENDING",
+      "to": "IDLE",
+      "label": "ENTRY_REJECTED",
+      "note": "definitive 4xx only"
+    },
+    {
+      "id": "t08",
+      "from": "ENTRY_PENDING",
+      "to": "HALTED",
+      "label": "ENTRY_UNCONFIRMED",
+      "variant": "security"
+    },
+    {
+      "id": "t10",
+      "from": "POSITION_OPEN",
+      "to": "RISK_MANAGEMENT_ACTIVE",
+      "label": "PROTECTION_ARMED"
+    },
+    {
+      "id": "t11",
+      "from": "POSITION_OPEN",
+      "to": "EXIT_PENDING",
+      "label": "EXIT_SUBMITTED"
+    },
+    {
+      "id": "t12",
+      "from": "POSITION_OPEN",
+      "to": "POSITION_CLOSED",
+      "label": "PROTECTIVE_EXIT_FILLED"
+    },
+    {
+      "id": "t14",
+      "from": "RISK_MANAGEMENT_ACTIVE",
+      "to": "EXIT_PENDING",
+      "label": "EXIT_SUBMITTED",
+      "note": "time stop, EOD, daily loss, manual, structure break or stale data"
+    },
+    {
+      "id": "t15",
+      "from": "RISK_MANAGEMENT_ACTIVE",
+      "to": "POSITION_CLOSED",
+      "label": "PROTECTIVE_EXIT_FILLED"
+    },
+    {
+      "id": "t17",
+      "from": "EXIT_PENDING",
+      "to": "POSITION_CLOSED",
+      "label": "EXIT_FILLED or PROTECTIVE_EXIT_FILLED"
+    },
+    {
+      "id": "t19",
+      "from": "EXIT_PENDING",
+      "to": "RISK_MANAGEMENT_ACTIVE",
+      "label": "EXIT_REJECTED",
+      "note": "retry after the backoff"
+    },
+    {
+      "id": "t20",
+      "from": "EXIT_PENDING",
+      "to": "HALTED",
+      "label": "EXIT_UNCONFIRMED",
+      "variant": "security"
+    },
+    {
+      "id": "t22",
+      "from": "POSITION_CLOSED",
+      "to": "IDLE",
+      "label": "CLOSE_ACKNOWLEDGED"
+    },
+    {
+      "id": "t24",
+      "from": "HALTED",
+      "to": "IDLE",
+      "label": "RESET",
+      "note": "in the table; no runtime path dispatches it",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Normal path",
+      "items": [
+        "Signal, entry, protection, exit and close, per option side",
+        "HALT edges are in 10b. Two EXIT_PENDING rows to CLOSED share one arrow here",
+        "Both rows are in src/domain/fsm.ts"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Unknown outcomes never resend",
+      "items": [
+        "ENTRY_UNCONFIRMED and EXIT_UNCONFIRMED both lead to HALTED",
+        "timeout, 5xx, 401, 408, 429 or network error counts as unknown"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "HALTED stops entries, not protection",
+      "items": [
+        "Protective exits run while no exit is in flight",
+        "A late fill is recorded for risk; the state stays HALTED"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,248 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "L2 Research plane: from Dhan data to a verdict",
+    "output": "docs/architecture/09-research-plane.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
+  },
+  "stages": [
+    {
+      "label": "Fetch and prepare"
+    },
+    {
+      "label": "Replay"
+    },
+    {
+      "label": "Judge"
+    },
+    {
+      "label": "Record"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "api",
+      "type": "external",
+      "label": "Dhan option API",
+      "sublabel": "ATM strikes, bar minutes",
+      "stage": 0,
+      "row": 0,
+      "sources": [
+        {
+          "path": "src/research/dataset.ts",
+          "line": 201,
+          "label": "parseRollingOptionResponse"
+        }
+      ]
+    },
+    {
+      "id": "dataset",
+      "type": "database",
+      "label": "Dataset file",
+      "sublabel": "sha256 and SDK version",
+      "stage": 0,
+      "row": 1,
+      "sources": [
+        {
+          "path": "src/research/dataset.ts",
+          "line": 39,
+          "label": "ResearchDataset"
+        }
+      ]
+    },
+    {
+      "id": "prereg",
+      "type": "external",
+      "label": "PREREG and HOLDOUT",
+      "sublabel": "committed before a run",
+      "stage": 0,
+      "row": 2,
+      "sources": [
+        {
+          "path": "docs/research/PREREG.md"
+        }
+      ]
+    },
+    {
+      "id": "replay",
+      "type": "backend",
+      "label": "replayDataset",
+      "sublabel": "same strategy, gate, charges",
+      "stage": 1,
+      "row": 0,
+      "sources": [
+        {
+          "path": "src/research/replay.ts",
+          "line": 307,
+          "label": "replayDataset"
+        }
+      ]
+    },
+    {
+      "id": "tm",
+      "type": "backend",
+      "label": "runTimeMachine",
+      "sublabel": "trades in R, verdict",
+      "stage": 1,
+      "row": 1,
+      "sources": [
+        {
+          "path": "src/research/timeMachine.ts",
+          "line": 137,
+          "label": "runTimeMachine"
+        }
+      ]
+    },
+    {
+      "id": "stats",
+      "type": "backend",
+      "label": "Block bootstrap",
+      "sublabel": "CI, dominance, Wilson",
+      "stage": 1,
+      "row": 2,
+      "sources": [
+        {
+          "path": "src/research/stats.ts",
+          "line": 293,
+          "label": "bootstrapMeanR"
+        }
+      ]
+    },
+    {
+      "id": "cells",
+      "type": "backend",
+      "label": "Context cells",
+      "sublabel": "per-cell n, CI, holdout",
+      "stage": 2,
+      "row": 0,
+      "sources": [
+        {
+          "path": "src/research/contextCells.ts",
+          "line": 123,
+          "label": "contextCells"
+        }
+      ]
+    },
+    {
+      "id": "verdict",
+      "type": "backend",
+      "label": "Cell verdict",
+      "sublabel": "three deterministic values",
+      "stage": 2,
+      "row": 1,
+      "sources": [
+        {
+          "path": "src/research/contextCells.ts",
+          "line": 32,
+          "label": "verdict union"
+        }
+      ]
+    },
+    {
+      "id": "ledger",
+      "type": "database",
+      "label": "Experiment ledger",
+      "sublabel": "hash-chained, append-only",
+      "stage": 3,
+      "row": 1,
+      "sources": [
+        {
+          "path": "src/research/ledgerStore.ts",
+          "line": 22,
+          "label": "appendToLedgerFile"
+        }
+      ]
+    }
+  ],
+  "flows": [
+    {
+      "from": "api",
+      "to": "dataset",
+      "label": "premiums, spot"
+    },
+    {
+      "from": "dataset",
+      "to": "replay",
+      "label": "sessions"
+    },
+    {
+      "from": "replay",
+      "to": "tm",
+      "label": "trades in R"
+    },
+    {
+      "from": "tm",
+      "to": "stats",
+      "label": "daily outcomes"
+    },
+    {
+      "from": "tm",
+      "to": "cells",
+      "label": "trades, day tags"
+    },
+    {
+      "from": "stats",
+      "to": "verdict",
+      "label": "CI, floors",
+      "variant": "emphasis"
+    },
+    {
+      "from": "cells",
+      "to": "verdict",
+      "label": "cell rules"
+    },
+    {
+      "from": "verdict",
+      "to": "ledger",
+      "label": "result record",
+      "variant": "emphasis"
+    },
+    {
+      "from": "prereg",
+      "to": "ledger",
+      "label": "registration first",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Same code as live, offline",
+      "items": [
+        "Replay reuses the live strategy, bracket, sizing, pre-trade gate and charges",
+        "Research imports no broker, execution or runtime module (ADR-001)"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "A result cannot change live config",
+      "items": [
+        "Promotion needs a human decision and a new pre-registration",
+        "Spent holdout periods can describe the market but cannot confirm"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Every run is counted",
+      "items": [
+        "Failed hypotheses stay in the ledger and count toward the multiple-testing divisor",
+        "A confirmation needs a registration first"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "The verdict set",
+      "items": [
+        "INSUFFICIENT_EVIDENCE, NO_TRADE or EDGE_SUPPORTED",
+        "A cell stays EDGE_SUPPORTED only if every cost stress agrees"
+      ]
+    }
+  ]
+}

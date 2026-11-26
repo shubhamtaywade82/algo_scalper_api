@@ -1,0 +1,63 @@
+{
+  "name": "options-trading-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NSE index options-buying agent on DhanHQ, with LLM advisory via @nemesis-oss/ollama-sdk",
+  "type": "module",
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "dev": "tsx src/index.tsx",
+    "dev:paper": "CONFIG_FILE=config.paper.yml MODE=paper tsx src/index.tsx",
+    "dev:sandbox": "MODE=sandbox tsx src/index.tsx",
+    "dev:live": "MODE=live tsx src/index.tsx",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit --project tsconfig.typecheck.json",
+    "check": "npm run typecheck && npm run build && npm test",
+    "start": "node dist/index.js",
+    "test": "tsx --test tests/*.test.ts",
+    "smoke:live": "tsx scripts/smoke-live.ts",
+    "smoke:trade": "tsx scripts/smoke-trade-cycle.ts",
+    "smoke:feed": "tsx scripts/smoke-feed.ts",
+    "journal:summary": "tsx scripts/journal-summary.ts",
+    "report:performance": "tsx scripts/performance-report.ts",
+    "timemachine": "tsx scripts/timemachine.ts",
+    "trail-study": "tsx scripts/trail-study.ts",
+    "reconcile": "tsx scripts/reconcile.ts",
+    "withdraw": "tsx scripts/withdraw.ts",
+    "cockpit:demo": "tsx scripts/cockpit-demo.ts",
+    "db:status": "tsx scripts/db.ts status",
+    "db:migrate": "tsx scripts/db.ts migrate",
+    "db:acknowledge": "tsx scripts/db.ts acknowledge",
+    "db:reset-wallet": "tsx scripts/db.ts reset-wallet",
+    "reset:paper": "tsx scripts/reset-paper.ts",
+    "test:integration": "tsx --test tests/persistence.integration.test.ts",
+    "ledger": "tsx scripts/ledger.ts",
+    "risk:shadow": "tsx scripts/risk-shadow.ts"
+  },
+  "dependencies": {
+    "@nemesis-oss/dhanhq-sdk": "2.0.1",
+    "@nemesis-oss/ollama-sdk": "^1.26.0",
+    "@nemesis-oss/tg-format": "^0.1.0",
+    "chalk": "^5.6.2",
+    "cli-truncate": "^4.0.0",
+    "dotenv": "^16.4.5",
+    "ink": "^5.2.1",
+    "ioredis": "^6.0.0",
+    "pg": "^8.23.1",
+    "react": "^18.3.1",
+    "string-width": "^7.2.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^18.3.31",
+    "ts-language-mcp": "2.3.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3"
+  }
+}

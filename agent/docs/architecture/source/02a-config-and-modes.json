@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "L1 Configuration and modes: how a run is decided",
+    "output": "docs/architecture/02a-config-and-modes.html",
+    "quality_profile": "showcase",
+    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "79e951f07c22d772e412cf35abf2843baa17102a" }
+  },
+  "stages": [
+    { "label": "Inputs" },
+    { "label": "Merge" },
+    { "label": "Validate" },
+    { "label": "Wire by mode" }
+  ],
+  "nodes": [
+    { "id": "env", "type": "external", "label": "Environment", "sublabel": "process env and .env", "stage": 0, "row": 0, "sources": [{ "path": "src/index.tsx", "line": 2, "label": "import dotenv/config" }] },
+    { "id": "yaml", "type": "database", "label": "YAML profile", "sublabel": "CONFIG_FILE, e.g. paper", "stage": 0, "row": 1, "sources": [{ "path": "src/config.ts", "line": 443, "label": "loadYamlConfig" }] },
+    { "id": "keymap", "type": "backend", "label": "Key mapping", "sublabel": "YAML path to env name", "stage": 1, "row": 1, "sources": [{ "path": "src/config.ts", "line": 400, "label": "envKeyForYamlPath" }] },
+    { "id": "merge", "type": "backend", "label": "Merge", "sublabel": "YAML overrides env", "stage": 1, "row": 0, "sources": [{ "path": "src/config.ts", "line": 481, "label": "merged = env, then YAML" }] },
+    { "id": "load", "type": "security", "label": "loadConfig", "sublabel": "parse and validate", "stage": 2, "row": 0, "sources": [{ "path": "src/config.ts", "line": 476, "label": "loadConfig" }, { "path": "src/config.ts", "line": 755, "label": "validateCrossFields" }] },
+    { "id": "refuse", "type": "security", "label": "Refuse to start", "sublabel": "unsafe or incomplete", "stage": 2, "row": 2, "sources": [{ "path": "src/config.ts", "line": 499, "label": "live acknowledgement" }, { "path": "src/config.ts", "line": 786, "end_line": 794, "label": "live ceilings" }] },
+    { "id": "cfg", "type": "backend", "label": "AgentConfig", "sublabel": "typed, read-only", "stage": 2, "row": 1, "sources": [{ "path": "src/config.ts", "line": 67, "label": "AgentConfig" }] },
+    { "id": "wire", "type": "backend", "label": "buildRuntime", "sublabel": "chooses ports by mode", "stage": 3, "row": 0, "sources": [{ "path": "src/runtime/createRuntime.ts", "line": 59, "label": "buildRuntime" }] },
+    { "id": "paper", "type": "cloud", "label": "Paper venue", "sublabel": "postgres or paper_exchange", "stage": 3, "row": 1, "sources": [{ "path": "src/runtime/createRuntime.ts", "line": 120, "label": "openPaperVenue, postgres" }, { "path": "src/paper/exchangeGateway.ts", "line": 20, "label": "PaperExchangeGateway" }] },
+    { "id": "sandbox", "type": "external", "label": "Sandbox gateway", "sublabel": "Dhan sandbox account", "stage": 3, "row": 2, "sources": [{ "path": "src/dhan/sandboxGateway.ts", "line": 27, "label": "DhanSandboxGateway" }] },
+    { "id": "live", "type": "cloud", "label": "Live port", "sublabel": "Dhan production account", "stage": 3, "row": 3, "sources": [{ "path": "src/dhan/liveExecution.ts", "line": 200, "label": "LiveExecutionPort" }] }
+  ],
+  "flows": [
+    { "from": "env", "to": "merge", "label": "env values" },
+    { "from": "yaml", "to": "keymap", "label": "YAML keys" },
+    { "from": "keymap", "to": "merge", "label": "env names", "variant": "dashed" },
+    { "from": "merge", "to": "load", "label": "merged env" },
+    { "from": "load", "to": "cfg", "label": "validated", "variant": "emphasis" },
+    { "from": "load", "to": "refuse", "label": "rejected", "variant": "security" },
+    { "from": "cfg", "to": "wire", "label": "AgentConfig" },
+    { "from": "wire", "to": "paper", "label": "MODE=paper" },
+    { "from": "wire", "to": "sandbox", "label": "MODE=sandbox" },
+    { "from": "wire", "to": "live", "label": "MODE=live, acknowledged", "variant": "security" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Precedence", "items": ["A YAML file overrides the same keys in .env (config.ts:481)", "config.paper.yml sets no venue, so PAPER_BACKEND in .env chooses postgres or exchange"] },
+    { "dot": "amber", "title": "Refusals at startup", "items": ["Live needs LIVE_TRADING_ACK equal to the acknowledgement phrase (config.ts:499)", "Live caps risk at 2% per trade and 6% daily, and requires ENFORCE_DAILY_LOSS=true (config.ts:786-794)"] },
+    { "dot": "cyan", "title": "Required services", "items": ["Paper needs DATABASE_URL (config.ts:711)", "Sandbox and live need DATABASE_URL and REDIS_URL (config.ts:708)"] }
+  ]
+}

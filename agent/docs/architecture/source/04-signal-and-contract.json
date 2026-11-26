@@ -1,0 +1,32 @@
+{
+  "schema_version": 1, "diagram_type": "architecture",
+  "meta": { "title": "L2 Signal and contract: from closed bars to a sized bracket", "output": "docs/architecture/04-signal-and-contract.html", "quality_profile": "showcase",
+    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "79e951f07c22d772e412cf35abf2843baa17102a" } },
+  "layout": { "mode": "grid", "cols": 3, "gapX": 170, "gapY": 110, "cellW": 120, "cellH": 84 },
+  "components": [
+    { "id": "orb", "type": "backend", "label": "ORB + SuperTrend", "sublabel": "closed-bar signal", "tag": "pure", "row": 0, "col": 0, "sources": [{ "path": "src/strategy/orbSupertrend.ts", "line": 60, "label": "evaluateOrbSupertrend" }] },
+    { "id": "catalog", "type": "backend", "label": "StrategySession", "sublabel": "first enabled family", "tag": "pure", "row": 0, "col": 1, "sources": [{ "path": "src/strategy/session.ts", "line": 43, "label": "StrategySession" }] },
+    { "id": "prev", "type": "backend", "label": "Previous-day break", "sublabel": "off unless enabled", "tag": "research", "row": 0, "col": 2, "sources": [{ "path": "src/strategy/levelBreak.ts", "line": 45, "label": "previousDayBreak" }] },
+    { "id": "ctx", "type": "backend", "label": "Market context", "sublabel": "structure verdict", "tag": "pure", "row": 1, "col": 0, "sources": [{ "path": "src/strategy/marketContext.ts", "line": 76, "label": "marketContext" }] },
+    { "id": "chain", "type": "backend", "label": "Chain analysis", "sublabel": "OI walls, bias", "tag": "pure", "row": 1, "col": 2, "sources": [{ "path": "src/options/chainAnalyzer.ts", "line": 119, "label": "analyzeOptionChain" }] },
+    { "id": "sel", "type": "backend", "label": "selectContract", "sublabel": "expiry, strike, quotes", "tag": "pure", "row": 2, "col": 1, "sources": [{ "path": "src/options/selector.ts", "line": 101, "label": "selectContract" }] },
+    { "id": "brk", "type": "backend", "label": "bracketLevels", "sublabel": "stop, target, ticks", "tag": "pure", "row": 2, "col": 2, "sources": [{ "path": "src/options/pricing.ts", "line": 43, "label": "bracketLevels" }] },
+    { "id": "plan", "type": "backend", "label": "Entry prices", "sublabel": "LIMIT at ask + buffer", "tag": "runtime", "row": 3, "col": 1, "sources": [{ "path": "src/runtime/entryPlan.ts", "line": 19, "label": "planEntryPrices" }] },
+    { "id": "size", "type": "security", "label": "sizePosition", "sublabel": "whole lots, budget", "tag": "pure", "row": 3, "col": 2, "sources": [{ "path": "src/options/sizing.ts", "line": 32, "label": "sizePosition" }] }
+  ],
+  "connections": [
+    { "id": "f-orb", "from": "orb", "to": "catalog", "label": "ORB family" },
+    { "id": "f-prev", "from": "prev", "to": "catalog", "label": "level family", "variant": "dashed" },
+    { "id": "signal", "from": "catalog", "to": "sel", "label": "signal", "variant": "emphasis" },
+    { "id": "ctx-in", "from": "ctx", "to": "sel", "label": "context" },
+    { "id": "chain-in", "from": "chain", "to": "sel", "label": "chain" },
+    { "id": "ask", "from": "sel", "to": "plan", "label": "ask, tick" },
+    { "id": "limit", "from": "plan", "to": "brk", "label": "entry limit" },
+    { "id": "bracket", "from": "brk", "to": "size", "label": "bracket" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Pure core", "items": ["Signal, context, chain and selection are pure functions", "Research replays these same functions (ADR-001)"] },
+    { "dot": "rose", "title": "Stop and target are mandatory", "items": ["bracketLevels returns nothing without a stop", "Lots are floored so one stop-out fits the budget"] },
+    { "dot": "amber", "title": "First match, by catalogue order", "items": ["A bar that fires two families is credited to the first", "Independent replay per family reports what was hidden"] }
+  ]
+}

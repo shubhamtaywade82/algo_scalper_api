@@ -1,0 +1,20 @@
+{
+  "schema": "greeks-snapshot/1",
+  "position_id": "E-20261123-0931-0007",
+  "underlying": "NIFTY",
+  "option_type": "CE",
+  "expiry": "2026-11-26",
+  "strike": 25450,
+  "signed_quantity": 75,
+  "entry_price": 141.2,
+  "spot": 25453.35,
+  "computed_at_ms": 1763766062114,
+  "source": "broker",
+  "net": {
+    "delta": 39.0,
+    "gamma": 0.0825,
+    "theta_per_day": -678.75,
+    "vega_per_1pct": 2050.5,
+    "rho": 412.2
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/shubhamtaywade82/algo_scalper_api/main/contracts/schemas/vix-snapshot-1.schema.json",
+  "title": "India VIX snapshot (vix-snapshot/1)",
+  "description": "Live India VIX reading published by algo_scalper_api (the VIX authority: it holds the INDIA_VIX websocket subscription and the VixGate state machine). The agent consumes this over `GET /api/market/vix` (dashboard token) as an advisory input to its own sizing/entry rules - share data, not decisions: Rails publishes the reading and its gate state; each consumer applies its own policy.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "symbol", "ltp", "as_of_ms", "source", "gate"],
+  "properties": {
+    "schema": {
+      "const": "vix-snapshot/1"
+    },
+    "symbol": {
+      "const": "INDIA_VIX"
+    },
+    "ltp": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Latest India VIX value."
+    },
+    "change_pct": {
+      "type": ["number", "null"],
+      "description": "Change vs previous close, in percent."
+    },
+    "as_of_ms": {
+      "type": "integer",
+      "description": "Epoch milliseconds of the reading."
+    },
+    "source": {
+      "enum": ["dhan_ws", "dhan_rest", "cache"],
+      "description": "dhan_ws = live websocket tick; dhan_rest = REST fallback; cache = served from tick cache."
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry_ceiling", "force_exit_above", "state"],
+      "properties": {
+        "entry_ceiling": {
+          "type": "number",
+          "description": "Rails VixGate blocks ITS OWN new entries above this (default 20.0). Advisory for the agent."
+        },
+        "force_exit_above": {
+          "type": "number",
+          "description": "Rails VixGate force-exits ITS OWN positions above this (default 22.0). Advisory for the agent."
+        },
+        "state": {
+          "enum": ["open", "entries_locked", "force_exit_armed"],
+          "description": "Rails' own gate state, published for observability. The agent maps it to its own policy."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,322 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "L3 Session day: from the weekday start to the last exit",
+    "output": "docs/architecture/13a-session-day.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
+  },
+  "stages": [
+    {
+      "label": "Before the open"
+    },
+    {
+      "label": "Entry window"
+    },
+    {
+      "label": "Close"
+    },
+    {
+      "label": "After"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "cron",
+      "type": "external",
+      "label": "Weekday cron",
+      "sublabel": "runs session.sh; not in the repo",
+      "stage": 0,
+      "row": 0,
+      "sources": [
+        {
+          "path": "scripts/session.sh",
+          "line": 2,
+          "label": "for cron on weekdays"
+        }
+      ]
+    },
+    {
+      "id": "start",
+      "type": "backend",
+      "label": "session.sh start",
+      "sublabel": "detached tmux session",
+      "stage": 0,
+      "row": 1,
+      "sources": [
+        {
+          "path": "scripts/session.sh",
+          "line": 23,
+          "label": "tmux new-session"
+        }
+      ]
+    },
+    {
+      "id": "boot",
+      "type": "backend",
+      "label": "buildRuntime",
+      "sublabel": "lease, restore the day",
+      "stage": 0,
+      "row": 2,
+      "sources": [
+        {
+          "path": "src/runtime/createRuntime.ts",
+          "line": 59,
+          "label": "buildRuntime"
+        }
+      ]
+    },
+    {
+      "id": "warm",
+      "type": "backend",
+      "label": "Clock guard",
+      "sublabel": "warm-up bars vs wall clock",
+      "stage": 0,
+      "row": 3,
+      "sources": [
+        {
+          "path": "src/runtime/clockGuard.ts",
+          "line": 17,
+          "label": "assertWarmupClock"
+        }
+      ]
+    },
+    {
+      "id": "entries",
+      "type": "backend",
+      "label": "Signals and entries",
+      "sublabel": "09:15 to 14:00 in the profile",
+      "stage": 1,
+      "row": 0,
+      "sources": [
+        {
+          "path": "config.paper.yml",
+          "line": 109,
+          "label": "entry_start"
+        }
+      ]
+    },
+    {
+      "id": "window",
+      "type": "security",
+      "label": "Outside the window",
+      "sublabel": "entry refused",
+      "stage": 1,
+      "row": 1,
+      "sources": [
+        {
+          "path": "src/risk/riskEngine.ts",
+          "line": 134,
+          "label": "OUTSIDE_ENTRY_WINDOW"
+        }
+      ]
+    },
+    {
+      "id": "exits",
+      "type": "backend",
+      "label": "Exits",
+      "sublabel": "ticks and clock: stop, target, time",
+      "stage": 1,
+      "row": 2,
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1366,
+          "label": "TIME_STOP"
+        }
+      ]
+    },
+    {
+      "id": "cutoff",
+      "type": "security",
+      "label": "Expiry-day cutoff",
+      "sublabel": "no new entries after 15:15",
+      "stage": 2,
+      "row": 0,
+      "sources": [
+        {
+          "path": "src/risk/riskEngine.ts",
+          "line": 138,
+          "label": "EXPIRY_DAY_CUTOFF"
+        }
+      ]
+    },
+    {
+      "id": "flatten",
+      "type": "backend",
+      "label": "Flatten by 15:15",
+      "sublabel": "EOD_FLATTEN, every position",
+      "stage": 2,
+      "row": 1,
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1362,
+          "label": "EOD_FLATTEN"
+        },
+        {
+          "path": "config.paper.yml",
+          "line": 112,
+          "label": "flatten_by"
+        }
+      ]
+    },
+    {
+      "id": "stop",
+      "type": "backend",
+      "label": "Graceful stop",
+      "sublabel": "s, or SIGTERM from the script",
+      "stage": 3,
+      "row": 0,
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 275,
+          "label": "stop"
+        }
+      ]
+    },
+    {
+      "id": "shutdown",
+      "type": "backend",
+      "label": "SHUTDOWN exits",
+      "sublabel": "flat, or the timeout",
+      "stage": 3,
+      "row": 1,
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1349,
+          "label": "SHUTDOWN"
+        }
+      ]
+    },
+    {
+      "id": "journal",
+      "type": "database",
+      "label": "Journal day file",
+      "sublabel": "events, one file per day",
+      "stage": 3,
+      "row": 2,
+      "sources": [
+        {
+          "path": "src/ops/eventLog.ts",
+          "line": 51,
+          "label": "EventLog"
+        }
+      ]
+    },
+    {
+      "id": "kill",
+      "type": "backend",
+      "label": "tmux kill-session",
+      "sublabel": "after the pane exits",
+      "stage": 3,
+      "row": 3,
+      "sources": [
+        {
+          "path": "scripts/session.sh",
+          "line": 32,
+          "label": "kill-session"
+        }
+      ]
+    }
+  ],
+  "flows": [
+    {
+      "from": "cron",
+      "to": "start",
+      "label": "weekday start"
+    },
+    {
+      "from": "start",
+      "to": "boot",
+      "label": "new session"
+    },
+    {
+      "from": "boot",
+      "to": "warm",
+      "label": "restore, then warm up"
+    },
+    {
+      "from": "warm",
+      "to": "entries",
+      "label": "window opens",
+      "variant": "emphasis"
+    },
+    {
+      "from": "entries",
+      "to": "window",
+      "label": "outside the window",
+      "variant": "dashed"
+    },
+    {
+      "from": "entries",
+      "to": "exits",
+      "label": "position open"
+    },
+    {
+      "from": "exits",
+      "to": "flatten",
+      "label": "15:15 or exit reason"
+    },
+    {
+      "from": "entries",
+      "to": "cutoff",
+      "label": "expiry day",
+      "variant": "dashed"
+    },
+    {
+      "from": "flatten",
+      "to": "stop",
+      "label": "session end or s"
+    },
+    {
+      "from": "stop",
+      "to": "shutdown",
+      "label": "graceful"
+    },
+    {
+      "from": "shutdown",
+      "to": "journal",
+      "label": "records"
+    },
+    {
+      "from": "shutdown",
+      "to": "kill",
+      "label": "pane exits"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Cron sits outside the repository",
+      "items": [
+        "The weekday cron that runs session.sh is not in the repo",
+        "Start and stop times belong to the operator's crontab"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Times come from the profile",
+      "items": [
+        "config.paper.yml runs entries 09:15 to 14:00 and flattens by 15:15",
+        "Code defaults differ (09:30 to 14:30, flatten 15:05): check the profile you run"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "No holiday calendar",
+      "items": [
+        "The repo has no NSE or BSE holiday list",
+        "On a holiday no ticks arrive, so no bars, signals or entries (README, verification item 6)"
+      ]
+    }
+  ]
+}

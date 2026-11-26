@@ -1,0 +1,112 @@
+# ==============================================================================
+# Options Trading Agent - Paper Trading Session Configuration
+# ==============================================================================
+# Run with:
+#   npm run dev:paper
+#   or: CONFIG_FILE=config.paper.yml MODE=paper tsx src/index.tsx
+# ==============================================================================
+
+mode: paper
+# Underlyings to trade (supported: NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX)
+underlyings:
+  - NIFTY
+  - BANKNIFTY
+  - SENSEX
+
+# Session posture configuration
+session:
+  # Active posture for the session: "scout" | "aligned" | "confirmed"
+  current_posture: scout
+
+  # Reference configurations and behavior for each posture
+  postures:
+    scout:
+      mode: aggressive
+      description: "Fastest entries: triggers ORB breakout, SuperTrend flip, EMA cross, momentum break, or trend continuation without requiring multi-indicator agreement."
+      orb_requires_close_outside: false
+      trend_requires_ema_filter: false
+
+    aligned:
+      mode: balanced
+      description: "Standard: requires ORB breakout + SuperTrend + EMA fast/slow alignment on closed bar."
+      orb_requires_close_outside: true
+      trend_requires_ema_filter: true
+
+    confirmed:
+      mode: protective
+      description: "Conservative: requires price to hold beyond range + multi-indicator trend confluence and confirmation bar."
+      orb_requires_close_outside: true
+      trend_requires_ema_filter: true
+      confirmation_bars: 1
+
+# Strategy Selection & Indicators
+strategy:
+  active_strategies:
+    - range                    # Opening Range Breakout
+    - trend                    # SuperTrend flip
+    - ema_cross                # Fast / slow EMA crossover
+    - momentum                 # 3-bar high/low momentum breakout
+    - continuation             # Pullback bounce in active trend
+  bar_minutes: 5               # 5-minute bars
+  supertrend_period: 10        # Base ATR period for adaptive SuperTrend
+  supertrend_multiplier: 3.0   # Base multiplier (dynamically scaled by market efficiency in Scout)
+  max_bars_since_flip: 4       # Enters within 4 bars (20m) of flip; mature trends enter via continuation or momentum
+  min_distance_atr: 0.2        # Minimum distance from ST line (in ATR multiples) to enter
+  ema_fast: 9
+  ema_slow: 21
+
+# Contract selection & expiry constraints
+contract:
+  min_days_to_expiry: 0
+  max_days_to_expiry: 6        # 6 keeps every weekly expiry in reach (NIFTY Tuesday, SENSEX Thursday) and still excludes 8+ DTE
+
+# Option Chain Analysis: PCR, Support/Resistance OI walls, and pre-trade confluence
+chain_analysis:
+  enabled: true
+  min_headroom_pts: 15         # Minimum headroom (pts) before major OI resistance/support wall
+
+# Market context: both CE and PE may be held, but each entry must be backed by the day trend, market structure
+# (swing breaks / MSS), chain bias and regime; structure against the side vetoes it.
+context:
+  enabled: true                # Gate entries on context (ranging markets need stronger agreement)
+  structure_exit: true         # Exit a side when market structure shifts against it
+
+# Capital & Sizing: 10L paper capital with 20k risk allocation per trade
+capital:
+  inr: 1000000                 # ₹10,00,000 (10 Lakhs paper balance)
+  max_risk_per_trade_pct: 2.0  # 2% of 10L = ₹20,000 risk allocation per trade
+  max_daily_loss_pct: 4.0      # Stop for the day at -4%: on 2026-10-26 a +₹11.8k peak became -₹67k with no brake
+  max_lots_per_order: 15       # Allows full ₹20k deployment without 1-lot cap
+
+# Risk Limits: allow all underlyings to open positions concurrently
+limits:
+  max_trades_per_day: 0        # 0 = unlimited trades per day (no trade count hardblock)
+  cooldown_seconds: 900        # 15 min per underlying after an exit: stops re-buying the same strike right after a stop-out
+  max_open_positions: 6        # Max 6 concurrent positions so all underlyings can take positions
+  max_positions_per_underlying: 2 # Up to 2 positions per underlying (1 CE + 1 PE)
+  max_positions_per_side: 1    # Limits correlated risk: at most 1 CE or 1 PE open across all indices
+  allow_opposing_sides: false  # NIFTY, BANKNIFTY and SENSEX move together: a CE on one and a PE on another pays decay and spread twice for no net view
+  enforce_daily_loss: true     # Set false to bypass daily loss brake completely, or press 'd' in cockpit
+  all_in_risk_policy: "shadow" # OTA-311: planned risk decides; all-in is journalled beside it. 'enforce' only after the shadow comparison and sign-off
+  broker_kill_switch_on_breach: false # Avoids tripping broker kill switch during paper runs
+
+# Exit Strategy & Targets
+exits:
+  stop_loss_pct: 50            # Wide premium stop: 30% was hit by noise. Time Machine NIFTY/SENSEX/BN 2025-10..2026-09
+  target_rr: 1.0               # Take 1R: the edge, where any, is in the first 30 min; 1.5R mostly expired unhit
+  runner_mode: false           # false = realistic achievable TP; true = uncapped runner
+  max_hold_minutes: 30         # 50%/1R/30min was the only exit set >= 0R on all four replay datasets; 30%/1.5R/90min was the worst
+  trailing_jump_pct: 8         # Step up stop loss by 8% as price advances (locks in profit tighter)
+  breakeven_at_rr: 0.8         # Move SL to entry breakeven at 0.8R profit (+40% on premium with the 50% stop)
+
+# Paper Trading Venue Settings
+paper:
+  backend: postgres            # postgres (local PostgreSQL ledger) or exchange
+  slippage_bps: 25             # 25 bps realistic spread/slippage simulation
+
+# Session Window & Timings (IST)
+timing:
+  entry_start: "09:15"         # Market open
+  entry_end: "14:00"           # Later entries on 1-3 DTE options rarely get time to work before the 15:15 flatten
+  expiry_day_cutoff: "15:15"
+  flatten_by: "15:15"          # Auto-square off cutoff

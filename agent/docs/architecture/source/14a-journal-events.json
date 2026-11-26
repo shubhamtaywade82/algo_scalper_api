@@ -1,0 +1,429 @@
+{
+  "schema_version": 1,
+  "diagram_type": "tree",
+  "meta": {
+    "title": "L4 Journal events: what the agent records, by purpose",
+    "output": "docs/architecture/14a-journal-events.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
+  },
+  "layout": {
+    "direction": "right",
+    "gapX": 40,
+    "gapY": 26
+  },
+  "nodes": [
+    {
+      "id": "root",
+      "label": "Journal events",
+      "sublabel": "one JSONL file per IST day; the ledger mirrors them",
+      "sources": [
+        {
+          "path": "src/ops/eventLog.ts",
+          "line": 51,
+          "label": "EventLog"
+        }
+      ]
+    },
+    {
+      "id": "g_entry",
+      "parent": "root",
+      "label": "Signal and entry",
+      "sublabel": "from a closed bar to a fill"
+    },
+    {
+      "id": "e_signal",
+      "parent": "g_entry",
+      "label": "signal_detected",
+      "sublabel": "a closed bar fired a family",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 590,
+          "label": "signal_detected"
+        }
+      ]
+    },
+    {
+      "id": "e_dropped",
+      "parent": "g_entry",
+      "label": "signal_dropped",
+      "sublabel": "a gate dropped the candidate",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 746,
+          "label": "signal_dropped"
+        }
+      ]
+    },
+    {
+      "id": "e_advice",
+      "parent": "g_entry",
+      "label": "advisor_verdict",
+      "sublabel": "ENTER or SKIP, with confidence",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1001,
+          "label": "advisor_verdict"
+        }
+      ]
+    },
+    {
+      "id": "e_intent",
+      "parent": "g_entry",
+      "label": "entry_submitted",
+      "sublabel": "durable intent, before dispatch",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 658,
+          "label": "entry_submitted"
+        }
+      ]
+    },
+    {
+      "id": "e_rejected",
+      "parent": "g_entry",
+      "label": "entry_rejected",
+      "sublabel": "definitive refusal; no position",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 692,
+          "label": "entry_rejected"
+        }
+      ]
+    },
+    {
+      "id": "e_filled",
+      "parent": "g_entry",
+      "label": "entry_filled",
+      "sublabel": "fill confirmed from the order stream",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1083,
+          "label": "entry_filled"
+        }
+      ]
+    },
+    {
+      "id": "e_late",
+      "parent": "g_entry",
+      "label": "late_entry_fill",
+      "sublabel": "a fill after the entry was given up",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1106,
+          "label": "late_entry_fill"
+        }
+      ]
+    },
+    {
+      "id": "g_position",
+      "parent": "root",
+      "label": "Position and exit",
+      "sublabel": "what happens to an open position"
+    },
+    {
+      "id": "e_client",
+      "parent": "g_position",
+      "label": "position_client_side",
+      "sublabel": "the agent holds the stop and target",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1092,
+          "label": "position_client_side"
+        }
+      ]
+    },
+    {
+      "id": "e_stale",
+      "parent": "g_position",
+      "label": "position_stale",
+      "sublabel": "option silence past FEED_STALE_MS",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1331,
+          "label": "position_stale"
+        }
+      ]
+    },
+    {
+      "id": "e_stale_clear",
+      "parent": "g_position",
+      "label": "position_stale_cleared",
+      "sublabel": "option ticks resumed",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1340,
+          "label": "position_stale_cleared"
+        }
+      ]
+    },
+    {
+      "id": "e_trail",
+      "parent": "g_position",
+      "label": "trailing_stop_updated",
+      "sublabel": "the trail moved the stop",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 345,
+          "label": "trailing_stop_updated"
+        }
+      ]
+    },
+    {
+      "id": "e_exit",
+      "parent": "g_position",
+      "label": "exit_submitted",
+      "sublabel": "durable exit intent, with its reason",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1278,
+          "label": "exit_submitted"
+        }
+      ]
+    },
+    {
+      "id": "e_gap",
+      "parent": "g_position",
+      "label": "audit_gap",
+      "sublabel": "exit intent not durable; exit still sent",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1279,
+          "label": "audit_gap"
+        }
+      ]
+    },
+    {
+      "id": "e_exit_rej",
+      "parent": "g_position",
+      "label": "exit_rejected",
+      "sublabel": "definitive refusal; retried after backoff",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1149,
+          "label": "exit_rejected"
+        }
+      ]
+    },
+    {
+      "id": "e_closed",
+      "parent": "g_position",
+      "label": "trade_closed",
+      "sublabel": "realised P&L, durable",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1185,
+          "label": "trade_closed"
+        }
+      ]
+    },
+    {
+      "id": "g_risk",
+      "parent": "root",
+      "label": "Day risk and broker",
+      "sublabel": "limits, breaches and the broker switch"
+    },
+    {
+      "id": "e_breach",
+      "parent": "g_risk",
+      "label": "daily_loss_breach",
+      "sublabel": "day P&L at or below the limit",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 576,
+          "label": "daily_loss_breach"
+        }
+      ]
+    },
+    {
+      "id": "e_reset",
+      "parent": "g_risk",
+      "label": "daily_loss_reset",
+      "sublabel": "operator reset of the drawdown",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 438,
+          "label": "daily_loss_reset"
+        }
+      ]
+    },
+    {
+      "id": "e_brake",
+      "parent": "g_risk",
+      "label": "daily_loss_brake_toggled",
+      "sublabel": "brake enforced or released",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 454,
+          "label": "daily_loss_brake_toggled"
+        }
+      ]
+    },
+    {
+      "id": "e_book_kill",
+      "parent": "g_risk",
+      "label": "book_kill_switch",
+      "sublabel": "local block on new entries",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 588,
+          "label": "book_kill_switch"
+        }
+      ]
+    },
+    {
+      "id": "e_broker_fail",
+      "parent": "g_risk",
+      "label": "broker_kill_switch_failed",
+      "sublabel": "Dhan refused or failed the switch",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 631,
+          "label": "broker_kill_switch_failed"
+        }
+      ]
+    },
+    {
+      "id": "g_operator",
+      "parent": "root",
+      "label": "Operator and strategy",
+      "sublabel": "decisions made in the cockpit"
+    },
+    {
+      "id": "e_block",
+      "parent": "g_operator",
+      "label": "operator_entry_block",
+      "sublabel": "operator blocks new entries",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 418,
+          "label": "operator_entry_block"
+        }
+      ]
+    },
+    {
+      "id": "e_unblock",
+      "parent": "g_operator",
+      "label": "operator_entry_clear",
+      "sublabel": "operator clears the block",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 430,
+          "label": "operator_entry_clear"
+        }
+      ]
+    },
+    {
+      "id": "e_posture",
+      "parent": "g_operator",
+      "label": "strategy_posture",
+      "sublabel": "posture cycled",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 464,
+          "label": "strategy_posture"
+        }
+      ]
+    },
+    {
+      "id": "e_toggle",
+      "parent": "g_operator",
+      "label": "strategy_toggled",
+      "sublabel": "a family switched on or off",
+      "sources": [
+        {
+          "path": "src/runtime/orchestrator.ts",
+          "line": 474,
+          "label": "strategy_toggled"
+        }
+      ]
+    },
+    {
+      "id": "g_halt",
+      "parent": "root",
+      "label": "Halts and feed",
+      "sublabel": "the events that stop trading"
+    },
+    {
+      "id": "e_halted",
+      "parent": "g_halt",
+      "label": "halted",
+      "sublabel": "underlying halted, with the reason",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1387,
+          "label": "halted"
+        }
+      ]
+    },
+    {
+      "id": "e_feed",
+      "parent": "g_halt",
+      "label": "feed_terminal",
+      "sublabel": "feed ended by the server, with code",
+      "sources": [
+        {
+          "path": "src/runtime/createRuntime.ts",
+          "line": 112,
+          "label": "feed_terminal"
+        }
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Durable before the broker",
+      "items": [
+        "entry_submitted is awaited before the entry is sent (underlyingAgent.ts:658)",
+        "exit_submitted is attempted before the sell, and a failed write becomes audit_gap; the exit still goes out",
+        "trade_closed is durable so a standby restores the realised P&L"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "A failed write is recorded",
+      "items": [
+        "audit_gap marks an exit whose intent could not be written; the exit still goes out",
+        "Unconfirmed events hold new entries until the record is written"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Restart rebuilds the day from these events",
+      "items": [
+        "Day P&L, trade count, cooldown and breach state come from today's file or ledger",
+        "A malformed line refuses startup"
+      ]
+    }
+  ]
+}

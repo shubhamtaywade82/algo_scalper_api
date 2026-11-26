@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "L1 Layers and planes",
+    "output": "docs/architecture/01-layers-and-planes.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
+  },
+  "layout": { "mode": "grid", "cols": 4, "gapX": 120, "gapY": 100, "cellW": 120, "cellH": 84 },
+  "components": [
+    { "id": "config", "type": "backend", "label": "Config", "sublabel": "env and YAML, ceilings", "row": 0, "col": 0, "sources": [{ "path": "src/config.ts", "line": 476, "end_line": 481, "label": "loadConfig, YAML over env" }] },
+    { "id": "auth", "type": "security", "label": "Auth", "sublabel": "PIN+TOTP, token cache", "row": 0, "col": 1, "sources": [{ "path": "src/dhan/auth.ts", "line": 24, "label": "createTotpProvider" }] },
+    { "id": "market", "type": "messagebus", "label": "Market data", "sublabel": "WS feed, REST chains", "tag": "I/O", "row": 0, "col": 2, "sources": [{ "path": "src/dhan/feed.ts", "line": 113, "label": "DhanFeed" }, { "path": "src/dhan/marketData.ts", "line": 76, "label": "DhanMarketData" }] },
+    { "id": "cockpit", "type": "frontend", "label": "Cockpit", "sublabel": "snapshot view, operator keys", "row": 0, "col": 3, "sources": [{ "path": "src/ui/App.tsx", "line": 56, "label": "App" }] },
+    { "id": "time", "type": "backend", "label": "Time", "sublabel": "IST minute of day", "row": 1, "col": 0, "sources": [{ "path": "src/time/ist.ts", "line": 18, "label": "istParts" }] },
+    { "id": "orch", "type": "backend", "label": "Orchestration", "sublabel": "routes ticks, agents", "row": 1, "col": 1, "sources": [{ "path": "src/runtime/orchestrator.ts", "line": 67, "label": "Orchestrator" }] },
+    { "id": "signal", "type": "backend", "label": "Signal", "sublabel": "ORB and SuperTrend", "tag": "pure", "row": 1, "col": 2, "sources": [{ "path": "src/strategy/session.ts", "line": 43, "label": "StrategySession" }] },
+    { "id": "contract", "type": "backend", "label": "Contract", "sublabel": "select, bracket, size", "tag": "pure", "row": 1, "col": 3, "sources": [{ "path": "src/options/selector.ts", "line": 101, "label": "selectContract" }] },
+    { "id": "audit", "type": "database", "label": "Audit", "sublabel": "journal, PostgreSQL", "row": 2, "col": 0, "sources": [{ "path": "src/ops/eventLog.ts", "line": 51, "label": "EventLog" }] },
+    { "id": "venue", "type": "cloud", "label": "Venue", "sublabel": "paper, sandbox, live", "tag": "broker writes", "row": 2, "col": 1, "sources": [{ "path": "src/execution/ports.ts", "line": 101, "label": "ExecutionPort" }] },
+    { "id": "advice", "type": "external", "label": "Advice", "sublabel": "Ollama, veto only", "row": 2, "col": 2, "sources": [{ "path": "src/llm/advisor.ts", "line": 62, "label": "OllamaTradeAdvisor" }] },
+    { "id": "gate", "type": "security", "label": "Risk gate", "sublabel": "all violations reported", "row": 2, "col": 3, "sources": [{ "path": "src/risk/riskEngine.ts", "line": 196, "label": "evaluatePreTrade" }] },
+    { "id": "research", "type": "backend", "label": "Research", "sublabel": "offline replay, no orders", "tag": "offline", "row": 3, "col": 3, "sources": [{ "path": "src/research/timeMachine.ts", "line": 137, "label": "runTimeMachine" }] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Live trading plane", "wraps": ["config", "auth", "market", "cockpit", "time", "orch", "signal", "contract", "audit", "venue", "advice", "gate"] },
+    { "kind": "security-group", "label": "Offline, no broker path", "wraps": ["research"] }
+  ],
+  "connections": [
+    { "id": "cfg-auth", "from": "config", "to": "auth", "label": "credentials" },
+    { "id": "auth-market", "from": "auth", "to": "market", "label": "token" },
+    { "id": "ticks", "from": "market", "to": "orch", "label": "ticks", "variant": "emphasis" },
+    { "id": "clock", "from": "time", "to": "orch", "label": "clock", "variant": "dashed" },
+    { "id": "to-signal", "from": "orch", "to": "signal", "label": "closed bars" },
+    { "id": "signal-contract", "from": "signal", "to": "contract", "label": "signal" },
+    { "id": "contract-gate", "from": "contract", "to": "gate", "label": "sized order" },
+    { "id": "gate-advice", "from": "gate", "to": "advice", "label": "passed" },
+    { "id": "advice-venue", "from": "advice", "to": "venue", "label": "ENTER", "variant": "emphasis" },
+    { "id": "venue-orch", "from": "venue", "to": "orch", "label": "events", "variant": "security" },
+    { "id": "orch-audit", "from": "orch", "to": "audit", "label": "journal" },
+    { "id": "snapshot", "from": "cockpit", "to": "orch", "label": "snapshot and keys", "variant": "dashed" },
+    { "id": "reuse", "from": "research", "to": "gate", "label": "reuses code", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Plane rule (ADR-001)", "items": ["Signal, Contract and Market logic import no broker or runtime code", "Research reuses their code and never reaches Venue"] },
+    { "dot": "rose", "title": "Broker writes stay in two adapters", "items": ["Enforced by tests/architecture.test.ts", "Advice may only veto an entry"] },
+    { "dot": "amber", "title": "Time is a cross-cutting input", "items": ["Every session gate uses IST minute of day", "Entries stop at ENTRY_END and positions flatten by FLATTEN_BY (config)"] }
+  ]
+}

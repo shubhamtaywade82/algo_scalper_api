@@ -1,0 +1,28 @@
+{
+  "schema_version": 1, "diagram_type": "architecture",
+  "meta": { "title": "L2 Audit, persistence and cockpit", "output": "docs/architecture/08-audit-persistence-cockpit.html", "quality_profile": "showcase",
+    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "79e951f07c22d772e412cf35abf2843baa17102a" } },
+  "layout": { "mode": "grid", "cols": 3, "gapX": 170, "gapY": 110, "cellW": 120, "cellH": 84 },
+  "components": [
+    { "id": "evlog", "type": "database", "label": "EventLog", "sublabel": "JSONL per IST day", "row": 0, "col": 0, "sources": [{ "path": "src/ops/eventLog.ts", "line": 51, "label": "EventLog" }] },
+    { "id": "pglog", "type": "database", "label": "PostgresLedger", "sublabel": "append-only events", "row": 0, "col": 1, "sources": [{ "path": "src/persistence/ledger.ts", "line": 94, "label": "PostgresLedger" }] },
+    { "id": "restore", "type": "backend", "label": "Day restore", "sublabel": "ledger or journal", "row": 0, "col": 2, "sources": [{ "path": "src/ops/dayState.ts", "line": 77, "label": "restoreDayBook" }] },
+    { "id": "alerts", "type": "external", "label": "Alert sink", "sublabel": "Telegram, webhook", "row": 1, "col": 0, "sources": [{ "path": "src/ops/alerts.ts", "line": 124, "label": "buildAlertListener" }] },
+    { "id": "pool", "type": "database", "label": "PostgreSQL pool", "sublabel": "migrations, checksums", "row": 1, "col": 1, "sources": [{ "path": "src/persistence/postgres.ts", "line": 13, "label": "createPostgresPool" }] },
+    { "id": "cache", "type": "database", "label": "Redis", "sublabel": "rate gate, cache", "row": 1, "col": 2, "sources": [{ "path": "src/persistence/cache.ts", "line": 34, "label": "RedisCacheStore" }] },
+    { "id": "render", "type": "frontend", "label": "Cockpit renderer", "sublabel": "pure text layout", "row": 2, "col": 1, "sources": [{ "path": "src/ui/cockpit.ts", "line": 610, "label": "renderOptionsCockpit" }] },
+    { "id": "app", "type": "frontend", "label": "Cockpit (Ink)", "sublabel": "snapshot view, operator actions", "row": 2, "col": 2, "sources": [{ "path": "src/ui/App.tsx", "line": 56, "label": "App" }] }
+  ],
+  "connections": [
+    { "id": "mirror", "from": "evlog", "to": "pglog", "label": "mirror" },
+    { "id": "events-out", "from": "evlog", "to": "alerts", "label": "events", "variant": "dashed" },
+    { "id": "connect", "from": "pglog", "to": "pool", "label": "connections" },
+    { "id": "restore-ledger", "from": "pglog", "to": "restore", "label": "restore", "variant": "dashed" },
+    { "id": "draws", "from": "render", "to": "app", "label": "draws" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "The journal is the local record", "items": ["One JSONL file per IST day, with serial writes", "Restore reads the ledger when DATABASE_URL is set, else the file"] },
+    { "dot": "rose", "title": "History is immutable", "items": ["PostgreSQL triggers reject UPDATE, DELETE and TRUNCATE on trade_events", "Migrations are append-only and checksummed"] },
+    { "dot": "amber", "title": "Read-only operator surface", "items": ["The renderer is pure and the app holds no trading state", "Journal summary and backfill are separate CLIs, not drawn here"] }
+  ]
+}

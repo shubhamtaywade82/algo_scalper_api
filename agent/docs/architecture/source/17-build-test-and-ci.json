@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "L5 Build, test and CI: what runs before a change can land",
+    "output": "docs/architecture/17-build-test-and-ci.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
+  },
+  "stages": [
+    { "label": "Install" },
+    { "label": "Verify" },
+    { "label": "Test" },
+    { "label": "Gate" }
+  ],
+  "nodes": [
+    { "id": "npm_ci", "type": "backend", "label": "npm ci", "sublabel": "from the lockfile; Node 22+", "stage": 0, "row": 0, "sources": [{ "path": "package.json", "line": 8, "label": "node >=22" }] },
+    { "id": "typecheck", "type": "backend", "label": "Typecheck", "sublabel": "tests and scripts too", "stage": 1, "row": 0, "sources": [{ "path": "package.json", "line": 17, "label": "typecheck" }] },
+    { "id": "build", "type": "backend", "label": "Build", "sublabel": "tsc", "stage": 1, "row": 1, "sources": [{ "path": "package.json", "line": 16, "label": "build" }] },
+    { "id": "test", "type": "backend", "label": "Test", "sublabel": "node:test via tsx", "stage": 2, "row": 0, "sources": [{ "path": "package.json", "line": 20, "label": "test" }] },
+    { "id": "pg", "type": "database", "label": "PostgreSQL 16", "sublabel": "CI service; integration suite", "stage": 2, "row": 1, "sources": [{ "path": ".github/workflows/ci.yml", "line": 21, "label": "postgres:16" }] },
+    { "id": "redis", "type": "database", "label": "Redis 7", "sublabel": "CI service; integration suite", "stage": 2, "row": 2, "sources": [{ "path": ".github/workflows/ci.yml", "line": 33, "label": "redis:7" }] },
+    { "id": "ci", "type": "cloud", "label": "CI verify job", "sublabel": "push and pull_request", "stage": 3, "row": 0, "sources": [{ "path": ".github/workflows/ci.yml", "line": 14, "label": "verify" }] }
+  ],
+  "flows": [
+    { "from": "npm_ci", "to": "typecheck", "label": "then" },
+    { "from": "typecheck", "to": "build", "label": "then" },
+    { "from": "build", "to": "test", "label": "then" },
+    { "from": "pg", "to": "test", "label": "TEST_DATABASE_URL", "variant": "dashed" },
+    { "from": "redis", "to": "test", "label": "TEST_REDIS_URL", "variant": "dashed" },
+    { "from": "test", "to": "ci", "label": "green required", "variant": "emphasis" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "The same steps run locally and in CI", "items": ["npm run check runs typecheck, build and tests (package.json:18)", "CI runs the same steps on a clean runner (ci.yml:44-63)"] },
+    { "dot": "rose", "title": "Services are real, and CI refuses to skip them", "items": ["PostgreSQL 16 and Redis 7 run as CI services (ci.yml:19-33)", "The integration suite fails in CI if either URL is missing (persistence.integration.test.ts:36-38)"] },
+    { "dot": "amber", "title": "The paper-exchange suite does not run in CI", "items": ["CI sets TEST_DATABASE_URL and TEST_REDIS_URL only (ci.yml:42-43)", "Run it by hand against a paper_exchange server with its own variables"] }
+  ]
+}

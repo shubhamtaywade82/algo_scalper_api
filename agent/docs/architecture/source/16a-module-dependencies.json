@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "L5 Module dependencies: which group imports which",
+    "output": "docs/architecture/16a-module-dependencies.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
+  },
+  "layout": { "mode": "grid", "cols": 3, "gapX": 170, "gapY": 110, "cellW": 130, "cellH": 84 },
+  "components": [
+    { "id": "entry", "type": "backend", "label": "Entry", "sublabel": "config.ts, index.tsx", "row": 0, "col": 0, "sources": [{ "path": "src/config.ts", "line": 476, "label": "loadConfig" }] },
+    { "id": "comp", "type": "backend", "label": "Composition", "sublabel": "runtime, ui", "row": 0, "col": 1, "sources": [{ "path": "src/runtime/orchestrator.ts", "line": 67, "label": "Orchestrator" }] },
+    { "id": "venue", "type": "cloud", "label": "Venues", "sublabel": "execution, dhan, paper", "row": 0, "col": 2, "sources": [{ "path": "src/execution/ports.ts", "line": 101, "label": "ExecutionPort" }] },
+    { "id": "decide", "type": "security", "label": "Decision code", "sublabel": "strategy, options, risk, llm", "row": 1, "col": 0, "sources": [{ "path": "src/risk/riskEngine.ts", "line": 196, "label": "evaluatePreTrade" }] },
+    { "id": "record", "type": "database", "label": "Records", "sublabel": "ops, persistence", "row": 1, "col": 1, "sources": [{ "path": "src/ops/eventLog.ts", "line": 51, "label": "EventLog" }] },
+    { "id": "shared", "type": "backend", "label": "Shared", "sublabel": "domain, time", "row": 1, "col": 2, "sources": [{ "path": "src/domain/fsm.ts", "line": 42, "label": "TRANSITIONS" }] },
+    { "id": "research", "type": "backend", "label": "Research", "sublabel": "offline replay", "row": 2, "col": 0, "sources": [{ "path": "src/research/timeMachine.ts", "line": 137, "label": "runTimeMachine" }] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Trading plane", "wraps": ["entry", "comp", "venue", "decide", "record", "shared"] },
+    { "kind": "security-group", "label": "Offline research: no broker path", "wraps": ["research"] }
+  ],
+  "connections": [
+    { "id": "c-decide", "from": "comp", "to": "decide", "label": "32 imports", "variant": "emphasis" },
+    { "id": "c-shared", "from": "comp", "to": "shared", "label": "20 imports" },
+    { "id": "c-venue", "from": "comp", "to": "venue", "label": "16 imports" },
+    { "id": "c-record", "from": "comp", "to": "record", "label": "15 imports" },
+    { "id": "c-entry", "from": "comp", "to": "entry", "label": "5 imports" },
+    { "id": "e-comp", "from": "entry", "to": "comp", "label": "4 imports" },
+    { "id": "decide-shared", "from": "decide", "to": "shared", "label": "20 imports" },
+    { "id": "venue-shared", "from": "venue", "to": "shared", "label": "15 imports" },
+    { "id": "venue-record", "from": "venue", "to": "record", "label": "11 imports" },
+    { "id": "venue-decide", "from": "venue", "to": "decide", "label": "4 imports" },
+    { "id": "record-shared", "from": "record", "to": "shared", "label": "10 imports" },
+    { "id": "record-comp", "from": "record", "to": "comp", "label": "1 type-only import", "variant": "dashed" },
+    { "id": "rs-shared", "from": "research", "to": "shared", "label": "17 imports", "variant": "security" },
+    { "id": "rs-decide", "from": "research", "to": "decide", "label": "17 imports", "variant": "security" },
+    { "id": "rs-entry", "from": "research", "to": "entry", "label": "1 import: config", "variant": "dashed" },
+    { "id": "rs-record", "from": "research", "to": "record", "label": "1 import: ops", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "The plane rule holds at group level", "items": ["Research reaches shared, decision and record code, and config only", "It never imports the venues or the runtime (ADR-001, tests/architecture.test.ts)"] },
+    { "dot": "amber", "title": "Two counts to note", "items": ["ops imports one type from runtime (chainRecorder.ts:5), type-only", "The composition code and the entry files import each other (4 and 5 imports)"] },
+    { "dot": "cyan", "title": "How the counts were taken", "items": ["Each count is import statements from one src folder to another, summed by group", "Only group pairs with 4 or more imports are drawn, plus the research and type-only exceptions; the full folder graph is the source of truth"] }
+  ]
+}

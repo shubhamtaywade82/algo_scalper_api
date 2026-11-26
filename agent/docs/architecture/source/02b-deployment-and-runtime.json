@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "L1 Deployment and runtime: where each part runs",
+    "output": "docs/architecture/02b-deployment-and-runtime.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
+  },
+  "layout": { "mode": "grid", "cols": 4, "gapX": 130, "gapY": 100, "cellW": 120, "cellH": 84 },
+  "components": [
+    { "id": "operator", "type": "external", "label": "Operator", "sublabel": "cockpit, tmux attach", "icon": "person", "row": 0, "col": 0, "sources": [{ "path": "src/ui/App.tsx", "line": 56, "label": "App" }] },
+    { "id": "cron", "type": "external", "label": "cron", "sublabel": "weekday start and stop", "row": 1, "col": 0, "sources": [{ "path": "scripts/session.sh", "line": 2, "label": "for cron on weekdays" }] },
+    { "id": "session", "type": "backend", "label": "session.sh", "sublabel": "detached tmux session", "row": 1, "col": 1, "sources": [{ "path": "scripts/session.sh", "line": 23, "label": "tmux new-session" }] },
+    { "id": "agent", "type": "backend", "label": "Agent process", "sublabel": "node, tsx, one per mode", "tag": "single writer", "row": 1, "col": 2, "sources": [{ "path": "src/index.tsx", "line": 18, "label": "main" }] },
+    { "id": "pg", "type": "database", "label": "PostgreSQL 16", "sublabel": "ledger, leases, paper venue", "row": 2, "col": 1, "sources": [{ "path": "docker-compose.yml", "line": 8, "label": "postgres:16" }] },
+    { "id": "redis", "type": "database", "label": "Redis 7", "sublabel": "rate gate, contract cache", "row": 2, "col": 2, "sources": [{ "path": "docker-compose.yml", "line": 24, "label": "redis:7" }] },
+    { "id": "journal", "type": "database", "label": "Journal files", "sublabel": "data/journal, JSONL", "row": 2, "col": 0, "sources": [{ "path": "src/ops/eventLog.ts", "line": 51, "label": "EventLog" }] },
+    { "id": "dhan", "type": "external", "label": "DhanHQ", "sublabel": "REST, WebSocket, orders", "row": 1, "col": 3, "sources": [{ "path": "src/dhan/client.ts", "line": 58, "label": "createDhanClient" }] },
+    { "id": "sandbox", "type": "external", "label": "Dhan sandbox", "sublabel": "sandbox mode only", "row": 0, "col": 3, "sources": [{ "path": "src/dhan/sandboxGateway.ts", "line": 27, "label": "DhanSandboxGateway" }] },
+    { "id": "paperx", "type": "external", "label": "paper_exchange", "sublabel": "PAPER_BACKEND=exchange", "row": 3, "col": 0, "sources": [{ "path": "src/paper/exchangeGateway.ts", "line": 20, "label": "PaperExchangeGateway" }] },
+    { "id": "ollama", "type": "external", "label": "Ollama", "sublabel": "local or cloud advisor", "row": 3, "col": 2, "sources": [{ "path": "src/llm/advisor.ts", "line": 62, "label": "OllamaTradeAdvisor" }] },
+    { "id": "alerts", "type": "external", "label": "Telegram or webhook", "sublabel": "best-effort alerts", "row": 3, "col": 3, "sources": [{ "path": "src/ops/alerts.ts", "line": 127, "label": "buildAlertListener" }] },
+    { "id": "ci", "type": "cloud", "label": "GitHub Actions", "sublabel": "verify job, postgres and redis", "row": 3, "col": 1, "sources": [{ "path": ".github/workflows/ci.yml", "line": 19, "label": "services" }] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Local host", "wraps": ["cron", "session", "agent", "pg", "redis", "journal"] },
+    { "kind": "security-group", "label": "CI runner", "wraps": ["ci"] }
+  ],
+  "connections": [
+    { "id": "weekday", "from": "cron", "to": "session", "label": "start, stop" },
+    { "id": "runs", "from": "session", "to": "agent", "label": "runs in tmux" },
+    { "id": "keys", "from": "operator", "to": "agent", "label": "keys, attach", "variant": "emphasis" },
+    { "id": "ledger", "from": "agent", "to": "pg", "label": "ledger, leases" },
+    { "id": "cache", "from": "agent", "to": "redis", "label": "rate gate" },
+    { "id": "audit", "from": "agent", "to": "journal", "label": "JSONL audit", "variant": "dashed" },
+    { "id": "market", "from": "agent", "to": "dhan", "label": "feed, orders", "variant": "emphasis" },
+    { "id": "sandbox-orders", "from": "agent", "to": "sandbox", "label": "sandbox mode", "variant": "dashed" },
+    { "id": "paper-orders", "from": "agent", "to": "paperx", "label": "exchange backend", "variant": "dashed" },
+    { "id": "advice", "from": "agent", "to": "ollama", "label": "advice", "variant": "dashed" },
+    { "id": "alert", "from": "agent", "to": "alerts", "label": "alerts", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Modes choose the venue", "items": ["paper: live Dhan feed, simulated fills in postgres or paper_exchange", "sandbox: Dhan sandbox account. live: Dhan production, behind LIVE_TRADING_ACK"] },
+    { "dot": "rose", "title": "One writer per mode", "items": ["Each mode and client holds a trading lease in PostgreSQL (migrations.ts:62)", "The lease is keyed mode:clientId, so a paper run never blocks a live run"] },
+    { "dot": "amber", "title": "Same service versions in CI", "items": ["docker-compose runs postgres:16 and redis:7 (docker-compose.yml:8, :24)", "CI runs the same images for the integration suite (ci.yml:21, :33)"] }
+  ]
+}

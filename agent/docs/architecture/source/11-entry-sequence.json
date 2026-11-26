@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "L3 Entry: from a closed bar to a placed order",
+    "output": "docs/architecture/11-entry-sequence.html",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "79e951f07c22d772e412cf35abf2843baa17102a" }
+  },
+  "participants": [
+    { "id": "feed", "type": "messagebus", "label": "Feed", "sublabel": "DhanFeed", "sources": [{ "path": "src/dhan/feed.ts", "line": 113, "label": "DhanFeed" }] },
+    { "id": "agent", "type": "backend", "label": "Agent", "sublabel": "UnderlyingAgent", "sources": [{ "path": "src/runtime/underlyingAgent.ts", "line": 113, "label": "UnderlyingAgent" }] },
+    { "id": "market", "type": "external", "label": "Market", "sublabel": "chains, expiries", "sources": [{ "path": "src/dhan/marketData.ts", "line": 76, "label": "DhanMarketData" }] },
+    { "id": "risk", "type": "security", "label": "Risk gate", "sublabel": "pre-trade", "sources": [{ "path": "src/risk/riskEngine.ts", "line": 196, "label": "evaluatePreTrade" }] },
+    { "id": "advisor", "type": "external", "label": "Advisor", "sublabel": "Ollama", "sources": [{ "path": "src/llm/advisor.ts", "line": 62, "label": "OllamaTradeAdvisor" }] },
+    { "id": "journal", "type": "database", "label": "Journal", "sublabel": "durable intent", "sources": [{ "path": "src/ops/eventLog.ts", "line": 51, "label": "EventLog" }] },
+    { "id": "venue", "type": "cloud", "label": "Live venue", "sublabel": "LiveExecutionPort", "sources": [{ "path": "src/dhan/liveExecution.ts", "line": 272, "label": "submitEntry" }] },
+    { "id": "dhan", "type": "external", "label": "DhanHQ", "sublabel": "super orders" }
+  ],
+  "segments": [
+    { "from": 160, "to": 202, "label": "Detect" },
+    { "from": 202, "to": 537, "label": "Decide" },
+    { "from": 537, "to": 662, "label": "Commit" },
+    { "from": 662, "to": 960, "label": "Execute" }
+  ],
+  "messages": [
+    { "id": "m01", "from": "feed", "to": "agent", "y": 180, "label": "tick by exchange key" },
+    { "id": "m02", "from": "agent", "to": "market", "y": 225, "label": "option chain" },
+    { "id": "m03", "from": "market", "to": "agent", "y": 265, "label": "chain snapshot", "variant": "return" },
+    { "id": "m04", "from": "agent", "to": "risk", "y": 310, "label": "build and check", "note": "any RiskCode rejects; no order built" },
+    { "id": "m05", "from": "risk", "to": "agent", "y": 390, "label": "approved or first violation", "variant": "return" },
+    { "id": "m06", "from": "agent", "to": "advisor", "y": 435, "label": "ENTER or SKIP?", "note": "veto only; timeout means SKIP" },
+    { "id": "m07", "from": "advisor", "to": "agent", "y": 515, "label": "ENTER", "variant": "return" },
+    { "id": "m08", "from": "agent", "to": "journal", "y": 560, "label": "entry_submitted", "note": "durable before any order" },
+    { "id": "m09", "from": "journal", "to": "agent", "y": 640, "label": "durable", "variant": "return" },
+    { "id": "m10", "from": "agent", "to": "venue", "y": 685, "label": "submitEntry: BUY LIMIT", "variant": "emphasis", "note": "LIMIT at the gated price" },
+    { "id": "m11", "from": "venue", "to": "dhan", "y": 765, "label": "super order", "note": "timeout or 5xx: UNCONFIRMED, not resent" },
+    { "id": "m12", "from": "dhan", "to": "venue", "y": 845, "label": "order id, or 4xx", "variant": "return" },
+    { "id": "m13", "from": "dhan", "to": "venue", "y": 890, "label": "fill on order stream", "variant": "emphasis" },
+    { "id": "m14", "from": "venue", "to": "agent", "y": 935, "label": "ENTRY_FILLED", "variant": "emphasis", "note": "then PROTECTION_ARMED" }
+  ],
+  "activations": [
+    { "participant": "agent", "from": 180, "to": 935 }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Two-phase entry", "items": ["Preparation runs off the serial queue, so other exits are not held", "Submit re-enters the queue and re-checks the entry window and spot age"] },
+    { "dot": "rose", "title": "No replay of trading writes", "items": ["The SDK sends each trading write at most once", "Ambiguous placement outcomes halt the underlying"] }
+  ]
+}

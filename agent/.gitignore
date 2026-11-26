@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+data/
+logs/
+tmp/
+npm-debug.log*
+*.tgz
+.claude/settings.local.json
+.archify/
+docs/architecture/*.delivery.json
+graphify-out/

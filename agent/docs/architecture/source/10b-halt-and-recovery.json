@@ -1,0 +1,203 @@
+{
+  "schema_version": 3,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "L3 Halts: HALT from any state, RESET by the operator",
+    "output": "docs/architecture/10b-halt-and-recovery.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/shubhamtaywade82/options-trading-agent",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "79e951f07c22d772e412cf35abf2843baa17102a"
+    }
+  },
+  "mainPath": [
+    "IDLE",
+    "HALTED"
+  ],
+  "states": [
+    {
+      "id": "IDLE",
+      "type": "start",
+      "label": "Idle",
+      "sublabel": "IDLE",
+      "sources": [
+        {
+          "path": "src/domain/fsm.ts",
+          "line": 42,
+          "label": "TRANSITIONS table"
+        }
+      ]
+    },
+    {
+      "id": "SIGNAL_DETECTED",
+      "type": "active",
+      "label": "Signal",
+      "sublabel": "SIGNAL_DETECTED"
+    },
+    {
+      "id": "ENTRY_PENDING",
+      "type": "waiting",
+      "label": "Entry pending",
+      "sublabel": "ENTRY_PENDING"
+    },
+    {
+      "id": "POSITION_OPEN",
+      "type": "active",
+      "label": "Open",
+      "sublabel": "POSITION_OPEN",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1021,
+          "label": "onEntryFilled"
+        }
+      ]
+    },
+    {
+      "id": "RISK_MANAGEMENT_ACTIVE",
+      "type": "active",
+      "label": "Protected",
+      "sublabel": "RISK_MANAGEMENT_ACTIVE"
+    },
+    {
+      "id": "EXIT_PENDING",
+      "type": "waiting",
+      "label": "Exit pending",
+      "sublabel": "EXIT_PENDING",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1233,
+          "label": "exitSent set before submit"
+        }
+      ]
+    },
+    {
+      "id": "POSITION_CLOSED",
+      "type": "success",
+      "label": "Closed",
+      "sublabel": "POSITION_CLOSED",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1124,
+          "label": "onExitFilled"
+        }
+      ]
+    },
+    {
+      "id": "HALTED",
+      "type": "failure",
+      "label": "Halted",
+      "sublabel": "HALTED",
+      "sources": [
+        {
+          "path": "src/runtime/underlyingAgent.ts",
+          "line": 1376,
+          "label": "halt"
+        }
+      ]
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t02",
+      "from": "IDLE",
+      "to": "HALTED",
+      "label": "HALT",
+      "variant": "security"
+    },
+    {
+      "id": "t05",
+      "from": "SIGNAL_DETECTED",
+      "to": "HALTED",
+      "label": "HALT",
+      "variant": "security"
+    },
+    {
+      "id": "t08",
+      "from": "ENTRY_PENDING",
+      "to": "HALTED",
+      "label": "ENTRY_UNCONFIRMED",
+      "variant": "security"
+    },
+    {
+      "id": "t09",
+      "from": "ENTRY_PENDING",
+      "to": "HALTED",
+      "label": "HALT",
+      "variant": "security"
+    },
+    {
+      "id": "t13",
+      "from": "POSITION_OPEN",
+      "to": "HALTED",
+      "label": "HALT",
+      "variant": "security"
+    },
+    {
+      "id": "t16",
+      "from": "RISK_MANAGEMENT_ACTIVE",
+      "to": "HALTED",
+      "label": "HALT",
+      "variant": "security"
+    },
+    {
+      "id": "t20",
+      "from": "EXIT_PENDING",
+      "to": "HALTED",
+      "label": "EXIT_UNCONFIRMED",
+      "variant": "security"
+    },
+    {
+      "id": "t21",
+      "from": "EXIT_PENDING",
+      "to": "HALTED",
+      "label": "HALT",
+      "variant": "security"
+    },
+    {
+      "id": "t23",
+      "from": "POSITION_CLOSED",
+      "to": "HALTED",
+      "label": "HALT",
+      "variant": "security"
+    },
+    {
+      "id": "t24",
+      "from": "HALTED",
+      "to": "IDLE",
+      "label": "RESET",
+      "note": "in the table; no runtime path dispatches it",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "HALT is legal in every active state",
+      "items": [
+        "Seven states can halt; HALTED itself accepts only RESET",
+        "An unknown broker outcome halts the underlying (ADR-005)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Restart is the way out of HALTED",
+      "items": [
+        "RESET is in the transition table (fsm.ts:81), but no runtime path dispatches it",
+        "The operator clear refuses while an underlying is halted (orchestrator.ts:422)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Coverage check",
+      "items": [
+        "10 and 10b together draw all 24 TRANSITIONS rows",
+        "Every halt path is a row of src/domain/fsm.ts"
+      ]
+    }
+  ]
+}

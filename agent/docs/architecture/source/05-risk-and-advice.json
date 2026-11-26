@@ -1,0 +1,29 @@
+{
+  "schema_version": 1, "diagram_type": "architecture",
+  "meta": { "title": "L2 Risk and advice: what must pass before an order", "output": "docs/architecture/05-risk-and-advice.html", "quality_profile": "showcase",
+    "repository": { "url": "https://github.com/shubhamtaywade82/options-trading-agent", "provider": "github", "link_mode": "local-only", "revision": "79e951f07c22d772e412cf35abf2843baa17102a" } },
+  "layout": { "mode": "grid", "cols": 3, "gapX": 170, "gapY": 110, "cellW": 120, "cellH": 84 },
+  "components": [
+    { "id": "gatel", "type": "security", "label": "Trading gate", "sublabel": "ledger, lease holds", "row": 0, "col": 0, "sources": [{ "path": "src/runtime/tradingGate.ts", "line": 24, "label": "ledgerAndLeaseGate" }] },
+    { "id": "policy", "type": "security", "label": "Rollout policy", "sublabel": "off, shadow, enforce", "tag": "ADR-011", "row": 0, "col": 1, "sources": [{ "path": "src/risk/riskEngine.ts", "line": 231, "label": "evaluatePreTradeUnderPolicy" }] },
+    { "id": "gate", "type": "security", "label": "Pre-trade gate", "sublabel": "22 RiskCode checks", "row": 0, "col": 2, "sources": [{ "path": "src/risk/riskEngine.ts", "line": 196, "label": "evaluatePreTrade" }] },
+    { "id": "book", "type": "security", "label": "DayBook", "sublabel": "day P&L, trades, kill", "row": 1, "col": 0, "sources": [{ "path": "src/risk/dayBook.ts", "line": 37, "label": "DayBook" }] },
+    { "id": "allin", "type": "security", "label": "All-in loss", "sublabel": "stop, costs, gaps", "row": 1, "col": 1, "sources": [{ "path": "src/risk/allInLoss.ts", "line": 45, "label": "allInAdverseLossInr" }] },
+    { "id": "advice", "type": "external", "label": "Advisor", "sublabel": "ENTER or SKIP, zod", "tag": "veto only", "row": 1, "col": 2, "sources": [{ "path": "src/llm/advisor.ts", "line": 62, "label": "OllamaTradeAdvisor" }] },
+    { "id": "kill", "type": "security", "label": "Kill switch", "sublabel": "local block, retry 30 s", "row": 2, "col": 0, "sources": [{ "path": "src/runtime/orchestrator.ts", "line": 54, "label": "BROKER_KILL_RETRY_MS" }] },
+    { "id": "shadow", "type": "database", "label": "Shadow journal", "sublabel": "planned vs all-in", "row": 2, "col": 1, "sources": [{ "path": "src/risk/riskShadow.ts", "line": 50, "label": "joinShadow" }] }
+  ],
+  "connections": [
+    { "id": "allowed", "from": "gatel", "to": "policy", "label": "entry allowed" },
+    { "id": "evaluates", "from": "policy", "to": "gate", "label": "evaluates" },
+    { "id": "allin-in", "from": "policy", "to": "allin", "label": "all-in risk", "variant": "dashed" },
+    { "id": "passed", "from": "gate", "to": "advice", "label": "passed", "variant": "emphasis" },
+    { "id": "breach", "from": "book", "to": "kill", "label": "loss breach", "variant": "security" },
+    { "id": "figures", "from": "allin", "to": "shadow", "label": "figures", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Violations are all reported", "items": ["evaluatePreTrade returns every failing RiskCode, not the first", "The gate recomputes risk from the order's own numbers"] },
+    { "dot": "amber", "title": "The advisor only vetoes", "items": ["It cannot create, resize or re-strike an order", "Timeout, error or a bad reply is SKIP"] },
+    { "dot": "cyan", "title": "Rollout, not a silent change", "items": ["Off and shadow decide on planned risk, unchanged", "Enforce needs the live acknowledgement in live mode"] }
+  ]
+}
