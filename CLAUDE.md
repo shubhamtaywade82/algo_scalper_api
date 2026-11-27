@@ -1,4 +1,4 @@
-# algo_scalper_api
+# algo-scalper
 
 Rails 8 API backend for **fully autonomous** intraday options scalping on Indian index markets (NIFTY, BANKNIFTY, SENSEX). Self-contained pipeline: signal generation → options analysis → capital allocation → order execution → position management.
 

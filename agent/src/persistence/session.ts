@@ -131,7 +131,7 @@ export async function openSession(
         url: databaseUrl,
         maxConnections: 1,
         connectTimeoutMs: 5_000,
-        statementTimeoutMs: Math.max(1_000, Math.floor(leaseTtlMs / 3)),
+        statementTimeoutMs: Math.min(4_000, Math.max(1_000, Math.floor(leaseTtlMs / 5))),
         onError: (error) => logger.error('lease connection error', { error: errorMessage(error, secrets) }),
       });
       // Created before the ledger, because every ledger write is fenced to the lease's epoch.

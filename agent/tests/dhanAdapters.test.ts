@@ -200,6 +200,38 @@ describe('market data', () => {
     const data = new DhanMarketData({ funds: { getLimit: async () => ({}) } } as never, { istShiftedTimestamps: false });
     await assert.rejects(data.availableFunds(), /availableBalance/);
   });
+
+  it('retries intradayCandles on 429 rate limit errors with backoff', async () => {
+    let attempts = 0;
+    const sleeps: number[] = [];
+    const client = {
+      charts: {
+        intraday: async () => {
+          attempts += 1;
+          if (attempts < 2) {
+            throw new Error('Dhan API rate limit exceeded (status 429)');
+          }
+          return {
+            open: [100],
+            high: [105],
+            low: [95],
+            close: [102],
+            volume: [1000],
+            timestamp: [1732681500],
+          };
+        },
+      },
+    };
+    const data = new DhanMarketData(client as never, {
+      istShiftedTimestamps: false,
+      sleep: async (ms) => { sleeps.push(ms); },
+    });
+    const candles = await data.intradayCandles({ exchangeSegment: 'IDX_I', securityId: '13' }, 5, '2026-11-26', '2026-11-27');
+    assert.equal(attempts, 2);
+    assert.equal(sleeps.length, 1);
+    assert.equal(candles.length, 1);
+    assert.equal(candles[0]?.close, 102);
+  });
 });
 
 describe('feed', () => {

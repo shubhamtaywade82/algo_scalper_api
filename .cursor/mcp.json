@@ -18,7 +18,7 @@
         "/home/nemesis/.cursor-server/extensions/shubhamtaywade.railsforge-0.1.4/dist/mcp/server.js"
       ],
       "env": {
-        "RAILSFORGE_WORKSPACE_ROOT": "/home/nemesis/projects/indian-trading/algo_scalper_api"
+        "RAILSFORGE_WORKSPACE_ROOT": "/home/nemesis/projects/indian-trading/algo-scalper"
       }
     },
     "rails-harness": {
@@ -30,7 +30,7 @@
         "/home/nemesis/.local/share/ruby-console-mcp-host/node_modules/ruby-console-mcp/build/index.js"
       ],
       "env": {
-        "RUBY_APP_PATH": "/home/nemesis/projects/indian-trading/algo_scalper_api",
+        "RUBY_APP_PATH": "/home/nemesis/projects/indian-trading/algo-scalper",
         "RUBY_CONSOLE_COMMAND": "bundle exec rails c --sandbox",
         "COMMAND_TIMEOUT": "60000"
       }

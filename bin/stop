@@ -74,9 +74,9 @@ do
   force_stop_project_processes "$pattern"
 done
 
-# options-trading-agent runs from its own repo (Procfile.dev `agent`), so the cwd filter above skips it. SIGTERM starts
-# its graceful shutdown, which closes paper positions through the normal exit path; give it time before forcing.
-AGENT_ROOT="$(cd "$ROOT/../options-trading-agent" 2>/dev/null && pwd || true)"
+# The agent runs from agent/ (Procfile.dev `agent`). SIGTERM starts its graceful shutdown, which closes paper
+# positions through the normal exit path; give it time before forcing.
+AGENT_ROOT="$(cd "$ROOT/agent" 2>/dev/null && pwd || true)"
 if [[ -n "$AGENT_ROOT" ]]; then
   mapfile -t agent_pids < <(pgrep -f "src/index.tsx" 2>/dev/null || true)
   filtered_pids=()

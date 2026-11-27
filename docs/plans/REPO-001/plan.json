@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "featureId": "REPO-001",
+  "title": "Complete Single-Repo Consolidation into algo-scalper",
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "title": "Port 429 retry backoff and lease timeout fixes to agent",
+      "description": "Port intradayCandles 429 backoff retry + test and tightened Lease/session timeouts from standalone options-trading-agent into agent/",
+      "acceptanceCriteria": ["ACC-001"],
+      "likelyFiles": [
+        "agent/src/dhan/marketData.ts",
+        "agent/src/persistence/lease.ts",
+        "agent/src/persistence/session.ts",
+        "agent/tests/dhanAdapters.test.ts"
+      ],
+      "estimatedScope": "s",
+      "risk": "low",
+      "dependencies": [],
+      "verification": {
+        "command": ["npm", "--prefix", "agent", "test"],
+        "expectedStatus": "passed"
+      }
+    },
+    {
+      "id": "TASK-002",
+      "title": "Update internal agent paths and MCP workspace configs to algo-scalper",
+      "description": "Point bin/stop and lib/tasks/shadow.rake to in-repo agent/ and update .mcp.json, .cursor/mcp.json, opencode.json, and CLAUDE.md from algo_scalper_api to algo-scalper",
+      "acceptanceCriteria": ["ACC-002"],
+      "likelyFiles": [
+        "bin/stop",
+        "lib/tasks/shadow.rake",
+        ".mcp.json",
+        ".cursor/mcp.json",
+        "opencode.json",
+        "CLAUDE.md"
+      ],
+      "estimatedScope": "s",
+      "risk": "low",
+      "dependencies": ["TASK-001"],
+      "verification": {
+        "command": [
+          "node",
+          "-e",
+          "const fs=require('fs'), cp=require('child_process'), assert=require('assert'); for (const f of ['.mcp.json','.cursor/mcp.json','opencode.json']) { JSON.parse(fs.readFileSync(f,'utf8')); assert(!fs.readFileSync(f,'utf8').includes('algo_scalper_api'), f); } assert(!fs.readFileSync('bin/stop','utf8').includes('../options-trading-agent'), 'bin/stop'); assert(!fs.readFileSync('lib/tasks/shadow.rake','utf8').includes('../options-trading-agent'), 'shadow.rake'); cp.execFileSync('bash',['-n','bin/stop'],{stdio:'inherit'}); cp.execFileSync('ruby',['-c','lib/tasks/shadow.rake'],{stdio:'inherit'});"
+        ],
+        "expectedStatus": "passed"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "TASK-001",
+      "to": "TASK-002",
+      "reason": "Port pending code fixes into agent/ before repointing internal repo scripts and configs"
+    }
+  ],
+  "verticalSlices": [
+    ["TASK-001"],
+    ["TASK-002"]
+  ]
+}

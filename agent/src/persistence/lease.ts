@@ -137,7 +137,7 @@ export interface LeaseOptions {
 export type LeaseLostListener = (reason: string) => void;
 
 /**
- * Holds the lease for one run. It renews every ttl/3. It stops holding once the last successful renewal
+ * Holds the lease for one run. It renews every ttl/4. It stops holding once the last successful renewal
  * is a full ttl old, measured from when the renewal was sent. That bound is conservative, because the
  * database cannot have extended the lease past the time the renewal was sent plus the ttl.
  */
@@ -174,7 +174,7 @@ export class Lease {
     }
     this.epochValue = epoch;
     this.lastRenewedSentAt = sentAt;
-    this.timer = this.setTimer(() => void this.renewTick(), Math.max(1, Math.floor(this.options.ttlMs / 3)));
+    this.timer = this.setTimer(() => void this.renewTick(), Math.max(1, Math.floor(this.options.ttlMs / 4)));
     return true;
   }
 

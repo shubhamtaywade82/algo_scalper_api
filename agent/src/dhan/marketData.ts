@@ -105,21 +105,38 @@ export class DhanMarketData {
     return this.options.now ?? Date.now;
   }
 
+  private async withRateLimitRetry<T>(fn: () => Promise<T>): Promise<T> {
+    const sleep = this.options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+    const maxAttempts = 3;
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await fn();
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        const isRateLimit = msg.includes('429') || msg.toLowerCase().includes('rate limit');
+        if (!isRateLimit || attempt >= maxAttempts) throw error;
+        await sleep(Math.round(1_000 * 2 ** (attempt - 1)));
+      }
+    }
+  }
+
   async intradayCandles(
     spot: InstrumentRef,
     barMinutes: number,
     fromDate: string,
     toDate: string,
   ): Promise<Candle[]> {
-    const response = await this.client.charts.intraday({
-      securityId: spot.securityId,
-      exchangeSegment: 'IDX_I',
-      instrument: 'INDEX',
-      interval: intradayIntervalFor(barMinutes),
-      oi: false,
-      fromDate,
-      toDate,
-    });
+    const response = await this.withRateLimitRetry(() =>
+      this.client.charts.intraday({
+        securityId: spot.securityId,
+        exchangeSegment: 'IDX_I',
+        instrument: 'INDEX',
+        interval: intradayIntervalFor(barMinutes),
+        oi: false,
+        fromDate,
+        toDate,
+      }),
+    );
     return mapChartColumns(response, this.options.istShiftedTimestamps);
   }
 

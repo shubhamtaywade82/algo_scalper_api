@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 2,
+  "featureId": "REPO-001",
+  "createdAt": "2026-11-27T06:36:23.549Z",
+  "updatedAt": "2026-11-27T06:43:01.275Z",
+  "tasks": {
+    "TASK-001": {
+      "taskId": "TASK-001",
+      "phase": "completed",
+      "records": [
+        {
+          "phase": "red",
+          "status": "failed",
+          "timestamp": "2026-11-27T06:37:15.895Z",
+          "evidence": "exit=1 classification=unclassified —  (node:internal/test_runner/test:1382:25) at Suite.processPendingSubtests (node:internal/test_runner/test:960:18) at Test.postRun (node:internal/test_runner/test:1522:19) at Test.run (node:internal/test_runner/test:1447:12) at async Suite.processPendingSubtests (node:internal/test_runner/test:960:7)",
+          "verification": {
+            "taskId": "TASK-001",
+            "command": [
+              "npm",
+              "--prefix",
+              "agent",
+              "test"
+            ],
+            "classification": "unclassified",
+            "reason": "output matched no known failure pattern; refusing to count as Red"
+          }
+        },
+        {
+          "phase": "red",
+          "status": "failed",
+          "timestamp": "2026-11-27T06:39:07.828Z",
+          "evidence": "exit=1 classification=assertion — gSubtests (node:internal/test_runner/test:960:18) at Test.postRun (node:internal/test_runner/test:1522:19) at Test.run (node:internal/test_runner/test:1447:12) at async Suite.processPendingSubtests (node:internal/test_runner/test:960:7), expected: undefined, operator: 'strictEqual', diff: 'simple' }",
+          "verification": {
+            "taskId": "TASK-001",
+            "command": [
+              "npm",
+              "--prefix",
+              "agent",
+              "test"
+            ],
+            "classification": "assertion",
+            "reason": "targeted test executed and failed at an assertion"
+          }
+        },
+        {
+          "phase": "green",
+          "status": "passed",
+          "timestamp": "2026-11-27T06:40:24.726Z",
+          "evidence": "exit=0 classification=none — bers it was not asked to wrap as they are (0.135609ms) ✔ writes one JSON line per call, in order, to a file that is created on first use (65.724748ms) ✔ wire recorder (OTA-106 a) (76.27228ms) ℹ tests 1714 ℹ suites 267 ℹ pass 1714 ℹ fail 0 ℹ cancelled 0 ℹ skipped 0 ℹ todo 0 ℹ duration_ms 14578.797961",
+          "verification": {
+            "taskId": "TASK-001",
+            "command": [
+              "npm",
+              "--prefix",
+              "agent",
+              "test"
+            ],
+            "classification": null,
+            "reason": "command exited 0"
+          }
+        },
+        {
+          "phase": "refactor",
+          "status": "passed",
+          "timestamp": "2026-11-27T06:41:52.477Z",
+          "evidence": "exit=0 classification=none — ers it was not asked to wrap as they are (0.121649ms) ✔ writes one JSON line per call, in order, to a file that is created on first use (69.126841ms) ✔ wire recorder (OTA-106 a) (75.001329ms) ℹ tests 1714 ℹ suites 267 ℹ pass 1714 ℹ fail 0 ℹ cancelled 0 ℹ skipped 0 ℹ todo 0 ℹ duration_ms 15275.437038",
+          "verification": {
+            "taskId": "TASK-001",
+            "command": [
+              "npm",
+              "--prefix",
+              "agent",
+              "test"
+            ],
+            "classification": null,
+            "reason": "command exited 0"
+          }
+        }
+      ]
+    },
+    "TASK-002": {
+      "taskId": "TASK-002",
+      "phase": "completed",
+      "records": [
+        {
+          "phase": "red",
+          "status": "failed",
+          "timestamp": "2026-11-27T06:42:09.001Z",
+          "evidence": "exit=1 classification=assertion — ecution:449:60) at evalFunction (node:internal/process/execution:283:30) at evalTypeScript (node:internal/process/execution:295:3) at node:internal/main/eval_string:71:3 { generatedMessage: false, code: 'ERR_ASSERTION', actual: false, expected: true, operator: '==', diff: 'simple' } Node.js v24.19.0",
+          "verification": {
+            "taskId": "TASK-002",
+            "command": [
+              "node",
+              "-e",
+              "const fs=require('fs'), cp=require('child_process'), assert=require('assert'); for (const f of ['.mcp.json','.cursor/mcp.json','opencode.json']) { JSON.parse(fs.readFileSync(f,'utf8')); assert(!fs.readFileSync(f,'utf8').includes('algo_scalper_api'), f); } assert(!fs.readFileSync('bin/stop','utf8').includes('../options-trading-agent'), 'bin/stop'); assert(!fs.readFileSync('lib/tasks/shadow.rake','utf8').includes('../options-trading-agent'), 'shadow.rake'); cp.execFileSync('bash',['-n','bin/stop'],{stdio:'inherit'}); cp.execFileSync('ruby',['-c','lib/tasks/shadow.rake'],{stdio:'inherit'});"
+            ],
+            "classification": "assertion",
+            "reason": "targeted test executed and failed at an assertion"
+          }
+        },
+        {
+          "phase": "green",
+          "status": "passed",
+          "timestamp": "2026-11-27T06:43:01.015Z",
+          "evidence": "exit=0 classification=none — Syntax OK",
+          "verification": {
+            "taskId": "TASK-002",
+            "command": [
+              "node",
+              "-e",
+              "const fs=require('fs'), cp=require('child_process'), assert=require('assert'); for (const f of ['.mcp.json','.cursor/mcp.json','opencode.json']) { JSON.parse(fs.readFileSync(f,'utf8')); assert(!fs.readFileSync(f,'utf8').includes('algo_scalper_api'), f); } assert(!fs.readFileSync('bin/stop','utf8').includes('../options-trading-agent'), 'bin/stop'); assert(!fs.readFileSync('lib/tasks/shadow.rake','utf8').includes('../options-trading-agent'), 'shadow.rake'); cp.execFileSync('bash',['-n','bin/stop'],{stdio:'inherit'}); cp.execFileSync('ruby',['-c','lib/tasks/shadow.rake'],{stdio:'inherit'});"
+            ],
+            "classification": null,
+            "reason": "command exited 0"
+          }
+        },
+        {
+          "phase": "refactor",
+          "status": "passed",
+          "timestamp": "2026-11-27T06:43:01.275Z",
+          "evidence": "exit=0 classification=none — Syntax OK",
+          "verification": {
+            "taskId": "TASK-002",
+            "command": [
+              "node",
+              "-e",
+              "const fs=require('fs'), cp=require('child_process'), assert=require('assert'); for (const f of ['.mcp.json','.cursor/mcp.json','opencode.json']) { JSON.parse(fs.readFileSync(f,'utf8')); assert(!fs.readFileSync(f,'utf8').includes('algo_scalper_api'), f); } assert(!fs.readFileSync('bin/stop','utf8').includes('../options-trading-agent'), 'bin/stop'); assert(!fs.readFileSync('lib/tasks/shadow.rake','utf8').includes('../options-trading-agent'), 'shadow.rake'); cp.execFileSync('bash',['-n','bin/stop'],{stdio:'inherit'}); cp.execFileSync('ruby',['-c','lib/tasks/shadow.rake'],{stdio:'inherit'});"
+            ],
+            "classification": null,
+            "reason": "command exited 0"
+          }
+        }
+      ]
+    }
+  }
+}

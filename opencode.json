@@ -32,7 +32,7 @@
       ],
       "enabled": true,
       "environment": {
-        "RUBY_APP_PATH": "/home/nemesis/projects/indian-trading/algo_scalper_api",
+        "RUBY_APP_PATH": "/home/nemesis/projects/indian-trading/algo-scalper",
         "RUBY_CONSOLE_COMMAND": "bundle exec rails c --sandbox",
         "COMMAND_TIMEOUT": "60000"
       }
