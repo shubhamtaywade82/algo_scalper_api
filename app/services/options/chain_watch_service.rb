@@ -126,13 +126,14 @@ module Options
     end
 
     def resubscribe_legs!(new_legs)
+      hub = Live::MarketFeedHub.instance
       new_keys = new_legs.map { |l| { segment: l[:segment], security_id: l[:security_id] } }
       old_keys = @subscribed_legs
 
-      to_add = new_keys - old_keys
+      to_add = missing_subscriptions(new_keys, old_keys, hub)
       to_remove = removable_legs(old_keys - new_keys)
 
-      Live::MarketFeedHub.instance.subscribe_many(to_add) if to_add.any?
+      hub.subscribe_many(to_add) if to_add.any?
       unsubscribe_legs(to_remove)
 
       # Legs protected by an active position stay marked as subscribed so we
@@ -140,6 +141,14 @@ module Options
       # dropped out of the ATM±5 window (finding #1).
       protected_keys = (old_keys - new_keys) - to_remove
       @subscribed_legs = new_keys | protected_keys
+    end
+
+    def missing_subscriptions(new_keys, old_keys, hub)
+      return new_keys - old_keys unless hub.running?
+
+      new_keys.reject do |key|
+        old_keys.include?(key) && hub.subscribed?(segment: key[:segment], security_id: key[:security_id])
+      end
     end
 
     def unsubscribe_current_legs!

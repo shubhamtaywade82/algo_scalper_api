@@ -646,11 +646,29 @@ module Live
       backoff = [2**[@reconnect_attempts, 6].min, 60].min
 
       Rails.logger.info("[MarketFeedHub] Restarting WebSocket client (attempt ##{@reconnect_attempts}, backoff #{backoff}s)...")
+      prior_keys = subscribed_key_hashes
+      prior_callbacks = @callbacks.to_a
+
       stop!
       sleep backoff
-      start!
+      restore_after_restart(prior_keys, prior_callbacks) if start!
     ensure
       @restarting = false
+    end
+
+    def subscribed_key_hashes
+      @subscribed_keys.to_a.filter_map do |key|
+        segment, security_id = key.split(':', 2)
+        next if segment.blank? || security_id.blank?
+
+        { segment: segment, security_id: security_id }
+      end
+    end
+
+    def restore_after_restart(prior_keys, prior_callbacks)
+      prior_callbacks.each { |cb| @callbacks << cb unless @callbacks.include?(cb) }
+      pending_keys = prior_keys.reject { |item| subscribed?(segment: item[:segment], security_id: item[:security_id]) }
+      subscribe_many(pending_keys) if pending_keys.any?
     end
 
     def subscribe_watchlist

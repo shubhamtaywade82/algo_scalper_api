@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "featureId": "BUG-001",
+  "title": "Prevent WebSocket Subscription Loss on Hub Restart and False Stale-Tick Pruning",
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "title": "Preserve subscriptions and callbacks across MarketFeedHub restart!",
+      "description": "Snapshot subscribed keys and callbacks before stop! inside MarketFeedHub#restart! and restore them when start! succeeds without changing direct stop! behavior",
+      "acceptanceCriteria": ["ACC-001"],
+      "likelyFiles": [
+        "app/services/live/market_feed_hub.rb",
+        "spec/services/live/market_feed_hub_reconnect_spec.rb"
+      ],
+      "estimatedScope": "s",
+      "risk": "low",
+      "dependencies": [],
+      "verification": {
+        "command": ["bundle", "exec", "rspec", "spec/services/live/market_feed_hub_reconnect_spec.rb"],
+        "expectedStatus": "passed"
+      }
+    },
+    {
+      "id": "TASK-002",
+      "title": "Reconcile ChainWatchService subscriptions with MarketFeedHub state",
+      "description": "Include legs missing from a running MarketFeedHub in Options::ChainWatchService#resubscribe_legs! even when present in @subscribed_legs",
+      "acceptanceCriteria": ["ACC-002"],
+      "likelyFiles": [
+        "app/services/options/chain_watch_service.rb",
+        "spec/services/options/chain_watch_service_spec.rb"
+      ],
+      "estimatedScope": "s",
+      "risk": "low",
+      "dependencies": ["TASK-001"],
+      "verification": {
+        "command": ["bundle", "exec", "rspec", "spec/services/options/chain_watch_service_spec.rb"],
+        "expectedStatus": "passed"
+      }
+    },
+    {
+      "id": "TASK-003",
+      "title": "Check cached_at before ts in RedisTickCache#prune_stale",
+      "description": "Use cached_at packet arrival timestamp with fallback to ts when evaluating tick staleness in Live::RedisTickCache#prune_stale",
+      "acceptanceCriteria": ["ACC-003"],
+      "likelyFiles": [
+        "app/services/live/redis_tick_cache.rb",
+        "spec/services/live/redis_tick_cache_spec.rb"
+      ],
+      "estimatedScope": "s",
+      "risk": "low",
+      "dependencies": ["TASK-002"],
+      "verification": {
+        "command": ["bundle", "exec", "rspec", "spec/services/live/redis_tick_cache_spec.rb"],
+        "expectedStatus": "passed"
+      }
+    }
+  ],
+  "edges": [
+    { "from": "TASK-001", "to": "TASK-002", "reason": "ChainWatchService self-healing complements MarketFeedHub restart preservation" },
+    { "from": "TASK-002", "to": "TASK-003", "reason": "Pruning fix follows subscription persistence fixes" }
+  ],
+  "verticalSlices": [
+    ["TASK-001"],
+    ["TASK-002"],
+    ["TASK-003"]
+  ]
+}

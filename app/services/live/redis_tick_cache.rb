@@ -148,15 +148,14 @@ module Live
 
         # check timestamp field if present
         data = redis.hgetall(key)
-        ts_str = data['ts'] || data[:ts]
-        if ts_str.nil? || ts_str.to_s.strip.empty?
+        ts = tick_last_seen_epoch(data)
+        if ts.nil?
           # no timestamp => treat as stale and remove
           Rails.logger.warn("[RedisTickCache] Pruning #{key} (missing timestamp)")
           redis.del(key)
           next
         end
 
-        ts = ts_str.to_i
         age = Time.current.to_i - ts
         if ts < cutoff
           Rails.logger.warn("[RedisTickCache] Pruning #{key} (stale; age=#{age}s > #{max_age}s)")
@@ -268,6 +267,30 @@ module Live
       # delete the ticks of live positions — that must be visible.
       Rails.logger.error("[RedisTickCache] active_position_security_ids unavailable: #{e.class} - #{e.message}")
       Set.new
+    end
+
+    # Prefer local arrival stamp (cached_at) over exchange ltt (ts);
+    # quiet contracts keep receiving live quote packets even when ltt is unchanged.
+    def tick_last_seen_epoch(data)
+      cached_epoch = parse_cached_at_epoch(data['cached_at'] || data[:cached_at])
+      return cached_epoch if cached_epoch
+
+      ts_str = data['ts'] || data[:ts]
+      return nil if ts_str.blank?
+
+      ts_str.to_i
+    end
+
+    def parse_cached_at_epoch(value)
+      return nil if value.blank?
+
+      raw = value.to_s.strip
+      return raw.to_i if /\A\d+(?:\.\d+)?\z/.match?(raw)
+
+      parsed = Time.zone ? Time.zone.parse(raw) : Time.parse(raw)
+      parsed&.to_i
+    rescue ArgumentError, TypeError
+      nil
     end
 
     def redis

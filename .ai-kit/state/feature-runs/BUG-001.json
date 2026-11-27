@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 2,
+  "featureId": "BUG-001",
+  "createdAt": "2026-11-27T06:27:19.974Z",
+  "updatedAt": "2026-11-27T06:35:46.424Z",
+  "tasks": {
+    "TASK-001": {
+      "taskId": "TASK-001",
+      "phase": "completed",
+      "records": [
+        {
+          "phase": "red",
+          "status": "failed",
+          "timestamp": "2026-11-27T06:28:24.798Z",
+          "evidence": "exit=1 classification=assertion — r than merge_timeout (600s) from the merged report: Unit Tests. Increase SimpleCov.merge_timeout to include them. Coverage report generated for RSpec to coverage/index.html Line coverage: 2019 / 40671 (4.96%) Stopped processing SimpleCov as a previous error not related to SimpleCov has been detected",
+          "verification": {
+            "taskId": "TASK-001",
+            "command": [
+              "bundle",
+              "exec",
+              "rspec",
+              "spec/services/live/market_feed_hub_reconnect_spec.rb"
+            ],
+            "classification": "assertion",
+            "reason": "targeted test executed and failed at an assertion"
+          }
+        },
+        {
+          "phase": "green",
+          "status": "passed",
+          "timestamp": "2026-11-27T06:29:17.382Z",
+          "evidence": "exit=0 classification=none — les took 3.79 seconds to load) 4 examples, 0 failures [SimpleCov]: Excluded 1 result(s) older than merge_timeout (600s) from the merged report: Unit Tests. Increase SimpleCov.merge_timeout to include them. Coverage report generated for RSpec to coverage/index.html Line coverage: 2031 / 40682 (4.99%)",
+          "verification": {
+            "taskId": "TASK-001",
+            "command": [
+              "bundle",
+              "exec",
+              "rspec",
+              "spec/services/live/market_feed_hub_reconnect_spec.rb"
+            ],
+            "classification": null,
+            "reason": "command exited 0"
+          }
+        },
+        {
+          "phase": "refactor",
+          "status": "passed",
+          "timestamp": "2026-11-27T06:29:54.481Z",
+          "evidence": "exit=0 classification=none — les took 3.86 seconds to load) 4 examples, 0 failures [SimpleCov]: Excluded 1 result(s) older than merge_timeout (600s) from the merged report: Unit Tests. Increase SimpleCov.merge_timeout to include them. Coverage report generated for RSpec to coverage/index.html Line coverage: 2031 / 40682 (4.99%)",
+          "verification": {
+            "taskId": "TASK-001",
+            "command": [
+              "bundle",
+              "exec",
+              "rspec",
+              "spec/services/live/market_feed_hub_reconnect_spec.rb"
+            ],
+            "classification": null,
+            "reason": "command exited 0"
+          }
+        }
+      ]
+    },
+    "TASK-002": {
+      "taskId": "TASK-002",
+      "phase": "completed",
+      "records": [
+        {
+          "phase": "red",
+          "status": "failed",
+          "timestamp": "2026-11-27T06:30:49.419Z",
+          "evidence": "exit=1 classification=assertion — r than merge_timeout (600s) from the merged report: Unit Tests. Increase SimpleCov.merge_timeout to include them. Coverage report generated for RSpec to coverage/index.html Line coverage: 1767 / 40682 (4.34%) Stopped processing SimpleCov as a previous error not related to SimpleCov has been detected",
+          "verification": {
+            "taskId": "TASK-002",
+            "command": [
+              "bundle",
+              "exec",
+              "rspec",
+              "spec/services/options/chain_watch_service_spec.rb"
+            ],
+            "classification": "assertion",
+            "reason": "targeted test executed and failed at an assertion"
+          }
+        },
+        {
+          "phase": "green",
+          "status": "passed",
+          "timestamp": "2026-11-27T06:31:32.650Z",
+          "evidence": "exit=0 classification=none — es took 4.64 seconds to load) 16 examples, 0 failures [SimpleCov]: Excluded 1 result(s) older than merge_timeout (600s) from the merged report: Unit Tests. Increase SimpleCov.merge_timeout to include them. Coverage report generated for RSpec to coverage/index.html Line coverage: 1772 / 40687 (4.35%)",
+          "verification": {
+            "taskId": "TASK-002",
+            "command": [
+              "bundle",
+              "exec",
+              "rspec",
+              "spec/services/options/chain_watch_service_spec.rb"
+            ],
+            "classification": null,
+            "reason": "command exited 0"
+          }
+        },
+        {
+          "phase": "refactor",
+          "status": "passed",
+          "timestamp": "2026-11-27T06:32:17.504Z",
+          "evidence": "exit=0 classification=none — es took 4.56 seconds to load) 16 examples, 0 failures [SimpleCov]: Excluded 1 result(s) older than merge_timeout (600s) from the merged report: Unit Tests. Increase SimpleCov.merge_timeout to include them. Coverage report generated for RSpec to coverage/index.html Line coverage: 1772 / 40687 (4.35%)",
+          "verification": {
+            "taskId": "TASK-002",
+            "command": [
+              "bundle",
+              "exec",
+              "rspec",
+              "spec/services/options/chain_watch_service_spec.rb"
+            ],
+            "classification": null,
+            "reason": "command exited 0"
+          }
+        }
+      ]
+    },
+    "TASK-003": {
+      "taskId": "TASK-003",
+      "phase": "completed",
+      "records": [
+        {
+          "phase": "red",
+          "status": "failed",
+          "timestamp": "2026-11-27T06:33:18.879Z",
+          "evidence": "exit=1 classification=assertion — r than merge_timeout (600s) from the merged report: Unit Tests. Increase SimpleCov.merge_timeout to include them. Coverage report generated for RSpec to coverage/index.html Line coverage: 1617 / 40687 (3.97%) Stopped processing SimpleCov as a previous error not related to SimpleCov has been detected",
+          "verification": {
+            "taskId": "TASK-003",
+            "command": [
+              "bundle",
+              "exec",
+              "rspec",
+              "spec/services/live/redis_tick_cache_spec.rb"
+            ],
+            "classification": "assertion",
+            "reason": "targeted test executed and failed at an assertion"
+          }
+        },
+        {
+          "phase": "green",
+          "status": "passed",
+          "timestamp": "2026-11-27T06:34:12.682Z",
+          "evidence": "exit=0 classification=none — les took 3.74 seconds to load) 5 examples, 0 failures [SimpleCov]: Excluded 1 result(s) older than merge_timeout (600s) from the merged report: Unit Tests. Increase SimpleCov.merge_timeout to include them. Coverage report generated for RSpec to coverage/index.html Line coverage: 1627 / 40698 (3.99%)",
+          "verification": {
+            "taskId": "TASK-003",
+            "command": [
+              "bundle",
+              "exec",
+              "rspec",
+              "spec/services/live/redis_tick_cache_spec.rb"
+            ],
+            "classification": null,
+            "reason": "command exited 0"
+          }
+        },
+        {
+          "phase": "refactor",
+          "status": "passed",
+          "timestamp": "2026-11-27T06:35:46.424Z",
+          "evidence": "exit=0 classification=none — iles took 3.9 seconds to load) 5 examples, 0 failures [SimpleCov]: Excluded 1 result(s) older than merge_timeout (600s) from the merged report: Unit Tests. Increase SimpleCov.merge_timeout to include them. Coverage report generated for RSpec to coverage/index.html Line coverage: 1629 / 40699 (4.00%)",
+          "verification": {
+            "taskId": "TASK-003",
+            "command": [
+              "bundle",
+              "exec",
+              "rspec",
+              "spec/services/live/redis_tick_cache_spec.rb"
+            ],
+            "classification": null,
+            "reason": "command exited 0"
+          }
+        }
+      ]
+    }
+  }
+}

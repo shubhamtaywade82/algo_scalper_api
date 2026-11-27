@@ -128,6 +128,38 @@ RSpec.describe Options::ChainWatchService do
     end
   end
 
+  describe '#resubscribe_legs! (reconciling dropped hub subscriptions)' do
+    let(:service) { described_class.new(index_key: 'NIFTY') }
+    let(:legs) do
+      [
+        { segment: 'NSE_FNO', security_id: '24800CE' },
+        { segment: 'NSE_FNO', security_id: '24800PE' }
+      ]
+    end
+
+    before do
+      service.instance_variable_set(:@subscribed_legs, legs.map(&:dup))
+      allow(Live::MarketFeedHub.instance).to receive(:running?).and_return(true)
+    end
+
+    it 're-subscribes legs missing from a running MarketFeedHub even if present in @subscribed_legs' do
+      allow(Live::MarketFeedHub.instance).to receive(:subscribed?).with(segment: 'NSE_FNO', security_id: '24800CE').and_return(false)
+      allow(Live::MarketFeedHub.instance).to receive(:subscribed?).with(segment: 'NSE_FNO', security_id: '24800PE').and_return(true)
+
+      service.send(:resubscribe_legs!, legs)
+
+      expect(Live::MarketFeedHub.instance).to have_received(:subscribe_many).with([{ segment: 'NSE_FNO', security_id: '24800CE' }])
+    end
+
+    it 'skips subscribe_many when all legs remain subscribed on the running hub' do
+      allow(Live::MarketFeedHub.instance).to receive(:subscribed?).and_return(true)
+
+      service.send(:resubscribe_legs!, legs)
+
+      expect(Live::MarketFeedHub.instance).not_to have_received(:subscribe_many)
+    end
+  end
+
   describe '#unsubscribe_current_legs! (position-aware, called from #stop!)' do
     let(:service) { described_class.new(index_key: 'NIFTY') }
 
