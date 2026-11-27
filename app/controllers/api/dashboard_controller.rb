@@ -60,11 +60,10 @@ module Api
     def sorted_indices_with_strategy
       signals_cfg = AlgoConfig.fetch[:signals] || {}
       IndexConfigLoader.load_indices.map do |idx|
-        strategy_name = resolve_strategy_name(signals_cfg, idx[:key])
-
         idx.merge(
+          symbol: idx[:symbol] || idx[:key],
           ltp: index_tick_ltp(idx[:segment], idx[:sid]),
-          strategy: strategy_name,
+          strategy: resolve_strategy_name(signals_cfg, idx[:key]),
           timeframe: signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '1m'
         )
       end

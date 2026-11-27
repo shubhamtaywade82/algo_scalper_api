@@ -7,6 +7,11 @@ module Ai
     queue_as :background
 
     def perform(index_keys: nil)
+      unless TradingSession::Service.market_open? || Rails.env.test?
+        Rails.logger.info('[Ai::AgentsCycleJob] Cash session is closed; skipping scheduled AI cycle')
+        return
+      end
+
       keys = index_keys.presence || IndexConfigLoader.load_indices.map { |c| c[:key].to_s.upcase }
       Rails.logger.info("[Ai::AgentsCycleJob] Executing AI cycle for #{keys.join(', ')}")
 

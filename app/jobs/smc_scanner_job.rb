@@ -19,9 +19,12 @@ class SmcScannerJob < ApplicationJob
       return
     end
 
-    Rails.logger.info('[SmcScannerJob] Starting SMC scan...')
+    if TradingSession::Service.market_closed? && !Rails.env.test?
+      Rails.logger.info('[SmcScannerJob] Cash session is closed; skipping scheduled SMC scan')
+      return
+    end
 
-    log_market_closed_status if TradingSession::Service.market_closed?
+    Rails.logger.info('[SmcScannerJob] Starting SMC scan...')
 
     indices = IndexConfigLoader.load_indices
     filtered_indices = filter_indices_by_expiry(indices)
